@@ -3,7 +3,7 @@ package opa
 import (
 	"regexp"
 
-	"github.com/rite2nikhil/kubernetes-policy/pkg/policies/types"
+	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
 )
 
 // FakeOPA is a OPA mock used for unit testing
