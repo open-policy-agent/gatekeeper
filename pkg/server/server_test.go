@@ -32,7 +32,7 @@ func TestAdmissionBasic(t *testing.T) {
 	validRequest := makeAdmissionRequest("anyKind", "validName", "validNamespace")
 
 	setup := []tr{
-		{http.MethodPost, "/validate", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "anyMessage","metadata": {}},"uid": "anyUID"}}`},
+		{http.MethodPost, "/validate", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\n  {\n    \"v\": {\n      \"id\": \"anyID\",\n      \"resource\": {\n        \"kind\": \"anyKind\",\n        \"namespace\": \"anyNamespace\",\n        \"name\": \"anyName\"\n      },\n      \"message\": \"anyMessage\"\n    }\n  }\n]","metadata": {}},"uid": "anyUID"}}`},
 		{http.MethodPost, "/validate", validRequest, 200, `{"response": {"allowed": true,"uid": "anyUID"}}`},
 	}
 
@@ -45,15 +45,6 @@ func TestAdmissionBasic(t *testing.T) {
 		}
 	}
 }
-
-/*
-	"{\"result\":
-	[
-		{\"id\":\"conditional-annotation\",
-		\"p\":[{\"op\":\"add\",\"path\":\"/metadata/annotations/foo\",\"value\":\"bar\"}]
-		}
-	]}" resp_bytes=112 resp_duration=52.743042 resp_status=200
-*/
 
 func TestPatchResultBasic(t *testing.T) {
 	var expected opatypes.QueryResponseV1

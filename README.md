@@ -26,6 +26,21 @@ Deploy sample policies
 
 ## 1. `validation` scenario
 
+Load the policy as a ConfigMap:
+
+```bash
+kubectl create configmap example --from-file ./policy/admission/ingress-host-fqdn.rego
+```
+
+```bash
+kubectl create ns qa
+```
+
+The following call should fail with by policy
+
+```bash
+kubectl -n qa apply -f ~/opa/ingress-bad.yaml
+```
 
 ## 2. `mutation` scenario
 
@@ -34,7 +49,7 @@ This policy will mutate resources that define an annotation with the key `"test-
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap example --from-file example.rego
+kubectl create configmap example --from-file ./policy/admission/annotate.rego
 ```
 
 First create a Deployment:
@@ -73,6 +88,7 @@ There are two scenarios of the policy engine namely Validation and Mutation
 ### policy language
 
 The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
+Policy ruled are create as a rego files. 
 
 ### package addmission
 
@@ -93,6 +109,7 @@ package admission
 
 deny[{
     "type": "always",
+    "resource": {"kind": kind, "namespace": namespace, "name": name},
     "message": "test always violate",
 }] {
     true
@@ -156,6 +173,7 @@ deny[{
 
 ## patch rule
 
+Patch rule allows mutation of objects.
 
 ### Example patch
 
