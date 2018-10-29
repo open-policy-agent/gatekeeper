@@ -32,8 +32,8 @@ func TestAdmissionBasic(t *testing.T) {
 	validRequest := makeAdmissionRequest("anyKind", "validName", "validNamespace")
 
 	setup := []tr{
-		{http.MethodPost, "/webhook", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "anyMessage","metadata": {}},"uid": "anyUID"}}`},
-		{http.MethodPost, "/webhook", validRequest, 200, `{"response": {"allowed": true,"uid": "anyUID"}}`},
+		{http.MethodPost, "/validate", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "anyMessage","metadata": {}},"uid": "anyUID"}}`},
+		{http.MethodPost, "/validate", validRequest, 200, `{"response": {"allowed": true,"uid": "anyUID"}}`},
 	}
 
 	for _, tr := range setup {
@@ -56,27 +56,17 @@ func TestAdmissionBasic(t *testing.T) {
 */
 
 func TestPatchResultBasic(t *testing.T) {
-
 	var expected opatypes.QueryResponseV1
 	err := util.UnmarshalJSON([]byte(`{
-		"result": [{"a":[1,2,3],"i":0,"x":1},{"a":[1,2,3],"i":1,"x":2},{"a":[1,2,3],"i":2,"x":3}]
-	}`), &expected)
-	if err != nil {
-		panic(err)
-	}
-
-	err = util.UnmarshalJSON([]byte(`{
 		"result": [{"id":"conditional-annotation","p":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}]
 	}`), &expected)
 	if err != nil {
 		panic(err)
 	}
-
 	bytes, err := createPatchFromOPAResult(expected.Result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	panic(string(bytes))
 	if bytes == nil || len(bytes) == 0 {
 		t.Fatal("bytes is nil or empty")
 	}

@@ -9,6 +9,7 @@ import (
 // FakeOPA is a OPA mock used for unit testing
 type FakeOPA struct {
 	allViolations map[string][]types.Deny
+	allPatches    map[string][]types.Patch
 }
 
 // SetViolation sets a violation for a query pattern
@@ -44,6 +45,19 @@ func (o *FakeOPA) PostQuery(query string) ([]map[string]interface{}, error) {
 
 // MakeDenyObject is helped menthod to make deny object
 func MakeDenyObject(id, kind, name, namespace, message string) types.Deny {
+	return types.Deny{
+		ID: id,
+		Resource: types.Resource{
+			Kind:      kind,
+			Name:      name,
+			Namespace: namespace,
+		},
+		Message: message,
+	}
+}
+
+// MakePatchObject is helped menthod to make deny object
+func MakePatchObject(id, kind, name, namespace, message string) types.Deny {
 	return types.Deny{
 		ID: id,
 		Resource: types.Resource{

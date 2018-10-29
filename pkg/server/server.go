@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -40,12 +41,6 @@ type Server struct {
 	addrs  []string
 	cert   *tls.Certificate
 	Opa    opa.Query
-}
-
-type patchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
 }
 
 // Loop will contain all the calls from the server that we'll be listening on.
@@ -285,41 +280,46 @@ func (s *Server) Validate(logger *log.Entry, w http.ResponseWriter, r *http.Requ
 }
 
 func createPatchFromOPAResult(result []map[string]interface{}) ([]byte, error) {
-	patches := []patchOperation{}
-	/*
-		for _, r := range result {
-			for k, val := range r {
-				switch k {
-				case "p":
-					var v string
-					var ok bool
-					if v, ok = val.(string); !ok {
-						return nil, fmt.Errorf("failed patchOperation invalid type %v", val)
-					}
-					fmt.Printf("%v", v)
-
-						p := patchOperation{}
-						if p.Op, ok = v["op"]; !ok {
-							return nil, fmt.Errorf("failed patchOperation missing op %v", v)
-						}
-						p = patchOperation{}
-						if p.Path, ok = v["path"]; !ok {
-							fmt.Printf("failed patchOperation missing path %v", v)
-							continue
-						}
-						p = patchOperation{}
-						if p.Value, ok = v["value"]; !ok {
-							fmt.Printf("failed patchOperation missing path %v", v)
-							continue
-						}
-						patches = append(patches, p)
-				}
-			}
+	patches := []types.PatchOperation{}
+	for _, ri := range result {
+		var val interface{}
+		var ok bool
+		if val, ok = ri["p"]; !ok {
+			return nil, nil
 		}
-	*/
+		var v []interface{}
+		if v, ok = val.([]interface{}); !ok {
+			return nil, fmt.Errorf("failed patchOperation invalid type %v %v", val, reflect.TypeOf(val))
+		}
 
-	patches = []patchOperation{{Op: "add", Path: "/metadata/annotations/foo", Value: "bar"}}
-
+		for _, pi := range v {
+			var piv map[string]interface{}
+			if piv, ok = pi.(map[string]interface{}); !ok {
+				return nil, fmt.Errorf("failed invalid type %v %v", pi, reflect.TypeOf(pi))
+			}
+			p := types.PatchOperation{}
+			var x interface{}
+			if x, ok = piv["op"]; !ok {
+				break
+			}
+			if p.Op, ok = x.(string); !ok {
+				break
+			}
+			if x, ok = piv["path"]; !ok {
+				break
+			}
+			if p.Path, ok = x.(string); !ok {
+				break
+			}
+			if x, ok = piv["value"]; !ok {
+				break
+			}
+			if p.Value, ok = x.(string); !ok {
+				break
+			}
+			patches = append(patches, p)
+		}
+	}
 	return createPatch(patches)
 }
 
@@ -365,7 +365,7 @@ func (s *Server) isValid(req *v1beta1.AdmissionRequest) (bool, string, error) {
 }
 
 // create mutation patch for resoures
-func createPatch(patches []patchOperation) ([]byte, error) {
+func createPatch(patches []types.PatchOperation) ([]byte, error) {
 	return json.Marshal(patches)
 }
 

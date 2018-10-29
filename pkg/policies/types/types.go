@@ -11,11 +11,25 @@ type Resource struct {
 	Name      string `json:"name,omitempty"`
 }
 
-// Violation models a resource violation on the enabled policy rules
+// Deny models a resource violation on the enabled policy rules
 type Deny struct {
 	ID       string   `json:"id,omitempty"`
 	Resource Resource `json:"resource,omitempty"`
 	Message  string   `json:"message,omitempty"`
+}
+
+// PatchOperation models a patch operation
+type PatchOperation struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
+// Patch models a resource patch policy
+type Patch struct {
+	ID       string           `json:"id,omitempty"`
+	Resource Resource         `json:"resource,omitempty"`
+	Patches  []PatchOperation `json:"patch,omitempty"`
 }
 
 var (
