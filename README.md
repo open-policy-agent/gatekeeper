@@ -1,10 +1,10 @@
 # kubernetes-policy-controller
 
-Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating webhook which gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
+Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating and a validating webhook which gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
 
 ## Status
 
-This is a new project and changes are still happening. Additionally the master branch may see some changes which break the build.
+This is a new project and is in alpha state.
 
 ## Using kubernetes-policy-controller
 
@@ -88,7 +88,7 @@ kubectl get deployment nginx -o json | jq '.metadata'
 ### policy language
 
 The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
-Policy ruled are create as a rego files. 
+Policy rules are create as a rego files. 
 
 ### package addmission
 
