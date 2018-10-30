@@ -1,6 +1,6 @@
 # kubernetes-policy-controller
 
-Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating webhook which gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) whcih is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
+Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating webhook which gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
 
 ## Status
 
@@ -23,6 +23,13 @@ Deploy sample policies
 ```bash
 ./deploy/deploy-admission-policy.sh
 ```
+
+## scenarios
+
+There are two scenarios of the policy engine namely Validation and Mutation
+
+* Validation: "all resources R in namespace N are taged with annotation A"
+* Mutation: "before a resource R in namespace N is created tag it with tag T"  
 
 ## 1. `validation` scenario
 
@@ -77,13 +84,6 @@ kubectl get deployment nginx -o json | jq '.metadata'
 ```
 
 ## create-policy
-
-### scenarios
-
-There are two scenarios of the policy engine namely Validation and Mutation
-
-* Validation: "all resources R in namespace N are taged with annotation A"
-* Mutation: "before a resource R in namespace N is created tag it with tag T"  
 
 ### policy language
 

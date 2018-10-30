@@ -447,7 +447,7 @@ func (s *Server) validate(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1bet
 	logger.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v",
 		req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
 
-	// determine whether to perform mutation
+	// validate
 	valid, reason, err := s.isValid(req)
 	if err != nil {
 		logger.Errorf("ar=%+v error=%v", ar, err)
