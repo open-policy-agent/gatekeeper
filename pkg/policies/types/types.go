@@ -95,10 +95,10 @@ func MakeSingleClusterResourceQuery(operation, resource, name string) string {
 			"message": message,}]`,
 			resource, name)
 	case "patch":
-		return fmt.Sprintf(`data.admission.patch[{
+		return fmt.Sprintf(`patches = [p | data.admission.patch[{
 			"id": id,
 			"resource": {"kind": "%s", "name": "%s"},
-			"patch": p,}]`,
+			"patch": p,}]]`,
 			resource, name)
 	default:
 		panic(fmt.Errorf("unsupported operation(%s)", operation))

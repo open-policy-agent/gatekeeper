@@ -280,14 +280,22 @@ func (s *Server) Validate(logger *log.Entry, w http.ResponseWriter, r *http.Requ
 }
 
 func createPatchFromOPAResult(result []map[string]interface{}) ([]byte, error) {
-	patches := []types.PatchOperation{}
 	var val interface{}
 	var ok bool
+	if len(result) != 1 {
+		return nil, fmt.Errorf("invalid patch opa result, %v", result)
+	}
 	if val, ok = result[0]["patches"]; !ok {
 		return nil, nil
 	}
-
-	return createPatch(patches)
+	var patches []interface{}
+	if patches, ok = val.([]interface{}); !ok {
+		return nil, fmt.Errorf("invalid patch value in opa result %v", val)
+	}
+	if len(patches) == 0 {
+		return nil, nil
+	}
+	return createPatch(patches[0])
 }
 
 func (s *Server) mutationRequired(req *v1beta1.AdmissionRequest) ([]byte, error) {
@@ -298,15 +306,14 @@ func (s *Server) mutationRequired(req *v1beta1.AdmissionRequest) ([]byte, error)
 	}
 
 	result, err := s.Opa.PostQuery(mutationQuery)
-	if err != nil && !opa.IsUndefinedErr(err) || len(result) == 0 {
-		return nil, err
+	if err != nil && !opa.IsUndefinedErr(err) {
+		return nil, fmt.Errorf("opa query failed query=%s err=%v", mutationQuery, err)
 	}
 
 	bs, err := createPatchFromOPAResult(result)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("patches ==============> %s", string(bs))
 	return bs, nil
 }
 
@@ -337,10 +344,13 @@ func createPatch(data interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(bs) == 0 {
+		return nil, nil
+	}
 	encodedbs := make([]byte, base64.URLEncoding.EncodedLen(len(bs)))
 	base64.StdEncoding.Encode(encodedbs, bs)
 
-	return encodedbs, nil
+	return bs, nil
 }
 
 func makeOPAWithAsQuery(query, path, value string) string {
