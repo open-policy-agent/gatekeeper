@@ -65,10 +65,10 @@ func MakeSingleNamespaceResourceQuery(operation, resource, namespace, name strin
 			"message": message,}]`,
 			resource, namespace, name)
 	case "patch":
-		return fmt.Sprintf(`data.admission.patch[{
+		return fmt.Sprintf(`patches = [p | data.admission.patch[{
 			"id": id,
 			"resource": {"kind": "%s", "namespace": "%s", "name": "%s"},
-			"patch": p,}]`,
+			"patch": ps,}]; p := ps[_]]`,
 			resource, namespace, name)
 	default:
 		panic(fmt.Errorf("unsupported operation(%s)", operation))
@@ -95,10 +95,10 @@ func MakeSingleClusterResourceQuery(operation, resource, name string) string {
 			"message": message,}]`,
 			resource, name)
 	case "patch":
-		return fmt.Sprintf(`data.admission.patch[{
+		return fmt.Sprintf(`patches = [p | data.admission.patch[{
 			"id": id,
 			"resource": {"kind": "%s", "name": "%s"},
-			"patch": p,}]`,
+			"patch": ps,}]; p := ps[_]]`,
 			resource, name)
 	default:
 		panic(fmt.Errorf("unsupported operation(%s)", operation))

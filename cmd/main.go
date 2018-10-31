@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rite2nikhil/kubernetes-policy/pkg/opa"
-	server "github.com/rite2nikhil/kubernetes-policy/pkg/server"
+	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
+	server "github.com/Azure/kubernetes-policy-controller/pkg/server"
 	"github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 )

@@ -49,7 +49,7 @@ func TestAdmissionBasic(t *testing.T) {
 func TestPatchResultBasic(t *testing.T) {
 	var expected opatypes.QueryResponseV1
 	err := util.UnmarshalJSON([]byte(`{
-		"result": [{"id":"conditional-annotation","p":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}]
+		"result":[{"patches":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}]
 	}`), &expected)
 	if err != nil {
 		panic(err)
@@ -60,6 +60,29 @@ func TestPatchResultBasic(t *testing.T) {
 	}
 	if bytes == nil || len(bytes) == 0 {
 		t.Fatal("bytes is nil or empty")
+	}
+
+	var patches *[]types.PatchOperation
+	if err := json.Unmarshal(bytes, &patches); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPatchResultEmpty(t *testing.T) {
+	var expected opatypes.QueryResponseV1
+	err := util.UnmarshalJSON([]byte(`{
+	"result":[{"patches":[]}]
+	}`), &expected)
+	if err != nil {
+		panic(err)
+	}
+
+	bytes, err := createPatchFromOPAResult(expected.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes != nil || len(bytes) != 0 {
+		t.Fatal("bytes is not nil or empty")
 	}
 }
 

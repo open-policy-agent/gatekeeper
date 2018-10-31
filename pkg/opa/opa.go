@@ -152,15 +152,12 @@ func (c *httpClient) PostQuery(query string) ([]map[string]interface{}, error) {
 	}
 	var result types.QueryResponseV1
 
-	fmt.Println("response--->>", resp)
 	if resp.StatusCode != 200 {
 		return nil, c.handleErrors(resp)
 	}
-	fmt.Println("after 200 check response--->>")
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	fmt.Printf("result --->> %+v \n", result)
 	if result.Result == nil {
 		return nil, Undefined{}
 	}
