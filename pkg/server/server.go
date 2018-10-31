@@ -295,7 +295,7 @@ func createPatchFromOPAResult(result []map[string]interface{}) ([]byte, error) {
 	if len(patches) == 0 {
 		return nil, nil
 	}
-	return createPatch(patches[0])
+	return createPatch(patches)
 }
 
 func (s *Server) mutationRequired(req *v1beta1.AdmissionRequest) ([]byte, error) {

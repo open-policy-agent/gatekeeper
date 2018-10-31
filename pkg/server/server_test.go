@@ -49,7 +49,7 @@ func TestAdmissionBasic(t *testing.T) {
 func TestPatchResultBasic(t *testing.T) {
 	var expected opatypes.QueryResponseV1
 	err := util.UnmarshalJSON([]byte(`{
-		"result":[{"patches":[[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]]}]
+		"result":[{"patches":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}]
 	}`), &expected)
 	if err != nil {
 		panic(err)
