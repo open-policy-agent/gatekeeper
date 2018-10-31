@@ -65,10 +65,10 @@ func MakeSingleNamespaceResourceQuery(operation, resource, namespace, name strin
 			"message": message,}]`,
 			resource, namespace, name)
 	case "patch":
-		return fmt.Sprintf(`data.admission.patch[{
+		return fmt.Sprintf(`patches = [p | data.admission.patch[{
 			"id": id,
 			"resource": {"kind": "%s", "namespace": "%s", "name": "%s"},
-			"patch": p,}]`,
+			"patch": p,}]]`,
 			resource, namespace, name)
 	default:
 		panic(fmt.Errorf("unsupported operation(%s)", operation))
