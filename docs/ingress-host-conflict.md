@@ -140,7 +140,7 @@ kubectl create ns test
 Try create a 
 
 ```bash 
-kubectl -n qa apply -f ~/opa/ingress-bad.yaml
+kubectl -n test apply -f ./ingress-host.yaml
 ```
 
 This is the error message returned by the `kubernetes-policy-controller`
