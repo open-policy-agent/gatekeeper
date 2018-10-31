@@ -1,4 +1,4 @@
-# Enforce Custom Policy on Kubernetes Cluster
+# Kubernetes clusters governance made simple
 
 ## Overview
 
@@ -11,7 +11,7 @@ Kubernetes compliance is enforced at the “runtime” via tools such as network
 * Label objects based on user from a department.
 * What are the policies that my cluster is violating.
 
-We are happy to announce `kubernetes-policy-controller` which allows enforcing custom semantic rules on on objects during create, update and delete operations without recompiling or reconfiguring the Kubernetes API server. The controller is backed by the Open Policy Agent([OPA](https://github.com/open-policy-agent/opa)) is a light weight , general purpose policy engine for Cloud Native environments.
+We are happy to announce `kubernetes-policy-controller` which allows enforcing custom semantic rules on on objects during create, update and delete operations without recompiling or reconfiguring the Kubernetes API server. The controller is backed by the Open Policy Agent([OPA](https://github.com/open-policy-agent/opa)) which is a light weight, general purpose policy engine for Cloud Native environments.
 
 ## How policy works with `kubernetes-policy-controller`
 
