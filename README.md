@@ -1,6 +1,6 @@
 # kubernetes-policy-controller
 
-Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating and a validating webhook which gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
+Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of "admission controllers”. Admission control is custom logic executed by a webhook. `kubernetes-policy-controller` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
 
 ## Status
 
@@ -10,15 +10,15 @@ This is a new project and is in alpha state.
 
 ## 1. Deployment
 
-Prerequisite a kubernetes cluster e.g. using ACS engine or AKS
+Access to a Kubernetes cluster with "cluster-admin" permission is the only prerequisite.
 
-Deploy `kubernetes-policy-controller`
+Deploy `kubernetes-policy-controller`:
 
 ```bash
 ./deploy/deploy-all.sh
 ```
 
-Deploy sample policies
+Deploy sample policies:
 
 ```bash
 ./deploy/deploy-admission-policy.sh
@@ -43,7 +43,7 @@ kubectl create configmap example --from-file ./policy/admission/ingress-host-fqd
 kubectl create ns qa
 ```
 
-The following call should fail with by policy
+The following call should fail with policy:
 
 ```bash
 kubectl -n qa apply -f ~/opa/ingress-bad.yaml
@@ -88,11 +88,11 @@ kubectl get deployment nginx -o json | jq '.metadata'
 ### policy language
 
 The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
-Policy rules are create as a rego files. 
+Policy rules are created as a rego files. 
 
 ### package addmission
 
-`kubernetes-policy-controller` defines a special package name `admission` which is uses to logically execute all the rules.
+`kubernetes-policy-controller` defines a special package name `admission` which is used to logically execute all the rules.
 So any rule defined should be part of this package.
 
 ```go
@@ -101,7 +101,7 @@ package admission
 
 ### deny rule
 
-Each violation of policy is a `deny` rule. So all we need to capture is all `deny` matches in order to validate.  
+Each violation of a policy is a `deny` rule. So all we need to capture is all `deny` matches in order to validate.  
 In the `policy` package any validation rule should be defined as special name called `deny`. In order to understand the basic idea lets consider a case where we want to create a rule which will block all API server requests i.e fail validation of all requests. The following models a that will always `deny` event
 
 ```go
@@ -118,7 +118,7 @@ deny[{
 
 ### matches[[kind, namespace, name, matched_resource_output]]  
 
-While defining a `deny` rule finding resources that match a criteria is required, for instance if you are writing a violation for a specific ingress resource. kubernetes-policy-controller provides the matches funcationality by importing `data.kubernetes.matches`
+When defining a deny rule, you must find Kubernetes resources that match specific criteria, such as Ingress resources in a particular namespace. `kubernetes-policy-controller` provides the matches functionality by importing `data.kubernetes.matches`.
 
 ```go
 import data.kubernetes.matches
@@ -150,7 +150,7 @@ import data.kubernetes.matches
 matches[["ingress", "production", "my-ingress", matched_ingress]]
 ```
 
-Here is an example of a policy which validates that Ingress hostnames must be unique across Namespaces. This policy shows how you can express a pair-wise search. In this case, there is a violation if any two ingresses in different namespaces. Note, you can query OPA to determine whether a single Ingress violates the policy (in which case the cost is linear with the # of Ingresses) or you can query for the set of all Ingresses th violate the policy (in which case the cost is (# of Ingresses)^2.).
+Here is an example of a policy which validates that Ingress hostnames must be unique across Namespaces. This policy shows how you can express a pair-wise search. In this case, there is a violation if any two ingresses in different namespaces have the same hostname. Note, you can query OPA to determine whether a single Ingress violates the policy (in which case the cost is linear with the # of Ingresses) or you can query for the set of all Ingresses that violate the policy (in which case the cost is (# of Ingresses)^2.).
 Author : [Torrin Sandall](https://github.com/tsandall)
 
 ```go
