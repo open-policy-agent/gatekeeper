@@ -90,7 +90,7 @@ kubectl get deployment nginx -o json | jq '.metadata'
 The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
 Policy rules are created as a rego files. 
 
-### package addmission
+### package admission
 
 `kubernetes-policy-controller` defines a special package name `admission` which is used to logically execute all the rules.
 So any rule defined should be part of this package.
