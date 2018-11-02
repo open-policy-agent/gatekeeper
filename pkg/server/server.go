@@ -146,18 +146,23 @@ func (s *Server) initRouter() {
 
 	s.registerHandler(router, 1, "/validate", http.MethodPost, appHandler(s.Validate))
 	s.registerHandler(router, 1, "/mutate", http.MethodPost, appHandler(s.Mutate))
+	s.registerHandler(router, 1, "/audit", http.MethodGet, appHandler(s.Audit))
 
 	// default 405
 	router.Handle("/mutate/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
 		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
 	router.Handle("/mutate", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
 		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
-
 	// default 405
 	router.Handle("/validate/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
 		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
 	router.Handle("/validate", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
 		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
+	// default 405
+	router.Handle("/audit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
+		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
+	router.Handle("/audit", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
+		http.MethodConnect, http.MethodDelete, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
 
 	s.Handler = router
 }
@@ -173,6 +178,25 @@ func HTTPStatus(code int) func(logger *log.Entry, w http.ResponseWriter, req *ht
 func (s *Server) registerHandler(router *mux.Router, version int, path string, method string, handler http.Handler) {
 	prefix := fmt.Sprintf("/v%d", version)
 	router.Handle(prefix+path, handler).Methods(method)
+}
+
+// Audit method for reporting current policy complaince of the cluster
+func (s *Server) Audit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
+	auditResponse, err := s.audit()
+	if err != nil {
+		logger.Errorf("error geting audit response: %v", err)
+		http.Error(w, fmt.Sprintf("error gettinf audit response: %v", err), http.StatusInternalServerError)
+	}
+	resp, err := json.Marshal(auditResponse)
+	if err != nil {
+		logger.Errorf("can not encode response: %v", err)
+		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
+	}
+	logger.Infof("ready to write reponse %v...", auditResponse)
+	if _, err := w.Write(resp); err != nil {
+		logger.Errorf("Can't write response: %v", err)
+		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
+	}
 }
 
 // Mutate method for mutation webhook server
@@ -482,6 +506,20 @@ func (s *Server) mutate(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1
 			return &pt
 		}(),
 	}
+}
+
+// main validation process
+func (s *Server) audit() ([]byte, error) {
+	validationQuery := types.MakeAuditQuery()
+	response, err := s.Opa.PostQuery(validationQuery)
+	if err != nil && !opa.IsUndefinedErr(err) {
+		return nil, err
+	}
+	bs, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return bs, nil
 }
 
 // InstallDefaultAdmissionPolicy will update OPA with a default policy  This function will
