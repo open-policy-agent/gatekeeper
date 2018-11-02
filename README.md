@@ -1,6 +1,18 @@
 # kubernetes-policy-controller
 
+Every organization has some rules. Some of these are essential to meet governance, and legal requirements and other are based on learning from past experience and not repeating the same mistakes. These decisions cannot tolerate human response time as they need near a real-time action. Services that are policy enabled to make the organization agile and are essential for long-term success as they are more adaptable as violations and conflicts can be discovered consistently as they are not prone to human error. 
+
 Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of "admission controllers”. Admission control is custom logic executed by a webhook. `kubernetes-policy-controller` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
+
+Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [kubernetes-policy-controller](https://github.com/Azure/kubernetes-policy-controller) extends the compliance enforcement at “create” event not at “run“ event. For example, a kubernetes service could answer questions like :
+
+* Can we whitelist / blacklist registries.
+* Not allow conflicting hosts for ingresses.
+* Label objects based on a user from a department.
+
+In addition to the `admission` scenario  it helps answer the `audit` question such as:
+
+* What are the policies that my cluster is violating.
 
 ## Status
 
