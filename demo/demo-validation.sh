@@ -1,3 +1,3 @@
 #!/bin/bash
 
-kubectl -n qa apply -f ~/opa/ingress-bad.yaml
+kubectl -n qa apply -f ingress-bad.yaml

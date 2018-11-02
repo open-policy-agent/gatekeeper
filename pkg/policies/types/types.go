@@ -36,24 +36,29 @@ var (
 	// KubernetesPolicy - Matches provides an abstraction to find resources that match the (kind,
 	// namespace, name) triplet.
 	KubernetesPolicy = []byte(`
-		package kubernetes
-		import data.kubernetes.resources
+		package k8s
+		import data.kubernetes
 		
 		matches[[kind, namespace, name, resource]] {
-			resource := resources[kind][namespace][name]
+			resource := kubernetes[kind][namespace][name]
 		}
 	`)
 	// PolicyMatchPolicy - policymatches provides an abstraction to find policies that match the (name).
 	PolicyMatchPolicy = []byte(`
-		package kubernetes
+		package k8s
 		import data.kubernetes.policies
-
+		
 		# Matches provides an abstraction to find policies that match the (name). 
 		policymatches[[name, policy]] {
 			policy := policies[name]
 		}
 	`)
 )
+
+// MakeAuditQuery query for all deny (policy violations)
+func MakeAuditQuery() string {
+	return `data.admission.deny[v]`
+}
 
 // MakeSingleNamespaceResourceQuery makes a single resource query
 func MakeSingleNamespaceResourceQuery(operation, resource, namespace, name string) string {
