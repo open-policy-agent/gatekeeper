@@ -21,7 +21,7 @@ This is a new project and is in alpha state.
 ## Slack Channel
 
 To participate and contribute in defining and creating kubernetes policies, here is the link to the `kubernetes-policy` slack channel.
-https://openpolicyagent.slack.com/messages/CDTN970AX
+https://openpolicyagent.slack.com/messages/CDTN970AX. Sign up at https://slack.openpolicyagent.org/.
 
 ## Using kubernetes-policy-controller
 
