@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+
 echo "Deploy OPA and kube-mgmt"
 
 read -p "Press enter to continue"
@@ -9,6 +10,7 @@ read -p "Press enter to continue"
 kubectl create ns opa
 
 # create tls secret
+rm -rf ./secret
 mkdir ./secret
 cd ./secret
 
