@@ -18,7 +18,7 @@
     deny[{
         "id": "ingress-conflict",
         "resource": {"kind": "ingresses", "namespace": namespace, "name": name},
-        "message": "ingress host conflicts with an existing ingress",
+        "resolution": {"message": "ingress host conflicts with an existing ingress"},
     }] {
         matches[["ingresses", namespace, name, matched_ingress]]
         matches[["ingresses", other_ns, other_name, other_ingress]]

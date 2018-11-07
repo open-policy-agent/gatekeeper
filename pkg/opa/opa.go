@@ -43,7 +43,6 @@ func IsUndefinedErr(err error) bool {
 // Client defines the OPA client interface.
 type Client interface {
 	Policies
-	Data
 	Query
 }
 
@@ -51,14 +50,6 @@ type Client interface {
 type Policies interface {
 	InsertPolicy(id string, bs []byte) error
 	DeletePolicy(id string) error
-}
-
-// Data defines the interface for pushing data in OPA.
-type Data interface {
-	Prefix(path string) Data
-	PatchData(path string, op string, value *interface{}) error
-	PutData(path string, value interface{}) error
-	PostData(path string, value interface{}) (json.RawMessage, error)
 }
 
 // Query defines the interface for query data in OPA.
@@ -74,67 +65,6 @@ func New(url string) Client {
 type httpClient struct {
 	url    string
 	prefix string
-}
-
-func (c *httpClient) Prefix(path string) Data {
-	cpy := *c
-	cpy.prefix = joinPaths("/", c.prefix, path)
-	return &cpy
-}
-
-func (c *httpClient) PatchData(path string, op string, value *interface{}) error {
-	buf, err := c.makePatch(path, op, value)
-	if err != nil {
-		return err
-	}
-	resp, err := c.do("PATCH", slashPath("data"), buf)
-	if err != nil {
-		return err
-	}
-	return c.handleErrors(resp)
-}
-
-func (c *httpClient) PutData(path string, value interface{}) error {
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(value); err != nil {
-		return err
-	}
-	absPath := slashPath("data", c.prefix, path)
-	resp, err := c.do("PUT", absPath, &buf)
-	if err != nil {
-		return err
-	}
-	return c.handleErrors(resp)
-}
-
-func (c *httpClient) PostData(path string, value interface{}) (json.RawMessage, error) {
-	var buf bytes.Buffer
-	var input struct {
-		Input interface{} `json:"input"`
-	}
-	input.Input = value
-	if err := json.NewEncoder(&buf).Encode(input); err != nil {
-		return nil, err
-	}
-	absPath := slashPath("data", c.prefix, path)
-	resp, err := c.do("POST", absPath, &buf)
-	if err != nil {
-		return nil, err
-	}
-	var result struct {
-		Result json.RawMessage        `json:"result"`
-		Error  map[string]interface{} `json:"error"`
-	}
-	if resp.StatusCode != 200 {
-		return nil, c.handleErrors(resp)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	if result.Result == nil {
-		return nil, Undefined{}
-	}
-	return result.Result, nil
 }
 
 func (c *httpClient) PostQuery(query string) ([]map[string]interface{}, error) {

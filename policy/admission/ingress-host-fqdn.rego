@@ -21,7 +21,7 @@
             "namespace": namespace,         # identifies namespace of resource
             "name": name                    # identifies name of resource
         },
-        "message": msg,                     # provides human-readable message to display
+        "resolution": {"message": msg},                     # provides human-readable message to display
     }] {
         matches[["ingresses", namespace, name, matched_ingress]]
         host := matched_ingress.spec.rules[_].host
