@@ -35,10 +35,10 @@ cd ..
 kubectl -n opa create secret tls opa-server --cert=./secret/server.crt --key=./secret/server.key
 
 # deploy kubernetes-policy-controller 
-kubectl apply -n opa -f ./opa.yaml
+kubectl apply -n opa -f ./deploy/opa.yaml
 
 # deploy kubernetes policies
-kubectl -n opa create configmap kubernetes-matches --from-file=../policy/kubernetes/matches.rego
+kubectl -n opa create configmap kubernetes-matches --from-file=./policy/kubernetes/matches.rego
 
 # deploy webhooks
 cat > ./secret/mutating-webhook-configuration.yaml <<EOF
