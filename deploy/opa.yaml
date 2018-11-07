@@ -78,7 +78,7 @@ spec:
         # authentication and authorization on the daemon. See the Security page for
         # details: https://www.openpolicyagent.org/docs/security.html.
         - name: opa
-          image: nikhilbh/opa:0.9.3-dev
+          image: openpolicyagent/opa:0.10.1
           imagePullPolicy: Always
           args:
             - "run"
@@ -91,7 +91,7 @@ spec:
             - "--replicate-cluster=v1/namespaces"
             - "--replicate=extensions/v1beta1/ingresses"
         - name: controller
-          image: nikhilbh/kubernetes-policy-controller:1.1
+          image: nikhilbh/kubernetes-policy-controller:1.2
           imagePullPolicy: Always
           args:
             - "--addr=0.0.0.0:443"
