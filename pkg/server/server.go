@@ -170,7 +170,7 @@ func (s *Server) registerHandler(router *mux.Router, version int, path string, m
 
 // Audit method for reporting current policy complaince of the cluster
 func (s *Server) Audit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
-	auditResponse, err := s.audit()
+	auditResponse, err := s.audit(logger)
 	if err != nil {
 		logger.Errorf("error geting audit response: %v", err)
 		http.Error(w, fmt.Sprintf("error gettinf audit response: %v", err), http.StatusInternalServerError)
@@ -183,7 +183,7 @@ func (s *Server) Audit(logger *log.Entry, w http.ResponseWriter, r *http.Request
 }
 
 // main validation process
-func (s *Server) audit() ([]byte, error) {
+func (s *Server) audit(logger *log.Entry) ([]byte, error) {
 	validationQuery := types.MakeAuditQuery()
 	result, err := s.Opa.PostQuery(validationQuery)
 	if err != nil && !opa.IsUndefinedErr(err) {
@@ -193,19 +193,17 @@ func (s *Server) audit() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var allViolations []types.Deny
-	err = util.UnmarshalJSON(bs, &allViolations)
+	var response types.AuditResponseV1
+	err = util.UnmarshalJSON(bs, &response.Violations)
 	if err != nil {
 		return nil, err
 	}
-	response := types.AuditResponseV1{}
-	response.Message = fmt.Sprintf("total violations:%v", len(allViolations))
-	response.Violations = allViolations
-
+	response.Message = fmt.Sprintf("total violations:%v", len(response.Violations))
 	bs, err = json.Marshal(response)
 	if err != nil {
 		panic(err)
 	}
+
 	return bs, nil
 }
 

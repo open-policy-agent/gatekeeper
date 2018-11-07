@@ -62,7 +62,10 @@ var (
 
 // MakeAuditQuery query for all deny (policy violations)
 func MakeAuditQuery() string {
-	return `data.admission.deny[v]`
+	return `data.admission.deny[{
+		"id": id,
+		"resource": {"kind": kind, "namespace": namespace, "name": name},
+		"resolution": resolution,}]`
 }
 
 // MakeSingleNamespaceResourceQuery makes a single resource query
