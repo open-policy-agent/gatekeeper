@@ -20,8 +20,10 @@ This is a new project and is in alpha state.
 
 ## Slack Channel
 
-To participate and contribute in defining and creating kubernetes policies, here is the link to the `kubernetes-policy` slack channel.
-https://openpolicyagent.slack.com/messages/CDTN970AX. Sign up at https://slack.openpolicyagent.org/.
+To participate and contribute in defining and creating kubernetes policies.
+Channel Name: `kubernetes-policy`
+[slack channel] (https://openpolicyagent.slack.com/messages/CDTN970AX)
+[Sign up] (https://slack.openpolicyagent.org/)
 
 ## Using kubernetes-policy-controller
 
@@ -127,7 +129,7 @@ package admission
 deny[{
     "type": "always",
     "resource": {"kind": kind, "namespace": namespace, "name": name},
-    "message": "test always violate",
+    "resolution": {"message": "test always violate"},
 }] {
     true
 }
@@ -177,20 +179,20 @@ import data.kubernetes.matches
 
 deny[{
     "id": "ingress-conflict",
-    "resource": {"kind": "ingress", "namespace": namespace, "name": name},
-    "message": "ingress host conflicts with an existing ingress",
+    "resource": {"kind": "ingresses", "namespace": namespace, "name": name},
+    "resolution": {"message": "ingress host conflicts with an existing ingress"},
 }] {
-    matches[["ingress", namespace, name, matched_ingress]]
-    matches[["ingress", other_ns, other_name, other_ingress]]
+    matches[["ingresses", namespace, name, matched_ingress]]
+    matches[["ingresses", other_ns, other_name, other_ingress]]
     namespace != other_ns
     other_ingress.spec.rules[_].host == matched_ingress.spec.rules[_].host
 }
 
 ```
 
-## patch rule
+## patches resolution
 
-Patch rule allows mutation of objects.
+Patches field allows mutation of objects.
 
 ### Example patch
 
@@ -206,10 +208,10 @@ import data.k8s.matches
 #
 ##############################################################################
 
-patch[{
+deny[{
     "id": "conditional-annotation",
     "resource": {"kind": kind, "namespace": namespace, "name": name},
-    "patch":  p,
+    "resolution": {"patches":  p, "message" : "conditional annotation"},
 }] {
     matches[[kind, namespace, name, matched_object]]
     matched_object.metadata.annotations["test-mutation"]

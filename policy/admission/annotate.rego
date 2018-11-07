@@ -8,10 +8,10 @@ import data.k8s.matches
 #
 ##############################################################################
 
-patch[{
+deny[{
     "id": "conditional-annotation",
     "resource": {"kind": kind, "namespace": namespace, "name": name},
-    "patch":  p,
+    "resolution": {"patches":  p, "message" : "conditional annotation"},
 }] {
     matches[[kind, namespace, name, matched_object]]
     matched_object.metadata.annotations["test-mutation"]

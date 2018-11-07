@@ -18,19 +18,19 @@ We are happy to announce `kubernetes-policy-controller` which allows enforcing c
 Policy-enablement empowers users to read, write, and manage these rules without needing specialized development. Policy rules can be selected from a library of pre-created rules or can be added to the library using Rego using OPA’s native query language Rego following a standard template to define validation and mutation policies. Below is one example of a validation policy:
 
 ```python
-    deny[{
-        "id": "ingress-conflict",
-        "resource": {"kind": "ingresses", "namespace": namespace, "name": name},
-        "message": "ingress host conflicts with an existing ingress",
-    }] {
-        # gets the ingress matching the ingress that needs to be validated
-        matches[["ingresses", namespace, name, matched_ingress]]
-        # gets any other ingress which is already a part of the cluster
-        matches[["ingresses", other_ns, other_name, other_ingress]]
-        # filters to ingresses in other namespaces
-        namespace != other_ns
-        other_ingress.spec.rules[_].host == matched_ingress.spec.rules[_].host
-    }
+deny[{
+    "id": "ingress-conflict",
+    "resource": {"kind": "ingresses", "namespace": namespace, "name": name},
+    "resolution": {"message": "ingress host conflicts with an existing ingress"},
+}] {
+    # gets the ingress matching the ingress that needs to be validated
+    matches[["ingresses", namespace, name, matched_ingress]]
+    # gets any other ingress which is already a part of the cluster
+    matches[["ingresses", other_ns, other_name, other_ingress]]
+    # filters to ingresses in other namespaces
+    namespace != other_ns
+    other_ingress.spec.rules[_].host == matched_ingress.spec.rules[_].host
+}
 ```
 
 ## Architecture of `kubernetes-policy-controller`

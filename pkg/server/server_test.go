@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -18,22 +19,18 @@ import (
 	"k8s.io/api/admission/v1beta1"
 )
 
-func TestAdmissionBasic(t *testing.T) {
+func TestAuditWithValidateViolation(t *testing.T) {
 	f := newFixture(t)
 
 	fakeOpa := &opa.FakeOPA{}
-	fakeOpa.SetViolation(`anyname.*`, types.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage"))
+	fakeOpa.SetViolation(``, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
 	f.server, _ = New().
 		WithAddresses([]string{":8182"}).
 		WithOPA(fakeOpa).
 		Init(context.Background())
 
-	violationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
-	validRequest := makeAdmissionRequest("anyKind", "validName", "validNamespace")
-
 	setup := []tr{
-		{http.MethodPost, "/validate", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\n  {\n    \"v\": {\n      \"id\": \"anyID\",\n      \"resource\": {\n        \"kind\": \"anyKind\",\n        \"namespace\": \"anyNamespace\",\n        \"name\": \"anyName\"\n      },\n      \"message\": \"anyMessage\"\n    }\n  }\n]","metadata": {}},"uid": "anyUID"}}`},
-		{http.MethodPost, "/validate", validRequest, 200, `{"response": {"allowed": true,"uid": "anyUID"}}`},
+		{http.MethodGet, "/audit", "", 200, `{"message": "total violations:1","violations": [{"id": "anyID","resolution": {"message": "anyMessage"},"resource": {"kind": "anyKind","name": "anyName","namespace": "anyNamespace"}}]}`},
 	}
 
 	for _, tr := range setup {
@@ -46,20 +43,160 @@ func TestAdmissionBasic(t *testing.T) {
 	}
 }
 
+func TestSingleValidation(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	violationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
+	validRequest := makeAdmissionRequest("anyKind", "validName", "validNamespace")
+
+	setup := []tr{
+		{http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\"anyMessage\"]","metadata": {}},"uid": "anyUID"}}`},
+		{http.MethodPost, "/admit", validRequest, 200, `{"response": {"allowed": true, "status": {"message": "valid based on configured policies", "metadata": {}}, "uid": "anyUID"}}`},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultipleValidation(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage1", nil),
+		opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage2", nil))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	violationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
+
+	setup := []tr{
+		{http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\"anyMessage1\",\"anyMessage2\"]","metadata": {}},"uid": "anyUID"}}`},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSingleMutation(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath", Value: "anyValue"}}
+	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	expectedPatchBytes, err := getPatchBytes(patches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "%s", "patchType": "JSONPatch",  "status": {"message": "applying patches", "metadata": {}}, "uid": "anyUID"}}`, string(expectedPatchBytes))
+
+	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
+	setup := []tr{
+		{http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultipleNonConflictingMutation(t *testing.T) {
+	f := newFixture(t)
+	fakeOpa := &opa.FakeOPA{}
+	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath1", Value: "anyValue"}, {Op: "anyOp", Path: "anyPath2", Value: "anyValue"}}
+	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+	expectedPatchBytes, err := getPatchBytes(patches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "%s", "patchType": "JSONPatch",  "status": {"message": "applying patches", "metadata": {}}, "uid": "anyUID"}}`, string(expectedPatchBytes))
+	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
+	setup := []tr{
+		{http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
+	}
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultipleConflictingMutation(t *testing.T) {
+	f := newFixture(t)
+	fakeOpa := &opa.FakeOPA{}
+	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath", Value: "anyValue"}, {Op: "anyOp", Path: "anyPath", Value: "anyValue"}}
+	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
+	setup := []tr{
+		{http.MethodPost, "/admit", mutationRequest, 200, `{"response": {"allowed": false, "status": {"message": "conflicting patches caused denied request, operations ({Op:anyOp Path:anyPath Value:anyValue}, {Op:anyOp Path:anyPath Value:anyValue})","metadata": {}},"uid": "anyUID"}}`},
+	}
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPatchResultBasic(t *testing.T) {
 	var expected opatypes.QueryResponseV1
-	err := util.UnmarshalJSON([]byte(`{
-		"result":[{"patches":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}]
-	}`), &expected)
+	err := util.UnmarshalJSON([]byte(`{"result":[{"id":"conditional-annotation","resolution":{"message":"conditional annotation","patches":[{"op":"add","path":"/metadata/annotations/foo","value":"bar"}]}}]}`), &expected)
+
 	if err != nil {
 		panic(err)
 	}
-	bytes, err := createPatchFromOPAResult(expected.Result)
+	allowed, _, bytes, err := createPatchFromOPAResult(expected.Result)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes == nil || len(bytes) == 0 {
 		t.Fatal("bytes is nil or empty")
+	}
+	if !allowed {
+		t.Fatal("allowed is false for mutation")
 	}
 
 	var patches *[]types.PatchOperation
@@ -68,22 +205,56 @@ func TestPatchResultBasic(t *testing.T) {
 	}
 }
 
+func TestResultBasicValidation(t *testing.T) {
+	var expected opatypes.QueryResponseV1
+	err := util.UnmarshalJSON([]byte(
+		`{"result":[{"id":"ingress-host-fqdn","resolution":{"message":"invalid ingress host fqdn \"acmecorp.com\""}},
+					{"id":"ingress-host-fqdn","resolution":{"message":"invalid ingress host fqdn \"acmecorp.com\""}}
+				   ]
+		 }`), &expected)
+	if err != nil {
+		panic(err)
+	}
+	allowed, reason, patchBytes, err := createPatchFromOPAResult(expected.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if patchBytes != nil || len(patchBytes) != 0 {
+		t.Fatal("bytes is not nil or empty")
+	}
+	if allowed {
+		t.Fatal("allowed is true for policy violation")
+	}
+	if reason == "" {
+		t.Fatal("reason is nil for policy violation")
+	}
+}
+
 func TestPatchResultEmpty(t *testing.T) {
 	var expected opatypes.QueryResponseV1
 	err := util.UnmarshalJSON([]byte(`{
-	"result":[{"patches":[]}]
+	"result":[{"resolution":{}}]
 	}`), &expected)
 	if err != nil {
 		panic(err)
 	}
-
-	bytes, err := createPatchFromOPAResult(expected.Result)
+	_, _, bytes, err := createPatchFromOPAResult(expected.Result)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bytes != nil || len(bytes) != 0 {
 		t.Fatal("bytes is not nil or empty")
 	}
+}
+
+func getPatchBytes(patches []types.PatchOperation) ([]byte, error) {
+	bs, err := json.Marshal(patches)
+	if err != nil {
+		return nil, err
+	}
+	expectedPatchBytes := make([]byte, base64.URLEncoding.EncodedLen(len(bs)))
+	base64.StdEncoding.Encode(expectedPatchBytes, bs)
+	return expectedPatchBytes, nil
 }
 
 func makeAdmissionRequest(kind, namespace, name string) string {

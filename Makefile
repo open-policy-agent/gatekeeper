@@ -2,7 +2,7 @@ ORG_PATH=github.com/Azure
 PROJECT_NAME := kubernetes-policy-controller
 REPO_PATH="$(ORG_PATH)/$(PROJECT_NAME)"
 CONTROLLER_BINARY_NAME := kubernetes-policy-controller
-CONTROLLER_VERSION=1.1
+CONTROLLER_VERSION=1.2
 
 VERSION_VAR := $(REPO_PATH)/version.Version
 GIT_VAR := $(REPO_PATH)/version.GitCommit

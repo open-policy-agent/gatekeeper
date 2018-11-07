@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	opa "github.com/Azure/kubernetes-policy-controller/pkg/opa"
 	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
 	mux "github.com/gorilla/mux"
+	"github.com/open-policy-agent/opa/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,18 +108,15 @@ func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, error) {
 		Addr:    u.Host,
 		Handler: s.Handler,
 	}
-
 	httpLoop := func() error { return httpServer.ListenAndServe() }
 
 	return httpLoop, nil
 }
 
 func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
-
 	if s.cert == nil {
 		return nil, fmt.Errorf("TLS certificate required but not supplied")
 	}
-
 	httpsServer := http.Server{
 		Addr:    u.Host,
 		Handler: s.Handler,
@@ -127,16 +124,13 @@ func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
 			Certificates: []tls.Certificate{*s.cert},
 		},
 	}
-
 	httpsLoop := func() error { return httpsServer.ListenAndServeTLS("", "") }
 
 	return httpsLoop, nil
 }
 
 func (s *Server) initRouter() {
-
 	router := s.router
-
 	if router == nil {
 		router = mux.NewRouter()
 	}
@@ -144,19 +138,13 @@ func (s *Server) initRouter() {
 	router.UseEncodedPath()
 	router.StrictSlash(true)
 
-	s.registerHandler(router, 1, "/validate", http.MethodPost, appHandler(s.Validate))
-	s.registerHandler(router, 1, "/mutate", http.MethodPost, appHandler(s.Mutate))
+	s.registerHandler(router, 1, "/admit", http.MethodPost, appHandler(s.Admit))
 	s.registerHandler(router, 1, "/audit", http.MethodGet, appHandler(s.Audit))
 
 	// default 405
-	router.Handle("/mutate/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
+	router.Handle("/admit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
 		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-	router.Handle("/mutate", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
-		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
-	// default 405
-	router.Handle("/validate/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
-		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-	router.Handle("/validate", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
+	router.Handle("/admit", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
 		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
 	// default 405
 	router.Handle("/audit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
@@ -182,25 +170,45 @@ func (s *Server) registerHandler(router *mux.Router, version int, path string, m
 
 // Audit method for reporting current policy complaince of the cluster
 func (s *Server) Audit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
-	auditResponse, err := s.audit()
+	auditResponse, err := s.audit(logger)
 	if err != nil {
 		logger.Errorf("error geting audit response: %v", err)
 		http.Error(w, fmt.Sprintf("error gettinf audit response: %v", err), http.StatusInternalServerError)
 	}
-	resp, err := json.Marshal(auditResponse)
-	if err != nil {
-		logger.Errorf("can not encode response: %v", err)
-		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
-	}
-	logger.Infof("ready to write reponse %v...", auditResponse)
-	if _, err := w.Write(resp); err != nil {
+	logger.Debugf("audit: ready to write reponse %v...", auditResponse)
+	if _, err := w.Write(auditResponse); err != nil {
 		logger.Errorf("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
 	}
 }
 
-// Mutate method for mutation webhook server
-func (s *Server) Mutate(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
+// main validation process
+func (s *Server) audit(logger *log.Entry) ([]byte, error) {
+	validationQuery := types.MakeAuditQuery()
+	result, err := s.Opa.PostQuery(validationQuery)
+	if err != nil && !opa.IsUndefinedErr(err) {
+		return nil, err
+	}
+	bs, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	var response types.AuditResponseV1
+	err = util.UnmarshalJSON(bs, &response.Violations)
+	if err != nil {
+		return nil, err
+	}
+	response.Message = fmt.Sprintf("total violations:%v", len(response.Violations))
+	bs, err = json.Marshal(response)
+	if err != nil {
+		panic(err)
+	}
+
+	return bs, nil
+}
+
+// Admit method for validation and mutation webhook server
+func (s *Server) Admit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
@@ -230,7 +238,7 @@ func (s *Server) Mutate(logger *log.Entry, w http.ResponseWriter, r *http.Reques
 			},
 		}
 	} else {
-		admissionResponse = s.mutate(logger, &ar)
+		admissionResponse = s.policyCheck(logger, &ar)
 	}
 	admissionReview := v1beta1.AdmissionReview{}
 	if admissionResponse != nil {
@@ -244,152 +252,129 @@ func (s *Server) Mutate(logger *log.Entry, w http.ResponseWriter, r *http.Reques
 		logger.Errorf("Can't encode response: %v", err)
 		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
 	}
-	logger.Infof("Ready to write reponse %v(%v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
+	logger.Debugf("Write reponse %v(%v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
 	if _, err := w.Write(resp); err != nil {
 		logger.Errorf("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
 	}
 }
 
-// Validate method for webhook server
-func (s *Server) Validate(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
-	var body []byte
-	if r.Body != nil {
-		if data, err := ioutil.ReadAll(r.Body); err == nil {
-			body = data
-		}
+// main admission process
+func (s *Server) policyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
+	response := &v1beta1.AdmissionResponse{
+		Allowed: true,
 	}
-	if len(body) == 0 {
-		logger.Error("empty body")
-		http.Error(w, "empty body", http.StatusBadRequest)
-		return
+	if ar.Request == nil {
+		logger.Errorf("AdmissionReview request is nil, +%v", *ar)
+		return response
 	}
-	// verify the content type is accurate
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		logger.Errorf("Content-Type=%s, expect application/json", contentType)
-		http.Error(w, "invalid Content-Type, expect `application/json`", http.StatusUnsupportedMediaType)
-		return
+	req := ar.Request
+	logger.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
+
+	// do admission policy check
+	allowed, reason, patchBytes, err := s.doPolicyCheck(req)
+	if err != nil {
+		logger.Debugf("policy check failed Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v ar=%+v error=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo, ar, err)
+		return response
 	}
-	var admissionResponse *v1beta1.AdmissionResponse
-	ar := v1beta1.AdmissionReview{}
-	deserializer := codecs.UniversalDeserializer()
-	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
-		logger.Errorf("Can't decode body: %v", err)
-		admissionResponse = &v1beta1.AdmissionResponse{
+	if patchBytes == nil || len(patchBytes) == 0 {
+		logger.Debugf("AdmissionResponse: No mutation due to policy check, Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource.Resource, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
+		return &v1beta1.AdmissionResponse{
+			Allowed: allowed,
 			Result: &metav1.Status{
-				Message: err.Error(),
+				Message: reason,
 			},
 		}
-	} else {
-		admissionResponse = s.validate(logger, &ar)
 	}
-	admissionReview := v1beta1.AdmissionReview{}
-	if admissionResponse != nil {
-		admissionReview.Response = admissionResponse
-		if ar.Request != nil {
-			admissionReview.Response.UID = ar.Request.UID
-		}
-	}
-	resp, err := json.Marshal(admissionReview)
-	if err != nil {
-		logger.Errorf("Can't encode response: %v", err)
-		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
-	}
-	logger.Infof("Ready to write reponse %v(%v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
-	if _, err := w.Write(resp); err != nil {
-		logger.Errorf("Can't write response: %v", err)
-		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
+	logger.Debugf("AdmissionResponse: Mutate Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource.Resource, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
+	return &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Patch:   patchBytes,
+		Result: &metav1.Status{
+			Message: reason,
+		},
+		PatchType: func() *v1beta1.PatchType {
+			pt := v1beta1.PatchTypeJSONPatch
+			return &pt
+		}(),
 	}
 }
 
-func createPatchFromOPAResult(result []map[string]interface{}) ([]byte, error) {
-	var val interface{}
-	var ok bool
-	if len(result) != 1 {
-		return nil, fmt.Errorf("invalid patch opa result, %v", result)
-	}
-	if val, ok = result[0]["patches"]; !ok {
-		return nil, nil
-	}
-	var patches []interface{}
-	if patches, ok = val.([]interface{}); !ok {
-		return nil, fmt.Errorf("invalid patch value in opa result %v", val)
-	}
-	if len(patches) == 0 {
-		return nil, nil
-	}
-	return createPatch(patches)
-}
-
-func (s *Server) mutationRequired(req *v1beta1.AdmissionRequest) ([]byte, error) {
+func (s *Server) doPolicyCheck(req *v1beta1.AdmissionRequest) (bool, string, []byte, error) {
 	var err error
 	var mutationQuery string
-	if mutationQuery, err = makeOPAMutationQuery(req); err != nil {
-		return nil, err
+	if mutationQuery, err = makeOPAPostQuery(req); err != nil {
+		return false, "", nil, err
 	}
 
 	result, err := s.Opa.PostQuery(mutationQuery)
 	if err != nil && !opa.IsUndefinedErr(err) {
-		return nil, fmt.Errorf("opa query failed query=%s err=%v", mutationQuery, err)
+		return false, "", nil, fmt.Errorf("opa query failed query=%s err=%v", mutationQuery, err)
 	}
 
-	bs, err := createPatchFromOPAResult(result)
-	if err != nil {
-		panic(err)
-	}
-	return bs, nil
+	return createPatchFromOPAResult(result)
 }
 
-// Check whether the target resoured need to be mutated
-func (s *Server) isValid(req *v1beta1.AdmissionRequest) (bool, string, error) {
-	var err error
-	var validationQuery string
-	if validationQuery, err = makeOPAValidationQuery(req); err != nil {
-		return false, "", err
-	}
-	response, err := s.Opa.PostQuery(validationQuery)
-	if err != nil && !opa.IsUndefinedErr(err) {
-		return false, "", err
-	}
-	if len(response) == 0 {
-		return true, "valid", nil
-	}
-	bs, err := json.MarshalIndent(response, "", "  ")
+func createPatchFromOPAResult(result []map[string]interface{}) (bool, string, []byte, error) {
+	var msg string
+	bs, err := json.Marshal(result)
 	if err != nil {
-		panic(err)
+		return false, msg, nil, err
 	}
-	return false, string(bs), nil
-}
-
-// create mutation patch for resoures
-func createPatch(data interface{}) ([]byte, error) {
-	bs, err := json.Marshal(data)
+	var allViolations []types.Deny
+	err = util.UnmarshalJSON(bs, &allViolations)
 	if err != nil {
-		return nil, err
+		return false, msg, nil, err
 	}
-	if len(bs) == 0 {
-		return nil, nil
+	if len(allViolations) == 0 {
+		return true, "valid based on configured policies", nil, nil
 	}
-	encodedbs := make([]byte, base64.URLEncoding.EncodedLen(len(bs)))
-	base64.StdEncoding.Encode(encodedbs, bs)
+	valid := true
+	var reason struct {
+		Reason []string `json:"reason,omitempty"`
+	}
+	validPatches := map[string]types.PatchOperation{}
+	for _, v := range allViolations {
+		patchCount := len(v.Resolution.Patches)
+		if patchCount == 0 {
+			valid = false
+			reason.Reason = append(reason.Reason, v.Resolution.Message)
+			continue
+		}
+		for _, p := range v.Resolution.Patches {
+			if existing, ok := validPatches[p.Path]; ok {
+				msg = fmt.Sprintf("conflicting patches caused denied request, operations (%+v, %+v)", p, existing)
+				return false, msg, nil, nil
+			}
+			validPatches[p.Path] = p
+		}
+	}
+	if !valid {
+		if bs, err := json.Marshal(reason.Reason); err == nil {
+			msg = string(bs)
+		}
+		return false, msg, nil, nil
+	}
+	var patches []interface{}
+	for _, p := range validPatches {
+		patches = append(patches, p)
+	}
+	if len(patches) == 0 {
+		panic(fmt.Errorf("unexpected no valid patches found, %+v", allViolations))
+	}
+	patchBytes, err := json.Marshal(patches)
+	if err != nil {
+		return false, "", nil, fmt.Errorf("failed creating patches, patches=%+v err=%v", patches, err)
+	}
 
-	return bs, nil
+	return true, "applying patches", patchBytes, nil
 }
 
 func makeOPAWithAsQuery(query, path, value string) string {
 	return fmt.Sprintf(`%s with %s as %s`, query, path, value)
 }
 
-func makeOPAValidationQuery(req *v1beta1.AdmissionRequest) (string, error) {
-	return makeOPAPostQuery(req, "deny")
-}
-
-func makeOPAMutationQuery(req *v1beta1.AdmissionRequest) (string, error) {
-	return makeOPAPostQuery(req, "patch")
-}
-
-func makeOPAPostQuery(req *v1beta1.AdmissionRequest, queryType string) (string, error) {
+func makeOPAPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 	var resource, name string
 	if resource = strings.ToLower(strings.TrimSpace(req.Resource.Resource)); len(resource) == 0 {
 		return resource, fmt.Errorf("resource is empty")
@@ -401,7 +386,7 @@ func makeOPAPostQuery(req *v1beta1.AdmissionRequest, queryType string) (string, 
 	var query, path string
 	switch resource {
 	case "namespaces":
-		query = types.MakeSingleClusterResourceQuery(queryType, resource, name)
+		query = types.MakeSingleClusterResourceQuery(resource, name)
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, resource, name)
 	default:
 		var namespace string
@@ -409,7 +394,7 @@ func makeOPAPostQuery(req *v1beta1.AdmissionRequest, queryType string) (string, 
 			namespace = metav1.NamespaceDefault
 		}
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]["%s"]`, resource, namespace, name)
-		query = types.MakeSingleNamespaceResourceQuery(queryType, resource, namespace, name)
+		query = types.MakeSingleNamespaceResourceQuery(resource, namespace, name)
 	}
 	value := string(req.Object.Raw[:])
 	return makeOPAWithAsQuery(query, path, value), nil
@@ -440,86 +425,6 @@ func randStringBytesMaskImprSrc(n int) string {
 	}
 
 	return string(b)
-}
-
-// main validation process
-func (s *Server) validate(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
-	response := &v1beta1.AdmissionResponse{
-		Allowed: true,
-	}
-	if ar.Request == nil {
-		logger.Errorf("AdmissionReview request is nil, +%v", *ar)
-		return response
-	}
-	req := ar.Request
-	logger.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v",
-		req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
-
-	// validate
-	valid, reason, err := s.isValid(req)
-	if err != nil {
-		logger.Errorf("ar=%+v error=%v", ar, err)
-		return response
-	}
-	if valid {
-		return response
-	}
-	return &v1beta1.AdmissionResponse{
-		Allowed: false,
-		Result: &metav1.Status{
-			Message: reason,
-		},
-	}
-}
-
-// main mutation process
-func (s *Server) mutate(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
-	response := &v1beta1.AdmissionResponse{
-		Allowed: true,
-	}
-	if ar.Request == nil {
-		logger.Errorf("AdmissionReview request is nil, +%v", *ar)
-		return response
-	}
-	req := ar.Request
-	logger.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v",
-		req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
-
-	// determine whether to perform mutation
-	patchBytes, err := s.mutationRequired(req)
-	if err != nil {
-		logger.Errorf("ar=%+v error=%v", ar, err)
-		return response
-	}
-	if patchBytes == nil || len(patchBytes) == 0 {
-		logger.Infof("No mutation due to policy check, Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource.Resource, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
-		return &v1beta1.AdmissionResponse{
-			Allowed: true,
-		}
-	}
-	logger.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
-	return &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Patch:   patchBytes,
-		PatchType: func() *v1beta1.PatchType {
-			pt := v1beta1.PatchTypeJSONPatch
-			return &pt
-		}(),
-	}
-}
-
-// main validation process
-func (s *Server) audit() ([]byte, error) {
-	validationQuery := types.MakeAuditQuery()
-	response, err := s.Opa.PostQuery(validationQuery)
-	if err != nil && !opa.IsUndefinedErr(err) {
-		return nil, err
-	}
-	bs, err := json.MarshalIndent(response, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	return bs, nil
 }
 
 // InstallDefaultAdmissionPolicy will update OPA with a default policy  This function will
