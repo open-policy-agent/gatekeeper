@@ -20,26 +20,28 @@ The following are basic components of policy controller at the cluster level
 
 ### kubernetes-policy-controller
 
-This is a kubernetes service, Exposes the high level functionality throuh `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is uses by as `MuatatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality is exposes the current evaluation state of the cluster. In addition this controller also is responsible to validate the correctness of the policies that are added for the cluster for example checking for conflicts and making for the policies are  valid rego doccuments. The aditional validation is performs the parameters for the policy are valid. If OPA service is unavailable it should return deny to the api-server.
+This is a kubernetes service exposed the `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is used as `MuatatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validates the correctness of the policies that are being added for the cluster e.g. checking for conflicts and making sure that the policies are valid rego doccuments.
 
-The results from `OPA` for policy evaluation query is a collection of the decisions from valious installed policies, some of which should be rejected with a message sent to the user, and some of which have a patch that should be applied to fix the problem. The controller aggregates the ressponse (refer to how we unify the validation and mutation funcationality below)
+Note > If OPA service is unavailable it should return deny to the api-server.
+
+The policy evaulation results from quering `OPA` service is a collection of the decisions from valious installed policies, some of which should be rejected with a message sent to the user, and some of which have a patch that should be applied to fix the problem. The controller aggregates the ressponse by unifying the validation and mutation funcationality.
 
 ### open-policy agent(OPA)
 
 open-policy-agent(OPA) service is the policy engine for the kubernetes policy controller. 
 
-OPA is also used standalone as a admission controller but it cannot be used for audit scenarios as it commits the objects in storage before running the policy queries.We also decided to use OPA as a service (instead of using as a lib) as it allows to
+For our `audit` requirement OPA can also be used standalone as a admission controller. We also chose to use OPA as a service (instead of using as a lib) as it allows to
 
 1. decouple the kuberenetes admission controller logic from the policy engine
 2. the policy engine to hosted outside of the cluster, the use cases being having opa as a service OPA exposes `query` interface which used to evaluate policy decisions
 
 ### kube-mgmt
 
-This is a Watches for kubernetes objects (required by policy) and ensure eventual consistent state of OPA policy engine. Watches for policy documents (CRD) and updates OPA with policies.
+The primary functionality is to watch for kubernetes objects (required by policy) and ensure eventual consistent state of OPA. Watches for policy documents (CRD) and updates OPA with policies.
 
 ## policy
 
-The policies are deployed as Custom Resource definitions. 
+The policies are deployed as Custom Resource definitions.
 
 ### deny rule
 
