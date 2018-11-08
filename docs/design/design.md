@@ -4,9 +4,13 @@
 
 There are two basic scenarios for the policy control 
 
-* Admission: Any CRUD operation should be regulated by policy deployed by the administrator of the cluster 
-
+* Admission: Any Create/Update operation should be regulated by policy deployed by the administrator of the cluster
 * Audit: Administrator of the cluster should be able to evaluate the currest state of the cluster 
+
+## Personas
+
+* Admin: Adminnistrator of the cluster who also installs the policies for the cluster. The administraor also runs audits on the cluster.  
+* User: Consumer of the kubernetes api.  
 
 ## Components
 
