@@ -20,7 +20,7 @@ The following are basic components of policy controller at the cluster level
 
 ### kubernetes-policy-controller
 
-This is a kubernetes service which exposes the `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is used as `MutatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validates the correctness of the policies that are being added for the cluster e.g. checking for conflicts and making sure that the policies are valid rego documents.
+This is a kubernetes service which exposes the `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is used as `MutatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validate the correctness of the policies that are being added for the cluster e.g. checking for conflicting patches; making sure that the policies are valid `rego` documents.
 
 Note > If OPA service is unavailable it should return deny to the api-server.
 
