@@ -1,15 +1,15 @@
-# Kubernetes policy concept
+# Kubernetes policy design
 
 ## Use Cases
 
 There are two basic scenarios for the policy control 
 
 * Admission: Any Create/Update operation should be regulated by policy deployed by the administrator of the cluster
-* Audit: Administrator of the cluster should be able to evaluate the currest state of the cluster 
+* Audit: Administrator of the cluster should be able to evaluate the current state of the cluster 
 
 ## Personas
 
-* Admin: Adminnistrator of the cluster who also installs the policies for the cluster. The administraor also runs audits on the cluster.  
+* Admin: Administrator of the cluster who also installs the policies for the cluster. The administrator also runs audits on the cluster.  
 * User: Consumer of the kubernetes api.  
 
 ## Components
@@ -20,44 +20,33 @@ The following are basic components of policy controller at the cluster level
 
 ### kubernetes-policy-controller
 
-This is a kubernetes service which exposes the `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is used as `MuatatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validates the correctness of the policies that are being added for the cluster e.g. checking for conflicts and making sure that the policies are valid rego doccuments.
+This is a kubernetes service which exposes the `audit` and `admit` TLS http methods for the cluster. The `admit` functionality is used as `MutatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validates the correctness of the policies that are being added for the cluster e.g. checking for conflicts and making sure that the policies are valid rego documents.
 
 Note > If OPA service is unavailable it should return deny to the api-server.
 
-The policy evaulation results from quering `OPA` service is a collection of the decisions from valious installed policies, some of which should be rejected with a message sent to the user, and some of which have a patch that should be applied to fix the problem. The controller aggregates the ressponse by unifying the validation and mutation funcationality.
+The evaluation is a call to `OPA`. This call produces one or more decisions. Each decision is either an approve/deny (with a message) or a list of patches to be applied on the object which is being evaluated. 
+
 
 ### open-policy agent(OPA)
 
-open-policy-agent(OPA) service is the policy engine for the kubernetes policy controller. 
+open-policy-agent(OPA) service is the policy engine for the kubernetes policy controller. It performs evaluations as called by `kubernetes-policy-controller`. For our `audit` requirement OPA can not be used as a standalone. We also chose to use OPA as a service (instead of using as a lib) as it allows to
 
-For our `audit` requirement OPA can also be used standalone as a admission controller. We also chose to use OPA as a service (instead of using as a lib) as it allows to
-
-1. decouple the kuberenetes admission controller logic from the policy engine
-2. the policy engine to hosted outside of the cluster, the use cases being having opa as a service OPA exposes `query` interface which used to evaluate policy decisions
+1. Decouple the kubernetes admission controller logic from the policy engine.
+2. When needed, the policy engine can be hosted outside of the cluster.
 
 ### kube-mgmt
 
-The primary functionality is to watch for kubernetes objects (required by policy) and ensure eventual consistent state of OPA. Watches for policy documents (CRD) and updates OPA with policies.
+The primary functionality is to watch for kubernetes objects and policy CRDs and ensure eventual consistent state of OPA. This ensures that OPA is always evaluating against a fresh cached view of the cluster state.
 
-## policy
+## Policy
 
-The policies are deployed as Custom Resource definitions.
+Policies are gates which are used to control the state of the cluster. Policies are modeled as CRDs. A single policy can be used for `validation` and for `mutation`. The same policy can be used in gating the api-server call and as offline audit by the user. This enables the user to validate new objects on the cluster and audit the state of the objects that were created before the policy deployment.
 
-### deny rule
+### Policy Definition
 
-Each violation of a policy is a `deny` rule. So all we need to capture is all `deny` matches in order to validate. In the `policy` package any validation rule should be defined as special name called `deny`. 
+Policies are expressed as `rego` document. A canonical example for a policy is as the following
 
-The basic requirements driving the the policy schema
-
-* Single rule for auditable validation, mutation
-
-`mutation` has additively more information than `validation`. `mutation` checks not only if there is a problem but says how to fix it. `kubernetes-policy-controller` unifies `mutation` and `valdation`, we make it so the admission controller always runs the same query but where a `mutation` includes additional information in each decision that OPA returns.
-
-* We want the policies to be auditable
-
-In order to understand the basic idea lets consider a case where we want to create a rule which will block all API server requests i.e fail validation of all requests. The following models a that will always `deny` event
-
-```go
+```python
 package admission
 
 deny[{
@@ -65,26 +54,27 @@ deny[{
     "resource": {"kind": kind, "namespace": namespace, "name": name},
     "resolution": {"message": "test always violate"},
 }] {
+    # deny all, match logic is omitted
     true
 }
 ```
 
-* `id`: uniquely identifies a policy on a kubernetes cluster. 
-* `resource`: allows filtering on the resource the policy is targeting, this includes the `kind` which same as kubernetes definition of `kind` of the object,`namespace` is the namespace and name of the object being evaulated.
-* `resolution`: the desicion of a single opa policy, it consists of `message` and `patches` (optional).Note that the patch field is an array of JSON patch operations so that if multiple operations are necessary to express the required change, the user has the full power of JSON patch at their disposal. As usual, these decisions are generated by OPA policies and the rules they contain. 
+> The above example denies everything. And it does not describe the actual match logic.
 
-#### examples
+Policy consists of:
 
-`validation` decision example. This decision says the admission controller should reject an ingress because it has an invalid host. The admission controller should send the user the specified error message.
+* `id`: uniquely identifies a policy on a kubernetes cluster.
+* `resource`: allows filtering on the resource the policy is targeting, this includes the `kind` which same as kubernetes definition of `kind` of the object,`namespace` is the namespace and name of the object being evaluated.
+* `resolution`: the decision of a single opa policy query, consists of `message` and optionally `patches` .Note that the patch field is an array of JSON patch operations. This means a single policy can patch different parts of the object being evaluated.
 
-`mutation` decision example. This decision says the admission controller should patch a pod so the 2nd container has the imagePullPolicy set to Always. The format is exactly the same as the VALIDATION example, but where the resolution field includes a patch field.
+### Examples
 
 ```python
 package admission
 # Patch any pod so that imagePullPolicy is Always
 deny[{
     "id": "image-pull-policy",
-    "resource": {"kind": "pod", "namespace": namespace, "name": name},
+    "resource": {"kind": "pod", "namespace": "front-end", "name": name},
     "resolution": resolution,
 }] 
 {
@@ -96,6 +86,8 @@ deny[{
                     "path": path,
                     "value": "Always"}],
         "message": "Change imagePullPolicy to Always"
-    }
+  }
 }
 ```
+
+The above policy ensures that the container `imagePullPolicy` is always set to `Always` for any pod deployed into `front-end` namespace.
