@@ -65,7 +65,7 @@ kubectl create ns qa
 The following call should fail with policy:
 
 ```bash
-kubectl -n qa apply -f ~/opa/ingress-bad.yaml
+kubectl -n qa apply -f ./demo/ingress-bad.yaml
 ```
 
 ## 2. `mutation` scenario
