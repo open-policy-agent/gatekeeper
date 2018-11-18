@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: kubernetes-policy-controller
+    app: kubernetes-policy-controller
+    tier: control-plane
+  name: kubernetes-policy-controller
+  namespace: kube-system
+spec:
+  hostNetwork: true
+  priorityClassName: system-cluster-critical
+  containers:
+    - name: kubernetes-policy-controller
+      image: docker.io/nikhilbh/kubernetes-policy-controller
+      imagePullPolicy: Always
+      args:
+        - --addr=https://127.0.0.1:7925
+        - --tls-cert-file=/etc/kubernetes/pki/kubernetes-policy-controller.crt
+        - --tls-private-key-file=/etc/kubernetes/pki/kubernetes-policy-controller.key
+        - --opa-url=http://localhost:8181/v1
+      volumeMounts:
+        - name: host-etc
+          mountPath: /etc
+          readOnly: true
+    - name: opa
+      image: openpolicyagent/opa:0.10.1
+      imagePullPolicy: Always
+      args:
+        - run
+        - --server
+        - --addr=http://127.0.0.1:8181
+        - /etc/kubernetes/policy
+        - -w
+      volumeMounts:
+        - name: host-etc
+          mountPath: /etc
+          readOnly: true
+  volumes:
+    - name: host-etc
+      hostPath:
+        path: /etc

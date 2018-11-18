@@ -6,13 +6,15 @@ package opa
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
-	types "github.com/open-policy-agent/opa/server/types"
+	"github.com/open-policy-agent/opa/server/types"
 )
 
 // Error contains the standard error fields returned by OPA.
@@ -58,13 +60,21 @@ type Query interface {
 }
 
 // New returns a new Client object.
-func New(url string) Client {
-	return &httpClient{strings.TrimRight(url, "/"), ""}
+func New(url string, opaCAs *x509.CertPool, opaAuthToken string) Client {
+
+	return &httpClient{
+		strings.TrimRight(url, "/"),
+		"",
+		opaCAs,
+		opaAuthToken,
+	}
 }
 
 type httpClient struct {
-	url    string
-	prefix string
+	url          string
+	prefix       string
+	opaCAs       *x509.CertPool
+	opaAuthToken string
 }
 
 func (c *httpClient) PostQuery(query string) ([]map[string]interface{}, error) {
@@ -149,6 +159,16 @@ func (c *httpClient) do(verb, path string, body io.Reader) (*http.Response, erro
 	req, err := http.NewRequest(verb, url, body)
 	if err != nil {
 		return nil, err
+	}
+	if c.opaAuthToken != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.opaAuthToken))
+	}
+	if strings.HasPrefix(c.url, "https") && c.opaCAs != nil {
+		http.DefaultClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: c.opaCAs,
+			},
+		}
 	}
 	return http.DefaultClient.Do(req)
 }

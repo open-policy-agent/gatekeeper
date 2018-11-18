@@ -2,7 +2,7 @@ ORG_PATH=github.com/Azure
 PROJECT_NAME := kubernetes-policy-controller
 REPO_PATH="$(ORG_PATH)/$(PROJECT_NAME)"
 CONTROLLER_BINARY_NAME := kubernetes-policy-controller
-CONTROLLER_VERSION=1.2
+CONTROLLER_VERSION ?= 1.2
 
 VERSION_VAR := $(REPO_PATH)/version.Version
 GIT_VAR := $(REPO_PATH)/version.GitCommit
@@ -24,6 +24,8 @@ endif
 
 GO_BUILD_OPTIONS := -buildmode=${GO_BUILD_MODE} -ldflags "-s -X $(VERSION_VAR)=$(DEMO_VERSION) -X $(GIT_VAR)=$(GIT_HASH) -X $(BUILD_DATE_VAR)=$(BUILD_DATE)"
 
+GO_DEBUG_BUILD_OPTIONS := -buildmode=${GO_BUILD_MODE} -gcflags "all=-N -l" -ldflags "-X $(VERSION_VAR)=$(DEMO_VERSION) -X $(GIT_VAR)=$(GIT_HASH) -X $(BUILD_DATE_VAR)=$(BUILD_DATE)"
+
 # useful for other docker repos
 REGISTRY ?= nikhilbh
 CONTROLLER_IMAGE_NAME := $(REGISTRY)/$(CONTROLLER_BINARY_NAME)
@@ -39,6 +41,12 @@ build-controller:clean-controller
 
 build:clean
 	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+
+build-dbg-controller:clean-controller
+	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_DEBUG_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+
+build-dbg:clean
+	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_DEBUG_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
 
 image-controller:
 	cp bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) images/$(CONTROLLER_BINARY_NAME)
