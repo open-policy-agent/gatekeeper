@@ -101,15 +101,3 @@ func MakeSingleNamespaceAuthorizationResourceQuery(resource, namespace, name str
 			"resolution": resolution,}]`,
 		resource, namespace, name)
 }
-
-// MakeSingleClusterResourceQuery makes a single resource query
-// For now I would keep the separation of the OPA packages here, because
-// the values which are given later via the value just don't have the same
-// format. But at least the rules have a similar structure now.
-func MakeSingleClusterAuthorizationResourceQuery(resource, name string) string {
-	return fmt.Sprintf(`data.authorization.deny[{
-			"id": id,
-			"resource": {"kind": "%s", "name": "%s"},
-			"resolution": resolution,}]`,
-		resource, name)
-}

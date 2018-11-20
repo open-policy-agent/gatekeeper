@@ -614,7 +614,7 @@ func makeOPAAuthorizationPostQuery(sar *authorizationv1beta1.SubjectAccessReview
 		// non-resource requests
 		if sar.Spec.NonResourceAttributes != nil {
 			// None is used for now to identify the kind of non-resource requests
-			query = types.MakeSingleClusterAuthorizationResourceQuery("None", sar.Spec.NonResourceAttributes.Path)
+			query = types.MakeSingleNamespaceAuthorizationResourceQuery("None", "", sar.Spec.NonResourceAttributes.Path)
 			path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, "None", sar.Spec.NonResourceAttributes.Path)
 		} else {
 			return "", fmt.Errorf("unknown request type, resource is neither resource nor non-resource request")
