@@ -5,7 +5,7 @@ user_system_control_plane(user) = res {
 }
 
 is_system(name) = res {
-	res = startswith(name, "dhc")
+	res = startswith(name, "system")
 }
 
 match_cud(verb) = res {

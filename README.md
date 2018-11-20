@@ -264,10 +264,10 @@ package authorization
 
 deny[{
 	"id": "crds-resources",
-	"resolution": "Your're not allowed to create/update/delete resources of the group 'crd.projectcalico.org'",
+	"resource": {"kind": kind, "namespace": namespace, "name": name},
+	"resolution": {"message": "Your're not allowed to create/update/delete resources of the group 'crd.projectcalico.org'"},
 }] {
-	input.kind = "SubjectAccessReview"
-	input.apiVersion = "authorization.k8s.io/v1beta1"
+	matches[[kind, namespace, name, resource]]
 
 	not re_match("^(calico|system:kube-controller-manager|system:kube-scheduler)$", input.spec.user)
 	re_match("^(crd.projectcalico.org)$", input.spec.resourceAttributes.group)

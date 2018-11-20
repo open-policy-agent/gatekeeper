@@ -77,7 +77,7 @@ package admission
 # Patch any pod so that imagePullPolicy is Always
 deny[{
     "id": "image-pull-policy",
-    "resource": {"kind": "pod", "namespace": "front-end", "name": name},
+    "resource": {"kind": "pods", "namespace": "front-end", "name": name},
     "resolution": resolution,
 }] 
 {
@@ -101,15 +101,16 @@ The above policy ensures that the container `imagePullPolicy` is always set to `
 package authorization
 # Deny execs to pods in kube-system
 deny[{
-	"id": "exec-pods-kube-system",
-	"resolution": "Your're not allowed to exec/cp into Pods in kube-system and istio-system",
-}] {
-    input.kind = "SubjectAccessReview"
-    input.apiVersion = "authorization.k8s.io/v1beta1"    
-    
-    re_match("^(kube-system|istio-system)$", input.spec.resourceAttributes.namespace)
-    input.spec.resourceAttributes.verb = "create"
-    input.spec.resourceAttributes.subresource = "exec"
+ 	"id": "exec-pods-kube-system-istio-system",
+ 	"resource": {"kind": "pods","namespace": namespace,"name": name},
+ 	"resolution": {"message": "Your're not allowed to exec/cp on Pods in kube-system & istio-system"},
+}]
+{
+ 	matches[["pods", namespace, name, resource]]
+ 
+ 	re_match("^(kube-system|istio-system)$", resource.spec.resourceAttributes.namespace)
+ 	resource.spec.resourceAttributes.verb = "create"
+ 	resource.spec.resourceAttributes.subresource = "exec"
 }
 ````
 

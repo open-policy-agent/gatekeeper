@@ -1,15 +1,21 @@
 package authorization
 
+import data.k8s.matches
+
 deny[{
 	"id": "podsecuritypolicies-kube-system",
-	"resolution": "Your're not allowed to use the privileged PodSecurityPolicies in pods outside of kube-system and istio-system",
+    "resource": {
+        "kind": kind,
+        "namespace": namespace,
+        "name": name,
+    },
+	"resolution": {"message": "Your're not allowed to use the privileged PodSecurityPolicies in pods outside of kube-system and istio-system"},
 }] {
-	input.kind = "SubjectAccessReview"
-	input.apiVersion = "authorization.k8s.io/v1beta1"
+    matches[[kind, namespace, name, resource]]
 
-	input.spec.resourceAttributes.group = "extensions"
-	input.spec.resourceAttributes.resource = "podsecuritypolicies"
-	input.spec.resourceAttributes.name = "privileged"
-	not re_match("^(kube-system|istio-system)$", input.spec.resourceAttributes.namespace)
-	input.spec.resourceAttributes.verb = "use"
+	resource.spec.resourceAttributes.group = "extensions"
+	resource.spec.resourceAttributes.resource = "podsecuritypolicies"
+	resource.spec.resourceAttributes.name = "privileged"
+	not re_match("^(kube-system|istio-system)$", resource.spec.resourceAttributes.namespace)
+	resource.spec.resourceAttributes.verb = "use"
 }
