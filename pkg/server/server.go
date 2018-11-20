@@ -398,6 +398,8 @@ func makeOPAAdmissionPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 		// assign a random name for validation
 		name = randStringBytesMaskImprSrc(10)
 	}
+	// TODO: I think we have an Issue here, what happens to other cluster-wide resources except namespaces?
+	// Right now they get also the default Namespace in the default clause
 	var query, path string
 	switch resource {
 	case "namespaces":
@@ -405,7 +407,7 @@ func makeOPAAdmissionPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, resource, name)
 	default:
 		var namespace string
-		if namespace = strings.ToLower(strings.TrimSpace(req.Namespace)); len(name) == 0 {
+		if namespace = strings.ToLower(strings.TrimSpace(req.Namespace)); len(namespace) == 0 {
 			namespace = metav1.NamespaceDefault
 		}
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]["%s"]`, resource, namespace, name)
@@ -432,7 +434,7 @@ type admissionRequest struct {
 	OldObject   json.RawMessage             `json:"oldObject,omitempty" protobuf:"bytes,10,opt,name=oldObject"`
 }
 
-func createAdmissionRequestValueForOPA(req *v1beta1.AdmissionRequest) (string, error){
+func createAdmissionRequestValueForOPA(req *v1beta1.AdmissionRequest) (string, error) {
 	ar := admissionRequest{
 		UID:         string(req.UID),
 		Kind:        req.Kind,
@@ -583,11 +585,48 @@ func parseOPAResult(result []map[string]interface{}) (allowed bool, reasonStr st
 }
 
 func makeOPAAuthorizationPostQuery(sar *authorizationv1beta1.SubjectAccessReview) (string, error) {
+
+	var query, path string
+	// resource requests
+	if sar.Spec.ResourceAttributes != nil {
+
+		var resource, name string
+		if resource = strings.ToLower(strings.TrimSpace(sar.Spec.ResourceAttributes.Resource)); len(resource) == 0 {
+			return resource, fmt.Errorf("resource is empty")
+		}
+		if name = strings.ToLower(strings.TrimSpace(sar.Spec.ResourceAttributes.Name)); len(name) == 0 {
+			// assign a random name for validation
+			name = randStringBytesMaskImprSrc(10)
+		}
+
+		// We could determine single namespace or cluster query based on if the namespace is set in the SubjectAccessReview, e.g.:
+		// 	List across namespaces +> the namespace field will be empty, e.g.: kubectl get pods --all-namespaces
+		//  List pods in a single namespace +> the namespace field will be set, e.g.: kubectl get pods -n my-namespace
+		//  Get a specific pod in a namespace +> the namespace field will be set, e.g.: kubectl get pod/mypod -n my-namespace`
+		//  Get a cluster-scoped resource +> namespace will be empty, e.g.: kubectl get clusterroles
+
+		// The problem is because we don't want to write separate rules for, e.g. the pod case (1 for all-namespaces & 1 for
+		// -n my-namespace) we just always send a namespace query, if we have no namespace from the request, we just set it empty.
+		// Namespaced Resource
+		query = types.MakeSingleNamespaceAuthorizationResourceQuery(resource, sar.Spec.ResourceAttributes.Namespace, name)
+		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]["%s"]`, resource, sar.Spec.ResourceAttributes.Namespace, name)
+	} else {
+		// non-resource requests
+		if sar.Spec.NonResourceAttributes != nil {
+			//TODO check if that is good enough to separate the 2 types
+			// None is used for now to identify the kind of non-resource requests
+			query = types.MakeSingleClusterAuthorizationResourceQuery("None", sar.Spec.NonResourceAttributes.Path)
+			path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, "None", sar.Spec.NonResourceAttributes.Path)
+		} else {
+			return "", fmt.Errorf("unknown request type, resource is neither resource nor non-resource request")
+		}
+	}
+
 	sarJson, err := json.Marshal(sar)
 	if err != nil {
 		return "", fmt.Errorf("error marshalling SubjectAccessReview: %v", err)
 	}
-	return makeOPAWithAsQuery(`data.authorization.deny[{"id": id,"resolution": resolution,}]`, "input", string(sarJson)), nil
+	return makeOPAWithAsQuery(query, path, string(sarJson)), nil
 }
 
 var src = rand.NewSource(time.Now().UnixNano())
