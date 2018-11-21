@@ -44,7 +44,7 @@ var (
 	tlsPrivateKeyFile = flag.String("tls-private-key-file", "/certs/tls.key", "set path of TLS private key file")
 	opaAddress        = flag.String("opa-url", "http://localhost:8181/v1", "set URL of OPA API endpoint")
 	opaCAFile         = flag.String("opa-ca-file", "", "set path of the ca crts which are used in addition to the system certs to verify the opa server cert")
-	opaAuthTokenFile  = flag.String("opa-auth-token-file", "/token/auth.token", "set path of auth token file where the bearer token for opa is stored in format 'token = \"<auth token>\"'")
+	opaAuthTokenFile  = flag.String("opa-auth-token-file", "", "set path of auth token file where the bearer token for opa is stored in format 'token = \"<auth token>\"'")
 	logLevel          = flag.String("log-level", "info", "log level, which can be: panic, fatal, error, warn, info or debug")
 )
 
