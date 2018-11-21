@@ -16,12 +16,14 @@ import (
 	"strings"
 	"time"
 
-	opa "github.com/Azure/kubernetes-policy-controller/pkg/opa"
+	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
 	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
-	mux "github.com/gorilla/mux"
+	"github.com/gorilla/mux"
 	"github.com/open-policy-agent/opa/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -139,12 +141,19 @@ func (s *Server) initRouter() {
 	router.StrictSlash(true)
 
 	s.registerHandler(router, 1, "/admit", http.MethodPost, appHandler(s.Admit))
+	s.registerHandler(router, 1, "/authorize", http.MethodPost, appHandler(s.Authorize))
 	s.registerHandler(router, 1, "/audit", http.MethodGet, appHandler(s.Audit))
 
 	// default 405
+
 	router.Handle("/admit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
 		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
 	router.Handle("/admit", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
+		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
+	// default 405
+	router.Handle("/authorize/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
+		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
+	router.Handle("/authorize", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
 		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
 	// default 405
 	router.Handle("/audit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
@@ -238,7 +247,7 @@ func (s *Server) Admit(logger *log.Entry, w http.ResponseWriter, r *http.Request
 			},
 		}
 	} else {
-		admissionResponse = s.policyCheck(logger, &ar)
+		admissionResponse = s.admissionPolicyCheck(logger, &ar)
 	}
 	admissionReview := v1beta1.AdmissionReview{}
 	if admissionResponse != nil {
@@ -252,7 +261,7 @@ func (s *Server) Admit(logger *log.Entry, w http.ResponseWriter, r *http.Request
 		logger.Errorf("Can't encode response: %v", err)
 		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
 	}
-	logger.Debugf("Write reponse %v(%v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
+	logger.Debugf("Write response %v(allowed: %v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
 	if _, err := w.Write(resp); err != nil {
 		logger.Errorf("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
@@ -260,7 +269,7 @@ func (s *Server) Admit(logger *log.Entry, w http.ResponseWriter, r *http.Request
 }
 
 // main admission process
-func (s *Server) policyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
+func (s *Server) admissionPolicyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 	response := &v1beta1.AdmissionResponse{
 		Allowed: true,
 	}
@@ -269,10 +278,10 @@ func (s *Server) policyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1
 		return response
 	}
 	req := ar.Request
-	logger.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
+	logger.Debugf("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
 
 	// do admission policy check
-	allowed, reason, patchBytes, err := s.doPolicyCheck(req)
+	allowed, reason, patchBytes, err := s.doAdmissionPolicyCheck(logger, req)
 	if err != nil {
 		logger.Debugf("policy check failed Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v ar=%+v error=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo, ar, err)
 		return response
@@ -300,22 +309,28 @@ func (s *Server) policyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1
 	}
 }
 
-func (s *Server) doPolicyCheck(req *v1beta1.AdmissionRequest) (bool, string, []byte, error) {
-	var err error
+func (s *Server) doAdmissionPolicyCheck(logger *log.Entry, req *v1beta1.AdmissionRequest) (allowed bool, reason string, patchBytes []byte, err error) {
 	var mutationQuery string
-	if mutationQuery, err = makeOPAPostQuery(req); err != nil {
+	if mutationQuery, err = makeOPAAdmissionPostQuery(req); err != nil {
 		return false, "", nil, err
 	}
+
+	logger.Debugf("Sending admission query to opa: %v", mutationQuery)
 
 	result, err := s.Opa.PostQuery(mutationQuery)
 	if err != nil && !opa.IsUndefinedErr(err) {
 		return false, "", nil, fmt.Errorf("opa query failed query=%s err=%v", mutationQuery, err)
 	}
 
+	logger.Debugf("Response from admission query to opa: %v", result)
+
 	return createPatchFromOPAResult(result)
 }
 
-func createPatchFromOPAResult(result []map[string]interface{}) (bool, string, []byte, error) {
+func createPatchFromOPAResult(result []map[string]interface{}) (allowed bool, reasonStr string, patchBytes []byte, err error) {
+	if len(result) == 0 {
+		return true, "valid based on configured policies", nil, nil
+	}
 	var msg string
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -362,7 +377,7 @@ func createPatchFromOPAResult(result []map[string]interface{}) (bool, string, []
 	if len(patches) == 0 {
 		panic(fmt.Errorf("unexpected no valid patches found, %+v", allViolations))
 	}
-	patchBytes, err := json.Marshal(patches)
+	patchBytes, err = json.Marshal(patches)
 	if err != nil {
 		return false, "", nil, fmt.Errorf("failed creating patches, patches=%+v err=%v", patches, err)
 	}
@@ -374,7 +389,7 @@ func makeOPAWithAsQuery(query, path, value string) string {
 	return fmt.Sprintf(`%s with %s as %s`, query, path, value)
 }
 
-func makeOPAPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
+func makeOPAAdmissionPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 	var resource, name string
 	if resource = strings.ToLower(strings.TrimSpace(req.Resource.Resource)); len(resource) == 0 {
 		return resource, fmt.Errorf("resource is empty")
@@ -383,6 +398,8 @@ func makeOPAPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 		// assign a random name for validation
 		name = randStringBytesMaskImprSrc(10)
 	}
+	// TODO: I think we have an Issue here, what happens to other cluster-wide resources except namespaces?
+	// Right now they get also the default Namespace in the default clause
 	var query, path string
 	switch resource {
 	case "namespaces":
@@ -390,14 +407,225 @@ func makeOPAPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, resource, name)
 	default:
 		var namespace string
-		if namespace = strings.ToLower(strings.TrimSpace(req.Namespace)); len(name) == 0 {
+		if namespace = strings.ToLower(strings.TrimSpace(req.Namespace)); len(namespace) == 0 {
 			namespace = metav1.NamespaceDefault
 		}
 		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]["%s"]`, resource, namespace, name)
 		query = types.MakeSingleNamespaceResourceQuery(resource, namespace, name)
 	}
-	value := string(req.Object.Raw[:])
+
+	value, err := createAdmissionRequestValueForOPA(req)
+	if err != nil {
+		return "", err
+	}
 	return makeOPAWithAsQuery(query, path, value), nil
+}
+
+type admissionRequest struct {
+	UID         string                      `json:"uid" protobuf:"bytes,1,opt,name=uid"`
+	Kind        metav1.GroupVersionKind     `json:"kind" protobuf:"bytes,2,opt,name=kind"`
+	Resource    metav1.GroupVersionResource `json:"resource" protobuf:"bytes,3,opt,name=resource"`
+	SubResource string                      `json:"subResource,omitempty" protobuf:"bytes,4,opt,name=subResource"`
+	Name        string                      `json:"name,omitempty" protobuf:"bytes,5,opt,name=name"`
+	Namespace   string                      `json:"namespace,omitempty" protobuf:"bytes,6,opt,name=namespace"`
+	Operation   string                      `json:"operation" protobuf:"bytes,7,opt,name=operation"`
+	UserInfo    authenticationv1.UserInfo   `json:"userInfo" protobuf:"bytes,8,opt,name=userInfo"`
+	Object      json.RawMessage             `json:"object,omitempty" protobuf:"bytes,9,opt,name=object"`
+	OldObject   json.RawMessage             `json:"oldObject,omitempty" protobuf:"bytes,10,opt,name=oldObject"`
+}
+
+func createAdmissionRequestValueForOPA(req *v1beta1.AdmissionRequest) (string, error) {
+	ar := admissionRequest{
+		UID:         string(req.UID),
+		Kind:        req.Kind,
+		Resource:    req.Resource,
+		SubResource: req.SubResource,
+		Name:        req.Name,
+		Namespace:   req.Namespace,
+		Operation:   string(req.Operation),
+		UserInfo:    req.UserInfo,
+		Object:      req.Object.Raw[:],
+		OldObject:   req.OldObject.Raw[:],
+	}
+	reqJson, err := json.Marshal(ar)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling AdmissionRequest: %v", err)
+	}
+	return string(reqJson), nil
+}
+
+// Authorize method for authorization module webhook server
+func (s *Server) Authorize(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
+	var body []byte
+	if r.Body != nil {
+		if data, err := ioutil.ReadAll(r.Body); err == nil {
+			body = data
+		}
+	}
+	if len(body) == 0 {
+		logger.Error("empty body")
+		http.Error(w, "empty body", http.StatusBadRequest)
+		return
+	}
+	// verify the content type is accurate
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		logger.Errorf("Content-Type=%s, expect application/json", contentType)
+		http.Error(w, "invalid Content-Type, expect `application/json`", http.StatusUnsupportedMediaType)
+		return
+	}
+	sar := authorizationv1beta1.SubjectAccessReview{}
+	deserializer := codecs.UniversalDeserializer()
+	if _, _, err := deserializer.Decode(body, nil, &sar); err != nil {
+		logger.Errorf("Can't decode body: %v", err)
+		sar = authorizationv1beta1.SubjectAccessReview{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "authorization.k8s.io/v1beta1",
+				Kind:       "SubjectAccessReview",
+			},
+			Status: authorizationv1beta1.SubjectAccessReviewStatus{
+				Allowed:         false,
+				Denied:          true,
+				EvaluationError: err.Error(),
+			},
+		}
+	} else {
+		sar.Status = s.authorizationPolicyCheck(logger, &sar)
+	}
+	resp, err := json.Marshal(sar)
+	if err != nil {
+		logger.Errorf("Can't encode response: %v", err)
+		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
+	}
+	logger.Debugf("SubjectAccessResponse: (denied: %v)\n", sar.Status.Denied)
+	if _, err := w.Write(resp); err != nil {
+		logger.Errorf("Can't write response: %v", err)
+		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
+	}
+}
+
+// main authorization process
+func (s *Server) authorizationPolicyCheck(logger *log.Entry, sar *authorizationv1beta1.SubjectAccessReview) authorizationv1beta1.SubjectAccessReviewStatus {
+	response := authorizationv1beta1.SubjectAccessReviewStatus{
+		Allowed: false,
+		Denied:  true,
+	}
+	attributes := sarAttributes(sar)
+	logger.Debugf("SubjectAccessReview for %s", attributes)
+
+	// do authorization policy check
+	allowed, reason, err := s.doAuthorizationPolicyCheck(logger, sar)
+	if err != nil {
+		logger.Debugf("policy check failed %s ar=%+v error=%v", attributes, sar, err)
+		return response
+	}
+	logger.Debugf("SubjectAccessReviewStatus: denied: %t reason: %s %s", !allowed, reason, attributes)
+	return authorizationv1beta1.SubjectAccessReviewStatus{
+		Allowed: false,
+		Denied:  !allowed,
+		Reason:  reason,
+	}
+}
+
+func sarAttributes(sar *authorizationv1beta1.SubjectAccessReview) string {
+	var attrs []string
+	if sar.Spec.ResourceAttributes != nil {
+		attrs = append(attrs, fmt.Sprintf("Group=%v Version=%v Resource=%v Subresource=%v Namespace=%v Name=%v Verb=%v", sar.Spec.ResourceAttributes.Group, sar.Spec.ResourceAttributes.Version, sar.Spec.ResourceAttributes.Resource, sar.Spec.ResourceAttributes.Subresource, sar.Spec.ResourceAttributes.Namespace, sar.Spec.ResourceAttributes.Name, sar.Spec.ResourceAttributes.Verb))
+	}
+	attrs = append(attrs, fmt.Sprintf("User=%v Groups=%v", sar.Spec.User, sar.Spec.Groups))
+	return strings.Join(attrs, " ")
+}
+
+func (s *Server) doAuthorizationPolicyCheck(logger *log.Entry, sar *authorizationv1beta1.SubjectAccessReview) (allowed bool, reason string, err error) {
+	var authorizationQuery string
+	if authorizationQuery, err = makeOPAAuthorizationPostQuery(sar); err != nil {
+		return false, "", err
+	}
+
+	logger.Debugf("Sending authorization query to opa: %v", authorizationQuery)
+
+	result, err := s.Opa.PostQuery(authorizationQuery)
+
+	if err != nil && !opa.IsUndefinedErr(err) {
+		return false, fmt.Sprintf("opa query failed query=%s err=%v", authorizationQuery, err), err
+	}
+
+	logger.Debugf("Response from authorization query to opa: %v", result)
+
+	return parseOPAResult(result)
+}
+
+func parseOPAResult(result []map[string]interface{}) (allowed bool, reasonStr string, err error) {
+	if len(result) == 0 {
+		return true, "", nil
+	}
+	var msg string
+	bs, err := json.Marshal(result)
+	if err != nil {
+		return false, msg, err
+	}
+	var allViolations []types.Deny
+	err = util.UnmarshalJSON(bs, &allViolations)
+	if err != nil {
+		return false, msg, err
+	}
+	if len(allViolations) == 0 {
+		return true, "", nil
+	}
+	var reason struct {
+		Reason []string `json:"reason,omitempty"`
+	}
+	for _, v := range allViolations {
+		reason.Reason = append(reason.Reason, v.Resolution.Message)
+	}
+	if bs, err := json.Marshal(reason.Reason); err == nil {
+		msg = string(bs)
+	}
+	return false, msg, nil
+}
+
+func makeOPAAuthorizationPostQuery(sar *authorizationv1beta1.SubjectAccessReview) (string, error) {
+
+	var query, path string
+	// resource requests
+	if sar.Spec.ResourceAttributes != nil {
+
+		var resource, name string
+		if resource = strings.ToLower(strings.TrimSpace(sar.Spec.ResourceAttributes.Resource)); len(resource) == 0 {
+			return resource, fmt.Errorf("resource is empty")
+		}
+		if name = strings.ToLower(strings.TrimSpace(sar.Spec.ResourceAttributes.Name)); len(name) == 0 {
+			// assign a random name for validation
+			name = randStringBytesMaskImprSrc(10)
+		}
+
+		// We could determine single namespace or cluster query based on if the namespace is set in the SubjectAccessReview, e.g.:
+		// 	List across namespaces +> the namespace field will be empty, e.g.: kubectl get pods --all-namespaces
+		//  List pods in a single namespace +> the namespace field will be set, e.g.: kubectl get pods -n my-namespace
+		//  Get a specific pod in a namespace +> the namespace field will be set, e.g.: kubectl get pod/mypod -n my-namespace`
+		//  Get a cluster-scoped resource +> namespace will be empty, e.g.: kubectl get clusterroles
+
+		// The problem is because we don't want to write separate rules for, e.g. the pod case (1 for all-namespaces & 1 for
+		// -n my-namespace) we just always send a namespace query, if we have no namespace from the request, we just set it empty.
+		// Namespaced Resource
+		query = types.MakeSingleNamespaceAuthorizationResourceQuery(resource, sar.Spec.ResourceAttributes.Namespace, name)
+		path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]["%s"]`, resource, sar.Spec.ResourceAttributes.Namespace, name)
+	} else {
+		// non-resource requests
+		if sar.Spec.NonResourceAttributes != nil {
+			// None is used for now to identify the kind of non-resource requests
+			query = types.MakeSingleNamespaceAuthorizationResourceQuery("None", "", sar.Spec.NonResourceAttributes.Path)
+			path = fmt.Sprintf(`data["kubernetes"]["%s"]["%s"]`, "None", sar.Spec.NonResourceAttributes.Path)
+		} else {
+			return "", fmt.Errorf("unknown request type, resource is neither resource nor non-resource request")
+		}
+	}
+
+	sarJson, err := json.Marshal(sar)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling SubjectAccessReview: %v", err)
+	}
+	return makeOPAWithAsQuery(query, path, string(sarJson)), nil
 }
 
 var src = rand.NewSource(time.Now().UnixNano())
@@ -476,7 +704,7 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case error:
 				err = t
 			default:
-				err = errors.New("Unknown error")
+				err = errors.New("unknown error")
 			}
 			logger.WithField("res.status", http.StatusInternalServerError).
 				Errorf("Panic processing request: %+v, file: %s, line: %d, stacktrace: '%s'", r, file, line, stack)
