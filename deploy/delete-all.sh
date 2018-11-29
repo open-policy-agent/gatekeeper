@@ -4,6 +4,8 @@ echo "Delete all will delete all kubebernetes-policy-controller components"
 
 read -p "Press enter to continue"
 
+rm -rf ./secret
+
 kubectl -n opa delete mutatingwebhookconfiguration mutating.kubernetes-policy-controller
 kubectl delete -n opa -f ./deploy/opa.yaml
 kubectl -n opa delete secret opa-server
