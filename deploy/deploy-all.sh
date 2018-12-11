@@ -58,7 +58,7 @@ webhooks:
       service:
         namespace: opa
         name: opa
-        path: "/v1/mutate"
+        path: "/v1/admit"
 EOF
 
 kubectl -n opa apply -f ./secret/mutating-webhook-configuration.yaml

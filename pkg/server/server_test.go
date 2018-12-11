@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	opa "github.com/Azure/kubernetes-policy-controller/pkg/opa"
-	types "github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
+	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
+	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
 	opatypes "github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/util"
 	"k8s.io/api/admission/v1beta1"
+	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 )
 
 func TestAuditWithValidateViolation(t *testing.T) {
@@ -247,6 +249,227 @@ func TestPatchResultEmpty(t *testing.T) {
 	}
 }
 
+func TestSingleAuthorization(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	violationRequest := makeSubjectAccessReview("apiregistration.k8s.io", "v1beta1", "apiservices", "", "create", "", "v1.apps", "admin", []string{"system:authenticated"})
+	validRequest := makeSubjectAccessReview("apiregstration.k8s.io", "v1beta1", "apiservices", "", "create", "", "custom.metrics.k8s.io", "admin", []string{"system:authenticated"})
+
+	setup := []tr{
+		{http.MethodPost, "/authorize", violationRequest, 200, `  {
+          "apiVersion": "authorization.k8s.io/v1beta1",
+          "kind": "SubjectAccessReview",
+          "metadata": {
+            "creationTimestamp": null
+          },
+           "spec": {
+            "group": [
+              "system:authenticated"
+            ],
+            "resourceAttributes": {
+              "group": "apiregistration.k8s.io",
+              "name": "v1.apps",
+              "resource": "apiservices",
+              "verb": "create",
+              "version": "v1beta1"
+            },
+            "user": "admin"
+          },
+          "status": {
+            "allowed": false,
+            "denied": true,
+            "reason": "[\"anyMessage\"]"
+          }
+        }`},
+		{http.MethodPost, "/authorize", validRequest, 200, `  {
+          "apiVersion": "authorization.k8s.io/v1beta1",
+          "kind": "SubjectAccessReview",
+          "metadata": {
+            "creationTimestamp": null
+          },
+          "spec": {
+            "group": [
+              "system:authenticated"
+            ],
+            "resourceAttributes": {
+              "group": "apiregstration.k8s.io",
+              "name": "custom.metrics.k8s.io",
+              "resource": "apiservices",
+              "verb": "create",
+              "version": "v1beta1"
+            },
+            "user": "admin"
+          },
+          "status": {
+            "allowed": false
+          }
+        }`},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSingleAuthorizationWithUnparseableSubjectAccessReview(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	violationRequest1 := `{"broken SubjectAccessReview"}`
+	violationRequest2 := ``
+
+	setup := []tr{
+		{http.MethodPost, "/authorize", violationRequest1, 200, `  {
+          "apiVersion": "authorization.k8s.io/v1beta1",
+          "kind": "SubjectAccessReview",
+          "metadata": {
+            "creationTimestamp": null
+          },
+          "spec": {},
+          "status": {
+            "allowed": false,
+            "denied": true,
+            "evaluationError": "couldn't get version/kind; json parse error: invalid character '}' after object key"
+          }
+        }`},
+		{http.MethodPost, "/authorize", violationRequest2, 400, ""},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMultipleAuthorization(t *testing.T) {
+	f := newFixture(t)
+
+	fakeOpa := &opa.FakeOPA{}
+	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil),
+		opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage2", nil))
+	f.server, _ = New().
+		WithAddresses([]string{":8182"}).
+		WithOPA(fakeOpa).
+		Init(context.Background())
+
+	violationRequest := makeSubjectAccessReview("apiregistration.k8s.io", "v1beta1", "apiservices", "", "create", "", "v1.apps", "admin", []string{"system:authenticated"})
+
+	setup := []tr{
+		{http.MethodPost, "/authorize", violationRequest, 200, `  {
+          "apiVersion": "authorization.k8s.io/v1beta1",
+          "kind": "SubjectAccessReview",
+          "metadata": {
+            "creationTimestamp": null
+          },
+           "spec": {
+            "group": [
+              "system:authenticated"
+            ],
+            "resourceAttributes": {
+              "group": "apiregistration.k8s.io",
+              "name": "v1.apps",
+              "resource": "apiservices",
+              "verb": "create",
+              "version": "v1beta1"
+            },
+            "user": "admin"
+          },
+          "status": {
+            "allowed": false,
+            "denied": true,
+            "reason": "[\"anyMessage\",\"anyMessage2\"]"
+          }
+        }`},
+	}
+
+	for _, tr := range setup {
+		req := newReqV1(tr.method, tr.path, tr.body)
+		req.RemoteAddr = "testaddr"
+
+		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestParseOPAResultDeny(t *testing.T) {
+	var expected opatypes.QueryResponseV1
+	err := util.UnmarshalJSON([]byte(`{"result":[{"id":"conditional-annotation","resolution":{"message":"conditional annotation"}}]}`), &expected)
+
+	if err != nil {
+		panic(err)
+	}
+	allowed, reason, err := parseOPAResult(expected.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed {
+		t.Fatal("allowed should be false if deny query has matched")
+	}
+	if reason != "[\"conditional annotation\"]" {
+		t.Fatal("reason should contain message from OPAResult")
+	}
+}
+
+func TestParseOPAResultAllow(t *testing.T) {
+	var expected opatypes.QueryResponseV1
+	err := util.UnmarshalJSON([]byte(`{}`), &expected)
+
+	if err != nil {
+		panic(err)
+	}
+	allowed, reason, err := parseOPAResult(expected.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !allowed {
+		t.Fatal("allowed should be true if no deny query has matched")
+	}
+	if reason != "" {
+		t.Fatal("reason should be empty")
+	}
+}
+
+func TestParseOPAResultEmptyDeny(t *testing.T) {
+	var expected opatypes.QueryResponseV1
+	err := util.UnmarshalJSON([]byte(`{"result":[{"resolution":{}}]}`), &expected)
+	if err != nil {
+		panic(err)
+	}
+	allowed, reason, err := parseOPAResult(expected.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed {
+		t.Fatal("allowed should be false if OPAResult contains a result, even if its empty")
+	}
+	if reason != "[\"\"]" {
+		t.Fatal("allowed is false for mutation")
+	}
+}
+
 func getPatchBytes(patches []types.PatchOperation) ([]byte, error) {
 	bs, err := json.Marshal(patches)
 	if err != nil {
@@ -265,6 +488,33 @@ func makeAdmissionRequest(kind, namespace, name string) string {
 	req.Object.Raw = []byte(objectStr)
 	r := &v1beta1.AdmissionReview{Request: req}
 	b, err := json.Marshal(r)
+	if err != nil {
+		panic(fmt.Errorf("Error: %s", err))
+	}
+	return string(b)
+}
+
+func makeSubjectAccessReview(group, version, resource, subResource, verb, namespace, name, user string, groups []string) string {
+	sar := &authorizationv1beta1.SubjectAccessReview{
+		TypeMeta: v1.TypeMeta{
+			APIVersion: "authorization.k8s.io/v1beta1",
+			Kind:       "SubjectAccessReview",
+		},
+		Spec: authorizationv1beta1.SubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1beta1.ResourceAttributes{
+				Group:       group,
+				Version:     version,
+				Resource:    resource,
+				Subresource: subResource,
+				Verb:        verb,
+				Namespace:   namespace,
+				Name:        name,
+			},
+			User:   user,
+			Groups: groups,
+		},
+	}
+	b, err := json.Marshal(sar)
 	if err != nil {
 		panic(fmt.Errorf("Error: %s", err))
 	}

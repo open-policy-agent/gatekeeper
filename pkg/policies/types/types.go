@@ -47,6 +47,10 @@ var (
 		matches[[kind, namespace, name, resource]] {
 			resource := kubernetes[kind][namespace][name]
 		}
+	
+		matches[[kind, namespace, name, resource]] {
+			resource := kubernetes[kind][namespace][name].object
+		}
 	`)
 	// PolicyMatchPolicy - policymatches provides an abstraction to find policies that match the (name).
 	PolicyMatchPolicy = []byte(`
@@ -84,4 +88,16 @@ func MakeSingleClusterResourceQuery(resource, name string) string {
 			"resource": {"kind": "%s", "name": "%s"},
 			"resolution": resolution,}]`,
 		resource, name)
+}
+
+// MakeSingleNamespaceResourceQuery makes a single resource query
+// For now I would keep the separation of the OPA packages here, because
+// the values which are given later via the value just don't have the same
+// format. But at least the rules have a similar structure now.
+func MakeSingleNamespaceAuthorizationResourceQuery(resource, namespace, name string) string {
+	return fmt.Sprintf(`data.authorization.deny[{
+			"id": id,
+			"resource": {"kind": "%s", "namespace": "%s", "name": "%s"},
+			"resolution": resolution,}]`,
+		resource, namespace, name)
 }
