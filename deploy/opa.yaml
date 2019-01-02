@@ -90,6 +90,7 @@ spec:
           args:
             - "--replicate-cluster=v1/namespaces"
             - "--replicate=extensions/v1beta1/ingresses"
+            - "--replicate=v1/pods"
         - name: controller
           image: nikhilbh/kubernetes-policy-controller:1.2
           imagePullPolicy: Always

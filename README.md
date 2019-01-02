@@ -187,6 +187,8 @@ import data.kubernetes.matches
 matches[["ingress", "production", "my-ingress", matched_ingress]]
 ```
 
+#### Example Policy: Unique Ingress Hostnames
+
 Here is an example of a policy which validates that Ingress hostnames must be unique across Namespaces. This policy shows how you can express a pair-wise search. In this case, there is a violation if any two ingresses in different namespaces have the same hostname. Note, you can query OPA to determine whether a single Ingress violates the policy (in which case the cost is linear with the # of Ingresses) or you can query for the set of all Ingresses that violate the policy (in which case the cost is (# of Ingresses)^2.).
 Author : [Torrin Sandall](https://github.com/tsandall)
 
@@ -206,6 +208,37 @@ deny[{
     other_ingress.spec.rules[_].host == matched_ingress.spec.rules[_].host
 }
 
+```
+
+#### Example Policy: Container image name from Registry
+
+Below is an example of Container image name check if it matches of the whitelisted patterns e.g. should be from a organization registry.
+
+```go
+package admission
+
+import data.k8s.matches
+
+###############################################################################
+#
+# Policy : Container image name check if it matches of the whitelisted patterns
+# e.g. should be from a organization registry. 
+#
+###############################################################################
+deny[{
+    "id": "container-image-whitelist",          # identifies type of violation
+    "resource": {
+        "kind": "pods",                 # identifies kind of resource
+        "namespace": namespace,         # identifies namespace of resource
+        "name": name                    # identifies name of resource
+    },
+    "resolution": {"message": msg},     # provides human-readable message to display
+}] {
+    matches[["pods", namespace, name, matched_pod]]
+    container = matched_pod.spec.containers[_]
+    not re_match("^registry.acmecorp.com/.+$", container.image)
+    msg := sprintf("invalid container registry image %q", [container.image])
+}
 ```
 
 ### patches resolution
