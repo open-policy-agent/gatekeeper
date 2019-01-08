@@ -9,8 +9,8 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
-	"github.com/Azure/kubernetes-policy-controller/pkg/server"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/server"
 	"github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
 )
@@ -25,15 +25,15 @@ type parameters struct {
 	addrs *[]string
 	// Certificate is the certificate to use in server-mode. If the certificate
 	// is nil, the server will NOT use TLS.
-	certificate  *tls.Certificate
+	certificate *tls.Certificate
 
-	logLevel     string
+	logLevel string
 
 	// CAs to use for the communication with OPA, per default the system certs are used
 	// if the flag opa-ca-file is set the CA certs from this file are also used
-	opaCAs       *x509.CertPool
+	opaCAs *x509.CertPool
 	// Addresse of OPA
-	opaAddress   string
+	opaAddress string
 	// auth token which is used via Bearer scheme to communicate with OPA
 	opaAuthToken string
 }

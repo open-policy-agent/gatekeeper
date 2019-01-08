@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
-	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
 	"github.com/gorilla/mux"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
 	"github.com/open-policy-agent/opa/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"

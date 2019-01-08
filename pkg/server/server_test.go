@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -13,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Azure/kubernetes-policy-controller/pkg/opa"
-	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
 	opatypes "github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/util"
 	"k8s.io/api/admission/v1beta1"
