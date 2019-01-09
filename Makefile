@@ -1,8 +1,8 @@
-ORG_PATH=github.com/Azure
+ORG_PATH=github.com/open-policy-agent
 PROJECT_NAME := kubernetes-policy-controller
 REPO_PATH="$(ORG_PATH)/$(PROJECT_NAME)"
 CONTROLLER_BINARY_NAME := kubernetes-policy-controller
-CONTROLLER_VERSION ?= 1.2
+CONTROLLER_VERSION ?= 2.0
 
 VERSION_VAR := $(REPO_PATH)/version.Version
 GIT_VAR := $(REPO_PATH)/version.GitCommit
