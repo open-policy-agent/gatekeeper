@@ -1,4 +1,4 @@
 #!/bin/bash
 
-controllerpod=$(kubectl -n opa get po --no-headers | awk '{print $1}')
-kubectl -n opa port-forward $controllerpod 7925:7925
+controllerpod=$(kubectl -n kpc-system get po --no-headers | awk '{print $1}')
+kubectl -n kpc-system port-forward $controllerpod 7925:7925

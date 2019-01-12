@@ -12,7 +12,7 @@ spec:
   priorityClassName: system-cluster-critical
   containers:
     - name: kubernetes-policy-controller
-      image: docker.io/nikhilbh/kubernetes-policy-controller
+      image: gcr.io/smythe-kpc/kubernetes-policy-controller:latest
       imagePullPolicy: Always
       args:
         - --addr=https://127.0.0.1:7925

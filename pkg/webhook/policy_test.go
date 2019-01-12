@@ -1,7 +1,6 @@
-package server
+package webhook
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,175 +11,179 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
 	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
 	opatypes "github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/util"
 	"k8s.io/api/admission/v1beta1"
 	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 func TestAuditWithValidateViolation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(``, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	setup := []tr{
-		{http.MethodGet, "/audit", "", 200, `{"message": "total violations:1","violations": [{"id": "anyID","resolution": {"message": "anyMessage"},"resource": {"kind": "anyKind","name": "anyName","namespace": "anyNamespace"}}]}`},
+		{"violation", http.MethodGet, "/audit", "", 200, `{"message": "total violations:1","violations": [{"id": "anyID","resolution": {"message": "anyMessage"},"resource": {"kind": "anyKind","name": "anyName","namespace": "anyNamespace"}}]}`},
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestSingleValidation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	violationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
 	validRequest := makeAdmissionRequest("anyKind", "validName", "validNamespace")
 
 	setup := []tr{
-		{http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\"anyMessage\"]","metadata": {}},"uid": "anyUID"}}`},
-		{http.MethodPost, "/admit", validRequest, 200, `{"response": {"allowed": true, "status": {"message": "valid based on configured policies", "metadata": {}}, "uid": "anyUID"}}`},
+		{"violation", http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"reason": "[\"anyMessage\"]","metadata": {},"code": 200},"uid": "anyUID"}}`},
+		// "W10=" is the base64 encoding of "[]"
+		{"valid", http.MethodPost, "/admit", validRequest, 200, `{"response": {"allowed": true, "patch": "W10=", "patchType": "JSONPatch",  "status": {"metadata": {},"code": 200}, "uid": "anyUID"}}`},
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestMultipleValidation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage1", nil),
 		opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage2", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	violationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
 
 	setup := []tr{
-		{http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"message": "[\"anyMessage1\",\"anyMessage2\"]","metadata": {}},"uid": "anyUID"}}`},
+		{"violation", http.MethodPost, "/admit", violationRequest, 200, `{"response": {"allowed": false,"status": {"reason": "[\"anyMessage1\",\"anyMessage2\"]","metadata": {},"code": 200},"uid": "anyUID"}}`},
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestSingleMutation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath", Value: "anyValue"}}
 	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	expectedPatchBytes, err := getPatchBytes(patches)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "%s", "patchType": "JSONPatch",  "status": {"message": "applying patches", "metadata": {}}, "uid": "anyUID"}}`, string(expectedPatchBytes))
+	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "W10=", "patchType": "JSONPatch",  "patch": "%s", "patchType": "JSONPatch",  "status": {"metadata": {},"code": 200}, "uid": "anyUID"}}`, string(expectedPatchBytes))
 
 	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
 	setup := []tr{
-		{http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
+		{"mutation", http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestMultipleNonConflictingMutation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 	fakeOpa := &opa.FakeOPA{}
+	// TODO: Flaky, order of patches not guaranteed
 	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath1", Value: "anyValue"}, {Op: "anyOp", Path: "anyPath2", Value: "anyValue"}}
 	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 	expectedPatchBytes, err := getPatchBytes(patches)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "%s", "patchType": "JSONPatch",  "status": {"message": "applying patches", "metadata": {}}, "uid": "anyUID"}}`, string(expectedPatchBytes))
+	expectedRespBody := fmt.Sprintf(`{"response": {"allowed": true, "patch": "W10=", "patchType": "JSONPatch",  "patch": "%s", "patchType": "JSONPatch",  "status": {"metadata": {},"code": 200}, "uid": "anyUID"}}`, string(expectedPatchBytes))
 	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
 	setup := []tr{
-		{http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
+		{"mutation", http.MethodPost, "/admit", mutationRequest, 200, expectedRespBody},
 	}
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestMultipleConflictingMutation(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 	fakeOpa := &opa.FakeOPA{}
 	patches := []types.PatchOperation{{Op: "anyOp", Path: "anyPath", Value: "anyValue"}, {Op: "anyOp", Path: "anyPath", Value: "anyValue"}}
 	fakeOpa.SetViolation(`anyname.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", patches))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 	mutationRequest := makeAdmissionRequest("anyKind", "anyName", "anyNamespace")
 	setup := []tr{
-		{http.MethodPost, "/admit", mutationRequest, 200, `{"response": {"allowed": false, "status": {"message": "conflicting patches caused denied request, operations ({Op:anyOp Path:anyPath Value:anyValue}, {Op:anyOp Path:anyPath Value:anyValue})","metadata": {}},"uid": "anyUID"}}`},
+		{"mutation", http.MethodPost, "/admit", mutationRequest, 200, `{"response": {"allowed": false, "status": {"reason": "conflicting patches caused denied request, operations ({Op:anyOp Path:anyPath Value:anyValue}, {Op:anyOp Path:anyPath Value:anyValue})","metadata": {},"code": 200},"uid": "anyUID"}}`},
 	}
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -251,20 +254,18 @@ func TestPatchResultEmpty(t *testing.T) {
 }
 
 func TestSingleAuthorization(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	violationRequest := makeSubjectAccessReview("apiregistration.k8s.io", "v1beta1", "apiservices", "", "create", "", "v1.apps", "admin", []string{"system:authenticated"})
 	validRequest := makeSubjectAccessReview("apiregstration.k8s.io", "v1beta1", "apiservices", "", "create", "", "custom.metrics.k8s.io", "admin", []string{"system:authenticated"})
 
 	setup := []tr{
-		{http.MethodPost, "/authorize", violationRequest, 200, `  {
+		{"violation", http.MethodPost, "/authorize", violationRequest, 200, `  {
           "apiVersion": "authorization.k8s.io/v1beta1",
           "kind": "SubjectAccessReview",
           "metadata": {
@@ -289,7 +290,7 @@ func TestSingleAuthorization(t *testing.T) {
             "reason": "[\"anyMessage\"]"
           }
         }`},
-		{http.MethodPost, "/authorize", validRequest, 200, `  {
+		{"valid", http.MethodPost, "/authorize", validRequest, 200, `  {
           "apiVersion": "authorization.k8s.io/v1beta1",
           "kind": "SubjectAccessReview",
           "metadata": {
@@ -315,30 +316,30 @@ func TestSingleAuthorization(t *testing.T) {
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestSingleAuthorizationWithUnparseableSubjectAccessReview(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	violationRequest1 := `{"broken SubjectAccessReview"}`
 	violationRequest2 := ``
 
 	setup := []tr{
-		{http.MethodPost, "/authorize", violationRequest1, 200, `  {
+		{"violation", http.MethodPost, "/authorize", violationRequest1, 200, `  {
           "apiVersion": "authorization.k8s.io/v1beta1",
           "kind": "SubjectAccessReview",
           "metadata": {
@@ -351,34 +352,34 @@ func TestSingleAuthorizationWithUnparseableSubjectAccessReview(t *testing.T) {
             "evaluationError": "couldn't get version/kind; json parse error: invalid character '}' after object key"
           }
         }`},
-		{http.MethodPost, "/authorize", violationRequest2, 400, ""},
+		{"violation2", http.MethodPost, "/authorize", violationRequest2, 400, ""},
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
 func TestMultipleAuthorization(t *testing.T) {
-	f := newFixture(t)
+	f := newFixture()
 
 	fakeOpa := &opa.FakeOPA{}
 	fakeOpa.SetViolation(`apps.*`, opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage", nil),
 		opa.MakeDenyObject("anyID", "anyKind", "anyName", "anyNamespace", "anyMessage2", nil))
-	f.server, _ = New().
-		WithAddresses([]string{":8182"}).
-		WithOPA(fakeOpa).
-		Init(context.Background())
+	mgr, _ := manager.New(&rest.Config{}, manager.Options{})
+	addWebhooks(mgr, f.server, fakeOpa)
 
 	violationRequest := makeSubjectAccessReview("apiregistration.k8s.io", "v1beta1", "apiservices", "", "create", "", "v1.apps", "admin", []string{"system:authenticated"})
 
 	setup := []tr{
-		{http.MethodPost, "/authorize", violationRequest, 200, `  {
+		{"violation", http.MethodPost, "/authorize", violationRequest, 200, `  {
           "apiVersion": "authorization.k8s.io/v1beta1",
           "kind": "SubjectAccessReview",
           "metadata": {
@@ -406,12 +407,14 @@ func TestMultipleAuthorization(t *testing.T) {
 	}
 
 	for _, tr := range setup {
-		req := newReqV1(tr.method, tr.path, tr.body)
-		req.RemoteAddr = "testaddr"
+		t.Run(tr.name, func(t *testing.T) {
+			req := newReqV1(tr.method, tr.path, tr.body)
+			req.RemoteAddr = "testaddr"
 
-		if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
-			t.Fatal(err)
-		}
+			if err := f.executeRequest(req, tr.code, tr.resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -522,26 +525,36 @@ func makeSubjectAccessReview(group, version, resource, subResource, verb, namesp
 	return string(b)
 }
 
-type fixture struct {
-	server   *Server
-	recorder *httptest.ResponseRecorder
-	t        *testing.T
+var _ serverLike = &testServer{}
+
+// testServer emulates the registry/routing of webhook.Server
+// Ideally this should be replaced with code that relies on the behavior of webhook.Server directly.
+type testServer struct {
+	sMux *http.ServeMux
 }
 
-func newFixture(t *testing.T) *fixture {
-	ctx := context.Background()
-	server, err := New().
-		WithAddresses([]string{":7925"}).
-		Init(ctx)
-	if err != nil {
-		panic(err)
+func (s *testServer) Handle(path string, handler http.Handler) {
+	s.sMux.Handle(path, handler)
+}
+
+func (s *testServer) Register(webhooks ...webhook.Webhook) error {
+	for _, wh := range webhooks {
+		s.sMux.Handle(wh.GetPath(), wh.Handler())
 	}
+	return nil
+}
+
+type fixture struct {
+	server   *testServer
+	recorder *httptest.ResponseRecorder
+}
+
+func newFixture() *fixture {
 	recorder := httptest.NewRecorder()
 
 	return &fixture{
-		server:   server,
+		server:   &testServer{sMux: http.NewServeMux()},
 		recorder: recorder,
-		t:        t,
 	}
 }
 
@@ -569,7 +582,7 @@ func newReqUnversioned(method, path, body string) *http.Request {
 
 func (f *fixture) executeRequest(req *http.Request, code int, resp string) error {
 	f.reset()
-	f.server.Handler.ServeHTTP(f.recorder, req)
+	f.server.sMux.ServeHTTP(f.recorder, req)
 	if f.recorder.Code != code {
 		return fmt.Errorf("Expected code %v from %v %v but got: %v", code, req.Method, req.URL, f.recorder)
 	}
@@ -598,6 +611,7 @@ func (f *fixture) executeRequest(req *http.Request, code int, resp string) error
 }
 
 type tr struct {
+	name   string
 	method string
 	path   string
 	body   string
