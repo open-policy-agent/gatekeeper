@@ -12,13 +12,14 @@ spec:
   priorityClassName: system-cluster-critical
   containers:
     - name: kubernetes-policy-controller
-      image: gcr.io/smythe-kpc/kubernetes-policy-controller:latest
+      image: docker.io/nikhilbh/kubernetes-policy-controller
       imagePullPolicy: Always
       args:
         - --addr=https://127.0.0.1:7925
         - --tls-cert-file=/etc/kubernetes/pki/kubernetes-policy-controller.crt
         - --tls-private-key-file=/etc/kubernetes/pki/kubernetes-policy-controller.key
         - --opa-url=http://localhost:8181/v1
+        - --authorization-mode
       volumeMounts:
         - name: host-etc
           mountPath: /etc

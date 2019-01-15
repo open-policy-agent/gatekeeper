@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= gcr.io/smythe-kpc/kubernetes-policy-controller:latest
+IMG ?= docker.io/nikhilbh/kubernetes-policy-controller:latest
 
 all: test manager
 
