@@ -316,16 +316,19 @@ deny[{
 ## Dev Workflow
 
 ### Build the Docker Image
+
 ```bash
 make docker-build
 ```
 
 ### Push the Docker Image
+
 ```bash
 make docker-push
 ```
 
 ### Deploy
+
 The following command deploys the latest pushed docker image to the currently active Kubernetes context
 
 ```bash
@@ -333,6 +336,7 @@ make deploy
 ```
 
 ### Rebuild Config Templates
+
 The following command rebuilds the config manifests used with `make deploy`:
 
 ```bash
