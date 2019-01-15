@@ -311,6 +311,8 @@ deny[{
 
 ### Video
 
+[Demo video of Kubernetes Policy Controller](https://youtu.be/1WObJiTZDHc)
+
 ## Dev Workflow
 
 ### Build the Docker Image
@@ -336,8 +338,6 @@ The following command rebuilds the config manifests used with `make deploy`:
 ```bash
 make manifests
 ```
-
-[Demo video of Kubernetes Policy Controller](https://youtu.be/1WObJiTZDHc)
 
 ## Contributing
 
