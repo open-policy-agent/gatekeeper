@@ -20,12 +20,16 @@ In the `authorization` scenario it's possible to block things like `kubectl get`
 
 This is a new project and is in alpha state.
 
-## Slack Channel
+## Want to get involved?
 
-To participate and contribute in defining and creating kubernetes policies.
-Channel Name: `kubernetes-policy`
-[slack channel](https://openpolicyagent.slack.com/messages/CDTN970AX)
-[Sign up](https://slack.openpolicyagent.org/)
+- Join the [`#kubernetes-policy`](https://openpolicyagent.slack.com/messages/CDTN970AX)
+  channel on [OPA Slack](https://slack.openpolicyagent.org/).
+
+- Join [weekly meetings](https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)
+  to discuss development, issues, use cases, etc.
+
+- Use [GitHub Issues](https://github.com/open-policy-agent/kubernetes-policy-controller/issues)
+  to file bugs, request features, or ask questions asynchronously.
 
 ## Using kubernetes-policy-controller
 
