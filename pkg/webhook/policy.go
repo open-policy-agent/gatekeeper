@@ -1,8 +1,7 @@
-package server
+package webhook
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,24 +9,34 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/golang/glog"
+	"github.com/mattbaird/jsonpatch"
 	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
 	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
 	"github.com/open-policy-agent/opa/util"
-	log "github.com/sirupsen/logrus"
-	"k8s.io/api/admission/v1beta1"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	apitypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
+	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
 )
+
+func init() {
+	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
+}
 
 var (
 	runtimeScheme = k8sruntime.NewScheme()
@@ -35,166 +44,110 @@ var (
 	deserializer  = codecs.UniversalDeserializer()
 )
 
-// Server defines the server for the Webhook
-type Server struct {
-	Handler http.Handler
+// AddPolicyWebhook registers the policy webhook server with the manager
+// below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
+// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
+// +kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+func AddPolicyWebhook(mgr manager.Manager) error {
+	opa := opa.NewFromFlags()
 
-	router *mux.Router
-	addrs  []string
-	cert   *tls.Certificate
-	Opa    opa.Query
-}
-
-// Loop will contain all the calls from the server that we'll be listening on.
-type Loop func() error
-
-// New returns a new Server.
-func New() *Server {
-	s := Server{}
-	return &s
-}
-
-// Init initializes the server. This function MUST be called before Loop.
-func (s *Server) Init(ctx context.Context) (*Server, error) {
-	s.initRouter()
-
-	return s, nil
-}
-
-// WithAddresses sets the listening addresses that the server will bind to.
-func (s *Server) WithAddresses(addrs []string) *Server {
-	s.addrs = addrs
-	return s
-}
-
-// WithCertificate sets the server-side certificate that the server will use.
-func (s *Server) WithCertificate(cert *tls.Certificate) *Server {
-	s.cert = cert
-	return s
-}
-
-// WithOPA sets the opa client that the server will use.
-func (s *Server) WithOPA(opa opa.Query) *Server {
-	s.Opa = opa
-	return s
-}
-
-// Listeners returns functions that listen and serve connections.
-func (s *Server) Listeners() ([]Loop, error) {
-	loops := []Loop{}
-	for _, addr := range s.addrs {
-		parsedURL, err := parseURL(addr, s.cert != nil)
-		if err != nil {
-			return nil, err
-		}
-		var loop Loop
-		switch parsedURL.Scheme {
-		case "http":
-			loop, err = s.getListenerForHTTPServer(parsedURL)
-		case "https":
-			loop, err = s.getListenerForHTTPSServer(parsedURL)
-		default:
-			err = fmt.Errorf("invalid url scheme %q", parsedURL.Scheme)
-		}
-		if err != nil {
-			return nil, err
-		}
-		loops = append(loops, loop)
-	}
-
-	return loops, nil
-}
-
-func (s *Server) getListenerForHTTPServer(u *url.URL) (Loop, error) {
-	httpServer := http.Server{
-		Addr:    u.Host,
-		Handler: s.Handler,
-	}
-	httpLoop := func() error { return httpServer.ListenAndServe() }
-
-	return httpLoop, nil
-}
-
-func (s *Server) getListenerForHTTPSServer(u *url.URL) (Loop, error) {
-	if s.cert == nil {
-		return nil, fmt.Errorf("TLS certificate required but not supplied")
-	}
-	httpsServer := http.Server{
-		Addr:    u.Host,
-		Handler: s.Handler,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{*s.cert},
+	serverOptions := webhook.ServerOptions{
+		CertDir: "/certs",
+		BootstrapOptions: &webhook.BootstrapOptions{
+			MutatingWebhookConfigName: "kpc",
+			Secret: &apitypes.NamespacedName{
+				Namespace: "kpc-system",
+				Name:      "kpc-webhook-server-secret",
+			},
+			Service: &webhook.Service{
+				Namespace: "kpc-system",
+				Name:      "kpc-controller-manager-service",
+			},
 		},
 	}
-	httpsLoop := func() error { return httpsServer.ListenAndServeTLS("", "") }
 
-	return httpsLoop, nil
+	s, err := webhook.NewServer("policy-admission-server", mgr, serverOptions)
+	if err != nil {
+		return err
+	}
+	return addWebhooks(mgr, s, opa)
 }
 
-func (s *Server) initRouter() {
-	router := s.router
-	if router == nil {
-		router = mux.NewRouter()
+// GenericHandler is any object that supports the webhook server's Handle() method.
+type GenericHandler interface {
+	Handle(string, http.Handler)
+}
+
+// serverLike is a shim to enable easy testing. This interface supports both endpoint registration
+// methods of Kubebuilder's webhook server.
+type serverLike interface {
+	GenericHandler
+	Register(...webhook.Webhook) error
+}
+
+// addWebhooks adds all webhooks to the provided server-like object.
+func addWebhooks(mgr manager.Manager, server serverLike, opa opa.Query) error {
+	AddGenericWebhooks(server, opa)
+
+	mutatingWh, err := builder.NewWebhookBuilder().
+		Mutating().
+		Name("mutation.styra.com").
+		Path("/v1/admit").
+		Rules(admissionregistrationv1beta1.RuleWithOperations{
+			Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
+			Rule: admissionregistrationv1beta1.Rule{
+				APIGroups:   []string{"*"},
+				APIVersions: []string{"*"},
+				Resources:   []string{"*"},
+			},
+		}).
+		Handlers(mutationHandler{opa: opa}).
+		WithManager(mgr).
+		Build()
+	if err != nil {
+		return err
 	}
 
-	router.UseEncodedPath()
-	router.StrictSlash(true)
-
-	s.registerHandler(router, 1, "/admit", http.MethodPost, appHandler(s.Admit))
-	s.registerHandler(router, 1, "/authorize", http.MethodPost, appHandler(s.Authorize))
-	s.registerHandler(router, 1, "/audit", http.MethodGet, appHandler(s.Audit))
-
-	// default 405
-
-	router.Handle("/admit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
-		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-	router.Handle("/admit", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
-		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
-	// default 405
-	router.Handle("/authorize/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
-		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-	router.Handle("/authorize", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
-		http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPut, http.MethodPatch)
-	// default 405
-	router.Handle("/audit/{path:.*}", appHandler(HTTPStatus(405))).Methods(http.MethodHead, http.MethodConnect, http.MethodDelete,
-		http.MethodGet, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-	router.Handle("/audit", appHandler(HTTPStatus(405))).Methods(http.MethodHead,
-		http.MethodConnect, http.MethodDelete, http.MethodOptions, http.MethodTrace, http.MethodPost, http.MethodPut, http.MethodPatch)
-
-	s.Handler = router
-}
-
-// HTTPStatus is used to set a specific status code
-// Adapted from https://stackoverflow.com/questions/27711154/what-response-code-to-return-on-a-non-supported-http-method-on-rest
-func HTTPStatus(code int) func(logger *log.Entry, w http.ResponseWriter, req *http.Request) {
-	return func(logger *log.Entry, w http.ResponseWriter, req *http.Request) {
-		w.WriteHeader(code)
+	if err := server.Register(mutatingWh); err != nil {
+		return err
 	}
+
+	return nil
 }
 
-func (s *Server) registerHandler(router *mux.Router, version int, path string, method string, handler http.Handler) {
-	prefix := fmt.Sprintf("/v%d", version)
-	router.Handle(prefix+path, handler).Methods(method)
+// AddGenericWebhooks adds all handlers that handle raw HTTP requests.
+func AddGenericWebhooks(server GenericHandler, opa opa.Query) {
+	auditWh := newGenericWebhook("/v1/audit", &auditHandler{opa: opa}, []string{http.MethodGet})
+	authWh := newGenericWebhook("/v1/authorize", &authorizeHandler{opa: opa}, []string{http.MethodPost})
+
+	server.Handle(auditWh.path, auditWh)
+	server.Handle(authWh.path, authWh)
 }
 
 // Audit method for reporting current policy complaince of the cluster
-func (s *Server) Audit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
-	auditResponse, err := s.audit(logger)
+var _ genericHandler = &auditHandler{}
+
+type auditHandler struct {
+	opa opa.Query
+}
+
+func (h *auditHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	auditResponse, err := h.audit()
 	if err != nil {
-		logger.Errorf("error geting audit response: %v", err)
+		glog.Errorf("error geting audit response: %v", err)
 		http.Error(w, fmt.Sprintf("error gettinf audit response: %v", err), http.StatusInternalServerError)
 	}
-	logger.Debugf("audit: ready to write reponse %v...", auditResponse)
+	glog.Infof("audit: ready to write reponse %v...", string(auditResponse))
 	if _, err := w.Write(auditResponse); err != nil {
-		logger.Errorf("Can't write response: %v", err)
+		glog.Infof("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
 	}
 }
 
 // main validation process
-func (s *Server) audit(logger *log.Entry) ([]byte, error) {
+func (h *auditHandler) audit() ([]byte, error) {
 	validationQuery := types.MakeAuditQuery()
-	result, err := s.Opa.PostQuery(validationQuery)
+	result, err := h.opa.PostQuery(validationQuery)
 	if err != nil && !opa.IsUndefinedErr(err) {
 		return nil, err
 	}
@@ -210,119 +163,71 @@ func (s *Server) audit(logger *log.Entry) ([]byte, error) {
 	response.Message = fmt.Sprintf("total violations:%v", len(response.Violations))
 	bs, err = json.Marshal(response)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return bs, nil
 }
 
-// Admit method for validation and mutation webhook server
-func (s *Server) Admit(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
-	var body []byte
-	if r.Body != nil {
-		if data, err := ioutil.ReadAll(r.Body); err == nil {
-			body = data
-		}
-	}
-	if len(body) == 0 {
-		logger.Error("empty body")
-		http.Error(w, "empty body", http.StatusBadRequest)
-		return
-	}
-	// verify the content type is accurate
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		logger.Errorf("Content-Type=%s, expect application/json", contentType)
-		http.Error(w, "invalid Content-Type, expect `application/json`", http.StatusUnsupportedMediaType)
-		return
-	}
-	var admissionResponse *v1beta1.AdmissionResponse
-	ar := v1beta1.AdmissionReview{}
-	deserializer := codecs.UniversalDeserializer()
-	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
-		logger.Errorf("Can't decode body: %v", err)
-		admissionResponse = &v1beta1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	} else {
-		admissionResponse = s.admissionPolicyCheck(logger, &ar)
-	}
-	admissionReview := v1beta1.AdmissionReview{}
-	if admissionResponse != nil {
-		admissionReview.Response = admissionResponse
-		if ar.Request != nil {
-			admissionReview.Response.UID = ar.Request.UID
-		}
-	}
-	resp, err := json.Marshal(admissionReview)
-	if err != nil {
-		logger.Errorf("Can't encode response: %v", err)
-		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
-	}
-	logger.Debugf("Write response %v(allowed: %v)...", admissionReview.Response.UID, admissionReview.Response.Allowed)
-	if _, err := w.Write(resp); err != nil {
-		logger.Errorf("Can't write response: %v", err)
-		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
-	}
+// Handler for the mutation admission webhook
+var _ admission.Handler = mutationHandler{}
+
+type mutationHandler struct {
+	opa opa.Query
 }
 
-// main admission process
-func (s *Server) admissionPolicyCheck(logger *log.Entry, ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
-	response := &v1beta1.AdmissionResponse{
-		Allowed: true,
-	}
-	if ar.Request == nil {
-		logger.Errorf("AdmissionReview request is nil, +%v", *ar)
-		return response
-	}
-	req := ar.Request
-	logger.Debugf("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
+func (h mutationHandler) Handle(ctx context.Context, req atypes.Request) atypes.Response {
+	ar := req.AdmissionRequest
+	glog.Infof("AdmissionReview for Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", ar.Resource, ar.Kind, ar.Namespace, ar.Name, ar.UID, ar.Operation, ar.UserInfo)
 
 	// do admission policy check
-	allowed, reason, patchBytes, err := s.doAdmissionPolicyCheck(logger, req)
+	allowed, reason, patchBytes, err := h.doAdmissionPolicyCheck(ar)
+
+	// Note we are allowing access on an erroring policy check
 	if err != nil {
-		logger.Debugf("policy check failed Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v ar=%+v error=%v", req.Resource, req.Kind, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo, ar, err)
-		return response
+		msg := fmt.Sprintf("policy check failed Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v ar=%+v error=%v", ar.Resource, ar.Kind, ar.Namespace, ar.Name, ar.UID, ar.Operation, ar.UserInfo, req, err)
+		glog.Infof(msg)
+		return admission.ValidationResponse(true, msg)
 	}
+
 	if patchBytes == nil || len(patchBytes) == 0 {
-		logger.Debugf("AdmissionResponse: No mutation due to policy check, Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource.Resource, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
-		return &v1beta1.AdmissionResponse{
-			Allowed: allowed,
+		glog.Infof("AdmissionResponse: No mutation due to policy check, Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", ar.Resource.Resource, ar.Namespace, ar.Name, ar.UID, ar.Operation, ar.UserInfo)
+		return admission.ValidationResponse(allowed, reason)
+	}
+
+	glog.Infof("AdmissionResponse: Mutate Resource=%v Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", ar.Resource.Resource, ar.Namespace, ar.Name, ar.UID, ar.Operation, ar.UserInfo)
+	patches := []jsonpatch.JsonPatchOperation{}
+	if err := json.Unmarshal(patchBytes, &patches); err != nil {
+		msg := fmt.Sprintf("poorly formed JSONPatch Resource=%v Kind=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v ar=%+v error=%v", ar.Resource, ar.Kind, ar.Namespace, ar.Name, ar.UID, ar.Operation, ar.UserInfo, req, err)
+		glog.Infof(msg)
+		return admission.ValidationResponse(true, msg)
+	}
+	return atypes.Response{
+		Patches: patches,
+		Response: &admissionv1beta1.AdmissionResponse{
+			Allowed: true,
 			Result: &metav1.Status{
 				Message: reason,
 			},
-		}
-	}
-	logger.Debugf("AdmissionResponse: Mutate Resource=%v, Namespace=%v Name=%v UID=%v Operation=%v UserInfo=%v", req.Resource.Resource, req.Namespace, req.Name, req.UID, req.Operation, req.UserInfo)
-	return &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Patch:   patchBytes,
-		Result: &metav1.Status{
-			Message: reason,
+			PatchType: func() *admissionv1beta1.PatchType { pt := admissionv1beta1.PatchTypeJSONPatch; return &pt }(),
 		},
-		PatchType: func() *v1beta1.PatchType {
-			pt := v1beta1.PatchTypeJSONPatch
-			return &pt
-		}(),
 	}
 }
 
-func (s *Server) doAdmissionPolicyCheck(logger *log.Entry, req *v1beta1.AdmissionRequest) (allowed bool, reason string, patchBytes []byte, err error) {
+func (h *mutationHandler) doAdmissionPolicyCheck(req *admissionv1beta1.AdmissionRequest) (allowed bool, reason string, patchBytes []byte, err error) {
 	var mutationQuery string
 	if mutationQuery, err = makeOPAAdmissionPostQuery(req); err != nil {
 		return false, "", nil, err
 	}
 
-	logger.Debugf("Sending admission query to opa: %v", mutationQuery)
+	glog.Infof("Sending admission query to opa: %v", mutationQuery)
 
-	result, err := s.Opa.PostQuery(mutationQuery)
+	result, err := h.opa.PostQuery(mutationQuery)
 	if err != nil && !opa.IsUndefinedErr(err) {
 		return false, "", nil, fmt.Errorf("opa query failed query=%s err=%v", mutationQuery, err)
 	}
 
-	logger.Debugf("Response from admission query to opa: %v", result)
+	glog.Infof("Response from admission query to opa: %v", result)
 
 	return createPatchFromOPAResult(result)
 }
@@ -389,7 +294,7 @@ func makeOPAWithAsQuery(query, path, value string) string {
 	return fmt.Sprintf(`%s with %s as %s`, query, path, value)
 }
 
-func makeOPAAdmissionPostQuery(req *v1beta1.AdmissionRequest) (string, error) {
+func makeOPAAdmissionPostQuery(req *admissionv1beta1.AdmissionRequest) (string, error) {
 	var resource, name string
 	if resource = strings.ToLower(strings.TrimSpace(req.Resource.Resource)); len(resource) == 0 {
 		return resource, fmt.Errorf("resource is empty")
@@ -434,7 +339,7 @@ type admissionRequest struct {
 	OldObject   json.RawMessage             `json:"oldObject,omitempty" protobuf:"bytes,10,opt,name=oldObject"`
 }
 
-func createAdmissionRequestValueForOPA(req *v1beta1.AdmissionRequest) (string, error) {
+func createAdmissionRequestValueForOPA(req *admissionv1beta1.AdmissionRequest) (string, error) {
 	ar := admissionRequest{
 		UID:         string(req.UID),
 		Kind:        req.Kind,
@@ -455,7 +360,13 @@ func createAdmissionRequestValueForOPA(req *v1beta1.AdmissionRequest) (string, e
 }
 
 // Authorize method for authorization module webhook server
-func (s *Server) Authorize(logger *log.Entry, w http.ResponseWriter, r *http.Request) {
+var _ genericHandler = &authorizeHandler{}
+
+type authorizeHandler struct {
+	opa opa.Query
+}
+
+func (h *authorizeHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
@@ -463,21 +374,21 @@ func (s *Server) Authorize(logger *log.Entry, w http.ResponseWriter, r *http.Req
 		}
 	}
 	if len(body) == 0 {
-		logger.Error("empty body")
+		glog.Error("empty body")
 		http.Error(w, "empty body", http.StatusBadRequest)
 		return
 	}
 	// verify the content type is accurate
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
-		logger.Errorf("Content-Type=%s, expect application/json", contentType)
+		glog.Errorf("Content-Type=%s, expect application/json", contentType)
 		http.Error(w, "invalid Content-Type, expect `application/json`", http.StatusUnsupportedMediaType)
 		return
 	}
 	sar := authorizationv1beta1.SubjectAccessReview{}
 	deserializer := codecs.UniversalDeserializer()
 	if _, _, err := deserializer.Decode(body, nil, &sar); err != nil {
-		logger.Errorf("Can't decode body: %v", err)
+		glog.Errorf("Can't decode body %v: %v", string(body), err)
 		sar = authorizationv1beta1.SubjectAccessReview{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "authorization.k8s.io/v1beta1",
@@ -490,36 +401,36 @@ func (s *Server) Authorize(logger *log.Entry, w http.ResponseWriter, r *http.Req
 			},
 		}
 	} else {
-		sar.Status = s.authorizationPolicyCheck(logger, &sar)
+		sar.Status = h.authorizationPolicyCheck(&sar)
 	}
 	resp, err := json.Marshal(sar)
 	if err != nil {
-		logger.Errorf("Can't encode response: %v", err)
+		glog.Errorf("Can't encode response: %v", err)
 		http.Error(w, fmt.Sprintf("could not encode response: %v", err), http.StatusInternalServerError)
 	}
-	logger.Debugf("SubjectAccessResponse: (denied: %v)\n", sar.Status.Denied)
+	glog.Infof("SubjectAccessResponse: (denied: %v)\n", sar.Status.Denied)
 	if _, err := w.Write(resp); err != nil {
-		logger.Errorf("Can't write response: %v", err)
+		glog.Errorf("Can't write response: %v", err)
 		http.Error(w, fmt.Sprintf("could not write response: %v", err), http.StatusInternalServerError)
 	}
 }
 
 // main authorization process
-func (s *Server) authorizationPolicyCheck(logger *log.Entry, sar *authorizationv1beta1.SubjectAccessReview) authorizationv1beta1.SubjectAccessReviewStatus {
+func (h *authorizeHandler) authorizationPolicyCheck(sar *authorizationv1beta1.SubjectAccessReview) authorizationv1beta1.SubjectAccessReviewStatus {
 	response := authorizationv1beta1.SubjectAccessReviewStatus{
 		Allowed: false,
 		Denied:  true,
 	}
 	attributes := sarAttributes(sar)
-	logger.Debugf("SubjectAccessReview for %s", attributes)
+	glog.Infof("SubjectAccessReview for %s", attributes)
 
 	// do authorization policy check
-	allowed, reason, err := s.doAuthorizationPolicyCheck(logger, sar)
+	allowed, reason, err := h.doAuthorizationPolicyCheck(sar)
 	if err != nil {
-		logger.Debugf("policy check failed %s ar=%+v error=%v", attributes, sar, err)
+		glog.Infof("policy check failed %s ar=%+v error=%v", attributes, sar, err)
 		return response
 	}
-	logger.Debugf("SubjectAccessReviewStatus: denied: %t reason: %s %s", !allowed, reason, attributes)
+	glog.Infof("SubjectAccessReviewStatus: denied: %t reason: %s %s", !allowed, reason, attributes)
 	return authorizationv1beta1.SubjectAccessReviewStatus{
 		Allowed: false,
 		Denied:  !allowed,
@@ -536,21 +447,21 @@ func sarAttributes(sar *authorizationv1beta1.SubjectAccessReview) string {
 	return strings.Join(attrs, " ")
 }
 
-func (s *Server) doAuthorizationPolicyCheck(logger *log.Entry, sar *authorizationv1beta1.SubjectAccessReview) (allowed bool, reason string, err error) {
+func (h *authorizeHandler) doAuthorizationPolicyCheck(sar *authorizationv1beta1.SubjectAccessReview) (allowed bool, reason string, err error) {
 	var authorizationQuery string
 	if authorizationQuery, err = makeOPAAuthorizationPostQuery(sar); err != nil {
 		return false, "", err
 	}
 
-	logger.Debugf("Sending authorization query to opa: %v", authorizationQuery)
+	glog.Infof("Sending authorization query to opa: %v", authorizationQuery)
 
-	result, err := s.Opa.PostQuery(authorizationQuery)
+	result, err := h.opa.PostQuery(authorizationQuery)
 
 	if err != nil && !opa.IsUndefinedErr(err) {
 		return false, fmt.Sprintf("opa query failed query=%s err=%v", authorizationQuery, err), err
 	}
 
-	logger.Debugf("Response from authorization query to opa: %v", result)
+	glog.Infof("Response from authorization query to opa: %v", result)
 
 	return parseOPAResult(result)
 }
@@ -655,21 +566,7 @@ func randStringBytesMaskImprSrc(n int) string {
 	return string(b)
 }
 
-// InstallDefaultAdmissionPolicy will update OPA with a default policy  This function will
-// block until the policy has been installed.
-func InstallDefaultAdmissionPolicy(id string, policy []byte, opa opa.Policies) error {
-	for {
-		time.Sleep(time.Second * 1)
-		if err := opa.InsertPolicy(id, policy); err != nil {
-			log.Errorf("Failed to install default policy (kubernetesPolicy) : %v", err)
-		} else {
-			return nil
-		}
-	}
-}
-
-type appHandler func(*log.Entry, http.ResponseWriter, *http.Request)
-
+// Generic HTTP methods and structs
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -684,14 +581,35 @@ func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{w, http.StatusOK}
 }
 
+var _ http.Handler = GenericWebhook{}
+
+type genericHandler interface {
+	Handle(http.ResponseWriter, *http.Request)
+}
+
+type GenericWebhook struct {
+	handler genericHandler
+	path    string
+	methods []string
+}
+
+func newGenericWebhook(path string, handler genericHandler, methods []string) GenericWebhook {
+	return GenericWebhook{
+		path:    path,
+		methods: methods,
+		handler: handler,
+	}
+}
+
 // ServeHTTP implements the net/http server handler interface
 // and recovers from panics.
-func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logger := log.WithFields(log.Fields{
-		"req.method": r.Method,
-		"req.path":   r.URL.Path,
-		"req.remote": parseRemoteAddr(r.RemoteAddr),
-	})
+func (gw GenericWebhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	glog.Infof("Received request: method=%v, path=%v, remote=%v", r.Method, r.URL.Path, parseRemoteAddr(r.RemoteAddr))
+	if !gw.allowedMethod(r.Method) || !gw.allowedPath(r.URL.Path) {
+		w.WriteHeader(405)
+		return
+	}
+
 	start := time.Now()
 	defer func() {
 		var err error
@@ -706,15 +624,31 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			default:
 				err = errors.New("unknown error")
 			}
-			logger.WithField("res.status", http.StatusInternalServerError).
-				Errorf("Panic processing request: %+v, file: %s, line: %d, stacktrace: '%s'", r, file, line, stack)
+			glog.Errorf("Panic processing request: %+v, file: %s, line: %d, stacktrace: '%s'", r, file, line, stack)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}()
 	rw := newResponseWriter(w)
-	fn(logger, rw, r)
+	gw.handler.Handle(rw, r)
 	latency := time.Since(start)
-	logger.Infof("Status (%d) took %d ns", rw.statusCode, latency.Nanoseconds())
+	glog.Infof("Status (%d) took %d ns", rw.statusCode, latency.Nanoseconds())
+}
+
+func (gw GenericWebhook) allowedMethod(method string) bool {
+	for _, m := range gw.methods {
+		if m == method {
+			return true
+		}
+	}
+	return false
+}
+
+func (gw GenericWebhook) allowedPath(path string) bool {
+	extra := strings.Replace(path, gw.path, "", 1)
+	if extra != "" && extra != "/" {
+		return false
+	}
+	return true
 }
 
 func parseRemoteAddr(addr string) string {
@@ -727,15 +661,4 @@ func parseRemoteAddr(addr string) string {
 		return ""
 	}
 	return hostname
-}
-
-func parseURL(s string, useHTTPSByDefault bool) (*url.URL, error) {
-	if !strings.Contains(s, "://") {
-		scheme := "http://"
-		if useHTTPSByDefault {
-			scheme = "https://"
-		}
-		s = scheme + s
-	}
-	return url.Parse(s)
 }

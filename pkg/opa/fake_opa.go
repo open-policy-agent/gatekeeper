@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 
-	"github.com/Azure/kubernetes-policy-controller/pkg/policies/types"
+	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
 	opatypes "github.com/open-policy-agent/opa/server/types"
 	"github.com/rite2nikhil/opa/util"
 )

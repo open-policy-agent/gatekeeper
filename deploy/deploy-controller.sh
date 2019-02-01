@@ -9,7 +9,4 @@ echo "Deploy OPA and kube-mgmt"
 read -p "Press enter to continue"
 
 # deploy opa 
-kubectl apply -n opa -f ./opa.yaml
-
-
-
+kubectl apply -n kpc-system -f ./kpc.yaml

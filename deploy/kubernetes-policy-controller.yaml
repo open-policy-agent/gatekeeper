@@ -19,6 +19,7 @@ spec:
         - --tls-cert-file=/etc/kubernetes/pki/kubernetes-policy-controller.crt
         - --tls-private-key-file=/etc/kubernetes/pki/kubernetes-policy-controller.key
         - --opa-url=http://localhost:8181/v1
+        - --authorization-mode
       volumeMounts:
         - name: host-etc
           mountPath: /etc

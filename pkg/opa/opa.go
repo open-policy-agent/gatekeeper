@@ -9,13 +9,81 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 
+	"github.com/golang/glog"
 	"github.com/open-policy-agent/opa/server/types"
 )
+
+var (
+	opaAddress       = flag.String("opa-url", "http://localhost:8181/v1", "set URL of OPA API endpoint")
+	opaCAFile        = flag.String("opa-ca-file", "", "set path of the ca crts which are used in addition to the system certs to verify the opa server cert")
+	opaAuthTokenFile = flag.String("opa-auth-token-file", "", "set path of auth token file where the bearer token for opa is stored in format 'token = \"<auth token>\"'")
+)
+
+func NewFromFlags() Client {
+	opaAuthToken, err := loadOpaAuthToken(*opaAuthTokenFile)
+	if err != nil {
+		fmt.Println("error:", err)
+		os.Exit(1)
+	}
+
+	opaCAs, err := loadCACertificates(*opaCAFile)
+	if err != nil {
+		fmt.Println("error:", err)
+		os.Exit(1)
+	}
+
+	return New(*opaAddress, opaCAs, opaAuthToken)
+}
+
+func loadCACertificates(tlsCertFile string) (*x509.CertPool, error) {
+	rootCAs, _ := x509.SystemCertPool()
+	if rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	if tlsCertFile != "" {
+		certs, err := ioutil.ReadFile(tlsCertFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not load ca certificate: %v", err)
+		}
+
+		// Append our cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+			glog.Info("No certs appended, using system certs only")
+		}
+	}
+
+	return rootCAs, nil
+}
+
+var opaAuthTokenRegex = regexp.MustCompile("token.*=.*\"(.*)\"")
+
+func loadOpaAuthToken(opaAuthTokenFile string) (string, error) {
+	if opaAuthTokenFile == "" {
+		return "", nil
+	}
+
+	bytes, err := ioutil.ReadFile(opaAuthTokenFile)
+	if err != nil {
+		return "", fmt.Errorf("error reading opaAuthTokenFile: %v", err)
+	}
+
+	match := opaAuthTokenRegex.FindStringSubmatch(string(bytes))
+	if len(match) != 2 {
+		return "", fmt.Errorf("error matching token in opaAuthTokenFile, matched: %v", match)
+	}
+
+	return match[1], nil
+}
 
 // Error contains the standard error fields returned by OPA.
 type Error struct {

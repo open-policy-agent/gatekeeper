@@ -61,7 +61,7 @@ There are two scenarios of the policy engine namely Validation and Mutation
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap example --from-file ./policy/admission/ingress-host-fqdn.rego
+kubectl create configmap example -n kpc-system --from-file ./policy/admission/ingress-host-fqdn.rego
 ```
 
 ```bash
@@ -81,7 +81,7 @@ This policy will mutate resources that define an annotation with the key `"test-
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap example --from-file ./policy/admission/annotate.rego
+kubectl create configmap -n kpc-system example2 --from-file ./policy/admission/annotate.rego
 ```
 
 First create a Deployment:
@@ -115,12 +115,13 @@ kubectl get deployment nginx -o json | jq '.metadata'
 1. Add the authorization module to the APIServer via flag, e.g.: `--authorization-mode=Node,Webhook,RBAC`
 1. Configure a webhook config file which is used by the APIServer to call the webhook, e.g.: `--authorization-webhook-config-file=/etc/kubernetes/kubernetes-policy-controller.kubeconfig`. See example file content [here](./deploy/kubernetes-policy-controller.kubeconfig)
 1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/kubernetes-policy-controller.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
+   1. To avoid dependencies on the Kubernetes API Server use the flag `--authorization-mode=true`
 1. Deploy some of the policies stored under [policy/authorization](./policy/authorization). There are examples for:
-  1. Blocking create/update/delete on Calico CRDs
-  1. Namespace-based blocking of the usage of `privileged` PodSecurityPolicy
-  1. Blocking access to StorageClass `cinder`
-  1. Blocking create/update/delete on ValidatingWebhookConfigurations & MutatingWebhookConfigurations (which isn't possible via ValidatingWebhooks & MutatingWebhooks)
-  1. Blocking `exec` and `cp` on Pods in kube-system
+   1. Blocking create/update/delete on Calico CRDs
+   1. Namespace-based blocking of the usage of `privileged` PodSecurityPolicy
+   1. Blocking access to StorageClass `cinder`
+   1. Blocking create/update/delete on ValidatingWebhookConfigurations & MutatingWebhookConfigurations (which isn't possible via ValidatingWebhooks & MutatingWebhooks)
+   1. Blocking `exec` and `cp` on Pods in kube-system
 
 *Note* This authorization modules are never called for users with group `system:masters` 
 
@@ -315,6 +316,36 @@ deny[{
 ### Video
 
 [Demo video of Kubernetes Policy Controller](https://youtu.be/1WObJiTZDHc)
+
+## Dev Workflow
+
+### Build the Docker Image
+
+```bash
+make docker-build
+```
+
+### Push the Docker Image
+
+```bash
+make docker-push
+```
+
+### Deploy
+
+The following command deploys the latest pushed docker image to the currently active Kubernetes context
+
+```bash
+make deploy
+```
+
+### Rebuild Config Templates
+
+The following command rebuilds the config manifests used with `make deploy`:
+
+```bash
+make manifests
+```
 
 ## Contributing
 

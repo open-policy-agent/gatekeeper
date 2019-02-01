@@ -1,58 +1,53 @@
-ORG_PATH=github.com/open-policy-agent
-PROJECT_NAME := kubernetes-policy-controller
-REPO_PATH="$(ORG_PATH)/$(PROJECT_NAME)"
-CONTROLLER_BINARY_NAME := kubernetes-policy-controller
-CONTROLLER_VERSION ?= 2.0
 
-VERSION_VAR := $(REPO_PATH)/version.Version
-GIT_VAR := $(REPO_PATH)/version.GitCommit
-BUILD_DATE_VAR := $(REPO_PATH)/version.BuildDate
-BUILD_DATE := $$(date +%Y-%m-%d-%H:%M)
-GIT_HASH := $$(git rev-parse --short HEAD)
+# Image URL to use all building/pushing image targets
+IMG ?= docker.io/nikhilbh/kubernetes-policy-controller:latest
 
-ifeq ($(OS),Windows_NT)
-	GO_BUILD_MODE = default
-else
-	UNAME_S := $(shell uname -s)
-	ifeq ($(UNAME_S), Linux)
-		GO_BUILD_MODE = pie
-	endif
-	ifeq ($(UNAME_S), Darwin)
-		GO_BUILD_MODE = default
-	endif
-endif
+all: test manager
 
-GO_BUILD_OPTIONS := -buildmode=${GO_BUILD_MODE} -ldflags "-s -X $(VERSION_VAR)=$(DEMO_VERSION) -X $(GIT_VAR)=$(GIT_HASH) -X $(BUILD_DATE_VAR)=$(BUILD_DATE)"
+# Run tests
+test: generate fmt vet manifests
+	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
-GO_DEBUG_BUILD_OPTIONS := -buildmode=${GO_BUILD_MODE} -gcflags "all=-N -l" -ldflags "-X $(VERSION_VAR)=$(DEMO_VERSION) -X $(GIT_VAR)=$(GIT_HASH) -X $(BUILD_DATE_VAR)=$(BUILD_DATE)"
+# Build manager binary
+manager: generate fmt vet
+	go build -o bin/manager github.com/open-policy-agent/kubernetes-policy-controller/cmd/manager
 
-# useful for other docker repos
-REGISTRY ?= nikhilbh
-CONTROLLER_IMAGE_NAME := $(REGISTRY)/$(CONTROLLER_BINARY_NAME)
+# Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate fmt vet
+	go run ./cmd/manager/main.go
 
-clean-controller:
-	rm -rf bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME)
+# Install CRDs into a cluster
+install: manifests
+	kubectl apply -f config/crds
 
-clean:
-	rm -rf bin/$(PROJECT_NAME)
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+deploy: manifests
+  # TODO: Re-enable below command once we have crds to deploy
+	# kubectl apply -f config/crds
+	kustomize build config/default | kubectl apply -f -
 
-build-controller:clean-controller
-	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+# Generate manifests e.g. CRD, RBAC etc.
+manifests:
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 
-build:clean
-	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+# Run go fmt against code
+fmt:
+	go fmt ./pkg/... ./cmd/...
 
-build-dbg-controller:clean-controller
-	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_DEBUG_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+# Run go vet against code
+vet:
+	go vet ./pkg/... ./cmd/...
 
-build-dbg:clean
-	go build -o bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) $(GO_DEBUG_BUILD_OPTIONS) $(ORG_PATH)/$(PROJECT_NAME)/cmd
+# Generate code
+generate:
+	go generate ./pkg/... ./cmd/...
 
-image-controller:
-	cp bin/$(PROJECT_NAME)/$(CONTROLLER_BINARY_NAME) images/$(CONTROLLER_BINARY_NAME)
-	docker build -t $(CONTROLLER_IMAGE_NAME):$(CONTROLLER_VERSION) images/$(CONTROLLER_BINARY_NAME)
+# Build the docker image
+docker-build: test
+	docker build . -t ${IMG}
+	@echo "updating kustomize image patch file for manager resource"
+	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
 
-push-controller:
-	docker push $(CONTROLLER_IMAGE_NAME):$(CONTROLLER_VERSION)
-
-.PHONY: build
+# Push the docker image
+docker-push:
+	docker push ${IMG}

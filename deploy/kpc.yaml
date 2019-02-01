@@ -1,0 +1,166 @@
+# Grant OPA/kube-mgmt read-only access to resources. This let's kube-mgmt
+# replicate resources into OPA so they can be used in policies.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: opa-viewer
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: system
+---
+# Define role for OPA/kube-mgmt to update webhook configurations and watch secrets and services.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kpc-cluster-role
+rules:
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Grant OPA/kube-mgmt role defined above.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kpc-cluster-role
+roleRef:
+  kind: ClusterRole
+  name: kpc-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: kpc-system
+---
+# Define role for OPA/kube-mgmt to update configmaps and manage services and secrets
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: kpc-system
+  name: kpc-namespace-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["secrets", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# Grant OPA/kube-mgmt role defined above.
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: kpc-system
+  name: kpc-namespace-role
+roleRef:
+  kind: Role
+  name: kpc-namespace-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: kpc-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: kpc-controller-manager-service
+  namespace: kpc-system
+spec:
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 443
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: kpc-controller-manager
+  namespace: kpc-system
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  serviceName: kpc-controller-manager-service
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+    spec:
+      containers:
+      - name: manager
+        args:
+          - --stderrthreshold=INFO
+        command:
+        - /root/manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SECRET_NAME
+          value: kpc-webhook-server-secret
+        image: docker.io/nikhilbh/kubernetes-policy-controller:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9876
+          name: webhook-server
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
+      - name: opa
+        args:
+          - run
+          - --server
+          - --addr=http://127.0.0.1:8181
+        image: openpolicyagent/opa:0.10.1
+        imagePullPolicy: Always
+        resources: {}
+      - name: kube-mgmt
+        args:
+          - --replicate-cluster=v1/namespaces
+          - --replicate=extensions/v1beta1/ingresses
+          - --replicate=v1/pods
+          - --policies=kpc-system
+        image: openpolicyagent/kube-mgmt:0.6
+        imagePullPolicy: Always
+        resources: {}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: kpc-webhook-server-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kpc-webhook-server-secret
+  namespace: kpc-system
