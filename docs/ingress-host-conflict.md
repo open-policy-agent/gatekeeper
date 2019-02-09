@@ -1,14 +1,14 @@
 # gatekeeper
 
-Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [gatekeeper](https://github.com/Azure/gatekeeper) extends the compliance enforcement at “create” event not at “run“ event, some of the examples are "Minimum replica count enforcement", "White listed/ black listed registries", "not allowing conflicting hosts for ingresses". Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating and a validating webhook which gets called for matching Kubernetes API server requests by the admission controller to enforce semantic validation of objects during create, update, and delete operations. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
+Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [gatekeeper](https://github.com/open-policy-agent/gatekeeper) extends the compliance enforcement at “create” event not at “run“ event, some of the examples are "Minimum replica count enforcement", "White listed/ black listed registries", "not allowing conflicting hosts for ingresses". Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating and a validating webhook which gets called for matching Kubernetes API server requests by the admission controller to enforce semantic validation of objects during create, update, and delete operations. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud Native environments hosted by CNCF as a sandbox level project.
 
 The administrator of the cluster defines the policy which is enforced by `gatekeeper`. There are two type of policies namely `validation` e.g. white listed registries and `mutation` e.g. annotating objects created in a namespace.
 
 Lets lets look at the example below which implements a validation policy to ensure Ingress hostnames must be unique across Namespaces.
 
-## deploy `gatekeeper' on a kubernetes cluster
+## deploy `gatekeeper' on a Kubernetes cluster
 
-Prerequisites are that you have a kubernets cluster (e.g ACS Engine or Azure Kubernetes Cluster (AKS))
+Prerequisites are that you have a Kubernetes cluster
 To implement admission control rules that validate Kubernetes resources during create, update, and delete operations, you must enable the [ValidatingAdmissionWebhook](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#validatingadmissionwebhook) when the Kubernetes API server is started. the admission controller is included in the [recommended set of admission controllers to enable](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#is-there-a-recommended-set-of-admission-controllers-to-use)
 
 ### 1.  create opa namespace
