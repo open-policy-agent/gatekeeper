@@ -7,4 +7,4 @@ echo "Delete gatekeeper webhook config"
 
 read -p "Press enter to continue"
 
-kubectl delete mutatingwebhookconfiguration kpc
+kubectl delete mutatingwebhookconfiguration gatekeeper

@@ -61,7 +61,7 @@ There are two scenarios of the policy engine namely Validation and Mutation
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap example -n kpc-system --from-file ./policy/admission/ingress-host-fqdn.rego
+kubectl create configmap example -n gatekeeper-system --from-file ./policy/admission/ingress-host-fqdn.rego
 ```
 
 ```bash
@@ -81,7 +81,7 @@ This policy will mutate resources that define an annotation with the key `"test-
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap -n kpc-system example2 --from-file ./policy/admission/annotate.rego
+kubectl create configmap -n gatekeeper-system example2 --from-file ./policy/admission/annotate.rego
 ```
 
 First create a Deployment:

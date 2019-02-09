@@ -7,4 +7,4 @@ read -p "Press enter to continue"
 rm -rf ./secret
 
 ./delete-webhook.sh
-kubectl delete ns kpc-system
+kubectl delete ns gatekeeper-system

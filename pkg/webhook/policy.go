@@ -54,14 +54,14 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
 		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: "kpc",
+			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
-				Namespace: "kpc-system",
-				Name:      "kpc-webhook-server-secret",
+				Namespace: "gatekeeper-system",
+				Name:      "gatekeeper-webhook-server-secret",
 			},
 			Service: &webhook.Service{
-				Namespace: "kpc-system",
-				Name:      "kpc-controller-manager-service",
+				Namespace: "gatekeeper-system",
+				Name:      "gatekeeper-controller-manager-service",
 			},
 		},
 	}
