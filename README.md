@@ -2,7 +2,7 @@
 
 Every organization has some rules. Some of these are essential to meet governance, and legal requirements and other are based on learning from past experience and not repeating the same mistakes. These decisions cannot tolerate human response time as they need near a real-time action. Services that are policy enabled to make the organization agile and are essential for long-term success as they are more adaptable as violations and conflicts can be discovered consistently as they are not prone to human error. 
 
-Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/). This webhooks are executed whenever a resource is created, updated or deleted and can be used to implement complex custom logic. `gatekeeper` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. Kubernetes also has another extension mechanism for general authorization decisions (not necessarily related to resources) which is called [authorization modules](https://kubernetes.io/docs/reference/access-authn-authz/authorization/). Usually, just the RBAC authorization module is used, but with `gatekeeper` it's possible to implement a blacklist in front of RBAC. The `gatekeeper` uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
+Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/). This webhooks are executed whenever a resource is created, updated or deleted and can be used to implement complex custom logic. `gatekeeper` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. Kubernetes also has another extension mechanism for general authorization decisions (not necessarily related to resources) which is called [authorization modules](https://kubernetes.io/docs/reference/access-authn-authz/authorization/). Usually, just the RBAC authorization module is used, but with `gatekeeper` it's possible to implement a blacklist in front of RBAC. `gatekeeper` uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
 
 Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [gatekeeper](https://github.com/Azure/gatekeeper) extends the compliance enforcement at “create” event not at “run“ event. For example, a kubernetes service could answer questions like :
 
@@ -129,7 +129,7 @@ kubectl get deployment nginx -o json | jq '.metadata'
 
 ### policy language
 
-The `gatekeeper` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
+`gatekeeper` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
 Policy rules are created as a rego files. 
 
 ### package admission

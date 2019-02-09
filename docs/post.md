@@ -37,7 +37,7 @@ deny[{
 
 Kubernetes allows decoupling complex logic such as policy decision from the inner working of API Server by means of "admission controllers”. Admission control is a custom logic executed by a webhook. `Kubernetes policy controller` is a mutating and a validating webhook which gets called for matching Kubernetes API server requests by the admission controller to enforce semantic validation of objects during create, update, and delete operations. It uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)) is a policy engine for Cloud-Native environments hosted by CNCF as a sandbox level project.
 
-They are following components that for the `gatekeeper`
+They are following components that for `gatekeeper`
 
 * Admission controller Webhook: This is the service that receives CRUD requests from the API server
 
