@@ -16,8 +16,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/mattbaird/jsonpatch"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/opa"
+	"github.com/open-policy-agent/gatekeeper/pkg/policies/types"
 	"github.com/open-policy-agent/opa/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"

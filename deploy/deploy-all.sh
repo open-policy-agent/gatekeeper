@@ -9,7 +9,7 @@ read -p "Press enter to continue"
 # create opa namespace
 kubectl create ns kpc-system
 
-# deploy kubernetes-policy-controller 
+# deploy gatekeeper 
 kubectl apply -n kpc-system -f ./deploy/kpc.yaml
 
 # deploy kubernetes policies

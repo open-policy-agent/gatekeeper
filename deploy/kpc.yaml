@@ -118,7 +118,7 @@ spec:
               fieldPath: metadata.namespace
         - name: SECRET_NAME
           value: kpc-webhook-server-secret
-        image: docker.io/nikhilbh/kubernetes-policy-controller:latest
+        image: docker.io/nikhilbh/gatekeeper:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 9876

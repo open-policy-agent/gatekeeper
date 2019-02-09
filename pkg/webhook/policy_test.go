@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/opa"
+	"github.com/open-policy-agent/gatekeeper/pkg/policies/types"
 	opatypes "github.com/open-policy-agent/opa/server/types"
 	"github.com/open-policy-agent/opa/util"
 	"k8s.io/api/admission/v1beta1"
