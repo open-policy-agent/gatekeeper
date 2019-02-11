@@ -18,7 +18,11 @@ In the `authorization` scenario it's possible to block things like `kubectl get`
 
 ## Status
 
-This is a new project and is in alpha state.
+This is a new project and is in alpha state. The way policies are
+structured is likely to change in the near future. If you want to kick
+the tires, see [Kubernetes Admission Control](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html)
+tutorial on openpolicyagent.org. The planned policy structure for this
+project will more closely resemble examples in that tutorial.
 
 ## Want to get involved?
 
