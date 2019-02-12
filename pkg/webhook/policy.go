@@ -16,8 +16,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/mattbaird/jsonpatch"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/policies/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/opa"
+	"github.com/open-policy-agent/gatekeeper/pkg/policies/types"
 	"github.com/open-policy-agent/opa/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -54,14 +54,14 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
 		BootstrapOptions: &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: "kpc",
+			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
-				Namespace: "kpc-system",
-				Name:      "kpc-webhook-server-secret",
+				Namespace: "gatekeeper-system",
+				Name:      "gatekeeper-webhook-server-secret",
 			},
 			Service: &webhook.Service{
-				Namespace: "kpc-system",
-				Name:      "kpc-controller-manager-service",
+				Namespace: "gatekeeper-system",
+				Name:      "gatekeeper-controller-manager-service",
 			},
 		},
 	}

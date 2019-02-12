@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/opa"
-	"github.com/open-policy-agent/kubernetes-policy-controller/pkg/webhook"
+	"github.com/open-policy-agent/gatekeeper/pkg/opa"
+	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 )
 
 var (

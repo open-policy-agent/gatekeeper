@@ -19,7 +19,7 @@ The following are basic components of policy controller at the cluster level
 
 ![Components](./k8s-policy-design.png)
 
-### kubernetes-policy-controller
+### gatekeeper
 
 This is a kubernetes service which exposes the `audit`, `admit` and `authorize` TLS http methods for the cluster. The `admit` functionality is used as `MutatingWebhookConfiguration` by the kubernetes apiserver. The `audit` functionality exposes the current evaluation state of the cluster. In addition the controller is responsible to validate the correctness of the policies that are being added for the cluster e.g. checking for conflicting patches; making sure that the policies are valid `rego` documents. The `authorize` functionality can be used as [webhook authorization module](https://kubernetes.io/docs/reference/access-authn-authz/authorization/#authorization-modules). In this case the APIServer sends a SubjectAccessReview for every request made to the APIServer to kubernetes policy controller and the controller can deny these requests based on OPA policies. 
 
@@ -30,7 +30,7 @@ The evaluation is a call to `OPA`. This call produces one or more decisions. Eac
 
 ### open-policy agent(OPA)
 
-open-policy-agent(OPA) service is the policy engine for the kubernetes policy controller. It performs evaluations as called by `kubernetes-policy-controller`. For our `audit` requirement OPA can not be used as a standalone. We also chose to use OPA as a service (instead of using as a lib) as it allows to
+open-policy-agent(OPA) service is the policy engine for the kubernetes policy controller. It performs evaluations as called by `gatekeeper`. For our `audit` requirement OPA can not be used as a standalone. We also chose to use OPA as a service (instead of using as a lib) as it allows to
 
 1. Decouple the kubernetes admission controller logic from the policy engine.
 2. When needed, the policy engine can be hosted outside of the cluster.

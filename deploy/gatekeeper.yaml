@@ -17,7 +17,7 @@ subjects:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: kpc-cluster-role
+  name: gatekeeper-cluster-role
 rules:
 - apiGroups: ["admissionregistration.k8s.io"]
   resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
@@ -30,22 +30,22 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: kpc-cluster-role
+  name: gatekeeper-cluster-role
 roleRef:
   kind: ClusterRole
-  name: kpc-cluster-role
+  name: gatekeeper-cluster-role
   apiGroup: rbac.authorization.k8s.io
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: kpc-system
+  namespace: gatekeeper-system
 ---
 # Define role for OPA/kube-mgmt to update configmaps and manage services and secrets
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  namespace: kpc-system
-  name: kpc-namespace-role
+  namespace: gatekeeper-system
+  name: gatekeeper-namespace-role
 rules:
 - apiGroups: [""]
   resources: ["configmaps"]
@@ -58,16 +58,16 @@ rules:
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  namespace: kpc-system
-  name: kpc-namespace-role
+  namespace: gatekeeper-system
+  name: gatekeeper-namespace-role
 roleRef:
   kind: Role
-  name: kpc-namespace-role
+  name: gatekeeper-namespace-role
   apiGroup: rbac.authorization.k8s.io
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: kpc-system
+  namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Service
@@ -75,8 +75,8 @@ metadata:
   labels:
     control-plane: controller-manager
     controller-tools.k8s.io: "1.0"
-  name: kpc-controller-manager-service
-  namespace: kpc-system
+  name: gatekeeper-controller-manager-service
+  namespace: gatekeeper-system
 spec:
   selector:
     control-plane: controller-manager
@@ -90,14 +90,14 @@ metadata:
   labels:
     control-plane: controller-manager
     controller-tools.k8s.io: "1.0"
-  name: kpc-controller-manager
-  namespace: kpc-system
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
       controller-tools.k8s.io: "1.0"
-  serviceName: kpc-controller-manager-service
+  serviceName: gatekeeper-controller-manager-service
   template:
     metadata:
       labels:
@@ -117,8 +117,8 @@ spec:
               apiVersion: v1
               fieldPath: metadata.namespace
         - name: SECRET_NAME
-          value: kpc-webhook-server-secret
-        image: docker.io/nikhilbh/kubernetes-policy-controller:latest
+          value: gatekeeper-webhook-server-secret
+        image: docker.io/nikhilbh/gatekeeper:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 9876
@@ -148,7 +148,7 @@ spec:
           - --replicate-cluster=v1/namespaces
           - --replicate=extensions/v1beta1/ingresses
           - --replicate=v1/pods
-          - --policies=kpc-system
+          - --policies=gatekeeper-system
         image: openpolicyagent/kube-mgmt:0.6
         imagePullPolicy: Always
         resources: {}
@@ -157,10 +157,10 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: kpc-webhook-server-secret
+          secretName: gatekeeper-webhook-server-secret
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kpc-webhook-server-secret
-  namespace: kpc-system
+  name: gatekeeper-webhook-server-secret
+  namespace: gatekeeper-system

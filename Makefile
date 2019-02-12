@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= docker.io/nikhilbh/kubernetes-policy-controller:latest
+IMG ?= docker.io/nikhilbh/gatekeeper:latest
 
 all: test manager
 
@@ -10,7 +10,7 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager github.com/open-policy-agent/kubernetes-policy-controller/cmd/manager
+	go build -o bin/manager github.com/open-policy-agent/gatekeeper/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet

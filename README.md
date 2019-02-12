@@ -1,10 +1,10 @@
-# kubernetes-policy-controller
+# gatekeeper
 
 Every organization has some rules. Some of these are essential to meet governance, and legal requirements and other are based on learning from past experience and not repeating the same mistakes. These decisions cannot tolerate human response time as they need near a real-time action. Services that are policy enabled to make the organization agile and are essential for long-term success as they are more adaptable as violations and conflicts can be discovered consistently as they are not prone to human error. 
 
-Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/). This webhooks are executed whenever a resource is created, updated or deleted and can be used to implement complex custom logic. `kubernetes-policy-controller` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. Kubernetes also has another extension mechanism for general authorization decisions (not necessarily related to resources) which is called [authorization modules](https://kubernetes.io/docs/reference/access-authn-authz/authorization/). Usually, just the RBAC authorization module is used, but with `kubernetes-policy-controller` it's possible to implement a blacklist in front of RBAC. The `kubernetes-policy-controller` uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
+Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/). This webhooks are executed whenever a resource is created, updated or deleted and can be used to implement complex custom logic. `gatekeeper` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. Kubernetes also has another extension mechanism for general authorization decisions (not necessarily related to resources) which is called [authorization modules](https://kubernetes.io/docs/reference/access-authn-authz/authorization/). Usually, just the RBAC authorization module is used, but with `gatekeeper` it's possible to implement a blacklist in front of RBAC. `gatekeeper` uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
 
-Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [kubernetes-policy-controller](https://github.com/Azure/kubernetes-policy-controller) extends the compliance enforcement at “create” event not at “run“ event. For example, a kubernetes service could answer questions like :
+Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [gatekeeper](https://github.com/Azure/gatekeeper) extends the compliance enforcement at “create” event not at “run“ event. For example, a kubernetes service could answer questions like :
 
 * Can we whitelist / blacklist registries.
 * Not allow conflicting hosts for ingresses.
@@ -32,16 +32,16 @@ project will more closely resemble examples in that tutorial.
 - Join [weekly meetings](https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)
   to discuss development, issues, use cases, etc.
 
-- Use [GitHub Issues](https://github.com/open-policy-agent/kubernetes-policy-controller/issues)
+- Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
-## Using kubernetes-policy-controller
+## Using gatekeeper
 
 ## 1. Deployment
 
 Access to a Kubernetes cluster with "cluster-admin" permission is the only prerequisite.
 
-Deploy `kubernetes-policy-controller`:
+Deploy `gatekeeper`:
 
 ```bash
 ./deploy/deploy-all.sh
@@ -65,7 +65,7 @@ There are two scenarios of the policy engine namely Validation and Mutation
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap example -n kpc-system --from-file ./policy/admission/ingress-host-fqdn.rego
+kubectl create configmap example -n gatekeeper-system --from-file ./policy/admission/ingress-host-fqdn.rego
 ```
 
 ```bash
@@ -85,7 +85,7 @@ This policy will mutate resources that define an annotation with the key `"test-
 Load the policy as a ConfigMap:
 
 ```bash
-kubectl create configmap -n kpc-system example2 --from-file ./policy/admission/annotate.rego
+kubectl create configmap -n gatekeeper-system example2 --from-file ./policy/admission/annotate.rego
 ```
 
 First create a Deployment:
@@ -114,11 +114,11 @@ kubectl get deployment nginx -o json | jq '.metadata'
 
 ### 2.3 `authorization` scenario
 
-`kubernetes-policy-controller` must be deployed in combination with OPA. In this scenario, `kubenetes-policy-controller` cannot be deployed via the usual mechanisms because the APIServer relies on it for every request. Afaik, the only viable scenario is to deploy it via static pod manifest on all master nodes. The following steps are necessary to configure `kubernetes-policy-controller` as authorization module webhook.
+`gatekeeper` must be deployed in combination with OPA. In this scenario, `kubenetes-policy-controller` cannot be deployed via the usual mechanisms because the APIServer relies on it for every request. Afaik, the only viable scenario is to deploy it via static pod manifest on all master nodes. The following steps are necessary to configure `gatekeeper` as authorization module webhook.
 
 1. Add the authorization module to the APIServer via flag, e.g.: `--authorization-mode=Node,Webhook,RBAC`
-1. Configure a webhook config file which is used by the APIServer to call the webhook, e.g.: `--authorization-webhook-config-file=/etc/kubernetes/kubernetes-policy-controller.kubeconfig`. See example file content [here](./deploy/kubernetes-policy-controller.kubeconfig)
-1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/kubernetes-policy-controller.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
+1. Configure a webhook config file which is used by the APIServer to call the webhook, e.g.: `--authorization-webhook-config-file=/etc/kubernetes/gatekeeper.kubeconfig`. See example file content [here](./deploy/gatekeeper.kubeconfig)
+1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/gatekeeper.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
    1. To avoid dependencies on the Kubernetes API Server use the flag `--authorization-mode=true`
 1. Deploy some of the policies stored under [policy/authorization](./policy/authorization). There are examples for:
    1. Blocking create/update/delete on Calico CRDs
@@ -133,12 +133,12 @@ kubectl get deployment nginx -o json | jq '.metadata'
 
 ### policy language
 
-The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
+`gatekeeper` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
 Policy rules are created as a rego files. 
 
 ### package admission
 
-`kubernetes-policy-controller` defines a special package name `admission` which is used to logically execute all the `admission` rules.
+`gatekeeper` defines a special package name `admission` which is used to logically execute all the `admission` rules.
 So any `admission` rule defined should be part of this package.
 
 ```go
@@ -164,7 +164,7 @@ deny[{
 
 ### matches[[kind, namespace, name, matched_resource_output]]  
 
-When defining a deny rule, you must find Kubernetes resources that match specific criteria, such as Ingress resources in a particular namespace. `kubernetes-policy-controller` provides the matches functionality by importing `data.kubernetes.matches`.
+When defining a deny rule, you must find Kubernetes resources that match specific criteria, such as Ingress resources in a particular namespace. `gatekeeper` provides the matches functionality by importing `data.kubernetes.matches`.
 
 ```go
 import data.kubernetes.matches
@@ -281,7 +281,7 @@ deny[{
 
 ### package authorization
 
-`kubernetes-policy-controller` defines a special package name `authorization` which is used to logically execute all the `authorization` rules.
+`gatekeeper` defines a special package name `authorization` which is used to logically execute all the `authorization` rules.
 So any `authorization` rule defined should be part of this package.
 
 ```go
