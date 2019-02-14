@@ -121,7 +121,7 @@ spec:
         image: docker.io/nikhilbh/gatekeeper:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 9876
+        - containerPort: 443
           name: webhook-server
           protocol: TCP
         resources:
