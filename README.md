@@ -114,11 +114,11 @@ kubectl get deployment nginx -o json | jq '.metadata'
 
 ### 2.3 `authorization` scenario
 
-`gatekeeper` must be deployed in combination with OPA. In this scenario, `kubenetes-policy-controller` cannot be deployed via the usual mechanisms because the APIServer relies on it for every request. Afaik, the only viable scenario is to deploy it via static pod manifest on all master nodes. The following steps are necessary to configure `gatekeeper` as authorization module webhook.
+`gatekeeper` must be deployed in combination with OPA. In this scenario, `gatekeeper` cannot be deployed via the usual mechanisms because the APIServer relies on it for every request. Afaik, the only viable scenario is to deploy it via static pod manifest on all master nodes. The following steps are necessary to configure `gatekeeper` as authorization module webhook.
 
 1. Add the authorization module to the APIServer via flag, e.g.: `--authorization-mode=Node,Webhook,RBAC`
 1. Configure a webhook config file which is used by the APIServer to call the webhook, e.g.: `--authorization-webhook-config-file=/etc/kubernetes/gatekeeper.kubeconfig`. See example file content [here](./deploy/gatekeeper.kubeconfig)
-1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/gatekeeper.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
+1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/gatekeeper-pod.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
    1. To avoid dependencies on the Kubernetes API Server use the flag `--authorization-mode=true`
 1. Deploy some of the policies stored under [policy/authorization](./policy/authorization). There are examples for:
    1. Blocking create/update/delete on Calico CRDs
