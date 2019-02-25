@@ -1,6 +1,20 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= docker.io/nikhilbh/gatekeeper:latest
+REGISTRY ?= quay.io
+REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
+
+IMG := $(REPOSITORY):latest
+
+VERSION := v2.0.1
+
+BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
+BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
+BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
+
+LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION) \
+	-X github.com/open-policy-agent/gatekeeper/version.Vcs=$(BUILD_COMMIT) \
+	-X github.com/open-policy-agent/gatekeeper/version.Timestamp=$(BUILD_TIMESTAMP) \
+	-X github.com/open-policy-agent/gatekeeper/version.Hostname=$(BUILD_HOSTNAME)"
 
 all: test manager
 
@@ -10,7 +24,11 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager github.com/open-policy-agent/gatekeeper/cmd/manager
+	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
+
+# Build manager binary
+manager-osx: generate fmt vet
+	go build -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
@@ -42,12 +60,30 @@ vet:
 generate:
 	go generate ./pkg/... ./cmd/...
 
+# Docker Login
+docker-login:
+	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(REGISTRY)
+
+# Tag for Dev
+docker-tag-dev:
+	@docker tag $(IMG) $(REPOSITORY):dev
+
+# Tag for Dev
+docker-push-dev:  docker-tag-dev
+	@docker push $(REPOSITORY):dev
+
 # Build the docker image
-docker-build: test
+docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
 
+docker-build-ci:
+	docker build . -t $(IMG) -f Dockerfile_ci
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+# Travis Dev Deployment
+travis-dev-deploy: docker-login docker-build-ci docker-push-dev
