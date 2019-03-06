@@ -18,3 +18,11 @@ deploy:
     on:
       repo: open-policy-agent/gatekeeper
       branch: master
+      tags: false
+  - provider: script
+    skip_cleanup: true
+    script: make travis-dev-release
+    on:
+      repo: open-policy-agent/gatekeeper
+      branch: master
+      tags: true

@@ -69,8 +69,18 @@ docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):dev
 
 # Tag for Dev
+docker-tag-release:
+	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
+	@docker tag $(IMG) $(REPOSITORY):latest	
+
+# Push for Dev
 docker-push-dev:  docker-tag-dev
 	@docker push $(REPOSITORY):dev
+
+# Push for Release
+docker-push-release:  docker-tag-release
+	@docker push $(REPOSITORY):$(VERSION)
+	@docker push $(REPOSITORY):latest
 
 # Build the docker image
 docker-build:
@@ -87,3 +97,6 @@ docker-push:
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
+
+# Travis Release
+travis-dev-release: docker-login docker-build-ci docker-push-release
