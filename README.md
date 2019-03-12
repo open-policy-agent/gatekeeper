@@ -1,5 +1,7 @@
 # gatekeeper
 
+[![Build Status](https://travis-ci.org/open-policy-agent/gatekeeper.svg?branch=master)](https://travis-ci.org/open-policy-agent/gatekeeper) [![Docker Repository on Quay](https://quay.io/repository/open-policy-agent/gatekeeper/status "Docker Repository on Quay")](https://quay.io/repository/open-policy-agent/gatekeeper)
+
 ## Warning: Restructing underway
 
 This is a new project that is undergoing heavy restructuring.  The policy format, architecture, interfaces, and code layout are all subject to change.
