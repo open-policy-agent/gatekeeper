@@ -62,6 +62,10 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 			Service: &webhook.Service{
 				Namespace: "gatekeeper-system",
 				Name:      "gatekeeper-controller-manager-service",
+				Selectors: map[string]string{
+					"control-plane":           "controller-manager",
+					"controller-tools.k8s.io": "1.0",
+				},
 			},
 		},
 	}
