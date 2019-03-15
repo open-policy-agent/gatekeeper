@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -51,9 +52,14 @@ var (
 func AddPolicyWebhook(mgr manager.Manager) error {
 	opa := opa.NewFromFlags()
 
+	enableManualDeploy := os.Getenv("ENABLE_MANUAL_DEPLOY")
+
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
-		BootstrapOptions: &webhook.BootstrapOptions{
+	}
+
+	if len(enableManualDeploy) == 0 {
+		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
 				Namespace: "gatekeeper-system",
@@ -67,7 +73,10 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 					"controller-tools.k8s.io": "1.0",
 				},
 			},
-		},
+		}
+	} else {
+		disableWebhookConfigInstaller := true
+		serverOptions.DisableWebhookConfigInstaller = &disableWebhookConfigInstaller
 	}
 
 	s, err := webhook.NewServer("policy-admission-server", mgr, serverOptions)
