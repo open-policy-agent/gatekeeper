@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -40,9 +40,10 @@ func init() {
 }
 
 var (
-	runtimeScheme = k8sruntime.NewScheme()
-	codecs        = serializer.NewCodecFactory(runtimeScheme)
-	deserializer  = codecs.UniversalDeserializer()
+	runtimeScheme      = k8sruntime.NewScheme()
+	codecs             = serializer.NewCodecFactory(runtimeScheme)
+	deserializer       = codecs.UniversalDeserializer()
+	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
 )
 
 // AddPolicyWebhook registers the policy webhook server with the manager
@@ -51,14 +52,11 @@ var (
 // +kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 func AddPolicyWebhook(mgr manager.Manager) error {
 	opa := opa.NewFromFlags()
-
-	enableManualDeploy := os.Getenv("ENABLE_MANUAL_DEPLOY")
-
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
 	}
 
-	if len(enableManualDeploy) == 0 {
+	if *enableManualDeploy == false {
 		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
