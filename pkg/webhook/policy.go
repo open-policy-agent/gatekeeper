@@ -44,6 +44,8 @@ var (
 	codecs             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer       = codecs.UniversalDeserializer()
 	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
+	port               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	webhookName        = flag.String("webhook-name", "mutation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to mutation.styra.com if unspecified ")
 )
 
 // AddPolicyWebhook registers the policy webhook server with the manager
@@ -54,6 +56,7 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 	opa := opa.NewFromFlags()
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
+		Port:    int32(*port),
 	}
 
 	if *enableManualDeploy == false {
@@ -102,7 +105,7 @@ func addWebhooks(mgr manager.Manager, server serverLike, opa opa.Query) error {
 
 	mutatingWh, err := builder.NewWebhookBuilder().
 		Mutating().
-		Name("mutation.styra.com").
+		Name(*webhookName).
 		Path("/v1/admit").
 		Rules(admissionregistrationv1beta1.RuleWithOperations{
 			Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
