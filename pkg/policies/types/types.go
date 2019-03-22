@@ -68,7 +68,7 @@ var (
 func MakeAuditQuery() string {
 	return `data.admission.deny[{
 		"id": id,
-		"resource": {"kind": kind, "namespace": namespace, "name": name},
+		"resource": resource,
 		"resolution": resolution,}]`
 }
 
