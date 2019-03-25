@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -39,9 +40,10 @@ func init() {
 }
 
 var (
-	runtimeScheme = k8sruntime.NewScheme()
-	codecs        = serializer.NewCodecFactory(runtimeScheme)
-	deserializer  = codecs.UniversalDeserializer()
+	runtimeScheme      = k8sruntime.NewScheme()
+	codecs             = serializer.NewCodecFactory(runtimeScheme)
+	deserializer       = codecs.UniversalDeserializer()
+	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
 )
 
 // AddPolicyWebhook registers the policy webhook server with the manager
@@ -50,10 +52,12 @@ var (
 // +kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 func AddPolicyWebhook(mgr manager.Manager) error {
 	opa := opa.NewFromFlags()
-
 	serverOptions := webhook.ServerOptions{
 		CertDir: "/certs",
-		BootstrapOptions: &webhook.BootstrapOptions{
+	}
+
+	if *enableManualDeploy == false {
+		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
 				Namespace: "gatekeeper-system",
@@ -67,7 +71,10 @@ func AddPolicyWebhook(mgr manager.Manager) error {
 					"controller-tools.k8s.io": "1.0",
 				},
 			},
-		},
+		}
+	} else {
+		disableWebhookConfigInstaller := true
+		serverOptions.DisableWebhookConfigInstaller = &disableWebhookConfigInstaller
 	}
 
 	s, err := webhook.NewServer("policy-admission-server", mgr, serverOptions)
