@@ -22,6 +22,14 @@ all: test manager
 test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
+# Hook to run docker tests
+hermetic-test:
+	mkdir -p .staging/test
+	cp -r * .staging/test
+	-rm .staging/test/Dockerfile
+	cp test/Dockerfile .staging/test/Dockerfile
+	docker build .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
