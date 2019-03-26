@@ -38,7 +38,7 @@ var (
 func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 	validatingWh, err := builder.NewWebhookBuilder().
 		Validating().
-		Name("mutation.styra.com").
+		Name("validation.gatekeeper.sh").
 		Path("/v1/admit").
 		Rules(admissionregistrationv1beta1.RuleWithOperations{
 			Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create, admissionregistrationv1beta1.Update},
