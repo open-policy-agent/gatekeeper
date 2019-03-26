@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ae3494287d57bbc379970d90b916be4ebe4bdfe5524fd01b3a50768901e01985"
+  digest = "1:a475c58e7c11fddd9efffc2c2ffb31afca8dd1548c38b6ac924336f88954c4fa"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -455,7 +455,7 @@
     "constraint/pkg/types",
   ]
   pruneopts = "UT"
-  revision = "006774a631d2264d2419f7c864bdedb43af5838f"
+  revision = "92533e815f97ccd521292cf83fd0597f61624459"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"
@@ -1184,7 +1184,6 @@
     "sigs.k8s.io/controller-runtime/pkg/manager",
     "sigs.k8s.io/controller-runtime/pkg/reconcile",
     "sigs.k8s.io/controller-runtime/pkg/runtime/log",
-    "sigs.k8s.io/controller-runtime/pkg/runtime/scheme",
     "sigs.k8s.io/controller-runtime/pkg/runtime/signals",
     "sigs.k8s.io/controller-runtime/pkg/source",
     "sigs.k8s.io/controller-runtime/pkg/webhook",
