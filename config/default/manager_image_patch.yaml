@@ -8,5 +8,5 @@ spec:
     spec:
       containers:
       # Change the value of image field below to your controller image URL
-      - image: docker.io/nikhilbh/gatekeeper:latest
+      - image: gcr.io/smythe-kpc/open-policy-agent/gatekeeper:latest
         name: manager

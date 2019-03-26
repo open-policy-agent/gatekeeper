@@ -40,8 +40,7 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-  # TODO: Re-enable below command once we have crds to deploy
-	# kubectl apply -f config/crds
+	kubectl apply -f config/crds
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
