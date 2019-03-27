@@ -19,10 +19,12 @@ matching_constraints[constraint] {
 	remaining_kinds := kinds - selected_kinds
 	count(remaining_kinds) < 2
 
+	matches_namespaces(match)
+
   labelSelector := get_default(match, "labelSelector", {})
 	obj := get_default(input.review, "object", {})
 	metadata := get_default(obj, "metadata", {})
-	labels := get_default(metadata, "labels", {})
+  labels := get_default(metadata, "labels", {})
 	matches_labelselector(labelSelector, labels)
 }
 
@@ -142,4 +144,18 @@ matches_labelselector(selector, labels) {
     get_default(matchExpressions[i], "values", []))}
 
   any(mismatches) == false
+}
+
+############################
+# Namespace Selector Logic #
+############################
+
+matches_namespaces(match) {
+	not has_field(match, "namespaces")
+}
+
+matches_namespaces(match) {
+	has_field(match, "namespaces")
+	ns := {n | n = match.namespaces[_]}
+	count({input.review.namespace} - ns) == 0
 }

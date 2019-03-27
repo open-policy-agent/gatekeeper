@@ -46,6 +46,8 @@ matching_constraints[constraint] {
 	remaining_kinds := kinds - selected_kinds
 	count(remaining_kinds) < 2
 
+	matches_namespaces(match)
+
   labelSelector := get_default(match, "labelSelector", {})
 	obj := get_default(input.review, "object", {})
 	metadata := get_default(obj, "metadata", {})
@@ -170,6 +172,20 @@ matches_labelselector(selector, labels) {
 
   any(mismatches) == false
 }
+
+############################
+# Namespace Selector Logic #
+############################
+
+matches_namespaces(match) {
+	not has_field(match, "namespaces")
+}
+
+matches_namespaces(match) {
+	has_field(match, "namespaces")
+	ns := {n | n = match.namespaces[_]}
+	count({input.review.namespace} - ns) == 0
+}
 `
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
@@ -258,15 +274,19 @@ func (h *K8sValidationTarget) MatchSchema() apiextensionsv1beta1.JSONSchemaProps
 		Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"}}
 	return apiextensionsv1beta1.JSONSchemaProps{
 		Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-			"kinds": apiextensionsv1beta1.JSONSchemaProps{Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-				Schema: &apiextensionsv1beta1.JSONSchemaProps{
-					Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-						"apiGroups": {Items: stringList},
-						"kinds":     {Items: stringList},
+			"kinds": apiextensionsv1beta1.JSONSchemaProps{
+				Type: "array",
+				Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+					Schema: &apiextensionsv1beta1.JSONSchemaProps{
+						Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+							"apiGroups": {Items: stringList},
+							"kinds":     {Items: stringList},
+						},
 					},
 				},
-			}},
+			},
 			"namespaces": apiextensionsv1beta1.JSONSchemaProps{
+				Type: "array",
 				Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
 					Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"}}},
 			"labelSelector": apiextensionsv1beta1.JSONSchemaProps{
