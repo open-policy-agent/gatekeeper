@@ -103,7 +103,7 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
 	if err != nil {
 		glog.Errorf("Error executing query: %s", err)
-		admission.ValidationResponse(false, err.Error())
+		return admission.ValidationResponse(false, err.Error())
 	}
 	res := resp.Results()
 	if len(res) != 0 {
