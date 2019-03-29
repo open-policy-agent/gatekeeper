@@ -46,11 +46,6 @@ const (
 
 var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 type Adder struct {
 	Opa          opa.Client
 	WatchManager *watch.WatchManager
