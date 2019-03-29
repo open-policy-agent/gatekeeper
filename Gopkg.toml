@@ -1,3 +1,29 @@
+# Gopkg.toml example
+#
+# Refer to https://golang.github.io/dep/docs/Gopkg.toml.html
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#   name = "github.com/x/y"
+#   version = "2.4.0"
+#
+# [prune]
+#   non-go = false
+#   go-tests = true
+#   unused-packages = true
+
 required = [
     "github.com/emicklei/go-restful",
     "github.com/onsi/ginkgo", # for test framework
@@ -16,19 +42,47 @@ required = [
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     ]
 
+[[constraint]]
+  name = "github.com/onsi/gomega"
+  version = "1.5.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/open-policy-agent/frameworks"
+
+[[constraint]]
+  name = "github.com/pkg/errors"
+  version = "0.8.1"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/net"
+
+[[constraint]]
+  name = "k8s.io/api"
+  version = "kubernetes-1.12.3"
+
+[[constraint]]
+  name = "k8s.io/apiextensions-apiserver"
+  version = "kubernetes-1.12.3"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  version = "kubernetes-1.12.3"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "kubernetes-1.12.3"
+
+[[constraint]]
+  name = "sigs.k8s.io/controller-runtime"
+  version = "0.1.9"
+
 [prune]
   go-tests = true
+  unused-packages = true
 
 
-# STANZAS BELOW ARE GENERATED AND MAY BE WRITTEN - DO NOT MODIFY BELOW THIS LINE.
-
-[[constraint]]
-  name="sigs.k8s.io/controller-runtime"
-  version="v0.1.1"
-
-[[constraint]]
-  name="sigs.k8s.io/controller-tools"
-  version="v0.1.1"
 
 # For dependency below: Refer to issue https://github.com/golang/dep/issues/1799
 [[override]]

@@ -19,8 +19,18 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION
 all: test manager
 
 # Run tests
-test: generate fmt vet manifests
+native-test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
+
+# Hook to run docker tests
+.PHONY: test
+test:
+	rm -rf .staging/test
+	mkdir -p .staging/test
+	cp -r * .staging/test
+	-rm .staging/test/Dockerfile
+	cp test/Dockerfile .staging/test/Dockerfile
+	docker build .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
 # Build manager binary
 manager: generate fmt vet
@@ -40,8 +50,7 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-  # TODO: Re-enable below command once we have crds to deploy
-	# kubectl apply -f config/crds
+	kubectl apply -f config/crds
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
