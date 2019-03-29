@@ -19,11 +19,13 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION
 all: test manager
 
 # Run tests
-test: generate fmt vet manifests
+native-test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Hook to run docker tests
-hermetic-test:
+.PHONY: test
+test:
+	rm -rf .staging/test
 	mkdir -p .staging/test
 	cp -r * .staging/test
 	-rm .staging/test/Dockerfile

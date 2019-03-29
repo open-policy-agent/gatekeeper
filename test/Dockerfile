@@ -17,4 +17,4 @@ ENV PATH=$PATH:/usr/local/kubebuilder/bin:/usr/bin
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 COPY .    .
 
-ENTRYPOINT ["make", "test"]
+ENTRYPOINT ["make", "native-test"]
