@@ -18,9 +18,9 @@ package constraint
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,8 +32,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 
 const project = "gatekeeper.sh"
 
@@ -50,7 +53,13 @@ func (a *Adder) Add(mgr manager.Manager, kind string) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, kind string, opa opa.Client) reconcile.Reconciler {
-	return &ReconcileConstraint{Client: mgr.GetClient(), scheme: mgr.GetScheme(), opa: opa, Kind: kind}
+	return &ReconcileConstraint{
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		opa:    opa,
+		log:    log.WithValues("kind", kind),
+		Kind:   kind,
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -83,6 +92,7 @@ type ReconcileConstraint struct {
 	scheme *runtime.Scheme
 	opa    opa.Client
 	Kind   string
+	log    logr.Logger
 }
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
@@ -113,7 +123,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 		}
-		glog.Infof("instance to be added: %#v", instance)
+		log.Info("instance will be added", "instance", instance)
 		unstructured.RemoveNestedField(instance.Object, "status", "errors")
 
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {

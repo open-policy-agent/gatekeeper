@@ -5,13 +5,13 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/golang/glog"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
@@ -21,6 +21,8 @@ import (
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
 }
+
+var log = logf.Log.WithName("webhook")
 
 var (
 	runtimeScheme      = k8sruntime.NewScheme()
@@ -100,9 +102,10 @@ type validationHandler struct {
 }
 
 func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atypes.Response {
+	log := log.WithValues("hookType", "validation")
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
 	if err != nil {
-		glog.Errorf("Error executing query: %s", err)
+		log.Error(err, "error executing query")
 		return admission.ValidationResponse(false, err.Error())
 	}
 	res := resp.Results()

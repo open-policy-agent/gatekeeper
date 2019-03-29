@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/golang/glog"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
@@ -45,7 +44,7 @@ const (
 	ctrlName      = "constrainttemplate-controller"
 )
 
-var log = logf.Log.WithName("controller")
+var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -169,23 +168,24 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	instance *v1alpha1.ConstraintTemplate,
 	crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
 	name := crd.GetName()
-	glog.Infof("Creating Constraint %s", name)
+	log := log.WithValues("name", name)
+	log.Info("creating constraint")
 	if !containsString(finalizerName, instance.GetFinalizers()) {
 		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 		if err := r.Update(context.Background(), instance); err != nil {
-			glog.Infof("Update error: %s", err)
+			log.Error(err, "update error", err)
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
-	glog.Infof("Loading code into OPA")
+	log.Info("loading code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	glog.Infof("Adding to watcher registry")
+	log.Info("adding to watcher registry")
 	if err := r.watcher.AddWatch(instance.Spec.CRD.Spec.Names.Kind, name); err != nil {
 		return reconcile.Result{}, err
 	}
-	glog.Infof("Creating Constraint CRD %s\n", name)
+	log.Info("creating constraint CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
 		instance.Status.Error = fmt.Sprintf("Could not create CRD: %s", err)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
@@ -208,17 +208,18 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// anyway. We should see if the OPA server is smart enough to look for changes on its own, otherwise
 	// this may be too expensive to do in large clusters
 	name := crd.GetName()
-	glog.Infof("Loading %s constraint code into OPA", name)
+	log := log.WithValues("name", instance.GetName(), "crdName", name)
+	log.Info("loading constraint code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	glog.Infof("Making sure constraint is in watcher registry")
+	log.Info("making sure constraint is in watcher registry")
 	if err := r.watcher.AddWatch(instance.Spec.CRD.Spec.Names.Kind, name); err != nil {
-		glog.Errorf("Error adding %s to registry: %s", name, err)
+		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
 	if !reflect.DeepEqual(crd.Spec, found.Spec) {
-		glog.Infof("Difference in spec for %s found, updating.", name)
+		log.Info("difference in spec found, updating")
 		found.Spec = crd.Spec
 		if err := r.Update(context.Background(), found); err != nil {
 			return reconcile.Result{}, err
@@ -232,18 +233,19 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
+	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	if containsString(finalizerName, instance.GetFinalizers()) {
 		if err := r.Delete(context.Background(), crd); err != nil && !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		found := &apiextensionsv1beta1.CustomResourceDefinition{}
 		if err := r.Get(context.Background(), types.NamespacedName{Name: name, Namespace: namespace}, found); err == nil {
-			glog.Infof("Child Constraint CRD %s has not yet been deleted, waiting.", found.GetName())
+			log.Info("child constraint CRD has not yet been deleted, waiting")
 			return reconcile.Result{Requeue: true}, nil
 		} else if err != nil && !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
-		glog.Infof("Removing from watcher registry")
+		log.Info("removing from watcher registry")
 		if err := r.watcher.RemoveWatch(instance.Spec.CRD.Spec.Names.Kind); err != nil {
 			return reconcile.Result{}, err
 		}

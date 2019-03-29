@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
 	errp "github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -17,7 +16,10 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var log = logf.Log.WithName("watchManager")
 
 // WatchManager allows us to dynamically configure what kinds are watched
 type WatchManager struct {
@@ -53,10 +55,10 @@ func (wm *WatchManager) NewRegistrar(parent string, addFns []func(manager.Manage
 }
 
 func newMgr(wm *WatchManager) (manager.Manager, error) {
-	glog.Info("setting up watch manager")
+	log.Info("setting up watch manager")
 	mgr, err := manager.New(wm.cfg, manager.Options{})
 	if err != nil {
-		glog.Error(err, "unable to set up watch manager")
+		log.Error(err, "unable to set up watch manager")
 		os.Exit(1)
 	}
 
@@ -88,8 +90,7 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	if len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
 		return false, nil
 	}
-	glog.Info("Watcher registry found changes, attempting to apply them.")
-	glog.Infof("Attempting to: Add: %#v, Remove: %#v, Changed: %#v", added, removed, changed)
+	log.Info("Watcher registry found changes, attempting to apply them", "add", added, "remove", removed, "change", changed)
 
 	readyToAdd, err := wm.filterPendingCRDs(added)
 	if err != nil {
@@ -97,7 +98,7 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	}
 
 	if len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
-		glog.Info("No resources ready to watch and nothing to remove.")
+		log.Info("no resources ready to watch and nothing to remove")
 		return false, nil
 	}
 
@@ -133,7 +134,7 @@ func (wm *WatchManager) updateManagerLoop(ctx context.Context) {
 		default:
 			time.Sleep(5 * time.Second)
 			if _, err := wm.updateManager(); err != nil {
-				glog.Error(err)
+				log.Error(err, "error in updateManagerLoop")
 			}
 		}
 	}
@@ -146,7 +147,7 @@ func (wm *WatchManager) restartManager(kinds map[string]watchVitals) error {
 	for k := range kinds {
 		kindStr = append(kindStr, k)
 	}
-	glog.Infof("Restarting Watch Manager with kinds: %s", strings.Join(kindStr, ", "))
+	log.Info("restarting Watch Manager", "kinds", strings.Join(kindStr, ", "))
 	close(wm.stopper)
 	// Only block on the old manager's exit if one has previously been started
 	if wm.started {
@@ -174,13 +175,13 @@ func (wm *WatchManager) restartManager(kinds map[string]watchVitals) error {
 }
 
 func startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
-	glog.Infof("Calling Manager.Start() for kinds %#v", kinds)
+	log.Info("Calling Manager.Start()", "kinds", kinds)
 	if err := mgr.Start(stopper); err != nil {
-		glog.Errorf("Error starting watch manager: %s.", err)
+		log.Error(err, "error starting watch manager")
 	}
 	// mgr.Start() only returns after the manager has completely stopped
 	close(stopped)
-	glog.Infof("Sub-Manager for kinds %#v exiting", kinds)
+	log.Info("sub-manager exiting", "kinds", kinds)
 }
 
 // gatherChanges returns anything added, removed or changed since the last time the manager
@@ -216,7 +217,7 @@ func (wm *WatchManager) gatherChanges(managedKindsRaw map[string]map[string]watc
 		}
 		instance, err := wm.getInstance(vitals.crdName)
 		if err != nil {
-			glog.Infof("Could not gather watch vitals for %s", vitals.crdName)
+			log.Info("could not gather watch vitals", "crdName", vitals.crdName)
 			continue
 		}
 		if !reflect.DeepEqual(wm.watchedKinds[kind].registrars, managedKinds[kind].registrars) {
@@ -243,20 +244,20 @@ func (wm *WatchManager) filterPendingCRDs(kinds map[string]watchVitals) (map[str
 		found, err := wm.getInstance(vitals.crdName)
 		if err != nil {
 			if !errors.IsNotFound(err) {
-				glog.Errorf("Could not retrieve CRD for %s, %s: %s", kind, vitals.crdName, err)
+				log.Error(err, "Could not retrieve CRD", "kind", kind, "crdName", vitals.crdName)
 			}
-			glog.Infof("CRD for %s does not yet exist, skipping.", kind)
+			log.Info("CRD does not yet exist, skipping", "kind", kind)
 			continue
 		}
 		if found.Status.AcceptedNames.Kind == "" {
-			glog.Infof("CRD for %s, %s found, but no status, skipping.", kind, vitals.crdName)
+			log.Info("CRD found, but no status, skipping.", "kind", kind, "crdName", vitals.crdName)
 			continue
 		}
 		if found.Status.AcceptedNames.Kind != kind {
-			glog.Errorf("Unexpected accepted kind for CRD %s, %s: %s", kind, vitals.crdName, found.Status.AcceptedNames.Kind)
+			log.Error(err, "unexpected accepted kind for CRD", "kind", kind, "crdName", vitals.crdName, "acceptedKind", found.Status.AcceptedNames.Kind)
 			continue
 		}
-		glog.Infof("%s is ready to be managed.", kind)
+		log.Info("Kind is ready to be managed", "kind", kind)
 		vitals.version = found.GetResourceVersion()
 		liveCRDs[kind] = vitals
 	}
