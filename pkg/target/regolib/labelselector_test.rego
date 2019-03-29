@@ -1,34 +1,34 @@
 package target
 
 test_empty_selector_matches_empty_labelset {
-  matches_labelselector({}, {})
+  matches_label_selector({}, {})
 }
 
 test_empty_selector_matches_labelset {
-  matches_labelselector({}, {"a": "b"})
+  matches_label_selector({}, {"a": "b"})
 }
 
 
 # Test matchLabels
 
 test_selector_matches_labelset_size_1 {
-  matches_labelselector({"matchLabels": {"a": "b"}}, {"a": "b"})
+  matches_label_selector({"matchLabels": {"a": "b"}}, {"a": "b"})
 }
 
 test_selector_matches_labelset_size_3 {
-  matches_labelselector({"matchLabels": {"a": "b", "c": "d", "e": "f"}}, {"a": "b", "c": "d", "e": "f"})
+  matches_label_selector({"matchLabels": {"a": "b", "c": "d", "e": "f"}}, {"a": "b", "c": "d", "e": "f"})
 }
 
 test_selector_matches_labelset_extra_labels {
-  matches_labelselector({"matchLabels": {"a": "b"}}, {"a": "b", "c": "d", "e": "f"})
+  matches_label_selector({"matchLabels": {"a": "b"}}, {"a": "b", "c": "d", "e": "f"})
 }
 
 test_selector_misses_empty_labelset {
-  not matches_labelselector({"matchLabels": {"a": "b"}}, {})
+  not matches_label_selector({"matchLabels": {"a": "b"}}, {})
 }
 
 test_selector_misses_off_by_1 {
-  not matches_labelselector({"matchLabels": {"a": "b", "c": "d", "e": "f"}}, {"a": "b", "c": "d"})
+  not matches_label_selector({"matchLabels": {"a": "b", "c": "d", "e": "f"}}, {"a": "b", "c": "d"})
 }
 
 
@@ -40,7 +40,7 @@ test_expression_in_1_value {
     "operator": "In",
     "values": ["b"]
    }]}
-  matches_labelselector(expr, {"a": "b"})
+  matches_label_selector(expr, {"a": "b"})
 }
 
 test_expression_in_3_values {
@@ -49,9 +49,9 @@ test_expression_in_3_values {
     "operator": "In",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {"a": "a"})
-  matches_labelselector(expr, {"a": "b"})
-  matches_labelselector(expr, {"a": "c"})
+  matches_label_selector(expr, {"a": "a"})
+  matches_label_selector(expr, {"a": "b"})
+  matches_label_selector(expr, {"a": "c"})
 }
 
 test_expression_in_3_values_extra_value {
@@ -60,9 +60,9 @@ test_expression_in_3_values_extra_value {
     "operator": "In",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {"a": "a", "b": "b"})
-  matches_labelselector(expr, {"a": "b", "b": "b"})
-  matches_labelselector(expr, {"a": "c", "b": "b"})
+  matches_label_selector(expr, {"a": "a", "b": "b"})
+  matches_label_selector(expr, {"a": "b", "b": "b"})
+  matches_label_selector(expr, {"a": "c", "b": "b"})
 }
 
 test_expression_in_1_values_violation_no_labels {
@@ -71,7 +71,7 @@ test_expression_in_1_values_violation_no_labels {
     "operator": "In",
     "values": ["b"]
    }]}
-  not matches_labelselector(expr, {})
+  not matches_label_selector(expr, {})
 }
 
 test_expression_in_3_values_violation_no_labels {
@@ -80,7 +80,7 @@ test_expression_in_3_values_violation_no_labels {
     "operator": "In",
     "values": ["a", "b", "c"]
    }]}
-  not matches_labelselector(expr, {})
+  not matches_label_selector(expr, {})
 }
 
 test_expression_in_1_values_violation_wrong_value {
@@ -89,7 +89,7 @@ test_expression_in_1_values_violation_wrong_value {
     "operator": "In",
     "values": ["a"]
    }]}
-  not matches_labelselector(expr, {"a": "r"})
+  not matches_label_selector(expr, {"a": "r"})
 }
 
 test_expression_in_1_values_violation_wrong_label {
@@ -98,7 +98,7 @@ test_expression_in_1_values_violation_wrong_label {
     "operator": "In",
     "values": ["a"]
    }]}
-  not matches_labelselector(expr, {"r": "a"})
+  not matches_label_selector(expr, {"r": "a"})
 }
 
 test_expression_in_3_values_violation_wrong_value {
@@ -107,7 +107,7 @@ test_expression_in_3_values_violation_wrong_value {
     "operator": "In",
     "values": ["a", "b", "c"]
    }]}
-  not matches_labelselector(expr, {"a": "r"})
+  not matches_label_selector(expr, {"a": "r"})
 }
 
 test_expression_in_3_values_violation_wrong_label {
@@ -116,7 +116,7 @@ test_expression_in_3_values_violation_wrong_label {
     "operator": "In",
     "values": ["a", "b", "c"]
    }]}
-  not matches_labelselector(expr, {"r": "a"})
+  not matches_label_selector(expr, {"r": "a"})
 }
 
 
@@ -128,7 +128,7 @@ test_expression_notin_1_value {
     "operator": "NotIn",
     "values": ["b"]
    }]}
-  matches_labelselector(expr, {"a": "a"})
+  matches_label_selector(expr, {"a": "a"})
 }
 
 test_expression_notin_3_values {
@@ -137,9 +137,9 @@ test_expression_notin_3_values {
     "operator": "NotIn",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {"a": "r"})
-  matches_labelselector(expr, {"a": "f"})
-  matches_labelselector(expr, {"a": "q"})
+  matches_label_selector(expr, {"a": "r"})
+  matches_label_selector(expr, {"a": "f"})
+  matches_label_selector(expr, {"a": "q"})
 }
 
 test_expression_notin_3_values_extra_value {
@@ -148,9 +148,9 @@ test_expression_notin_3_values_extra_value {
     "operator": "NotIn",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {"a": "r", "b": "b"})
-  matches_labelselector(expr, {"a": "f", "b": "b"})
-  matches_labelselector(expr, {"a": "q", "b": "b"})
+  matches_label_selector(expr, {"a": "r", "b": "b"})
+  matches_label_selector(expr, {"a": "f", "b": "b"})
+  matches_label_selector(expr, {"a": "q", "b": "b"})
 }
 
 test_expression_notin_1_values_no_labels {
@@ -159,7 +159,7 @@ test_expression_notin_1_values_no_labels {
     "operator": "NotIn",
     "values": ["b"]
    }]}
-  matches_labelselector(expr, {})
+  matches_label_selector(expr, {})
 }
 
 test_expression_notin_3_values_no_labels {
@@ -168,7 +168,7 @@ test_expression_notin_3_values_no_labels {
     "operator": "NotIn",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {})
+  matches_label_selector(expr, {})
 }
 
 test_expression_notin_1_values_wrong_label {
@@ -177,7 +177,7 @@ test_expression_notin_1_values_wrong_label {
     "operator": "NotIn",
     "values": ["a"]
    }]}
-  matches_labelselector(expr, {"r": "a"})
+  matches_label_selector(expr, {"r": "a"})
 }
 
 test_expression_in_3_values_wrong_label {
@@ -186,7 +186,7 @@ test_expression_in_3_values_wrong_label {
     "operator": "NotIn",
     "values": ["a", "b", "c"]
    }]}
-  matches_labelselector(expr, {"r": "a"})
+  matches_label_selector(expr, {"r": "a"})
 }
 
 test_expression_notin_1_values_violation_wrong_value {
@@ -195,7 +195,7 @@ test_expression_notin_1_values_violation_wrong_value {
     "operator": "NotIn",
     "values": ["a"]
    }]}
-  not matches_labelselector(expr, {"a": "a"})
+  not matches_label_selector(expr, {"a": "a"})
 }
 
 
@@ -205,9 +205,9 @@ test_expression_notin_3_values_violation_wrong_value {
     "operator": "NotIn",
     "values": ["a", "b", "c"]
    }]}
-  not matches_labelselector(expr, {"a": "a"})
-  not matches_labelselector(expr, {"a": "b"})
-  not matches_labelselector(expr, {"a": "c"})
+  not matches_label_selector(expr, {"a": "a"})
+  not matches_label_selector(expr, {"a": "b"})
+  not matches_label_selector(expr, {"a": "c"})
 }
 
 
@@ -217,7 +217,7 @@ test_expression_exists_1_key {
     "key": "a",
     "operator": "Exists",
    }]}
-   matches_labelselector(expr, {"a": "a"})
+   matches_label_selector(expr, {"a": "a"})
 }
 
 test_expression_exists_3_keys {
@@ -225,7 +225,7 @@ test_expression_exists_3_keys {
     "key": "a",
     "operator": "Exists",
    }]}
-   matches_labelselector(expr, {"a": "a", "b": "b", "c": "c"})
+   matches_label_selector(expr, {"a": "a", "b": "b", "c": "c"})
 }
 
 test_expression_exists_violation_3_keys {
@@ -233,7 +233,7 @@ test_expression_exists_violation_3_keys {
     "key": "a",
     "operator": "Exists",
    }]}
-   not matches_labelselector(expr, {"r": "a", "b": "b", "c": "c"})
+   not matches_label_selector(expr, {"r": "a", "b": "b", "c": "c"})
 }
 
 test_expression_exists_violation_1_key {
@@ -241,7 +241,7 @@ test_expression_exists_violation_1_key {
     "key": "a",
     "operator": "Exists",
    }]}
-   not matches_labelselector(expr, {"r": "a"})
+   not matches_label_selector(expr, {"r": "a"})
 }
 
 test_expression_exists_violation_no_keys {
@@ -249,7 +249,7 @@ test_expression_exists_violation_no_keys {
     "key": "a",
     "operator": "Exists",
    }]}
-   not matches_labelselector(expr, {})
+   not matches_label_selector(expr, {})
 }
 
 test_expression_exists_values_ignored {
@@ -258,7 +258,7 @@ test_expression_exists_values_ignored {
     "operator": "Exists",
     "values": "a"
    }]}
-   matches_labelselector(expr, {"a": "b"})
+   matches_label_selector(expr, {"a": "b"})
 }
 
 test_expression_exists_violation_values_ignored {
@@ -267,7 +267,7 @@ test_expression_exists_violation_values_ignored {
     "operator": "Exists",
     "values": "a"
    }]}
-   not matches_labelselector(expr, {"b": "a"})
+   not matches_label_selector(expr, {"b": "a"})
 }
 
 
@@ -277,7 +277,7 @@ test_expression_doesnotexist_no_keys {
     "key": "a",
     "operator": "DoesNotExist",
    }]}
-   matches_labelselector(expr, {})
+   matches_label_selector(expr, {})
 }
 
 test_expression_doesnotexist_1_key {
@@ -285,7 +285,7 @@ test_expression_doesnotexist_1_key {
     "key": "a",
     "operator": "DoesNotExist",
    }]}
-   matches_labelselector(expr, {"b": "b"})
+   matches_label_selector(expr, {"b": "b"})
 }
 
 test_expression_doesnotexist_3_keys {
@@ -293,7 +293,7 @@ test_expression_doesnotexist_3_keys {
     "key": "a",
     "operator": "DoesNotExist",
    }]}
-   matches_labelselector(expr, {"b": "b", "c": "c", "d": "d"})
+   matches_label_selector(expr, {"b": "b", "c": "c", "d": "d"})
 }
 
 test_expression_doesnotexist_violation_1_key {
@@ -301,7 +301,7 @@ test_expression_doesnotexist_violation_1_key {
     "key": "a",
     "operator": "DoesNotExist",
    }]}
-   not matches_labelselector(expr, {"a": "b"})
+   not matches_label_selector(expr, {"a": "b"})
 }
 
 test_expression_doesnotexist_violation_3_keys {
@@ -309,7 +309,7 @@ test_expression_doesnotexist_violation_3_keys {
     "key": "a",
     "operator": "DoesNotExist",
    }]}
-   not matches_labelselector(expr, {"a": "b", "b": "b", "c": "c"})
+   not matches_label_selector(expr, {"a": "b", "b": "b", "c": "c"})
 }
 
 test_expression_doesnotexist_values_ignored {
@@ -318,7 +318,7 @@ test_expression_doesnotexist_values_ignored {
     "operator": "DoesNotExist",
     "values": "a"
    }]}
-   matches_labelselector(expr, {"b": "a"})
+   matches_label_selector(expr, {"b": "a"})
 }
 
 test_expression_doesnotexist_violation_values_ignored {
@@ -327,7 +327,7 @@ test_expression_doesnotexist_violation_values_ignored {
     "operator": "DoesNotExist",
     "values": "a"
    }]}
-   not matches_labelselector(expr, {"a": "b"})
+   not matches_label_selector(expr, {"a": "b"})
 }
 
 
@@ -353,7 +353,7 @@ test_compound_selector_multi_success {
       "values": ["z", "x", "y"]
     },
    ]}
-   matches_labelselector(expr, {"b": "a", "c": "z", "d": "r"})
+   matches_label_selector(expr, {"b": "a", "c": "z", "d": "r"})
 }
 
 test_compound_selector_one_violation {
@@ -377,10 +377,10 @@ test_compound_selector_one_violation {
       "values": ["z", "x", "y"]
     },
    ]}
-   not matches_labelselector(expr, {"a": "z", "b": "a", "c": "z", "d": "r"})
-   not matches_labelselector(expr, {"c": "z", "d": "r"})
-   not matches_labelselector(expr, {"b": "a", "c": "r", "d": "r"})
-   not matches_labelselector(expr, {"b": "a", "c": "z", "d": "x"})
+   not matches_label_selector(expr, {"a": "z", "b": "a", "c": "z", "d": "r"})
+   not matches_label_selector(expr, {"c": "z", "d": "r"})
+   not matches_label_selector(expr, {"b": "a", "c": "r", "d": "r"})
+   not matches_label_selector(expr, {"b": "a", "c": "z", "d": "x"})
 }
 
 test_compound_selector_many_violations {
@@ -404,7 +404,7 @@ test_compound_selector_many_violations {
       "values": ["z", "x", "y"]
     },
    ]}
-   not matches_labelselector(expr, {"a": "z"})
+   not matches_label_selector(expr, {"a": "z"})
 }
 
 test_double_compound_selector_multi_success {
@@ -432,7 +432,7 @@ test_double_compound_selector_multi_success {
         "values": ["z", "x", "y"]
       },
    ]}
-   matches_labelselector(expr, {"b": "a", "c": "z", "d": "r", "e": "f"})
+   matches_label_selector(expr, {"b": "a", "c": "z", "d": "r", "e": "f"})
 }
 
 test_double_compound_selector_label_failure {
@@ -460,8 +460,8 @@ test_double_compound_selector_label_failure {
         "values": ["z", "x", "y"]
       },
    ]}
-   not matches_labelselector(expr, {"b": "a", "c": "z", "d": "r", "e": "r"})
-   not matches_labelselector(expr, {"b": "a", "c": "z", "d": "r"})
+   not matches_label_selector(expr, {"b": "a", "c": "z", "d": "r", "e": "r"})
+   not matches_label_selector(expr, {"b": "a", "c": "z", "d": "r"})
 }
 
 test_double_compound_selector_expression_failure {
@@ -489,11 +489,11 @@ test_double_compound_selector_expression_failure {
         "values": ["z", "x", "y"]
       },
    ]}
-   not matches_labelselector(expr, {"a": "r", "b": "a", "c": "z", "d": "r", "e": "f"})
-   not matches_labelselector(expr, {"c": "z", "d": "r", "e": "f"})
-   not matches_labelselector(expr, {"b": "a", "c": "r", "d": "r", "e": "f"})
-   not matches_labelselector(expr, {"b": "a", "c": "z", "d": "x", "e": "f"})
-   not matches_labelselector(expr, {"a": "r", "d": "x", "e": "f"})
+   not matches_label_selector(expr, {"a": "r", "b": "a", "c": "z", "d": "r", "e": "f"})
+   not matches_label_selector(expr, {"c": "z", "d": "r", "e": "f"})
+   not matches_label_selector(expr, {"b": "a", "c": "r", "d": "r", "e": "f"})
+   not matches_label_selector(expr, {"b": "a", "c": "z", "d": "x", "e": "f"})
+   not matches_label_selector(expr, {"a": "r", "d": "x", "e": "f"})
 }
 
 test_double_compound_selector_expression_all_failure {
@@ -521,11 +521,11 @@ test_double_compound_selector_expression_all_failure {
         "values": ["z", "x", "y"]
       },
    ]}
-   not matches_labelselector(expr, {"a": "r", "b": "a", "c": "z", "d": "r", "e": "x"})
-   not matches_labelselector(expr, {"c": "z", "d": "r", "e": "x"})
-   not matches_labelselector(expr, {"b": "a", "c": "r", "d": "r"})
-   not matches_labelselector(expr, {"b": "a", "c": "z", "d": "x", "e": "x"})
-   not matches_labelselector(expr, {"a": "r", "d": "x"})
+   not matches_label_selector(expr, {"a": "r", "b": "a", "c": "z", "d": "r", "e": "x"})
+   not matches_label_selector(expr, {"c": "z", "d": "r", "e": "x"})
+   not matches_label_selector(expr, {"b": "a", "c": "r", "d": "r"})
+   not matches_label_selector(expr, {"b": "a", "c": "z", "d": "x", "e": "x"})
+   not matches_label_selector(expr, {"a": "r", "d": "x"})
 }
 
 test_double_compound_selector_expression_empty_failure {
@@ -553,5 +553,5 @@ test_double_compound_selector_expression_empty_failure {
         "values": ["z", "x", "y"]
       },
    ]}
-   not matches_labelselector(expr, {})
+   not matches_label_selector(expr, {})
 }

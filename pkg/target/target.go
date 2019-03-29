@@ -36,23 +36,16 @@ matching_constraints[constraint] {
 	groups := {input.review.kind.group, "*"}
 	spec := get_default(constraint, "spec", {})
 	match := get_default(spec, "match", {})
-	kindSelector := get_default(match, "kinds", [{"apiGroups": ["*"], "kinds": ["*"]}])
-	selected_groups := {g | g = kindSelector[r].apiGroups[_]}
-	remaining_groups := groups - selected_groups
-	count(remaining_groups) < 2
 
-	kinds := {input.review.kind.kind, "*"}
-	selected_kinds := {k | k = kindSelector[r].kinds[_]}
-	remaining_kinds := kinds - selected_kinds
-	count(remaining_kinds) < 2
+  any_kind_selector_matches(match)
 
 	matches_namespaces(match)
 
-  labelSelector := get_default(match, "labelSelector", {})
+  label_selector := get_default(match, "labelSelector", {})
 	obj := get_default(input.review, "object", {})
 	metadata := get_default(obj, "metadata", {})
   labels := get_default(metadata, "labels", {})
-	matches_labelselector(labelSelector, labels)
+	matches_label_selector(label_selector, labels)
 }
 
 # Namespace-scoped objects
@@ -120,6 +113,36 @@ get_default(object, field, _default) = output {
   output = _default
 }
 
+########################
+# Label Selector Logic #
+########################
+
+any_kind_selector_matches(match) {
+	kind_selectors := get_default(match, "kinds", [{"apiGroups": ["*"], "kinds": ["*"]}])
+  ks := kind_selectors[_]
+  kind_selector_matches(ks)
+}
+
+kind_selector_matches(ks) {
+	group_matches(ks)
+  kind_matches(ks)
+}
+
+group_matches(ks) {
+	ks.apiGroups[_] == "*"
+}
+
+group_matches(ks) {
+	ks.apiGroups[_] == input.review.kind.group
+}
+
+kind_matches(ks) {
+	ks.kinds[_] == "*"
+}
+
+kind_matches(ks) {
+	ks.kinds[_] == input.review.kind.kind
+}
 
 ########################
 # Label Selector Logic #
@@ -156,7 +179,7 @@ match_expression_violated("DoesNotExist", labels, key, values) = true {
 
 # Checks to see if a kubernetes LabelSelector matches a given set of labels
 # A non-existent selector or labels should be represented by an empty object ("{}")
-matches_labelselector(selector, labels) {
+matches_label_selector(selector, labels) {
   keys := {key | labels[key]}
   matchLabels := get_default(selector, "matchLabels", {})
   satisfiedMatchLabels := {key | matchLabels[key] == labels[key]}
