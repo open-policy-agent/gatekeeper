@@ -95,7 +95,7 @@ deny[{"msg": "denied!"}] {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig(), mgr.GetClient()))
+	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()))
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 

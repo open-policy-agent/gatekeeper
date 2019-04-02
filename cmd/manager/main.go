@@ -33,7 +33,8 @@ import (
 
 func main() {
 	flag.Parse()
-	logf.SetLogger(logf.ZapLogger(false))
+	// TODO make development logging mode toggleable
+	logf.SetLogger(logf.ZapLogger(true))
 	log := logf.Log.WithName("entrypoint")
 
 	// Get a config to talk to the apiserver

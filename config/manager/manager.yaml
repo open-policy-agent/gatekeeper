@@ -44,7 +44,9 @@ spec:
       - command:
         - /root/manager
         args:
-          - "--stderrthreshold=INFO"
+          - "--alsologtostderr"
+          - "--stderrthreshold=100"
+          - "-v=100"
         image: controller:latest
         imagePullPolicy: Always
         name: manager

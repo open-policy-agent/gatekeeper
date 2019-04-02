@@ -1,0 +1,13 @@
+apiVersion: sync.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  whitelist:
+    - group: ""
+      version: "v1"
+      kind: "Namespace"
+    - group: ""
+      version: "v1"
+      kind: "Pod"
