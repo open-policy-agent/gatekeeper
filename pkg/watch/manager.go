@@ -113,7 +113,17 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	if len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
 		return false, nil
 	}
-	log.Info("Watcher registry found changes, attempting to apply them", "add", added, "remove", removed, "change", changed)
+	var a, r, c []string
+	for k, _ := range added {
+		a = append(a, k.String())
+	}
+	for k, _ := range removed {
+		r = append(r, k.String())
+	}
+	for k, _ := range changed {
+		a = append(c, k.String())
+	}
+	log.Info("Watcher registry found changes, attempting to apply them", "add", a, "remove", r, "change", c)
 
 	readyToAdd, err := wm.filterPendingResources(added)
 	if err != nil {

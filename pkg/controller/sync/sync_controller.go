@@ -37,7 +37,9 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
-const project = "gatekeeper.sh"
+const (
+	finalizerName = "finalizers.gatekeeper.sh/sync"
+)
 
 type Adder struct {
 	Opa opa.Client
@@ -113,7 +115,6 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	finalizerName := "finalizers.gatekeeper.sh/sync"
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !containsString(finalizerName, instance.GetFinalizers()) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
@@ -121,7 +122,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 			// condition that leads to a validating webhook deny of the update
 			cpy := instance.DeepCopy()
 			if err := r.Update(context.Background(), cpy); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{}, err
 			}
 			if !reflect.DeepEqual(instance, cpy) {
 				log.Info("instance and cpy differ")
@@ -133,18 +134,26 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	} else {
 		// Handle deletion
-		if containsString(finalizerName, instance.GetFinalizers()) {
+		if HasFinalizer(instance) {
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-			instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+			if err := RemoveFinalizer(r, instance); err != nil {
+				return reconcile.Result{}, err
 			}
 		}
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func HasFinalizer(obj *unstructured.Unstructured) bool {
+	return containsString(finalizerName, obj.GetFinalizers())
+}
+
+func RemoveFinalizer(c client.Client, obj *unstructured.Unstructured) error {
+	obj.SetFinalizers(removeString(finalizerName, obj.GetFinalizers()))
+	return c.Update(context.Background(), obj)
 }
 
 func containsString(s string, items []string) bool {

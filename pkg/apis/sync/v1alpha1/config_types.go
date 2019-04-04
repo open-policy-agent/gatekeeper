@@ -17,6 +17,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ConfigSpec defines the desired state of Config
@@ -35,8 +36,24 @@ type WhitelistEntry struct {
 
 // ConfigStatus defines the observed state of Config
 type ConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// List of Group/Version/Kinds with finalizers to clean
+	AllFinalizers []GVK `json:"extraFinalizers,omitempty"`
+}
+
+func ToAPIGVK(gvk schema.GroupVersionKind) GVK {
+	return GVK{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}
+}
+
+func ToGVK(gvk GVK) schema.GroupVersionKind {
+	return schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}
+}
+
+type GVK struct {
+	Group   string `json:"group,omitempty"`
+	Version string `json:"version,omitempty"`
+	Kind    string `json:"kind,omitempty"`
 }
 
 // +genclient
