@@ -38,7 +38,7 @@ type WhitelistEntry struct {
 type ConfigStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// List of Group/Version/Kinds with finalizers to clean
+	// List of Group/Version/Kinds with finalizers
 	AllFinalizers []GVK `json:"allFinalizers,omitempty"`
 }
 

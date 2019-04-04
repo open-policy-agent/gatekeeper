@@ -44,7 +44,7 @@ spec:
         status:
           properties:
             allFinalizers:
-              description: List of Group/Version/Kinds with finalizers to clean
+              description: List of Group/Version/Kinds with finalizers
               items:
                 properties:
                   group:
