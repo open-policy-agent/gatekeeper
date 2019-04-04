@@ -43,7 +43,7 @@ spec:
           type: object
         status:
           properties:
-            extraFinalizers:
+            allFinalizers:
               description: List of Group/Version/Kinds with finalizers to clean
               items:
                 properties:
