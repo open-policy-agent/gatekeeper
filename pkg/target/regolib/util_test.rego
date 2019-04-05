@@ -1,5 +1,14 @@
 package target
 
+# make group_version tests
+test_grouped {
+  ["mygroup", "myversion"] == make_group_version("mygroup/myversion")
+}
+
+test_ungrouped {
+  ["", "myversion"] == make_group_version("myversion")
+}
+
 # has_field tests
 test_has_field_exists {
   obj := {"a": "b"}
