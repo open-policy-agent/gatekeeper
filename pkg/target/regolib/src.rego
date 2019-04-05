@@ -23,20 +23,21 @@ matching_constraints[constraint] {
 
 # Namespace-scoped objects
 matching_reviews_and_constraints[[review, constraint]] {
-	obj = data["{{.DataRoot}}"].namespace[namespace][group][version][kind][name]
-	r := make_review(obj, group, version, kind, name)
+	obj = data["{{.DataRoot}}"].namespace[namespace][api_version][kind][name]
+	r := make_review(obj, api_version, kind, name)
 	review := add_field(r, "namespace", namespace)
 	matching_constraints[constraint] with input as {"review": review}
 }
 
 # Cluster-scoped objects
 matching_reviews_and_constraints[[review, constraint]] {
-	obj = data["{{.DataRoot}}"].cluster[group][version][kind][name]
-	review = make_review(obj, group, version, kind, name)
+	obj = data["{{.DataRoot}}"].cluster[api_version][kind][name]
+	review = make_review(obj, api_version, kind, name)
 	matching_constraints[constraint] with input as {"review": review}
 }
 
-make_review(obj, group, version, kind, name) = review {
+make_review(obj, api_version, kind, name) = review {
+	[group, version] := make_group_version(api_version)
 	review := {
 		"kind": {"group": group, "version": version, "kind": kind},
 		"name": name,
@@ -48,6 +49,17 @@ make_review(obj, group, version, kind, name) = review {
 ########
 # Util #
 ########
+
+make_group_version(api_version) = [group, version] {
+	contains(api_version, "/")
+	[group, version] := split(api_version, "/")
+}
+
+make_group_version(api_version) = [group, version] {
+	not contains(api_version, "/")
+	group := ""
+	version := api_version
+}
 
 add_field(object, key, value) = ret {
 	keys := {k | object[k]}
