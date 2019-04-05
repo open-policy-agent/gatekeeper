@@ -43,8 +43,10 @@ spec:
       containers:
       - command:
         - /root/manager
-        args:
-          - "--stderrthreshold=INFO"
+        # args:
+          # - "--alsologtostderr"
+          # - "--stderrthreshold=INFO"
+          # - "-v=100"
         image: controller:latest
         imagePullPolicy: Always
         name: manager

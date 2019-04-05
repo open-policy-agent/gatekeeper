@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -233,6 +234,71 @@ func TestHandleViolation(t *testing.T) {
 				}
 				if !reflect.DeepEqual(r.Resource, expected) {
 					t.Errorf("result.Resource = %s; wanted %s", spew.Sdump(r.Resource), spew.Sdump(expected))
+				}
+			}
+		})
+	}
+}
+
+func TestProcessData(t *testing.T) {
+	tc := []struct {
+		Name          string
+		JSON          string
+		ErrorExpected bool
+		ExpectedPath  string
+	}{
+		{
+			Name:         "Cluster Object",
+			JSON:         `{"apiVersion": "v1alpha1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
+			ExpectedPath: "cluster/v1alpha1/Rock/myrock",
+		},
+		{
+			Name:         "Namespace Object",
+			JSON:         `{"apiVersion": "v1alpha1", "kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
+			ExpectedPath: "namespace/foo/v1alpha1/Rock/myrock",
+		},
+		{
+			Name:         "Grouped Object",
+			JSON:         `{"apiVersion": "mygroup/v1alpha1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
+			ExpectedPath: "cluster/mygroup%2Fv1alpha1/Rock/myrock",
+		},
+		{
+			Name:          "No Version",
+			JSON:          `{"kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
+			ErrorExpected: true,
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			h := &K8sValidationTarget{}
+			o := &unstructured.Unstructured{}
+			err := json.Unmarshal([]byte(tt.JSON), o)
+			if err != nil {
+				t.Fatalf("Error parsing JSON: %s", err)
+			}
+			handled, path, data, err := h.ProcessData(o)
+			if !handled {
+				t.Errorf("handled = false; want true")
+			}
+			if !tt.ErrorExpected {
+				if path != tt.ExpectedPath {
+					t.Errorf("path = %s; want %s", path, tt.ExpectedPath)
+				}
+				if !reflect.DeepEqual(data, o.Object) {
+					t.Errorf(cmp.Diff(data, o.Object))
+				}
+				if err != nil {
+					t.Errorf("err = %s; want nil", err)
+				}
+			} else {
+				if path != "" {
+					t.Errorf("path = %s; want empty string", path)
+				}
+				if data != nil {
+					t.Errorf("data = %v; want nil", spew.Sdump(data))
+				}
+				if err == nil {
+					t.Errorf("err = nil; want non-nil")
 				}
 			}
 		})

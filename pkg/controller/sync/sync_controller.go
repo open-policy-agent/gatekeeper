@@ -13,14 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package constraint
+package sync
 
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
-
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,15 +35,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
+var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
-const project = "gatekeeper.sh"
+const (
+	finalizerName = "finalizers.gatekeeper.sh/sync"
+)
 
 type Adder struct {
 	Opa opa.Client
 }
 
-// Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
+// Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
 	r := newReconciler(mgr, gvk, a.Opa)
@@ -52,7 +54,7 @@ func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client) reconcile.Reconciler {
-	return &ReconcileConstraint{
+	return &ReconcileSync{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		opa:    opa,
@@ -64,7 +66,7 @@ func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Cli
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKind) error {
 	// Create a new controller
-	c, err := controller.New(fmt.Sprintf("%s-constraint-controller", gvk.String()), mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(fmt.Sprintf("%s-sync-controller", gvk.String()), mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -80,10 +82,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKin
 	return nil
 }
 
-var _ reconcile.Reconciler = &ReconcileConstraint{}
+var _ reconcile.Reconciler = &ReconcileSync{}
 
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
-type ReconcileConstraint struct {
+type ReconcileSync struct {
 	client.Client
 	scheme *runtime.Scheme
 	opa    opa.Client
@@ -94,7 +96,7 @@ type ReconcileConstraint struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
-func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(r.gvk)
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -107,39 +109,51 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	// For some reason 'Status' objects corresponding to rejection messages are being pushed
+	if instance.GroupVersionKind() != r.gvk {
+		log.Info("ignoring unexpected data", "data", instance)
+		return reconcile.Result{}, nil
+	}
 
-	finalizerName := "finalizers.gatekeeper.sh/constraint"
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !containsString(finalizerName, instance.GetFinalizers()) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+			// For some reason the instance sometimes gets changed by update when there is a race
+			// condition that leads to a validating webhook deny of the update
+			cpy := instance.DeepCopy()
+			if err := r.Update(context.Background(), cpy); err != nil {
+				return reconcile.Result{}, err
+			}
+			if !reflect.DeepEqual(instance, cpy) {
+				log.Info("instance and cpy differ")
 			}
 		}
-		log.Info("instance will be added", "instance", instance)
-		unstructured.RemoveNestedField(instance.Object, "status", "errors")
-
-		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
+		log.Info("data will be added", "data", instance)
+		if _, err := r.opa.AddData(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
-		}
-		unstructured.SetNestedField(instance.Object, true, "status", "enforced")
-		if err := r.Update(context.Background(), instance); err != nil {
-			return reconcile.Result{Requeue: true}, nil
 		}
 	} else {
 		// Handle deletion
-		if containsString(finalizerName, instance.GetFinalizers()) {
-			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
+		if HasFinalizer(instance) {
+			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-			instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+			if err := RemoveFinalizer(r, instance); err != nil {
+				return reconcile.Result{}, err
 			}
 		}
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func HasFinalizer(obj *unstructured.Unstructured) bool {
+	return containsString(finalizerName, obj.GetFinalizers())
+}
+
+func RemoveFinalizer(c client.Client, obj *unstructured.Unstructured) error {
+	obj.SetFinalizers(removeString(finalizerName, obj.GetFinalizers()))
+	return c.Update(context.Background(), obj)
 }
 
 func containsString(s string, items []string) bool {

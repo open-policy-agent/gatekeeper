@@ -109,3 +109,9 @@ travis-dev-deploy: docker-login docker-build-ci docker-push-dev
 
 # Travis Release
 travis-dev-release: docker-login docker-build-ci docker-push-release
+
+# Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
+uninstall:
+	-kubectl delete -n gatekeeper-system Config config
+	sleep 5
+	kubectl delete ns gatekeeper-system

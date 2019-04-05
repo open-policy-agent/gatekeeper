@@ -5,6 +5,36 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - sync.gatekeeper.sh
+  resources:
+  - configs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - sync.gatekeeper.sh
+  resources:
+  - configs/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
   - constraints.gatekeeper.sh
   resources:
   - '*'
@@ -48,6 +78,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - constraints.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - '*'
   resources:

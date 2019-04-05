@@ -3,6 +3,8 @@ package target
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path"
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -217,8 +219,39 @@ func (h *K8sValidationTarget) Library() *template.Template {
 	return libTempl
 }
 
+type WipeData struct{}
+
+func processWipeData() (bool, string, interface{}, error) {
+	return true, "", nil, nil
+}
+
+func processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
+	// Namespace will be "" for cluster objects
+	gvk := o.GetObjectKind().GroupVersionKind()
+	if gvk.Version == "" {
+		return true, "", nil, fmt.Errorf("resource %s has no version", o.GetName())
+	}
+	if gvk.Kind == "" {
+		return true, "", nil, fmt.Errorf("resource %s has no kind", o.GetName())
+	}
+
+	if o.GetNamespace() == "" {
+		return true, path.Join("cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+	}
+	return true, path.Join("namespace", o.GetNamespace(), url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+}
+
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interface{}, error) {
-	return true, "", nil, errors.New("PROCESS DATA NOT YET IMPLEMENTED")
+	switch data := obj.(type) {
+	case unstructured.Unstructured:
+		return processUnstructured(&data)
+	case *unstructured.Unstructured:
+		return processUnstructured(data)
+	case WipeData, *WipeData:
+		return processWipeData()
+	default:
+		return false, "", nil, nil
+	}
 }
 
 func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, error) {

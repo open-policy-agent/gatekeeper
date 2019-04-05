@@ -25,10 +25,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	errorpkg "github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -61,12 +61,20 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
+func (a *Adder) InjectOpa(o opa.Client) {
+	a.Opa = o
+}
+
+func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
+	a.WatchManager = wm
+}
+
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
 	constraintAdder := constraint.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
-		[]func(manager.Manager, string) error{constraintAdder.Add})
+		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})
 	if err != nil {
 		return nil, err
 	}
@@ -88,16 +96,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ConstraintTemplate
 	err = c.Watch(&source.Kind{Type: &v1alpha1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create
-	// Uncomment watch a Deployment created by ConstraintTemplate - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &v1alpha1.ConstraintTemplate{},
-	})
 	if err != nil {
 		return err
 	}
@@ -177,7 +175,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		return reconcile.Result{}, err
 	}
 	log.Info("adding to watcher registry")
-	if err := r.watcher.AddWatch(instance.Spec.CRD.Spec.Names.Kind, name); err != nil {
+	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 		return reconcile.Result{}, err
 	}
 	log.Info("creating constraint CRD")
@@ -209,7 +207,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		return reconcile.Result{}, err
 	}
 	log.Info("making sure constraint is in watcher registry")
-	if err := r.watcher.AddWatch(instance.Spec.CRD.Spec.Names.Kind, name); err != nil {
+	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
@@ -241,7 +239,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 			return reconcile.Result{}, err
 		}
 		log.Info("removing from watcher registry")
-		if err := r.watcher.RemoveWatch(instance.Spec.CRD.Spec.Names.Kind); err != nil {
+		if err := r.watcher.RemoveWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 			return reconcile.Result{}, err
 		}
 		if _, err := r.opa.RemoveTemplate(context.Background(), instance); err != nil {
@@ -253,6 +251,14 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func makeGvk(kind string) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   "constraints.gatekeeper.sh",
+		Version: "v1alpha1",
+		Kind:    kind,
+	}
 }
 
 func containsString(s string, items []string) bool {
