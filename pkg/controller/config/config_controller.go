@@ -393,7 +393,7 @@ func (w *watchSet) Equals(other *watchSet) bool {
 	defer w.mux.RUnlock()
 	other.mux.RLock()
 	defer other.mux.RUnlock()
-	return reflect.DeepEqual(w, other)
+	return reflect.DeepEqual(w.set, other.set)
 }
 
 func (w *watchSet) Replace(other *watchSet) {
