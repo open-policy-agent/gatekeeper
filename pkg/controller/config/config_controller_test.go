@@ -27,7 +27,7 @@ import (
 
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	syncv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/sync/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -47,15 +47,17 @@ const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &syncv1alpha1.Config{
+	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "config",
 			Namespace: "gatekeeper-system",
 		},
-		Spec: syncv1alpha1.ConfigSpec{
-			Whitelist: []syncv1alpha1.WhitelistEntry{
-				{Group: "", Version: "v1", Kind: "Namespace"},
-				{Group: "", Version: "v1", Kind: "Pod"},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: []configv1alpha1.SyncOnlyEntry{
+					{Group: "", Version: "v1", Kind: "Namespace"},
+					{Group: "", Version: "v1", Kind: "Pod"},
+				},
 			},
 		},
 	}

@@ -35,9 +35,11 @@ func TestStorageConfig(t *testing.T) {
 			Namespace: "bar",
 		},
 		Spec: ConfigSpec{
-			Whitelist: []WhitelistEntry{
-				{Group: "", Version: "v1", Kind: "Namespace"},
-				{Group: "", Version: "v1", Kind: "Pod"},
+			Sync: Sync{
+				SyncOnly: []SyncOnlyEntry{
+					{Group: "", Version: "v1", Kind: "Namespace"},
+					{Group: "", Version: "v1", Kind: "Pod"},
+				},
 			},
 		},
 	}

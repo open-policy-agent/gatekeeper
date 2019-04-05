@@ -24,11 +24,16 @@ import (
 type ConfigSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// List of Group/Version/Kinds to sync
-	Whitelist []WhitelistEntry `json:"whitelist,omitempty"`
+	// Configuration for syncing k8s objects
+	Sync Sync `json:"sync,omitempty"`
 }
 
-type WhitelistEntry struct {
+type Sync struct {
+	// If non-empty, only entries on this list will be replicated into OPA
+	SyncOnly []SyncOnlyEntry `json:"syncOnly,omitempty"`
+}
+
+type SyncOnlyEntry struct {
 	Group   string `json:"group,omitempty"`
 	Version string `json:"version,omitempty"`
 	Kind    string `json:"kind,omitempty"`

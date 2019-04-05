@@ -13,13 +13,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apis
-
-import (
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/sync/v1alpha1"
-)
-
-func init() {
-	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
-	AddToSchemes = append(AddToSchemes, v1alpha1.SchemeBuilder.AddToScheme)
-}
+// Package sync contains sync API versions
+package config

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	syncv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/sync/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -104,7 +104,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to Config
-	err = c.Watch(&source.Kind{Type: &syncv1alpha1.Config{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &configv1alpha1.Config{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
-	instance := &syncv1alpha1.Config{}
+	instance := &configv1alpha1.Config{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -158,7 +158,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 				return reconcile.Result{}, err
 			}
 		}
-		for _, entry := range instance.Spec.Whitelist {
+		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			newWhitelist.Add(gvk)
 		}
@@ -170,7 +170,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 	// make sure old finalizers get cleaned up even on restart
 	for _, gvk := range instance.Status.AllFinalizers {
-		toClean.Add(syncv1alpha1.ToGVK(gvk))
+		toClean.Add(configv1alpha1.ToGVK(gvk))
 	}
 
 	if !r.watched.Equals(newWhitelist) {
@@ -187,9 +187,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	toClean.AddSet(r.watched)
 	items := toClean.Items()
-	allFinalizers := make([]syncv1alpha1.GVK, len(items))
+	allFinalizers := make([]configv1alpha1.GVK, len(items))
 	for i, gvk := range items {
-		allFinalizers[i] = syncv1alpha1.ToAPIGVK(gvk)
+		allFinalizers[i] = configv1alpha1.ToAPIGVK(gvk)
 	}
 	instance.Status.AllFinalizers = allFinalizers
 	toClean.RemoveSet(newWhitelist)
@@ -274,13 +274,13 @@ func (fc *finalizerCleanup) clean() {
 					}
 				}
 				if !failure {
-					instance := &syncv1alpha1.Config{}
+					instance := &configv1alpha1.Config{}
 					if err := fc.c.Get(context.Background(), cfgKey, instance); err != nil {
 						log.Info("could not retrieve config to report removed finalizer")
 					}
-					var allFinalizers []syncv1alpha1.GVK
+					var allFinalizers []configv1alpha1.GVK
 					for _, v := range instance.Status.AllFinalizers {
-						if syncv1alpha1.ToGVK(v) != gvk {
+						if configv1alpha1.ToGVK(v) != gvk {
 							allFinalizers = append(allFinalizers, v)
 						}
 					}
