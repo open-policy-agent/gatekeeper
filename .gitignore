@@ -59,7 +59,6 @@ bld/
 #!owners*.txt
 /.corext
 /.gen*
-/vendor
 /deploy/secret
 /secret
 junit.xml
