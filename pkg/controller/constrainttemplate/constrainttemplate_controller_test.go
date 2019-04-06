@@ -63,8 +63,10 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			Targets: map[string]v1alpha1.Target{
-				"admission.k8s.gatekeeper.sh": {Rego: `
+			Targets: []v1alpha1.Target{
+				{
+					Target: "admission.k8s.gatekeeper.sh",
+					Rego: `
 package foo
 
 deny[{"msg": "denied!"}] {

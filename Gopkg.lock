@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4fb03f7a7506c97e2abee3d167ae4b6abfa551c1cf99d76b79a47e3a3259c4dd"
+  digest = "1:0990dce5f904648757db3aafc9f4505ddea52179f5ff4c2972fe559ac6b0deef"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -454,8 +454,8 @@
     "constraint/pkg/client/regolib",
     "constraint/pkg/types",
   ]
-  pruneopts = "UT"
-  revision = "dc46b9fb5e6d0efd525ba33c0edbf7cba1c1a193"
+  pruneopts = ""
+  revision = "f1e58895c9402685d7f652644b2b6f819835ab01"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"
@@ -1165,8 +1165,8 @@
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/runtime/serializer",
     "k8s.io/apimachinery/pkg/types",
-    "k8s.io/apimachinery/pkg/util/json",
     "k8s.io/apimachinery/pkg/util/validation/field",
+    "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/dynamic",
     "k8s.io/client-go/kubernetes",

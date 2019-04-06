@@ -50,7 +50,7 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	kubectl apply -f config/crds
+	kubectl apply -f config/crds vendor/github.com/open-policy-agent/frameworks/constraint/config/crds
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
