@@ -82,6 +82,12 @@ required = [
   go-tests = true
   unused-packages = true
 
+  # We want to include all files so we can access the constraint CRD manifests
+  [[prune.project]]
+    name = "github.com/open-policy-agent/frameworks"
+    unused-packages = false
+    go-tests = false
+
 
 
 # For dependency below: Refer to issue https://github.com/golang/dep/issues/1799
