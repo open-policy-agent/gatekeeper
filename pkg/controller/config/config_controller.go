@@ -149,7 +149,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	newWhitelist := newSet()
+	newSyncOnly := newSet()
 	toClean := newSet()
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !containsString(finalizerName, instance.GetFinalizers()) {
@@ -160,7 +160,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
-			newWhitelist.Add(gvk)
+			newSyncOnly.Add(gvk)
 		}
 		// Handle deletion
 	} else {
@@ -173,7 +173,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		toClean.Add(configv1alpha1.ToGVK(gvk))
 	}
 
-	if !r.watched.Equals(newWhitelist) {
+	if !r.watched.Equals(newSyncOnly) {
 		// Wipe all data to avoid stale state
 		err := r.watcher.Pause()
 		defer r.watcher.Unpause()
@@ -192,7 +192,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		allFinalizers[i] = configv1alpha1.ToAPIGVK(gvk)
 	}
 	instance.Status.AllFinalizers = allFinalizers
-	toClean.RemoveSet(newWhitelist)
+	toClean.RemoveSet(newSyncOnly)
 	if toClean.Size() > 0 {
 		if r.fc != nil {
 			close(r.fc.stop)
@@ -211,14 +211,14 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		go r.fc.clean()
 	}
 
-	if err := r.watcher.ReplaceWatch(newWhitelist.Items()); err != nil {
+	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	if err := r.Update(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	r.watched.Replace(newWhitelist)
+	r.watched.Replace(newSyncOnly)
 	return reconcile.Result{}, nil
 }
 
