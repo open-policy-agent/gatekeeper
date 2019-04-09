@@ -126,9 +126,9 @@ get_default(object, field, _default) = output {
   output = _default
 }
 
-########################
-# Label Selector Logic #
-########################
+#######################
+# Kind Selector Logic #
+#######################
 
 any_kind_selector_matches(match) {
 	kind_selectors := get_default(match, "kinds", [{"apiGroups": ["*"], "kinds": ["*"]}])
