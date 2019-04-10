@@ -19,7 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// AddToManager adds all Controllers to the Manager
+// AddToManager adds audit manager to the Manager
 func AddToManager(m manager.Manager, opa opa.Client) error {
-	return New(context.Background(), m.GetConfig(), opa)
+	 am, err := New(context.Background(), m.GetConfig(), opa)
+	 if err != nil {
+		return err
+	}
+	 return m.Add(am)
 }

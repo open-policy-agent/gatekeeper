@@ -9,16 +9,17 @@ import (
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -35,8 +36,8 @@ var (
 )
 
 // auditManager allows us to audit resources periodically
-type auditManager struct {
-	mgr     manager.Manager
+type AuditManager struct {
+	client  client.Client
 	opa     opa.Client
 	stopper chan struct{}
 	stopped chan struct{}
@@ -45,9 +46,7 @@ type auditManager struct {
 
 type auditResult struct {
 	cname       string
-	cgroup      string
-	ckind       string
-	cversion    string
+	cgvk        schema.GroupVersionKind
 	capiversion string
 	rkind       string
 	rname       string
@@ -56,30 +55,27 @@ type auditResult struct {
 }
 
 // New starts a new manager for audit
-func New(ctx context.Context, cfg *rest.Config, opa opa.Client) error {
-	am := &auditManager{
+func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, error) {
+	am := &AuditManager{
 		opa:     opa,
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
 		cfg:     cfg,
 	}
-	mgr, err := manager.New(cfg, manager.Options{})
+	c, err := client.New(cfg, client.Options{Scheme: nil, Mapper: nil})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	am.mgr = mgr
-	go startMgr(mgr, am.stopper, am.stopped)
+	am.client = c
 	go am.auditManagerLoop(ctx)
-	return nil
+	return am, nil
 }
 
 // audit audits resources periodically
-func (am *auditManager) audit() error {
-	c := am.mgr.GetClient()
-
+func (am *AuditManager) audit() error {
 	// don't audit anything until the constraintTemplate crd is in the cluster
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-	if err := c.Get(context.TODO(), types.NamespacedName{Name: crdName}, crd); err != nil {
+	if err := am.client.Get(context.TODO(), types.NamespacedName{Name: crdName}, crd); err != nil {
 		return err
 	}
 	resp, err := am.opa.Audit(context.TODO())
@@ -87,46 +83,22 @@ func (am *auditManager) audit() error {
 		return err
 	}
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
-	dynamic := dynamic.NewForConfigOrDie(am.cfg)
+	dynamicClient, err := dynamic.NewForConfig(am.cfg)
+	if err != nil {
+		return err
+	}
 
 	if len(resp.Results()) > 0 {
-		updateList := make(map[string][]auditResult)
-
-		for _, r := range resp.Results() {
-			name := r.Constraint.GetName()
-			apiVersion := r.Constraint.GetAPIVersion()
-			gvk := r.Constraint.GroupVersionKind()
-			kind := gvk.Kind
-			group := gvk.Group
-			version := gvk.Version
-			selfLink := r.Constraint.GetSelfLink()
-			message := r.Msg
-			if len(message) > msgSize {
-				message = truncateString(message, msgSize)
-			}
-			resource, ok := r.Resource.(*unstructured.Unstructured)
-			if !ok {
-				return errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
-			}
-			rname := resource.GetName()
-			rkind := resource.GetKind()
-			rnamespace := resource.GetNamespace()
-
-			updateList[selfLink] = append(updateList[selfLink], auditResult{
-				cgroup:      group,
-				cversion:    version,
-				capiversion: apiVersion,
-				ckind:       kind,
-				cname:       name,
-				rkind:       rkind,
-				rname:       rname,
-				rnamespace:  rnamespace,
-				message:     message,
-			})
+		updateLists, err := getUpdateListsFromAuditResponses(resp)
+		if err != nil {
+			return err
 		}
 		// get all constraints kind
-		clientset := kubernetes.NewForConfigOrDie(am.cfg)
-		rs, err := clientset.Discovery().ServerResourcesForGroupVersion(constraintsGV)
+		discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
+		if err != nil {
+			return err
+		}
+		rs, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
 		if err != nil {
 			return err
 		}
@@ -136,7 +108,7 @@ func (am *auditManager) audit() error {
 			resourceGvk := strings.Split(rs.GroupVersion, "/")
 			group := resourceGvk[0]
 			version := resourceGvk[1]
-			resourceClient := dynamic.Resource(schema.GroupVersionResource{Group: group, Version: version, Resource: r.Name})
+			resourceClient := dynamicClient.Resource(schema.GroupVersionResource{Group: group, Version: version, Resource: r.Name})
 			l, err := resourceClient.List(metav1.ListOptions{})
 			if err != nil {
 				return err
@@ -146,37 +118,33 @@ func (am *auditManager) audit() error {
 				oname := item.GetName()
 				oapiVersion := item.GetAPIVersion()
 				ogvk := item.GroupVersionKind()
-				okind := ogvk.Kind
-				ogroup := ogvk.Group
-				oversion := ogvk.Version
 				violations, found, err := unstructured.NestedSlice(item.Object, "status", "violations")
 				if err != nil {
 					return err
 				}
 				if !found || len(violations) == 0 {
-					fmt.Printf("constraint %s violations is either not found or empty, skip clear \n", oname)
+					log.Info("constraint violations is either not found or empty, skip clear", "constraint name", oname)
 				} else {
-					fmt.Printf("constraint name %s, apiversion %s, kind %s, group %s, version %s, violations %v \n", oname, oapiVersion, okind, ogroup, oversion, violations)
 					var emptyAuditResults []auditResult
-					err = updateConstraintStatus(dynamic, ogroup, oversion, okind, oname, oapiVersion, emptyAuditResults)
+					err = updateConstraintStatus(dynamicClient, ogvk, oname, oapiVersion, emptyAuditResults)
 					if err != nil {
 						return err
 					}
-					fmt.Printf("constraint %s violations have been cleared \n", oname)
+					log.Info("constraint violations have been cleared", "constraint name", oname)
 				}
 			}
 		}
 		// update each violated constraint
-		for selfLink := range updateList {
-			auditResults := updateList[selfLink]
+		for selfLink := range updateLists {
+			auditResults := updateLists[selfLink]
 			aResult := auditResults[0]
-			return updateConstraintStatus(dynamic, aResult.cgroup, aResult.cversion, aResult.ckind, aResult.cname, aResult.capiversion, auditResults)
+			return updateConstraintStatus(dynamicClient, aResult.cgvk, aResult.cname, aResult.capiversion, auditResults)
 		}
 	}
 	return nil
 }
 
-func (am *auditManager) auditManagerLoop(ctx context.Context) {
+func (am *AuditManager) auditManagerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -192,19 +160,52 @@ func (am *auditManager) auditManagerLoop(ctx context.Context) {
 	}
 }
 
-func startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}) {
-	if err := mgr.Start(stopper); err != nil {
-		log.Error(err, "Error starting audit watch manager")
-	}
-	// mgr.Start() only returns after the manager has completely stopped
-	close(stopped)
-	log.Info("audit exiting")
+// Start implements controller.Controller
+func (am *AuditManager) Start(stop <-chan struct{}) error {
+	log.Info("Starting Audit Manager")
+
+	<-stop
+	log.Info("Stopping audit manager workers")
+	return nil
 }
 
-func updateConstraintStatus(dynamic dynamic.Interface, cgroup string, cversion string, ckind string, cname string, capiversion string, auditResults []auditResult) error {
-	cresource := fmt.Sprintf("%ss", strings.ToLower(ckind))
-	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: cgroup, Version: cversion, Resource: cresource})
-	o, err := cstrClient.Get(cname, metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: ckind, APIVersion: capiversion}})
+func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[string][]auditResult, error) {
+	updateLists := make(map[string][]auditResult)
+
+	for _, r := range resp.Results() {
+		name := r.Constraint.GetName()
+		apiVersion := r.Constraint.GetAPIVersion()
+		gvk := r.Constraint.GroupVersionKind()
+		selfLink := r.Constraint.GetSelfLink()
+		message := r.Msg
+		if len(message) > msgSize {
+			message = truncateString(message, msgSize)
+		}
+		resource, ok := r.Resource.(*unstructured.Unstructured)
+		if !ok {
+			return nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
+		}
+		rname := resource.GetName()
+		rkind := resource.GetKind()
+		rnamespace := resource.GetNamespace()
+
+		updateLists[selfLink] = append(updateLists[selfLink], auditResult{
+			cgvk:        gvk,
+			capiversion: apiVersion,
+			cname:       name,
+			rkind:       rkind,
+			rname:       rname,
+			rnamespace:  rnamespace,
+			message:     message,
+		})
+	}
+	return updateLists, nil
+}
+
+func updateConstraintStatus(dynamicClient dynamic.Interface, cgvk schema.GroupVersionKind, cname string, capiversion string, auditResults []auditResult) error {
+	cresource := fmt.Sprintf("%ss", strings.ToLower(cgvk.Kind))
+	cstrClient := dynamicClient.Resource(schema.GroupVersionResource{Group: cgvk.Group, Version: cgvk.Version, Resource: cresource})
+	o, err := cstrClient.Get(cname, metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: cgvk.Kind, APIVersion: capiversion}})
 	if err != nil {
 		return err
 	}
