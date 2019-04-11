@@ -30,9 +30,10 @@ const (
 )
 
 var (
-	auditInterval     = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
-	crd               = &apiextensionsv1beta1.CustomResourceDefinition{}
-	emptyAuditResults []auditResult
+	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
+	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	crd                       = &apiextensionsv1beta1.CustomResourceDefinition{}
+	emptyAuditResults         []auditResult
 )
 
 // AuditManager allows us to audit resources periodically
@@ -155,11 +156,16 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 	updateLists := make(map[string][]auditResult)
 
 	for _, r := range resp.Results() {
+		selfLink := r.Constraint.GetSelfLink()
+		// skip if this constraint has reached the constraintViolationsLimit
+		if len(updateLists[selfLink]) == *constraintViolationsLimit {
+			continue
+		}
+
 		name := r.Constraint.GetName()
 		namespace := r.Constraint.GetNamespace()
 		apiVersion := r.Constraint.GetAPIVersion()
 		gvk := r.Constraint.GroupVersionKind()
-		selfLink := r.Constraint.GetSelfLink()
 		message := r.Msg
 		if len(message) > msgSize {
 			message = truncateString(message, msgSize)
@@ -171,7 +177,6 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 		rname := resource.GetName()
 		rkind := resource.GetKind()
 		rnamespace := resource.GetNamespace()
-
 		updateLists[selfLink] = append(updateLists[selfLink], auditResult{
 			cgvk:        gvk,
 			capiversion: apiVersion,
