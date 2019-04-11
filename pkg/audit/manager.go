@@ -30,12 +30,12 @@ const (
 )
 
 var (
-	auditInterval = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
-	crd           = &apiextensionsv1beta1.CustomResourceDefinition{}
+	auditInterval     = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
+	crd               = &apiextensionsv1beta1.CustomResourceDefinition{}
 	emptyAuditResults []auditResult
 )
 
-// auditManager allows us to audit resources periodically
+// AuditManager allows us to audit resources periodically
 type AuditManager struct {
 	client  client.Client
 	opa     opa.Client
@@ -55,6 +55,14 @@ type auditResult struct {
 	message     string
 }
 
+// StatusViolation represents each violation under status
+type StatusViolation struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Message   string `json:"message"`
+}
+
 // New starts a new manager for audit
 func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, error) {
 	am := &AuditManager{
@@ -68,7 +76,8 @@ func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, 
 }
 
 // audit audits resources periodically
-func (am *AuditManager) audit(ctx context.Context) error {	
+func (am *AuditManager) audit(ctx context.Context) error {
+	timestamp := time.Now().UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
 	c, err := client.New(am.cfg, client.Options{Scheme: nil, Mapper: nil})
 	if err != nil {
@@ -97,11 +106,12 @@ func (am *AuditManager) audit(ctx context.Context) error {
 	log.Info("getting all constraints kind")
 	rs, err := am.getAllConstraintsKinds()
 	if err != nil {
-		log.Info("no constraints found with apiversion", "constraint apiversion", constraintsGV)
+		// if no constraint is found with the constraint apiversion, then return
+		log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
 		return nil
 	}
 	// update constraints for each kind
-	return am.updateConstraintsForKinds(ctx, rs, updateLists)
+	return am.updateConstraintsForKinds(ctx, rs, updateLists, timestamp)
 }
 
 func (am *AuditManager) auditManagerLoop(ctx context.Context) {
@@ -176,7 +186,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 	return updateLists, nil
 }
 
-func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult) error {
+func (am *AuditManager) updateConstraintsForKinds(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string) error {
 	resourceGV := strings.Split(resourceList.GroupVersion, "/")
 	group := resourceGV[0]
 	version := resourceGV[1]
@@ -184,14 +194,13 @@ func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resource
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
 		log.Info("constraint", "resource kind", r.Kind)
-		constraintGvk := schema.GroupVersionKind {
-			Group: group,
+		constraintGvk := schema.GroupVersionKind{
+			Group:   group,
 			Version: version,
-			Kind: r.Kind,
+			Kind:    r.Kind,
 		}
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
-		log.Info("client before list")
 		err := am.client.List(ctx, &client.ListOptions{}, instanceList)
 		if err != nil {
 			return err
@@ -199,30 +208,20 @@ func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resource
 		log.Info("constraint", "count of constraints", len(instanceList.Items))
 		// get each constraint
 		for _, item := range instanceList.Items {
-			oname := item.GetName()
 			// if constraint is in updatedLists, then update its violations
 			constraintAuditResults, ok := updateLists[item.GetSelfLink()]
-			// else set to empty if not empty
+			// else update auditTimestamp and clear violations
 			if !ok {
-				violations, found, err := unstructured.NestedSlice(item.Object, "status", "violations")
+				err = am.updateConstraintStatus(ctx, &item, emptyAuditResults, timestamp)
 				if err != nil {
 					return err
-				}
-				if !found || len(violations) == 0 {
-					log.Info("constraint violations is either not found or empty, skip clear", "constraint name", oname)
-				} else {
-					err = am.updateConstraintStatus(ctx, &item, emptyAuditResults)
-					if err != nil {
-						return err
-					}
-					log.Info("constraint violations have been cleared", "constraint name", oname)
 				}
 			} else {
 				aResult := constraintAuditResults[0]
 				instance := &unstructured.Unstructured{}
 				instance.SetGroupVersionKind(aResult.cgvk)
 				namespacedName := types.NamespacedName{
-					Name: aResult.cname,
+					Name:      aResult.cname,
 					Namespace: aResult.cnamespace,
 				}
 				// get the constraint
@@ -231,7 +230,7 @@ func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resource
 					log.Error(err, "get constraint error", err)
 				}
 				// update the constraint
-				err = am.updateConstraintStatus(ctx, instance, constraintAuditResults)
+				err = am.updateConstraintStatus(ctx, instance, constraintAuditResults, timestamp)
 				if err != nil {
 					log.Error(err, "update constraint error", err)
 				}
@@ -241,16 +240,17 @@ func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resource
 	return nil
 }
 
-func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult) error {
-	log.Info("updating constraint", "constraint name", instance.GetName())
+func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string) error {
+	constraintName := instance.GetName()
+	log.Info("updating constraint", "constraintName", constraintName)
 	// create constraint status violations
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
-		statusViolations = append(statusViolations, map[string]string{
-			"kind":      ar.rkind,
-			"name":      ar.rname,
-			"namespace": ar.rnamespace,
-			"message":   ar.message,
+		statusViolations = append(statusViolations, StatusViolation{
+			Kind:      ar.rkind,
+			Name:      ar.rname,
+			Namespace: ar.rnamespace,
+			Message:   ar.message,
 		})
 	}
 	raw, err := json.Marshal(statusViolations)
@@ -263,14 +263,22 @@ func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *un
 	if err != nil {
 		return err
 	}
-	// update constraint status
+	// update constraint status auditTimestamp
+	unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
+	// update constraint status violations
 	if len(violations) == 0 {
-		unstructured.RemoveNestedField(instance.Object, "status", "violations")
+		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violations")
+		if err != nil {
+			return err
+		}
+		if found {
+			unstructured.RemoveNestedField(instance.Object, "status", "violations")
+			log.Info("removed status violations", "constraintName", constraintName)
+		}
 		err = am.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
-		log.Info("removed status violations")
 	} else {
 		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
 		log.Info("update constraint", "object", instance)
@@ -278,7 +286,7 @@ func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *un
 		if err != nil {
 			return err
 		}
-		log.Info("updated constraint status violations", "constraint", instance.GetName(), "count", len(violations))
+		log.Info("updated constraint status violations", "constraintName", constraintName, "count", len(violations))
 	}
 	return nil
 }
