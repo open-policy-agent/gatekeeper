@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"strings"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -33,6 +31,8 @@ const (
 
 var (
 	auditInterval = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
+	crd           = &apiextensionsv1beta1.CustomResourceDefinition{}
+	emptyAuditResults []auditResult
 )
 
 // auditManager allows us to audit resources periodically
@@ -46,6 +46,7 @@ type AuditManager struct {
 
 type auditResult struct {
 	cname       string
+	cnamespace  string
 	cgvk        schema.GroupVersionKind
 	capiversion string
 	rkind       string
@@ -62,86 +63,45 @@ func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, 
 		stopped: make(chan struct{}),
 		cfg:     cfg,
 	}
-	c, err := client.New(cfg, client.Options{Scheme: nil, Mapper: nil})
-	if err != nil {
-		return nil, err
-	}
-	am.client = c
 	go am.auditManagerLoop(ctx)
 	return am, nil
 }
 
 // audit audits resources periodically
-func (am *AuditManager) audit() error {
-	// don't audit anything until the constraintTemplate crd is in the cluster
-	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-	if err := am.client.Get(context.TODO(), types.NamespacedName{Name: crdName}, crd); err != nil {
+func (am *AuditManager) audit(ctx context.Context) error {	
+	// new client to get updated restmapper
+	c, err := client.New(am.cfg, client.Options{Scheme: nil, Mapper: nil})
+	if err != nil {
 		return err
 	}
-	resp, err := am.opa.Audit(context.TODO())
+	am.client = c
+	// don't audit anything until the constraintTemplate crd is in the cluster
+	if err := am.ensureCRDExists(ctx); err != nil {
+		log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
+		return nil
+	}
+	resp, err := am.opa.Audit(ctx)
 	if err != nil {
 		return err
 	}
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
-	dynamicClient, err := dynamic.NewForConfig(am.cfg)
-	if err != nil {
-		return err
-	}
-
+	// get updatedLists
+	updateLists := make(map[string][]auditResult)
 	if len(resp.Results()) > 0 {
-		updateLists, err := getUpdateListsFromAuditResponses(resp)
+		updateLists, err = getUpdateListsFromAuditResponses(resp)
 		if err != nil {
 			return err
-		}
-		// get all constraints kind
-		discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
-		if err != nil {
-			return err
-		}
-		rs, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
-		if err != nil {
-			return err
-		}
-		// get constraints for each kind
-		for _, r := range rs.APIResources {
-			log.Info("constraint", "resource kind", r.Kind)
-			resourceGvk := strings.Split(rs.GroupVersion, "/")
-			group := resourceGvk[0]
-			version := resourceGvk[1]
-			resourceClient := dynamicClient.Resource(schema.GroupVersionResource{Group: group, Version: version, Resource: r.Name})
-			l, err := resourceClient.List(metav1.ListOptions{})
-			if err != nil {
-				return err
-			}
-			// get and clear/reset each constraint violation if it's not currently empty
-			for _, item := range l.Items {
-				oname := item.GetName()
-				oapiVersion := item.GetAPIVersion()
-				ogvk := item.GroupVersionKind()
-				violations, found, err := unstructured.NestedSlice(item.Object, "status", "violations")
-				if err != nil {
-					return err
-				}
-				if !found || len(violations) == 0 {
-					log.Info("constraint violations is either not found or empty, skip clear", "constraint name", oname)
-				} else {
-					var emptyAuditResults []auditResult
-					err = updateConstraintStatus(dynamicClient, ogvk, oname, oapiVersion, emptyAuditResults)
-					if err != nil {
-						return err
-					}
-					log.Info("constraint violations have been cleared", "constraint name", oname)
-				}
-			}
-		}
-		// update each violated constraint
-		for selfLink := range updateLists {
-			auditResults := updateLists[selfLink]
-			aResult := auditResults[0]
-			return updateConstraintStatus(dynamicClient, aResult.cgvk, aResult.cname, aResult.capiversion, auditResults)
 		}
 	}
-	return nil
+	// get all constraints kind
+	log.Info("getting all constraints kind")
+	rs, err := am.getAllConstraintsKinds()
+	if err != nil {
+		log.Info("no constraints found with apiversion", "constraint apiversion", constraintsGV)
+		return nil
+	}
+	// update constraints for each kind
+	return am.updateConstraintsForKinds(ctx, rs, updateLists)
 }
 
 func (am *AuditManager) auditManagerLoop(ctx context.Context) {
@@ -153,7 +113,7 @@ func (am *AuditManager) auditManagerLoop(ctx context.Context) {
 			return
 		default:
 			time.Sleep(time.Duration(*auditInterval) * time.Second)
-			if err := am.audit(); err != nil {
+			if err := am.audit(ctx); err != nil {
 				log.Error(err, "audit manager audit() failed")
 			}
 		}
@@ -169,11 +129,24 @@ func (am *AuditManager) Start(stop <-chan struct{}) error {
 	return nil
 }
 
+func (am *AuditManager) ensureCRDExists(ctx context.Context) error {
+	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
+}
+
+func (am *AuditManager) getAllConstraintsKinds() (*metav1.APIResourceList, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
+	if err != nil {
+		return nil, err
+	}
+	return discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
+}
+
 func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[string][]auditResult, error) {
 	updateLists := make(map[string][]auditResult)
 
 	for _, r := range resp.Results() {
 		name := r.Constraint.GetName()
+		namespace := r.Constraint.GetNamespace()
 		apiVersion := r.Constraint.GetAPIVersion()
 		gvk := r.Constraint.GroupVersionKind()
 		selfLink := r.Constraint.GetSelfLink()
@@ -193,6 +166,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 			cgvk:        gvk,
 			capiversion: apiVersion,
 			cname:       name,
+			cnamespace:  namespace,
 			rkind:       rkind,
 			rname:       rname,
 			rnamespace:  rnamespace,
@@ -202,23 +176,73 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 	return updateLists, nil
 }
 
-func updateConstraintStatus(dynamicClient dynamic.Interface, cgvk schema.GroupVersionKind, cname string, capiversion string, auditResults []auditResult) error {
-	cresource := fmt.Sprintf("%ss", strings.ToLower(cgvk.Kind))
-	cstrClient := dynamicClient.Resource(schema.GroupVersionResource{Group: cgvk.Group, Version: cgvk.Version, Resource: cresource})
-	o, err := cstrClient.Get(cname, metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: cgvk.Kind, APIVersion: capiversion}})
-	if err != nil {
-		return err
+func (am *AuditManager) updateConstraintsForKinds (ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult) error {
+	resourceGV := strings.Split(resourceList.GroupVersion, "/")
+	group := resourceGV[0]
+	version := resourceGV[1]
+
+	// get constraints for each Kind
+	for _, r := range resourceList.APIResources {
+		log.Info("constraint", "resource kind", r.Kind)
+		constraintGvk := schema.GroupVersionKind {
+			Group: group,
+			Version: version,
+			Kind: r.Kind,
+		}
+		instanceList := &unstructured.UnstructuredList{}
+		instanceList.SetGroupVersionKind(constraintGvk)
+		log.Info("client before list")
+		err := am.client.List(ctx, &client.ListOptions{}, instanceList)
+		if err != nil {
+			return err
+		}
+		log.Info("constraint", "count of constraints", len(instanceList.Items))
+		// get each constraint
+		for _, item := range instanceList.Items {
+			oname := item.GetName()
+			// if constraint is in updatedLists, then update its violations
+			constraintAuditResults, ok := updateLists[item.GetSelfLink()]
+			// else set to empty if not empty
+			if !ok {
+				violations, found, err := unstructured.NestedSlice(item.Object, "status", "violations")
+				if err != nil {
+					return err
+				}
+				if !found || len(violations) == 0 {
+					log.Info("constraint violations is either not found or empty, skip clear", "constraint name", oname)
+				} else {
+					err = am.updateConstraintStatus(ctx, &item, emptyAuditResults)
+					if err != nil {
+						return err
+					}
+					log.Info("constraint violations have been cleared", "constraint name", oname)
+				}
+			} else {
+				aResult := constraintAuditResults[0]
+				instance := &unstructured.Unstructured{}
+				instance.SetGroupVersionKind(aResult.cgvk)
+				namespacedName := types.NamespacedName{
+					Name: aResult.cname,
+					Namespace: aResult.cnamespace,
+				}
+				// get the constraint
+				err := am.client.Get(ctx, namespacedName, instance)
+				if err != nil {
+					log.Error(err, "get constraint error", err)
+				}
+				// update the constraint
+				err = am.updateConstraintStatus(ctx, instance, constraintAuditResults)
+				if err != nil {
+					log.Error(err, "update constraint error", err)
+				}
+			}
+		}
 	}
-	val, found, err := unstructured.NestedBool(o.Object, "status", "enforced")
-	if err != nil {
-		return err
-	}
-	if !found {
-		return errors.Errorf("constraint %s status enforced not found", cname)
-	}
-	if !val {
-		return errors.Errorf("constraint %s status not enforced", cname)
-	}
+	return nil
+}
+
+func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult) error {
+	log.Info("updating constraint", "constraint name", instance.GetName())
 	// create constraint status violations
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
@@ -241,20 +265,20 @@ func updateConstraintStatus(dynamicClient dynamic.Interface, cgvk schema.GroupVe
 	}
 	// update constraint status
 	if len(violations) == 0 {
-		unstructured.RemoveNestedField(o.Object, "status", "violations")
-		_, err = cstrClient.Update(o, metav1.UpdateOptions{})
+		unstructured.RemoveNestedField(instance.Object, "status", "violations")
+		err = am.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
 		log.Info("removed status violations")
 	} else {
-		unstructured.SetNestedSlice(o.Object, violations, "status", "violations")
-		log.Info("update constraint", "object", o)
-		_, err = cstrClient.Update(o, metav1.UpdateOptions{})
+		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
+		log.Info("update constraint", "object", instance)
+		err = am.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
-		log.Info("updated constraint status violations", "count", len(violations))
+		log.Info("updated constraint status violations", "constraint", instance.GetName(), "count", len(violations))
 	}
 	return nil
 }
