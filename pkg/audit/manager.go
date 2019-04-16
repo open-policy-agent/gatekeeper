@@ -43,6 +43,7 @@ type AuditManager struct {
 	stopper chan struct{}
 	stopped chan struct{}
 	cfg     *rest.Config
+	ctx     context.Context
 }
 
 type auditResult struct {
@@ -71,8 +72,8 @@ func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, 
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
 		cfg:     cfg,
+		ctx:     ctx,
 	}
-	go am.auditManagerLoop(ctx)
 	return am, nil
 }
 
@@ -112,7 +113,7 @@ func (am *AuditManager) audit(ctx context.Context) error {
 		return nil
 	}
 	// update constraints for each kind
-	return am.updateConstraintsForKinds(ctx, rs, updateLists, timestamp)
+	return am.writeAuditResults(ctx, rs, updateLists, timestamp)
 }
 
 func (am *AuditManager) auditManagerLoop(ctx context.Context) {
@@ -134,7 +135,7 @@ func (am *AuditManager) auditManagerLoop(ctx context.Context) {
 // Start implements controller.Controller
 func (am *AuditManager) Start(stop <-chan struct{}) error {
 	log.Info("Starting Audit Manager")
-
+	go am.auditManagerLoop(am.ctx)
 	<-stop
 	log.Info("Stopping audit manager workers")
 	return nil
@@ -191,7 +192,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 	return updateLists, nil
 }
 
-func (am *AuditManager) updateConstraintsForKinds(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string) error {
+func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string) error {
 	resourceGV := strings.Split(resourceList.GroupVersion, "/")
 	group := resourceGV[0]
 	version := resourceGV[1]
@@ -214,28 +215,14 @@ func (am *AuditManager) updateConstraintsForKinds(ctx context.Context, resourceL
 		// get each constraint
 		for _, item := range instanceList.Items {
 			// if constraint is in updatedLists, then update its violations
-			constraintAuditResults, ok := updateLists[item.GetSelfLink()]
-			// else update auditTimestamp and clear violations
-			if !ok {
+			if constraintAuditResults, ok := updateLists[item.GetSelfLink()]; !ok {
 				err = am.updateConstraintStatus(ctx, &item, emptyAuditResults, timestamp)
 				if err != nil {
 					return err
 				}
 			} else {
-				aResult := constraintAuditResults[0]
-				instance := &unstructured.Unstructured{}
-				instance.SetGroupVersionKind(aResult.cgvk)
-				namespacedName := types.NamespacedName{
-					Name:      aResult.cname,
-					Namespace: aResult.cnamespace,
-				}
-				// get the constraint
-				err := am.client.Get(ctx, namespacedName, instance)
-				if err != nil {
-					log.Error(err, "get constraint error", err)
-				}
 				// update the constraint
-				err = am.updateConstraintStatus(ctx, instance, constraintAuditResults, timestamp)
+				err = am.updateConstraintStatus(ctx, &item, constraintAuditResults, timestamp)
 				if err != nil {
 					log.Error(err, "update constraint error", err)
 				}
