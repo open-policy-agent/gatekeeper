@@ -129,8 +129,8 @@ type ReconcileConfig struct {
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync)
 // update is needed for finalizers
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=sync.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=sync.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
 func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Config instance
 	if request.NamespacedName != cfgKey {
