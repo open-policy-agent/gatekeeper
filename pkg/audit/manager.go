@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +33,6 @@ const (
 var (
 	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
 	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	crd                       = &apiextensionsv1beta1.CustomResourceDefinition{}
 	emptyAuditResults         []auditResult
 )
 
@@ -44,6 +44,7 @@ type AuditManager struct {
 	stopped chan struct{}
 	cfg     *rest.Config
 	ctx     context.Context
+	ucloop  *updateConstraintLoop
 }
 
 type auditResult struct {
@@ -142,6 +143,7 @@ func (am *AuditManager) Start(stop <-chan struct{}) error {
 }
 
 func (am *AuditManager) ensureCRDExists(ctx context.Context) error {
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
 	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
@@ -203,7 +205,7 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		constraintGvk := schema.GroupVersionKind{
 			Group:   group,
 			Version: version,
-			Kind:    r.Kind,
+			Kind:    r.Kind + "List",
 		}
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
@@ -212,27 +214,36 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 			return err
 		}
 		log.Info("constraint", "count of constraints", len(instanceList.Items))
+		updateConstraints := make(map[string]unstructured.Unstructured, len(instanceList.Items))
 		// get each constraint
 		for _, item := range instanceList.Items {
-			// if constraint is in updatedLists, then update its violations
-			if constraintAuditResults, ok := updateLists[item.GetSelfLink()]; !ok {
-				err = am.updateConstraintStatus(ctx, &item, emptyAuditResults, timestamp)
-				if err != nil {
-					return err
-				}
-			} else {
-				// update the constraint
-				err = am.updateConstraintStatus(ctx, &item, constraintAuditResults, timestamp)
-				if err != nil {
-					log.Error(err, "update constraint error", err)
+			updateConstraints[item.GetSelfLink()] = item
+		}
+
+		if len(updateConstraints) > 0 {
+			if am.ucloop != nil {
+				close(am.ucloop.stop)
+				select {
+				case <-am.ucloop.stopped:
+				case <-time.After(time.Duration(*auditInterval) * time.Second):
 				}
 			}
+			am.ucloop = &updateConstraintLoop{
+				uc:      updateConstraints,
+				client:  am.client,
+				stop:    make(chan struct{}),
+				stopped: make(chan struct{}),
+				ul:      updateLists,
+				ts:      timestamp,
+			}
+			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
+			go am.ucloop.update()
 		}
 	}
 	return nil
 }
 
-func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string) error {
+func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string) error {
 	constraintName := instance.GetName()
 	log.Info("updating constraint", "constraintName", constraintName)
 	// create constraint status violations
@@ -267,14 +278,14 @@ func (am *AuditManager) updateConstraintStatus(ctx context.Context, instance *un
 			unstructured.RemoveNestedField(instance.Object, "status", "violations")
 			log.Info("removed status violations", "constraintName", constraintName)
 		}
-		err = am.client.Update(ctx, instance)
+		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
 	} else {
 		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
 		log.Info("update constraint", "object", instance)
-		err = am.client.Update(ctx, instance)
+		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
@@ -292,4 +303,58 @@ func truncateString(str string, size int) string {
 		shortenStr = str[0:size] + "..."
 	}
 	return shortenStr
+}
+
+type updateConstraintLoop struct {
+	uc      map[string]unstructured.Unstructured
+	client  client.Client
+	stop    chan struct{}
+	stopped chan struct{}
+	ul      map[string][]auditResult
+	ts      string
+}
+
+func (ucloop *updateConstraintLoop) update() {
+	defer close(ucloop.stopped)
+	updateLoop := func() (bool, error) {
+		for _, item := range ucloop.uc {
+			select {
+			case <-ucloop.stop:
+				return true, nil
+			default:
+				failure := false
+				// if constraint is in updatedLists, then update its violations
+				if constraintAuditResults, ok := ucloop.ul[item.GetSelfLink()]; !ok {
+					err := ucloop.updateConstraintStatus(context.Background(), &item, emptyAuditResults, ucloop.ts)
+					if err != nil {
+						failure = true
+						log.Error(err, "could not update constraint status", "name", item.GetName(), "namespace", item.GetNamespace())
+					}
+				} else {
+					// update the constraint
+					err := ucloop.updateConstraintStatus(context.Background(), &item, constraintAuditResults, ucloop.ts)
+					if err != nil {
+						failure = true
+						log.Error(err, "could not update constraint status", "name", item.GetName(), "namespace", item.GetNamespace())
+					}
+				}
+				if !failure {
+					delete(ucloop.uc, item.GetSelfLink())
+				}
+			}
+		}
+		if len(ucloop.uc) == 0 {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    5,
+	}, updateLoop); err != nil {
+		log.Error(err, "max retries for update", "remaining update constraints", ucloop.uc)
+	}
 }
