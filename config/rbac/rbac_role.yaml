@@ -15,7 +15,7 @@ rules:
   - update
   - patch
 - apiGroups:
-  - sync.gatekeeper.sh
+  - config.gatekeeper.sh
   resources:
   - configs
   verbs:
@@ -27,7 +27,7 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - sync.gatekeeper.sh
+  - config.gatekeeper.sh
   resources:
   - configs/status
   verbs:
