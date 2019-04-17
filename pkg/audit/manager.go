@@ -325,34 +325,36 @@ func (ucloop *updateConstraintLoop) update() {
 			default:
 				failure := false
 				ctx := context.Background()
-				name := item.GetName()
-				namespace := item.GetNamespace()
+				var latestItem unstructured.Unstructured
+				item.DeepCopyInto(&latestItem)
+				name := latestItem.GetName()
+				namespace := latestItem.GetNamespace()
 				namespacedName := types.NamespacedName{
 					Name:      name,
 					Namespace: namespace,
 				}
 				// get the latest constraint
-				err := ucloop.client.Get(ctx, namespacedName, &item)
+				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
 					failure = true
-					log.Error(err, "could not get constraint during update", "name", name, "namespace", namespace)
+					log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
 				}
-				if constraintAuditResults, ok := ucloop.ul[item.GetSelfLink()]; !ok {
-					err := ucloop.updateConstraintStatus(ctx, &item, emptyAuditResults, ucloop.ts)
+				if constraintAuditResults, ok := ucloop.ul[latestItem.GetSelfLink()]; !ok {
+					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts)
 					if err != nil {
 						failure = true
 						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				} else {
 					// update the constraint
-					err := ucloop.updateConstraintStatus(ctx, &item, constraintAuditResults, ucloop.ts)
+					err := ucloop.updateConstraintStatus(ctx, &latestItem, constraintAuditResults, ucloop.ts)
 					if err != nil {
 						failure = true
 						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				}
 				if !failure {
-					delete(ucloop.uc, item.GetSelfLink())
+					delete(ucloop.uc, latestItem.GetSelfLink())
 				}
 			}
 		}
