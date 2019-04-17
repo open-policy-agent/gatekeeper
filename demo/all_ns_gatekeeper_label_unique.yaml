@@ -1,11 +1,11 @@
 apiVersion: constraints.gatekeeper.sh/v1alpha1
-kind: K8sRequiredLabels
+kind: K8sUniqueLabel
 metadata:
-  name: ns-must-have-gk
+  name: ns-gk-label-unique
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Namespace"]
   parameters:
-    labels: ["gatekeeper"]
+    label: gatekeeper
