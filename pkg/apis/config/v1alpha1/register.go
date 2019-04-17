@@ -20,7 +20,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=github.com/open-policy-agent/gatekeeper/pkg/apis/sync
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=sync.gatekeeper.sh
+// +groupName=config.gatekeeper.sh
 package v1alpha1
 
 import (
