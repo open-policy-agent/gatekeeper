@@ -1,0 +1,58 @@
+apiVersion: templates.gatekeeper.sh/v1alpha1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniquelabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueLabel
+        listKind: K8sUniqueLabelList
+        plural: k8suniquelabels
+        singular: k8suniquelabel
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            label:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniquelabel
+
+        make_apiversion(kind) = apiVersion {
+          g := kind.group
+          v := kind.version
+          g != ""
+          apiVersion = sprintf("%v/%v", [g, v])
+        }
+
+        make_apiversion(kind) = apiVersion {
+          kind.group == ""
+          apiVersion = kind.version
+        }
+
+        identical_namespace(obj, review) {
+          obj.metadata.namespace == review.namespace
+          obj.metadata.name == review.name
+          obj.kind == review.kind.kind
+          obj.apiVersion == make_apiversion(review.kind)
+        }
+
+        identical_cluster(obj, review) {
+          obj.metadata.name == review.name
+          obj.kind == review.kind.kind
+          obj.apiVersion == make_apiversion(review.kind)
+        }
+
+        deny[{"msg": msg, "details": {"value": val, "label": label}}] {
+          label := input.constraint.spec.parameters.label
+          val := input.review.object.metadata.labels[label]
+          cluster_objs := [o | o = data.inventory.cluster[_][_][_]; not identical_cluster(o, input.review)]
+          ns_objs := [o | o = data.inventory.namespace[_][_][_][_]; not identical_namespace(o, input.review)]
+          all_objs := array.concat(cluster_objs, ns_objs)
+          all_values := {val | obj = all_objs[_]; val = obj.metadata.labels[label]}
+          count({val} - all_values) == 0
+          msg := sprintf("label %v has duplicate value %v", [label, val])
+        }
