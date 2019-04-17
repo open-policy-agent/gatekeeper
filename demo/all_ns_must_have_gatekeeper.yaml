@@ -1,5 +1,5 @@
 apiVersion: constraints.gatekeeper.sh/v1alpha1
-kind: K8sRequiredLabel
+kind: K8sRequiredLabels
 metadata:
   name: ns-must-have-gk
 spec:

@@ -6,10 +6,10 @@ spec:
   crd:
     spec:
       names:
-        kind: K8sRequiredLabel
+        kind: K8sRequiredLabels
         listKind: K8sRequiredLabelsList
         plural: k8srequiredlabels
-        singular: k8srequiredlabel
+        singular: k8srequiredlabels
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
