@@ -47,4 +47,4 @@ kubectl delete -f k8srequiredlabels_template.yaml
 kubectl delete -f no_dupe_ns.yaml
 kubectl delete -f good_ns.yaml
 kubectl delete ns no-label
-
+kubectl delete -f sync.yaml
