@@ -48,6 +48,12 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
 
+If you want to skip the long way and just quickly deploy Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
+
+  ```sh
+  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  ```
+
 ### Uninstallation
 
 Note that this is not a clean uninstall. There may be some CRDs that are not cleaned up
@@ -69,6 +75,12 @@ If Gatekeeper is no longer running, it has no ability to clean up after itself, 
    * Delete all instances of the constraint resource
    * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
    * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
+
+If you deployed Gatekeeper using a single yaml from the [Installation](#Installation) section, then after you have completed the [Cleaning Up Old Constraints](#cleaning-up-old-constraints) section, you can delete all the Gatekeeper components with the following command:
+
+  ```sh
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  ```
 
 ## How to Use Gatekeeper
 
