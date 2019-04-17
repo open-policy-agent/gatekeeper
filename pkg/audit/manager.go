@@ -66,7 +66,7 @@ type StatusViolation struct {
 	Message   string `json:"message"`
 }
 
-// New starts a new manager for audit
+// New creates a new manager for audit
 func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, error) {
 	am := &AuditManager{
 		opa:     opa,
@@ -78,7 +78,7 @@ func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, 
 	return am, nil
 }
 
-// audit audits resources periodically
+// audit performs an audit then updates the status of all constraint resources with the results
 func (am *AuditManager) audit(ctx context.Context) error {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
@@ -105,9 +105,8 @@ func (am *AuditManager) audit(ctx context.Context) error {
 			return err
 		}
 	}
-	// get all constraints kind
-	log.Info("getting all constraints kind")
-	rs, err := am.getAllConstraintsKinds()
+	// get all constraint kinds
+	rs, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
 		log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
@@ -136,7 +135,9 @@ func (am *AuditManager) auditManagerLoop(ctx context.Context) {
 // Start implements controller.Controller
 func (am *AuditManager) Start(stop <-chan struct{}) error {
 	log.Info("Starting Audit Manager")
-	go am.auditManagerLoop(am.ctx)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go am.auditManagerLoop(ctx)
 	<-stop
 	log.Info("Stopping audit manager workers")
 	return nil
@@ -147,7 +148,7 @@ func (am *AuditManager) ensureCRDExists(ctx context.Context) error {
 	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
-func (am *AuditManager) getAllConstraintsKinds() (*metav1.APIResourceList, error) {
+func (am *AuditManager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
 	if err != nil {
 		return nil, err
@@ -323,19 +324,31 @@ func (ucloop *updateConstraintLoop) update() {
 				return true, nil
 			default:
 				failure := false
-				// if constraint is in updatedLists, then update its violations
+				ctx := context.Background()
+				name := item.GetName()
+				namespace := item.GetNamespace()
+				namespacedName := types.NamespacedName{
+					Name:      name,
+					Namespace: namespace,
+				}
+				// get the latest constraint
+				err := ucloop.client.Get(ctx, namespacedName, &item)
+				if err != nil {
+					failure = true
+					log.Error(err, "could not get constraint during update", "name", name, "namespace", namespace)
+				}
 				if constraintAuditResults, ok := ucloop.ul[item.GetSelfLink()]; !ok {
-					err := ucloop.updateConstraintStatus(context.Background(), &item, emptyAuditResults, ucloop.ts)
+					err := ucloop.updateConstraintStatus(ctx, &item, emptyAuditResults, ucloop.ts)
 					if err != nil {
 						failure = true
-						log.Error(err, "could not update constraint status", "name", item.GetName(), "namespace", item.GetNamespace())
+						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				} else {
 					// update the constraint
-					err := ucloop.updateConstraintStatus(context.Background(), &item, constraintAuditResults, ucloop.ts)
+					err := ucloop.updateConstraintStatus(ctx, &item, constraintAuditResults, ucloop.ts)
 					if err != nil {
 						failure = true
-						log.Error(err, "could not update constraint status", "name", item.GetName(), "namespace", item.GetNamespace())
+						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				}
 				if !failure {
@@ -350,11 +363,11 @@ func (ucloop *updateConstraintLoop) update() {
 	}
 
 	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 5 * time.Second,
+		Duration: 1 * time.Second,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    5,
 	}, updateLoop); err != nil {
-		log.Error(err, "max retries for update", "remaining update constraints", ucloop.uc)
+		log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
 	}
 }
