@@ -4,7 +4,7 @@
 
 ## Warning: Restructing underway
 
-This is a new project that is under development.  The architecture, interfaces, and code layout are all subject to change, though the policy syntax and ConstraintTemplate spec schema should be stable enough for alpha.
+This is a new project that is under development.  The architecture, interfaces, and code layout are all subject to change. The policy syntax and ConstraintTemplate spec schema should be stable enough for alpha. For information on constraints and constraint templates, see the [How to Use Gatekeeper](#how-to-use-gatekeeper) section.
 
 If you need OPA-style admission control right now, we recommend using the [OPA Kubernetes Admission Control tutorial](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html).
 
@@ -54,12 +54,29 @@ Note that this is not a clean uninstall. There may be some CRDs that are not cle
 
    * cd to the repository directory
    * run `make uninstall`
+   
+#### Cleaning Up Old Constraints
+
+Currently the above uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate` or `Constraint` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
+
+When Gatekeeper is running it is possible to remove unwanted constraints by:
+
+   * Deleting all instances of the constraint resource
+   * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
+   
+If Gatekeeper is no longer running, it has no ability to clean up after itself, so the finalizers, CRDs and other artifacts must be removed manually:
+
+   * Delete all instances of the constraint resource
+   * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
+   * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
 
 ## How to Use Gatekeeper
 
+Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) to describe and enforce policy. Look there for more detailed information on their semantics and advanced usage.
+
 ### Constraint Templates
 
-Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the Rego that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
+Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/v0.10.7/how-do-i-write-policies/) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
 
 Here is an example constraint template that requires all labels described by the constraint to be present:
 
@@ -99,7 +116,7 @@ spec:
 
 ### Constraints
 
-Constraints are then used to inform Gatekeeper that the admin wants a ConstraintTemplate to be enforced, and how. This constraint uses the `K8sRequiredLabels` constraint above to make sure the `gatekeeper` label is defined on all namespaces:
+Constraints are then used to inform Gatekeeper that the admin wants a ConstraintTemplate to be enforced, and how. This constraint uses the `K8sRequiredLabels` constraint template above to make sure the `gatekeeper` label is defined on all namespaces:
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1alpha1
@@ -125,7 +142,11 @@ Note that if multiple matchers are specified, a resource must satisfy each top-l
 
 ### Replicating Data
 
-Kubernetes data can be replicated into OPA via the sync config. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
+Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
+
+Audit also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
+
+Kubernetes data can be replicated into OPA via the sync config resource. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
 
 ```yaml
 apiVersion: config.gatekeeper.sh/v1alpha1
@@ -144,7 +165,15 @@ spec:
         kind: "Pod"
 ```
 
-Once data is synced into OPA, rules can be written to do things like enforce that an ingress's hostname is unique among all ingresses.
+Once data is synced into OPA, rules can access the cached data under the `data.inventory` document.
+
+The `data.inventory` document has the following format:
+
+  * For cluster-scoped objects: `data.inventory.cluster[<groupVersion>][<kind>][<name>]`
+     * Example referencing the Gatekeeper namespace: `data.inventory.cluster["v1"].Namespace["gatekeeper"]`
+  * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
+     * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-0"]`
+
 
 ## Kick The Tires
 
