@@ -48,7 +48,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
 
-If you want to skip the long way and just quickly deploy Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
+If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
   ```sh
   kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
@@ -56,31 +56,34 @@ If you want to skip the long way and just quickly deploy Gatekeeper in your clus
 
 ### Uninstallation
 
-Note that this is not a clean uninstall. There may be some CRDs that are not cleaned up
+Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, `Constraint` CRDs and the `Configs` CRDs. 
+   
+#### Before Uninstall, Clean Up Old Constraints
+
+Currently the uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate`, `Constraint`, and `Config` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
+
+When Gatekeeper is running it is possible to remove unwanted constraints by:
+   * Deleting all instances of the constraint resource
+   * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
+   * Deleting the `Config` resource, which should automatically clean up the `CRD`
+
+#### Uninstall Gatekeeper
+If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
-   
-#### Cleaning Up Old Constraints
 
-Currently the above uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate` or `Constraint` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
-
-When Gatekeeper is running it is possible to remove unwanted constraints by:
-
-   * Deleting all instances of the constraint resource
-   * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
-   
-If Gatekeeper is no longer running, it has no ability to clean up after itself, so the finalizers, CRDs and other artifacts must be removed manually:
-
-   * Delete all instances of the constraint resource
-   * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
-   * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
-
-If you deployed Gatekeeper using a single yaml from the [Installation](#Installation) section, then after you have completed the [Cleaning Up Old Constraints](#cleaning-up-old-constraints) section, you can delete all the Gatekeeper components with the following command:
+If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
   kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
   ```
+
+If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
+
+   * Delete all instances of the constraint resource
+   * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
+   * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
 
 ## How to Use Gatekeeper
 
