@@ -37,6 +37,7 @@ WARNING: It is not recommended to install Gatekeeper on a production cluster. Th
 
 ### Installation
 
+#### Deploying HEAD Using make
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
    * Make sure [Kubebuilder is installed](https://book.kubebuilder.io/getting_started/installation_and_setup.html)
@@ -48,6 +49,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
 
+#### Deploying a Release using Prebuilt Image
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
   ```sh
@@ -65,20 +67,24 @@ Currently the uninstall mechanism only removes the Gatekeeper system, it does no
 When Gatekeeper is running it is possible to remove unwanted constraints by:
    * Deleting all instances of the constraint resource
    * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
-   * Deleting the `Config` resource, which should automatically clean up the `CRD`
+   * Deleting the `Config` resource removes finalizers on synced resources
 
 #### Uninstall Gatekeeper
+
+##### Using make
 If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
 
+##### Using Prebuilt Image
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
   kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
   ```
 
+##### Manually Removing Constraints
 If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
 
    * Delete all instances of the constraint resource
