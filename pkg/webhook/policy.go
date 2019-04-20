@@ -3,10 +3,12 @@ package webhook
 import (
 	"context"
 	"flag"
+	"fmt"
 	"strings"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apitypes "k8s.io/apimachinery/pkg/types"
@@ -21,6 +23,10 @@ import (
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
 }
+
+const (
+	namespace = "gatekeeper-system"
+)
 
 var log = logf.Log.WithName("webhook")
 
@@ -66,11 +72,11 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			MutatingWebhookConfigName: "gatekeeper",
 			Secret: &apitypes.NamespacedName{
-				Namespace: "gatekeeper-system",
+				Namespace: namespace,
 				Name:      "gatekeeper-webhook-server-secret",
 			},
 			Service: &webhook.Service{
-				Namespace: "gatekeeper-system",
+				Namespace: namespace,
 				Name:      "gatekeeper-controller-manager-service",
 				Selectors: map[string]string{
 					"control-plane":           "controller-manager",
@@ -103,6 +109,9 @@ type validationHandler struct {
 
 func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atypes.Response {
 	log := log.WithValues("hookType", "validation")
+	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
+		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
+	}
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
 	if err != nil {
 		log.Error(err, "error executing query")
@@ -117,4 +126,14 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		return admission.ValidationResponse(false, strings.Join(msgs, "\n"))
 	}
 	return admission.ValidationResponse(true, "")
+}
+
+func isGkServiceAccount(user authenticationv1.UserInfo) bool {
+	saGroup := fmt.Sprintf("system:serviceaccounts:%s", namespace)
+	for _, g := range user.Groups {
+		if g == saGroup {
+			return true
+		}
+	}
+	return false
 }
