@@ -36,7 +36,7 @@ var (
 	deserializer       = codecs.UniversalDeserializer()
 	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
 	port               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	webhookName        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to mutation.styra.com if unspecified ")
+	webhookName        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
 )
 
 // AddPolicyWebhook registers the policy webhook server with the manager
@@ -70,7 +70,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 
 	if *enableManualDeploy == false {
 		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
-			MutatingWebhookConfigName: "gatekeeper",
+			ValidatingWebhookConfigName: *webhookName,
 			Secret: &apitypes.NamespacedName{
 				Namespace: namespace,
 				Name:      "gatekeeper-webhook-server-secret",
