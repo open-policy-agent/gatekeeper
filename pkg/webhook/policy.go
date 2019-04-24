@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"strings"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -115,7 +117,12 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
 	if err != nil {
 		log.Error(err, "error executing query")
-		return admission.ValidationResponse(false, err.Error())
+		vResp := admission.ValidationResponse(false, err.Error())
+		if vResp.Response.Result == nil {
+			vResp.Response.Result = &metav1.Status{}
+		}
+		vResp.Response.Result.Code = http.StatusInternalServerError
+		return vResp
 	}
 	res := resp.Results()
 	if len(res) != 0 {
@@ -123,7 +130,12 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		for _, r := range res {
 			msgs = append(msgs, r.Msg)
 		}
-		return admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+		if vResp.Response.Result == nil {
+			vResp.Response.Result = &metav1.Status{}
+		}
+		vResp.Response.Result.Code = http.StatusForbidden
+		return vResp
 	}
 	return admission.ValidationResponse(true, "")
 }
