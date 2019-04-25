@@ -341,3 +341,6 @@ __pycache__/
 *.btm.cs
 *.odx.cs
 *.xsd.cs
+
+# always include vendor directory
+!/vendor/
