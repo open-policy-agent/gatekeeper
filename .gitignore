@@ -343,4 +343,4 @@ __pycache__/
 *.xsd.cs
 
 # always include vendor directory
-!/vendor/
+!/vendor/**
