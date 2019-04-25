@@ -52,7 +52,7 @@ install: manifests
 deploy: manifests
 	kubectl apply -f config/crds
 	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/config/crds
-	kustomize build config/default | kubectl apply -f -
+	kustomize build config | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
@@ -96,7 +96,7 @@ docker-push-release:  docker-tag-release
 docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager_image_patch.yaml
 
 docker-build-ci:
 	docker build . -t $(IMG) -f Dockerfile_ci
