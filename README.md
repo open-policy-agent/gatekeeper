@@ -37,7 +37,18 @@ WARNING: It is not recommended to install Gatekeeper on a production cluster. Th
 
 ### Installation
 
+#### Prerequisites
+
+For either installation method, make sure you have cluster admin permissions:
+
+```sh
+  kubectl create clusterrolebinding cluster-admin-binding \
+    --clusterrole cluster-admin \
+    --user <YOUR USER NAME>
+```
+
 #### Deploying HEAD Using make
+
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
    * Make sure [Kubebuilder is installed](https://book.kubebuilder.io/getting_started/installation_and_setup.html)
@@ -50,6 +61,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * run `make deploy`
 
 #### Deploying a Release using Prebuilt Image
+
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
   ```sh
@@ -72,12 +84,14 @@ When Gatekeeper is running it is possible to remove unwanted constraints by:
 #### Uninstall Gatekeeper
 
 ##### Using make
+
 If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
 
 ##### Using Prebuilt Image
+
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
@@ -85,6 +99,7 @@ If you used a prebuilt image to deploy Gatekeeper, then you can delete all the G
   ```
 
 ##### Manually Removing Constraints
+
 If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
 
    * Delete all instances of the constraint resource
