@@ -29,7 +29,7 @@ Kubernetes allows decoupling policy decisions from the inner workings of the API
 
 In addition to the `admission` scenario, Gatekeeper's audit functionality allows administrators to see what resources are currently violating any given policy.
 
-Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strenthening compliance efforts and preventing bad state from slowing down the organization.
+Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
 ## Installation Instructions
 
@@ -51,7 +51,7 @@ For either installation method, make sure you have cluster admin permissions:
 
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
-   * Make sure [Kubebuilder is installed](https://book.kubebuilder.io/getting_started/installation_and_setup.html)
+   * Make sure [Kubebuilder](https://book.kubebuilder.io/getting_started/installation_and_setup.html) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
    * Clone the Gatekeeper repo to your local system
    * Make sure you have a container registry you can write to that is readable by the target cluster
    * cd to the repository directory
