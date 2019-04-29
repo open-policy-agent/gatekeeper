@@ -62,14 +62,14 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 #### Deploying a Release using Prebuilt Image
 
-  If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command, substituting the url to your prebuilt image:
-  
-  ```
-  IMG=<YOUR DESIRED PREBUILT IMAGE URL>
-	cp ./config/manager/manager_image_patch.example.yaml ./config/manager/manager_image_patch.yaml
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager/manager_image_patch.yaml
+If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then first copy the following kustomize configuration patch:
+ 
+  ```sh
+  cp config/manager/manager_image_patch.example.yaml config/manager/manager_image_patch.yaml
   ```
   
+Then modify the new manager_image_patch.yaml file to point to your prebuilt image. Finally, run the following:  
+
   ```sh
   kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
   ```
