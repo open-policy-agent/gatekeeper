@@ -65,7 +65,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then first copy the following kustomize configuration patch:
  
   ```sh
-  cp config/manager/manager_image_patch.example.yaml config/manager/manager_image_patch.yaml
+  cp config/manager_image_patch_template.yaml config/manager_image_patch.yaml
   ```
   
 Then modify the new manager_image_patch.yaml file to point to your prebuilt image. Finally, run the following:  

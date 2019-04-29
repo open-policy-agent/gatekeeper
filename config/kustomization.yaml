@@ -23,7 +23,7 @@ resources:
 - manager/manager.yaml
 
 patches:
-- manager/manager_image_patch.yaml
+- manager_image_patch.yaml
 
 vars:
 - name: WEBHOOK_SECRET_NAME

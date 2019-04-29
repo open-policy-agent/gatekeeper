@@ -96,7 +96,7 @@ docker-push-release:  docker-tag-release
 docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
-	echo "#" > ./config/manager/manager_image_patch.yaml
+	echo "#" > ./config/manager_image_patch.yaml
 
 docker-build-ci:
 	docker build . -t $(IMG) -f Dockerfile_ci
