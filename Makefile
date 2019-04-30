@@ -16,6 +16,18 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION
 	-X github.com/open-policy-agent/gatekeeper/version.Timestamp=$(BUILD_TIMESTAMP) \
 	-X github.com/open-policy-agent/gatekeeper/version.Hostname=$(BUILD_HOSTNAME)"
 
+MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
+\nkind: StatefulSet\
+\nmetadata:\
+\n  name: controller-manager\
+\n  namespace: system\
+\nspec:\
+\n  template:\
+\n    spec:\
+\n      containers:\
+\n      - image: <your image file>\
+\n        name: manager"
+
 all: test manager
 
 # Run tests
@@ -96,7 +108,10 @@ docker-push-release:  docker-tag-release
 docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager_image_patch.yaml
+
+	@test -s ./config/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/manager_image_patch.yaml'
+
+	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager_image_patch.yaml
 
 docker-build-ci:
 	docker build . -t $(IMG) -f Dockerfile_ci
