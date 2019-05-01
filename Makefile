@@ -62,6 +62,7 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
+	touch -a ./config/manager_image_patch.yaml
 	kubectl apply -f config/crds
 	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/config/crds
 	kustomize build config | kubectl apply -f -
