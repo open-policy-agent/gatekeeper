@@ -174,7 +174,7 @@ func TestConstraintValidation(t *testing.T) {
 			ErrorExpected: false,
 		},
 		{
-			Name:          "Invalid Template",
+			Name:          "Invalid Constraint",
 			Template:      good_rego_template,
 			Constraint:    bad_labelselector,
 			ErrorExpected: true,
