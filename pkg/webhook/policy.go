@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -114,6 +116,20 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
 	}
+
+	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {
+		vResp := admission.ValidationResponse(false, err.Error())
+		if vResp.Response.Result == nil {
+			vResp.Response.Result = &metav1.Status{}
+		}
+		if userErr {
+			vResp.Response.Result.Code = http.StatusUnprocessableEntity
+		} else {
+			vResp.Response.Result.Code = http.StatusInternalServerError
+		}
+		return vResp
+	}
+
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
 	if err != nil {
 		log.Error(err, "error executing query")
@@ -148,4 +164,38 @@ func isGkServiceAccount(user authenticationv1.UserInfo) bool {
 		}
 	}
 	return false
+}
+
+// validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
+// validating internal resources
+func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req atypes.Request) (bool, error) {
+	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" && req.AdmissionRequest.Kind.Kind == "ConstraintTemplate" {
+		return h.validateTemplate(ctx, req)
+	}
+	if req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" {
+		return h.validateConstraint(ctx, req)
+	}
+	return false, nil
+}
+
+func (h *validationHandler) validateTemplate(ctx context.Context, req atypes.Request) (bool, error) {
+	templ := &v1alpha1.ConstraintTemplate{}
+	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, templ); err != nil {
+		return false, err
+	}
+	if _, err := h.opa.CreateCRD(ctx, templ); err != nil {
+		return true, err
+	}
+	return false, nil
+}
+
+func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.Request) (bool, error) {
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err != nil {
+		return false, err
+	}
+	if err := h.opa.ValidateConstraint(ctx, obj); err != nil {
+		return true, err
+	}
+	return false, nil
 }
