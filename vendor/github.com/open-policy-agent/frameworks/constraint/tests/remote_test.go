@@ -8,7 +8,7 @@ import (
 )
 
 func TestRemoteClientE2E(t *testing.T) {
-	d, err := remote.New(remote.URL("http://localhost:8181"), remote.Tracing(true))
+	d, err := remote.New(remote.URL("http://localhost:8181"), remote.Tracing(false))
 	if err != nil {
 		t.Fatal(err)
 	}

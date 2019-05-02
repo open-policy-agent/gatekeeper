@@ -45,6 +45,32 @@ spec:
                     type: object
                   type: array
               type: object
+            validation:
+              description: Configuration for validation
+              properties:
+                trace:
+                  description: List of requests to trace. Both "user" and "kinds"
+                    must be specified
+                  items:
+                    properties:
+                      kinds:
+                        description: Only trace requests of the following GroupVersionKind
+                        items:
+                          properties:
+                            group:
+                              type: string
+                            kind:
+                              type: string
+                            version:
+                              type: string
+                          type: object
+                        type: array
+                      user:
+                        description: Only trace requests from specified user
+                        type: string
+                    type: object
+                  type: array
+              type: object
           type: object
         status:
           properties:

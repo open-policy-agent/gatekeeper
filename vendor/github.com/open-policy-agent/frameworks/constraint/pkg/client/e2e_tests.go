@@ -342,6 +342,142 @@ deny[{"msg": "DENIED", "details": {}}] {
 		}
 		return nil
 	},
+
+	"Tracing Off": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+deny[{"msg": "DENIED", "details": {}}] {
+	"always" == "always"
+}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		cstr := newConstraint("Foo", "ph", nil)
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		rsps, err := c.Review(ctx, targetData{Name: "Sara", ForConstraint: "Foo"})
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 1 {
+			return e("Bad number of results", rsps)
+		}
+		for _, r := range rsps.ByTarget {
+			if r.Trace != nil {
+				return e("Trace dump not nil", rsps)
+			}
+		}
+		return nil
+	},
+
+	"Tracing On": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+deny[{"msg": "DENIED", "details": {}}] {
+	"always" == "always"
+}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		cstr := newConstraint("Foo", "ph", nil)
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		rsps, err := c.Review(ctx, targetData{Name: "Sara", ForConstraint: "Foo"}, Tracing(true))
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 1 {
+			return e("Bad number of results", rsps)
+		}
+		for _, r := range rsps.ByTarget {
+			if r.Trace == nil {
+				return e("Trace dump nil", rsps)
+			}
+		}
+		return nil
+	},
+
+	"Audit Tracing Enabled": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+	deny[{"msg": "DENIED", "details": {}}] {
+		"always" == "always"
+	}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		cstr := newConstraint("Foo", "ph", nil)
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		obj := &targetData{Name: "Sara", ForConstraint: "Foo"}
+		if _, err := c.AddData(ctx, obj); err != nil {
+			return errors.Wrap(err, "AddData")
+		}
+		obj2 := &targetData{Name: "Max", ForConstraint: "Foo"}
+		if _, err := c.AddData(ctx, obj2); err != nil {
+			return errors.Wrap(err, "AddDataX2")
+		}
+		rsps, err := c.Audit(ctx, Tracing(true))
+		if err != nil {
+			return errors.Wrap(err, "Audit")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 2 {
+			return e("Bad number of results", rsps)
+		}
+		for _, r := range rsps.ByTarget {
+			if r.Trace == nil {
+				return e("Trace dump nil", rsps)
+			}
+		}
+		return nil
+	},
+
+	"Audit Tracing Disabled": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+	deny[{"msg": "DENIED", "details": {}}] {
+		"always" == "always"
+	}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		cstr := newConstraint("Foo", "ph", nil)
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		obj := &targetData{Name: "Sara", ForConstraint: "Foo"}
+		if _, err := c.AddData(ctx, obj); err != nil {
+			return errors.Wrap(err, "AddData")
+		}
+		obj2 := &targetData{Name: "Max", ForConstraint: "Foo"}
+		if _, err := c.AddData(ctx, obj2); err != nil {
+			return errors.Wrap(err, "AddDataX2")
+		}
+		rsps, err := c.Audit(ctx, Tracing(false))
+		if err != nil {
+			return errors.Wrap(err, "Audit")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 2 {
+			return e("Bad number of results", rsps)
+		}
+		for _, r := range rsps.ByTarget {
+			if r.Trace != nil {
+				return e("Trace dump not nil", rsps)
+			}
+		}
+		return nil
+	},
 }
 
 // TODO: Test metadata, test idempotence, test multiple targets

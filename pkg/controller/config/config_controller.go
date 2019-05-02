@@ -51,7 +51,7 @@ const (
 	finalizerName = "finalizers.gatekeeper.sh/config"
 )
 
-var cfgKey = types.NamespacedName{Namespace: "gatekeeper-system", Name: "config"}
+var CfgKey = types.NamespacedName{Namespace: "gatekeeper-system", Name: "config"}
 var log = logf.Log.WithName("controller")
 
 type Adder struct {
@@ -133,7 +133,7 @@ type ReconcileConfig struct {
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
 func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Config instance
-	if request.NamespacedName != cfgKey {
+	if request.NamespacedName != CfgKey {
 		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
@@ -275,7 +275,7 @@ func (fc *finalizerCleanup) clean() {
 				}
 				if !failure {
 					instance := &configv1alpha1.Config{}
-					if err := fc.c.Get(context.Background(), cfgKey, instance); err != nil {
+					if err := fc.c.Get(context.Background(), CfgKey, instance); err != nil {
 						log.Info("could not retrieve config to report removed finalizer")
 					}
 					var allFinalizers []configv1alpha1.GVK

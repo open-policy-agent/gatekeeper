@@ -2,11 +2,11 @@ package client
 
 import (
 	"encoding/json"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var _ TargetHandler = &handler{}

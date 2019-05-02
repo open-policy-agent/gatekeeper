@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/rego"
 )
@@ -101,7 +102,7 @@ func TestPutModule(t *testing.T) {
 					t.Fatalf("err = \"%s\"; want nil", err)
 				}
 			}
-			res, _, err := d.eval(context.Background(), "data.hello.r[a]", nil)
+			res, _, err := d.eval(context.Background(), "data.hello.r[a]", nil, &drivers.QueryCfg{})
 			if err != nil {
 				t.Errorf("Eval error: %s", err)
 			}
@@ -195,7 +196,7 @@ func TestDeleteModule(t *testing.T) {
 						}
 					}
 				}
-				res, _, err := d.eval(context.Background(), "data.hello.r[a]", nil)
+				res, _, err := d.eval(context.Background(), "data.hello.r[a]", nil, &drivers.QueryCfg{})
 				if err != nil {
 					t.Errorf("Eval error: %s", err)
 				}
@@ -248,7 +249,7 @@ func TestPutData(t *testing.T) {
 					if (err != nil) && !tt.ErrorExpected {
 						t.Fatalf("err = \"%s\"; want nil", err)
 					}
-					res, _, err := d.eval(context.Background(), makeDataPath(k), nil)
+					res, _, err := d.eval(context.Background(), makeDataPath(k), nil, &drivers.QueryCfg{})
 					if err != nil {
 						t.Errorf("Eval error: %s", err)
 					}
@@ -332,7 +333,7 @@ func TestDeleteData(t *testing.T) {
 							if (err != nil) && !a.ErrorExpected {
 								t.Fatalf("PUT err = \"%s\"; want nil", err)
 							}
-							res, _, err := d.eval(context.Background(), makeDataPath(k), nil)
+							res, _, err := d.eval(context.Background(), makeDataPath(k), nil, &drivers.QueryCfg{})
 							if err != nil {
 								t.Errorf("Eval error: %s", err)
 							}
@@ -354,7 +355,7 @@ func TestDeleteData(t *testing.T) {
 							if b != a.ExpectedBool {
 								t.Fatalf("DeleteModule(\"%s\") = %t; want %t", k, b, a.ExpectedBool)
 							}
-							res, _, err := d.eval(context.Background(), makeDataPath(k), nil)
+							res, _, err := d.eval(context.Background(), makeDataPath(k), nil, &drivers.QueryCfg{})
 							if err != nil {
 								t.Errorf("Eval error: %s", err)
 							}
