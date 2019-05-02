@@ -225,8 +225,8 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 func (h *validationHandler) reviewRequest(ctx context.Context, req atypes.Request) (*rtypes.Responses, error) {
 	cfg, _ := h.getConfig(ctx)
 	traceEnabled := false
-OuterLoop:
-	for _, trace := range cfg.Spec.Validation.Trace {
+	dump := false
+	for _, trace := range cfg.Spec.Validation.Traces {
 		if trace.User != req.AdmissionRequest.UserInfo.Username {
 			continue
 		}
@@ -235,10 +235,10 @@ OuterLoop:
 			Version: req.AdmissionRequest.Kind.Version,
 			Kind:    req.AdmissionRequest.Kind.Kind,
 		}
-		for _, traceGvk := range trace.Kinds {
-			if gvk == traceGvk {
-				traceEnabled = true
-				break OuterLoop
+		if gvk == trace.Kind {
+			traceEnabled = true
+			if trace.Dump == "All" {
+				dump = true
 			}
 		}
 	}
@@ -246,6 +246,14 @@ OuterLoop:
 	resp, err := h.opa.Review(ctx, req.AdmissionRequest, opa.Tracing(traceEnabled))
 	if traceEnabled {
 		log.Info(resp.TraceDump())
+	}
+	if dump {
+		dump, err := h.opa.Dump(ctx)
+		if err != nil {
+			log.Error(err, "dump error")
+		} else {
+			log.Info(dump)
+		}
 	}
 	return resp, err
 }

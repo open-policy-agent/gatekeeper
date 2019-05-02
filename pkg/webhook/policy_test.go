@@ -239,15 +239,13 @@ func TestTracing(t *testing.T) {
 			Cfg: &v1alpha1.Config{
 				Spec: v1alpha1.ConfigSpec{
 					Validation: v1alpha1.Validation{
-						Trace: []v1alpha1.Trace{
+						Traces: []v1alpha1.Trace{
 							{
 								User: "test@test.com",
-								Kinds: []v1alpha1.GVK{
-									{
-										Group:   "",
-										Version: "v1",
-										Kind:    "Namespace",
-									},
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Namespace",
 								},
 							},
 						},
@@ -263,15 +261,13 @@ func TestTracing(t *testing.T) {
 			Cfg: &v1alpha1.Config{
 				Spec: v1alpha1.ConfigSpec{
 					Validation: v1alpha1.Validation{
-						Trace: []v1alpha1.Trace{
+						Traces: []v1alpha1.Trace{
 							{
 								User: "test@test.com",
-								Kinds: []v1alpha1.GVK{
-									{
-										Group:   "",
-										Version: "v1",
-										Kind:    "Pod",
-									},
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Pod",
 								},
 							},
 						},
@@ -287,15 +283,13 @@ func TestTracing(t *testing.T) {
 			Cfg: &v1alpha1.Config{
 				Spec: v1alpha1.ConfigSpec{
 					Validation: v1alpha1.Validation{
-						Trace: []v1alpha1.Trace{
+						Traces: []v1alpha1.Trace{
 							{
 								User: "test@test.com",
-								Kinds: []v1alpha1.GVK{
-									{
-										Group:   "",
-										Version: "v1",
-										Kind:    "Namespace",
-									},
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Namespace",
 								},
 							},
 						},

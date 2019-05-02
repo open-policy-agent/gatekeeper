@@ -33,14 +33,16 @@ type ConfigSpec struct {
 
 type Validation struct {
 	// List of requests to trace. Both "user" and "kinds" must be specified
-	Trace []Trace `json:"trace,omitempty"`
+	Traces []Trace `json:"traces,omitempty"`
 }
 
 type Trace struct {
-	// Only trace requests from specified user
-	User  string `json:"user,omitempty"`
+	// Only trace requests from the specified user
+	User string `json:"user,omitempty"`
 	// Only trace requests of the following GroupVersionKind
-	Kinds []GVK  `json:"kinds,omitempty"`
+	Kind GVK `json:"kind,omitempty"`
+	// Also dump the state of OPA with the trace. Set to `All` to dump everything.
+	Dump string `json:"dump,omitempty"`
 }
 
 type Sync struct {
