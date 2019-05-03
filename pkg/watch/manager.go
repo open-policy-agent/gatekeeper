@@ -233,6 +233,7 @@ func (wm *WatchManager) restartManager(kinds map[schema.GroupVersionKind]watchVi
 	if wm.started {
 		<-wm.stopped
 	}
+	wm.started = false
 
 	wm.stopper = make(chan struct{})
 	wm.stopped = make(chan struct{})
