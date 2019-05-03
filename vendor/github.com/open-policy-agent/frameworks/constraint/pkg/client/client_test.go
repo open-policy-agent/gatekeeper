@@ -15,7 +15,7 @@ import (
 )
 
 func TestClientE2E(t *testing.T) {
-	d := local.New(local.Tracing(true))
+	d := local.New()
 	p, err := NewProbe(d)
 	if err != nil {
 		t.Fatal(err)

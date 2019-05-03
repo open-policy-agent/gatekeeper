@@ -189,7 +189,7 @@ func (d *driver) DeleteData(ctx context.Context, path string) (bool, error) {
 	return true, nil
 }
 
-func (d *driver) eval(ctx context.Context, path string, input interface{}) (rego.ResultSet, *string, error) {
+func (d *driver) eval(ctx context.Context, path string, input interface{}, cfg *drivers.QueryCfg) (rego.ResultSet, *string, error) {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
 	args := []func(*rego.Rego){
@@ -198,7 +198,7 @@ func (d *driver) eval(ctx context.Context, path string, input interface{}) (rego
 		rego.Input(input),
 		rego.Query(path),
 	}
-	if d.traceEnabled {
+	if d.traceEnabled || cfg.TracingEnabled {
 		buf := topdown.NewBufferTracer()
 		args = append(args, rego.Tracer(buf))
 		rego := rego.New(args...)
@@ -213,14 +213,18 @@ func (d *driver) eval(ctx context.Context, path string, input interface{}) (rego
 	return res, nil, err
 }
 
-func (d *driver) Query(ctx context.Context, path string, input interface{}) (*types.Response, error) {
+func (d *driver) Query(ctx context.Context, path string, input interface{}, opts ...drivers.QueryOpt) (*types.Response, error) {
+	cfg := &drivers.QueryCfg{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	inp, err := json.MarshalIndent(input, "", "   ")
 	if err != nil {
 		return nil, err
 	}
 	// Add a variable binding to the path
 	path = fmt.Sprintf("data.%s[result]", path)
-	rs, trace, err := d.eval(ctx, path, input)
+	rs, trace, err := d.eval(ctx, path, input, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +255,7 @@ func (d *driver) Dump(ctx context.Context) (string, error) {
 	for k, v := range d.modules {
 		mods[k] = v.String()
 	}
-	data, _, err := d.eval(ctx, "data", nil)
+	data, _, err := d.eval(ctx, "data", nil, &drivers.QueryCfg{})
 	if err != nil {
 		return "", err
 	}

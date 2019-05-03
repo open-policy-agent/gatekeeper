@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -36,10 +37,10 @@ type Client interface {
 	Reset(context.Context) error
 
 	// Review makes sure the provided object satisfies all stored constraints
-	Review(context.Context, interface{}) (*types.Responses, error)
+	Review(context.Context, interface{}, ...QueryOpt) (*types.Responses, error)
 
 	// Audit makes sure the cached state of the system satisfies all stored constraints
-	Audit(context.Context) (*types.Responses, error)
+	Audit(context.Context, ...QueryOpt) (*types.Responses, error)
 
 	// Dump dumps the state of OPA to aid in debugging
 	Dump(context.Context) (string, error)
@@ -508,7 +509,23 @@ func (c *client) Reset(ctx context.Context) error {
 	return nil
 }
 
-func (c *client) Review(ctx context.Context, obj interface{}) (*types.Responses, error) {
+type queryCfg struct {
+	enableTracing bool
+}
+
+type QueryOpt func(*queryCfg)
+
+func Tracing(enabled bool) QueryOpt {
+	return func(cfg *queryCfg) {
+		cfg.enableTracing = enabled
+	}
+}
+
+func (c *client) Review(ctx context.Context, obj interface{}, opts ...QueryOpt) (*types.Responses, error) {
+	cfg := &queryCfg{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	responses := types.NewResponses()
 	errMap := make(ErrorMap)
 TargetLoop:
@@ -523,7 +540,7 @@ TargetLoop:
 			continue
 		}
 		input := map[string]interface{}{"review": review}
-		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].deny`, name), input)
+		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].deny`, name), input, drivers.Tracing(cfg.enableTracing))
 		if err != nil {
 			errMap[name] = err
 			continue
@@ -543,13 +560,17 @@ TargetLoop:
 	return responses, errMap
 }
 
-func (c *client) Audit(ctx context.Context) (*types.Responses, error) {
+func (c *client) Audit(ctx context.Context, opts ...QueryOpt) (*types.Responses, error) {
+	cfg := &queryCfg{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	responses := types.NewResponses()
 	errMap := make(ErrorMap)
 TargetLoop:
 	for name, target := range c.targets {
 		// Short-circuiting question applies here as well
-		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil)
+		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil, drivers.Tracing(cfg.enableTracing))
 		if err != nil {
 			errMap[name] = err
 			continue

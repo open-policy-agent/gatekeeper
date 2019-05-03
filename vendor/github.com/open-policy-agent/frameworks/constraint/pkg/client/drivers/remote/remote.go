@@ -153,12 +153,19 @@ func makeURLPath(path string) (string, error) {
 	return strings.Join(pieces, "/"), nil
 }
 
-func (d *driver) Query(ctx context.Context, path string, input interface{}) (*ctypes.Response, error) {
+func (d *driver) Query(ctx context.Context, path string, input interface{}, opts ...drivers.QueryOpt) (*ctypes.Response, error) {
+	cfg := &drivers.QueryCfg{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	path, err := makeURLPath(path)
 	if err != nil {
 		return nil, err
 	}
-	response, err := d.opa.Query(d.addTrace(path), input)
+	if d.traceEnabled || cfg.TracingEnabled {
+		path = d.addTrace(path)
+	}
+	response, err := d.opa.Query(path, input)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +179,7 @@ func (d *driver) Query(ctx context.Context, path string, input interface{}) (*ct
 	}
 	resp := &ctypes.Response{Results: results}
 
-	if d.traceEnabled && response.Explanation != nil {
+	if (d.traceEnabled || cfg.TracingEnabled) && response.Explanation != nil {
 		var t interface{}
 		if err := json.Unmarshal(response.Explanation, &t); err != nil {
 			return nil, err

@@ -45,6 +45,34 @@ spec:
                     type: object
                   type: array
               type: object
+            validation:
+              description: Configuration for validation
+              properties:
+                traces:
+                  description: List of requests to trace. Both "user" and "kinds"
+                    must be specified
+                  items:
+                    properties:
+                      dump:
+                        description: Also dump the state of OPA with the trace. Set
+                          to `All` to dump everything.
+                        type: string
+                      kind:
+                        description: Only trace requests of the following GroupVersionKind
+                        properties:
+                          group:
+                            type: string
+                          kind:
+                            type: string
+                          version:
+                            type: string
+                        type: object
+                      user:
+                        description: Only trace requests from the specified user
+                        type: string
+                    type: object
+                  type: array
+              type: object
           type: object
         status:
           properties:

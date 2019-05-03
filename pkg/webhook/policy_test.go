@@ -5,11 +5,13 @@ import (
 	"testing"
 
 	"github.com/ghodss/yaml"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	templv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
@@ -97,7 +99,7 @@ spec:
 
 func makeOpaClient() (client.Client, error) {
 	target := &target.K8sValidationTarget{}
-	driver := local.New(local.Tracing(true))
+	driver := local.New(local.Tracing(false))
 	backend, err := client.NewBackend(client.Driver(driver))
 	if err != nil {
 		return nil, err
@@ -186,7 +188,7 @@ func TestConstraintValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			cstr := &v1alpha1.ConstraintTemplate{}
+			cstr := &templv1alpha1.ConstraintTemplate{}
 			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
 				t.Fatalf("Could not instantiate template: %s", err)
 			}
@@ -216,6 +218,130 @@ func TestConstraintValidation(t *testing.T) {
 			}
 			if err == nil && tt.ErrorExpected {
 				t.Error("err = nil; want non-nil")
+			}
+		})
+	}
+}
+
+func TestTracing(t *testing.T) {
+	tc := []struct {
+		Name          string
+		Template      string
+		User          string
+		TraceExpected bool
+		Cfg           *v1alpha1.Config
+	}{
+		{
+			Name:          "Valid Trace",
+			Template:      good_rego_template,
+			TraceExpected: true,
+			User:          "test@test.com",
+			Cfg: &v1alpha1.Config{
+				Spec: v1alpha1.ConfigSpec{
+					Validation: v1alpha1.Validation{
+						Traces: []v1alpha1.Trace{
+							{
+								User: "test@test.com",
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Namespace",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:          "Wrong Kind",
+			Template:      good_rego_template,
+			TraceExpected: false,
+			User:          "test@test.com",
+			Cfg: &v1alpha1.Config{
+				Spec: v1alpha1.ConfigSpec{
+					Validation: v1alpha1.Validation{
+						Traces: []v1alpha1.Trace{
+							{
+								User: "test@test.com",
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Pod",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:          "Wrong User",
+			Template:      good_rego_template,
+			TraceExpected: false,
+			User:          "other@test.com",
+			Cfg: &v1alpha1.Config{
+				Spec: v1alpha1.ConfigSpec{
+					Validation: v1alpha1.Validation{
+						Traces: []v1alpha1.Trace{
+							{
+								User: "test@test.com",
+								Kind: v1alpha1.GVK{
+									Group:   "",
+									Version: "v1",
+									Kind:    "Namespace",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			opa, err := makeOpaClient()
+			if err != nil {
+				t.Fatalf("Could not initialize OPA: %s", err)
+			}
+			cstr := &templv1alpha1.ConstraintTemplate{}
+			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
+				t.Fatalf("Could not instantiate template: %s", err)
+			}
+			if _, err := opa.AddTemplate(context.Background(), cstr); err != nil {
+				t.Fatalf("Could not add template: %s", err)
+			}
+			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg}
+			if err != nil {
+				t.Fatalf("Error parsing yaml: %s", err)
+			}
+			review := atypes.Request{
+				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Namespace",
+					},
+					Object: runtime.RawExtension{
+						Raw: []byte(`{"apiVersion": "v1", "kind": "Namespace"}`),
+					},
+					UserInfo: authenticationv1.UserInfo{
+						Username: tt.User,
+					},
+				},
+			}
+			resp, err := handler.reviewRequest(context.Background(), review)
+			if err != nil {
+				t.Errorf("Unexpected error: %s", err)
+			}
+			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			for _, r := range resp.ByTarget {
+				if r.Trace == nil && tt.TraceExpected {
+					t.Error("No trace when a trace is expected")
+				}
+				if r.Trace != nil && !tt.TraceExpected {
+					t.Error("Trace when no trace is expected")
+				}
 			}
 		})
 	}

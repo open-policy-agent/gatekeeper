@@ -26,6 +26,23 @@ type ConfigSpec struct {
 
 	// Configuration for syncing k8s objects
 	Sync Sync `json:"sync,omitempty"`
+
+	// Configuration for validation
+	Validation Validation `json:"validation,omitempty"`
+}
+
+type Validation struct {
+	// List of requests to trace. Both "user" and "kinds" must be specified
+	Traces []Trace `json:"traces,omitempty"`
+}
+
+type Trace struct {
+	// Only trace requests from the specified user
+	User string `json:"user,omitempty"`
+	// Only trace requests of the following GroupVersionKind
+	Kind GVK `json:"kind,omitempty"`
+	// Also dump the state of OPA with the trace. Set to `All` to dump everything.
+	Dump string `json:"dump,omitempty"`
 }
 
 type Sync struct {

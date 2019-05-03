@@ -2,20 +2,25 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	templv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	apitypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -60,7 +65,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 				Resources:   []string{"*"},
 			},
 		}).
-		Handlers(&validationHandler{opa: opa}).
+		Handlers(&validationHandler{opa: opa, client: mgr.GetClient()}).
 		WithManager(mgr).
 		Build()
 	if err != nil {
@@ -75,7 +80,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 	if *enableManualDeploy == false {
 		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			ValidatingWebhookConfigName: *webhookName,
-			Secret: &apitypes.NamespacedName{
+			Secret: &types.NamespacedName{
 				Namespace: namespace,
 				Name:      "gatekeeper-webhook-server-secret",
 			},
@@ -108,9 +113,14 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
-	opa opa.Client
+	opa    opa.Client
+	client client.Client
+
+	// for testing
+	injectedConfig *v1alpha1.Config
 }
 
+// Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atypes.Response {
 	log := log.WithValues("hookType", "validation")
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
@@ -130,7 +140,7 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		return vResp
 	}
 
-	resp, err := h.opa.Review(ctx, req.AdmissionRequest)
+	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {
 		log.Error(err, "error executing query")
 		vResp := admission.ValidationResponse(false, err.Error())
@@ -156,6 +166,17 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	return admission.ValidationResponse(true, "")
 }
 
+func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error) {
+	if h.injectedConfig != nil {
+		return h.injectedConfig, nil
+	}
+	if h.client == nil {
+		return nil, errors.New("no client available to retrieve validation config")
+	}
+	cfg := &v1alpha1.Config{}
+	return cfg, h.client.Get(ctx, config.CfgKey, cfg)
+}
+
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
 	saGroup := fmt.Sprintf("system:serviceaccounts:%s", namespace)
 	for _, g := range user.Groups {
@@ -179,7 +200,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 }
 
 func (h *validationHandler) validateTemplate(ctx context.Context, req atypes.Request) (bool, error) {
-	templ := &v1alpha1.ConstraintTemplate{}
+	templ := &templv1alpha1.ConstraintTemplate{}
 	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, templ); err != nil {
 		return false, err
 	}
@@ -198,4 +219,41 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 		return true, err
 	}
 	return false, nil
+}
+
+// traceSwitch returns true if a request should be traced
+func (h *validationHandler) reviewRequest(ctx context.Context, req atypes.Request) (*rtypes.Responses, error) {
+	cfg, _ := h.getConfig(ctx)
+	traceEnabled := false
+	dump := false
+	for _, trace := range cfg.Spec.Validation.Traces {
+		if trace.User != req.AdmissionRequest.UserInfo.Username {
+			continue
+		}
+		gvk := v1alpha1.GVK{
+			Group:   req.AdmissionRequest.Kind.Group,
+			Version: req.AdmissionRequest.Kind.Version,
+			Kind:    req.AdmissionRequest.Kind.Kind,
+		}
+		if gvk == trace.Kind {
+			traceEnabled = true
+			if trace.Dump == "All" {
+				dump = true
+			}
+		}
+	}
+
+	resp, err := h.opa.Review(ctx, req.AdmissionRequest, opa.Tracing(traceEnabled))
+	if traceEnabled {
+		log.Info(resp.TraceDump())
+	}
+	if dump {
+		dump, err := h.opa.Dump(ctx)
+		if err != nil {
+			log.Error(err, "dump error")
+		} else {
+			log.Info(dump)
+		}
+	}
+	return resp, err
 }
