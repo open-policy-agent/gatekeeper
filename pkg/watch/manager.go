@@ -110,7 +110,7 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	if err != nil {
 		return false, errp.Wrap(err, "error gathering watch changes, not restarting watch manager")
 	}
-	if len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
+	if wm.started == true && len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
 		return false, nil
 	}
 	var a, r, c []string
@@ -170,10 +170,7 @@ func (wm *WatchManager) updateManagerLoop(ctx context.Context) {
 			return
 		default:
 			time.Sleep(5 * time.Second)
-			if wm.paused {
-				continue
-			}
-			if _, err := wm.updateManager(); err != nil {
+			if _, err := wm.updateOrPause(); err != nil {
 				log.Error(err, "error in updateManagerLoop")
 			}
 		}
@@ -182,15 +179,14 @@ func (wm *WatchManager) updateManagerLoop(ctx context.Context) {
 
 // updateOrPause() wraps the update function, allowing us to check if the manager is paused in
 // a thread-safe manner
-func (wm *WatchManager) updateOrPause() {
+func (wm *WatchManager) updateOrPause() (bool, error) {
 	wm.startedMux.Lock()
 	defer wm.startedMux.Unlock()
 	if wm.paused {
 		log.Info("update manager is paused")
+		return false, nil
 	}
-	if _, err := wm.updateManager(); err != nil {
-		log.Error(err, "error in updateManagerLoop")
-	}
+	return wm.updateManager()
 }
 
 // Pause the manager to prevent syncing while other things are happening, such as wiping
@@ -208,7 +204,6 @@ func (wm *WatchManager) Pause() error {
 		}
 	}
 	wm.paused = true
-	wm.started = false
 	return nil
 }
 
@@ -249,18 +244,19 @@ func (wm *WatchManager) restartManager(kinds map[schema.GroupVersionKind]watchVi
 		}
 	}
 
-	wm.started = true
-	go startMgr(mgr, wm.stopper, wm.stopped, kindStr)
+	go wm.startMgr(mgr, wm.stopper, wm.stopped, kindStr)
 	return nil
 }
 
-func startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
+func (wm *WatchManager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
 	log.Info("Calling Manager.Start()", "kinds", kinds)
+	wm.started = true
 	if err := mgr.Start(stopper); err != nil {
 		log.Error(err, "error starting watch manager")
 	}
 	// mgr.Start() only returns after the manager has completely stopped
 	close(stopped)
+	wm.started = false
 	log.Info("sub-manager exiting", "kinds", kinds)
 }
 

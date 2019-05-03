@@ -234,6 +234,11 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		found := &apiextensionsv1beta1.CustomResourceDefinition{}
 		if err := r.Get(context.Background(), types.NamespacedName{Name: name, Namespace: namespace}, found); err == nil {
 			log.Info("child constraint CRD has not yet been deleted, waiting")
+			// The following allows the controller to recover from a finalizer deadlock that occurs while
+			// the controller is offline
+			if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{Requeue: true}, nil
 		} else if err != nil && !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
