@@ -23,7 +23,7 @@ p "Five weeks go by. Developer moves on to another project. \"advanced-transacti
 read
 p "Our intrepid admin finds it. \"What is advanced-transaction-system? Do we use it?\""
 read
-p "They go on a 3 day quest across many departments..."
+p "They go on a three day quest across many departments..."
 read
 p "Only to find the project was scrapped."
 read

@@ -104,6 +104,13 @@ spec:
           mem_multiple(suffix)
         }
 
+        get_suffix(mem) = suffix {
+          is_string(mem)
+          not substring(mem, count(mem) - 1, -1)
+          not substring(mem, count(mem) - 2, -1)
+          suffix := ""
+        }
+
         canonify_mem(orig) = new {
           is_number(orig)
           new := orig
