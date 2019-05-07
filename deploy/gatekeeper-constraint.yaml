@@ -189,7 +189,7 @@ spec:
               fieldPath: metadata.namespace
         - name: SECRET_NAME
           value: gatekeeper-webhook-server-secret
-        image: quay.io/open-policy-agent/gatekeeper:v3.0.0
+        image: quay.io/open-policy-agent/gatekeeper:v3.0.1
         imagePullPolicy: Always
         ports:
         - containerPort: 443
