@@ -16,14 +16,38 @@ limitations under the License.
 package controller
 
 import (
+	"context"
+
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
+
+type Injector interface {
+	InjectOpa(opa.Client)
+	InjectWatchManager(*watch.WatchManager)
+	Add(mgr manager.Manager) error
+}
+
+// Injectors is a list of adder structs that need injection. We can convert this
+// to an interface once we create controllers for things like data sync
+var Injectors []Injector
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager) error {
+func AddToManager(m manager.Manager, client opa.Client) error {
+
+	wm := watch.New(context.Background(), m.GetConfig())
+
+	for _, a := range Injectors {
+		a.InjectOpa(client)
+		a.InjectWatchManager(wm)
+		if err := a.Add(m); err != nil {
+			return err
+		}
+	}
 	for _, f := range AddToManagerFuncs {
 		if err := f(m); err != nil {
 			return err

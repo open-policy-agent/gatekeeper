@@ -3,8 +3,8 @@
 cd "${0%/*}"
 
 #set -e
-echo "Delete Kubernetes-policy-controller webhook config"
+echo "Delete gatekeeper webhook config"
 
 read -p "Press enter to continue"
 
-kubectl delete mutatingwebhookconfiguration kpc
+kubectl delete mutatingwebhookconfiguration gatekeeper

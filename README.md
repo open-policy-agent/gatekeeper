@@ -1,30 +1,15 @@
-# kubernetes-policy-controller
+# Gatekeeper
 
-Every organization has some rules. Some of these are essential to meet governance, and legal requirements and other are based on learning from past experience and not repeating the same mistakes. These decisions cannot tolerate human response time as they need near a real-time action. Services that are policy enabled to make the organization agile and are essential for long-term success as they are more adaptable as violations and conflicts can be discovered consistently as they are not prone to human error. 
+[![Build Status](https://travis-ci.org/open-policy-agent/gatekeeper.svg?branch=master)](https://travis-ci.org/open-policy-agent/gatekeeper) [![Docker Repository on Quay](https://quay.io/repository/open-policy-agent/gatekeeper/status "Docker Repository on Quay")](https://quay.io/repository/open-policy-agent/gatekeeper)
 
-Kubernetes allows decoupling complex logic such as policy decisions from the inner working of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/). This webhooks are executed whenever a resource is created, updated or deleted and can be used to implement complex custom logic. `kubernetes-policy-controller` is a mutating and a validating webhook that gets called for matching Kubernetes API server requests by the admission controller. Kubernetes also has another extension mechanism for general authorization decisions (not necessarily related to resources) which is called [authorization modules](https://kubernetes.io/docs/reference/access-authn-authz/authorization/). Usually, just the RBAC authorization module is used, but with `kubernetes-policy-controller` it's possible to implement a blacklist in front of RBAC. The `kubernetes-policy-controller` uses Open Policy Agent ([OPA](https://github.com/open-policy-agent/opa)), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
+## Warning: Restructing underway
 
-Kubernetes compliance is enforced at the “runtime” via tools such as network policy and pod security policy. [kubernetes-policy-controller](https://github.com/Azure/kubernetes-policy-controller) extends the compliance enforcement at “create” event not at “run“ event. For example, a kubernetes service could answer questions like :
+This is a new project that is under development.  The architecture, interfaces, and code layout are all subject to change. The policy syntax and ConstraintTemplate spec schema should be stable enough for alpha. For information on constraints and constraint templates, see the [How to Use Gatekeeper](#how-to-use-gatekeeper) section.
 
-* Can we whitelist / blacklist registries.
-* Not allow conflicting hosts for ingresses.
-* Label objects based on a user from a department.
+If you need OPA-style admission control right now, we recommend using the [OPA Kubernetes Admission Control tutorial](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html).
 
-In addition to the `admission` scenario  it helps answer the `audit` question such as:
-
-* What are the policies that my cluster is violating.
-
-In the `authorization` scenario it's possible to block things like `kubectl get`, `kubectl port-forward` or even non-resource requests (all authorized request can be blocked).  
-
-## Status
-
-This is a new project and is in alpha state. The way policies are
-structured is likely to change in the near future. If you want to kick
-the tires, see [Kubernetes Admission Control](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html)
-tutorial on openpolicyagent.org. The planned policy structure for this
-project will more closely resemble examples in that tutorial.
-
-## Want to get involved?
+## Want to help?
+Join us to help define the direction and implementation of this project!
 
 - Join the [`#kubernetes-policy`](https://openpolicyagent.slack.com/messages/CDTN970AX)
   channel on [OPA Slack](https://slack.openpolicyagent.org/).
@@ -32,330 +17,200 @@ project will more closely resemble examples in that tutorial.
 - Join [weekly meetings](https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)
   to discuss development, issues, use cases, etc.
 
-- Use [GitHub Issues](https://github.com/open-policy-agent/kubernetes-policy-controller/issues)
+- Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
-## Using kubernetes-policy-controller
 
-## 1. Deployment
+## Goals
 
-Access to a Kubernetes cluster with "cluster-admin" permission is the only prerequisite.
+Every organization has policies. Some are essential to meet governance and legal requirements. Others help ensure adherance to best practices and institutional conventions. Attempting to ensure compliance manually would be error-prone and frustrating. Automating policy enforcement ensures consistency, lowers development latency through immediate feedback, and helps with agility by allowing developers to operate independently without sacrificing compliance.
 
-Deploy `kubernetes-policy-controller`:
+Kubernetes allows decoupling policy decisions from the inner workings of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/), which are executed whenever a resource is created, updated or deleted. Gatekeeper is a validating (mutating TBA) webhook that enforces CRD-based policies executed by [Open Policy Agent](https://github.com/open-policy-agent/opa), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
 
-```bash
-./deploy/deploy-all.sh
+In addition to the `admission` scenario, Gatekeeper's audit functionality allows administrators to see what resources are currently violating any given policy.
+
+Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
+
+## Installation Instructions
+
+WARNING: It is not recommended to install Gatekeeper on a production cluster. The project is in alpha and may or may not uninstall cleanly.
+
+### Installation
+
+#### Prerequisites
+
+For either installation method, make sure you have cluster admin permissions:
+
+```sh
+  kubectl create clusterrolebinding cluster-admin-binding \
+    --clusterrole cluster-admin \
+    --user <YOUR USER NAME>
 ```
 
-Deploy sample policies:
+#### Deploying HEAD Using make
 
-```bash
-./deploy/deploy-admission-policy.sh
+Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
+
+   * Make sure [Kubebuilder](https://book.kubebuilder.io/getting_started/installation_and_setup.html) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
+   * Clone the Gatekeeper repo to your local system
+   * Make sure you have a container registry you can write to that is readable by the target cluster
+   * cd to the repository directory
+   * run `make docker-build REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
+   * run `make docker-push-release REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
+   * make sure your kubectl context is set to the desired installation cluster
+   * run `make deploy`
+
+#### Deploying a Release using Prebuilt Image
+
+If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
+
+  ```sh
+  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  ```
+
+### Uninstallation
+
+Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, `Constraint` CRDs and the `Configs` CRDs. 
+   
+#### Before Uninstall, Clean Up Old Constraints
+
+Currently the uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate`, `Constraint`, and `Config` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
+
+When Gatekeeper is running it is possible to remove unwanted constraints by:
+   * Deleting all instances of the constraint resource
+   * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
+   * Deleting the `Config` resource removes finalizers on synced resources
+
+#### Uninstall Gatekeeper
+
+##### Using make
+
+If you used `make` to deploy, then run the following to uninstall Gatekeeper:
+
+   * cd to the repository directory
+   * run `make uninstall`
+
+##### Using Prebuilt Image
+
+If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
+
+  ```sh
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  ```
+
+##### Manually Removing Constraints
+
+If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
+
+   * Delete all instances of the constraint resource
+   * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
+   * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
+
+## How to Use Gatekeeper
+
+Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) to describe and enforce policy. Look there for more detailed information on their semantics and advanced usage.
+
+### Constraint Templates
+
+Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/v0.10.7/how-do-i-write-policies/) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
+
+Here is an example constraint template that requires all labels described by the constraint to be present:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1alpha1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+        listKind: K8sRequiredLabelsList
+        plural: k8srequiredlabels
+        singular: k8srequiredlabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            labels:
+              type: array
+              items: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        deny[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.constraint.spec.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
 ```
 
-## 2. Scenarios
+### Constraints
 
-There are two scenarios of the policy engine namely Validation and Mutation
+Constraints are then used to inform Gatekeeper that the admin wants a ConstraintTemplate to be enforced, and how. This constraint uses the `K8sRequiredLabels` constraint template above to make sure the `gatekeeper` label is defined on all namespaces:
 
-* Validation: "all resources R in namespace N are taged with annotation A"
-* Mutation: "before a resource R in namespace N is created tag it with tag T"  
-
-### 2.1 `validation` scenario
-
-Load the policy as a ConfigMap:
-
-```bash
-kubectl create configmap example -n kpc-system --from-file ./policy/admission/ingress-host-fqdn.rego
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sRequiredLabels
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    labels: ["gatekeeper"]
 ```
 
-```bash
-kubectl create ns qa
+Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
+
+   * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+   * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
+   * `labelSelector` is a standard Kubernetes label selector.
+
+Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything).
+
+### Replicating Data
+
+Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
+
+Audit also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
+
+Kubernetes data can be replicated into OPA via the sync config resource. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
+      - group: ""
+        version: "v1"
+        kind: "Pod"
 ```
 
-The following call should fail with policy:
+Once data is synced into OPA, rules can access the cached data under the `data.inventory` document.
 
-```bash
-kubectl -n qa apply -f ./demo/ingress-bad.yaml
-```
+The `data.inventory` document has the following format:
 
-### 2.2 `mutation` scenario
+  * For cluster-scoped objects: `data.inventory.cluster[<groupVersion>][<kind>][<name>]`
+     * Example referencing the Gatekeeper namespace: `data.inventory.cluster["v1"].Namespace["gatekeeper"]`
+  * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
+     * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-0"]`
 
-This policy will mutate resources that define an annotation with the key `"test-mutation"`. The resouces will be updated to include the annotation `"foo": "bar"`.
 
-Load the policy as a ConfigMap:
+## Kick The Tires
 
-```bash
-kubectl create configmap -n kpc-system example2 --from-file ./policy/admission/annotate.rego
-```
-
-First create a Deployment:
-
-```bash
-kubectl run nginx --image nginx
-```
-
-Check that the Deployment was not mutated:
-
-```bash
-kubectl get deployment nginx -o json | jq '.metadata'
-```
-
-Annotate the Deployment to indicate that it should be mutated:
-
-```bash
-kubectl annotate deployment nginx test-mutation=true
-```
-
-Check that the Deployment was mutated:
-
-```bash
-kubectl get deployment nginx -o json | jq '.metadata'
-```
-
-### 2.3 `authorization` scenario
-
-`kubernetes-policy-controller` must be deployed in combination with OPA. In this scenario, `kubenetes-policy-controller` cannot be deployed via the usual mechanisms because the APIServer relies on it for every request. Afaik, the only viable scenario is to deploy it via static pod manifest on all master nodes. The following steps are necessary to configure `kubernetes-policy-controller` as authorization module webhook.
-
-1. Add the authorization module to the APIServer via flag, e.g.: `--authorization-mode=Node,Webhook,RBAC`
-1. Configure a webhook config file which is used by the APIServer to call the webhook, e.g.: `--authorization-webhook-config-file=/etc/kubernetes/kubernetes-policy-controller.kubeconfig`. See example file content [here](./deploy/kubernetes-policy-controller.kubeconfig)
-1. Deploy the policy-controller via static pod manifest. Place e.g. the following file in `/etc/kubernetes/manifests/`. See example file content [here](./deploy/kubernetes-policy-controller.yaml). In this case no `kube-mgmt` container is deployed, because this would lead to an circular dependency. In this case the policies are stored in the folder `/etc/kubernetes/policy` on the master node. Alternatively, they could be deployed via shared volume and an `initContainer`.
-   1. To avoid dependencies on the Kubernetes API Server use the flag `--authorization-mode=true`
-1. Deploy some of the policies stored under [policy/authorization](./policy/authorization). There are examples for:
-   1. Blocking create/update/delete on Calico CRDs
-   1. Namespace-based blocking of the usage of `privileged` PodSecurityPolicy
-   1. Blocking access to StorageClass `cinder`
-   1. Blocking create/update/delete on ValidatingWebhookConfigurations & MutatingWebhookConfigurations (which isn't possible via ValidatingWebhooks & MutatingWebhooks)
-   1. Blocking `exec` and `cp` on Pods in kube-system
-
-*Note* This authorization modules are never called for users with group `system:masters` 
-
-## create-policy
-
-### policy language
-
-The `kubernetes-policy-controller` uses OPA as the policy engine. OPA provides a high-level declarative language for authoring policies and simple APIs to answer policy queries.
-Policy rules are created as a rego files. 
-
-### package admission
-
-`kubernetes-policy-controller` defines a special package name `admission` which is used to logically execute all the `admission` rules.
-So any `admission` rule defined should be part of this package.
-
-```go
-package admission
-```
-
-### deny rule
-
-Each violation of a policy is a `deny` rule. So all we need to capture is all `deny` matches in order to validate.  
-In the `admission` package any validation rule should be defined as special name called `deny`. In order to understand the basic idea lets consider a case where we want to create a rule which will block all API server requests i.e fail validation of all requests. The following models an always `deny` event
-
-```go
-package admission
-
-deny[{
-    "type": "always",
-    "resource": {"kind": kind, "namespace": namespace, "name": name},
-    "resolution": {"message": "test always violate"},
-}] {
-    true
-}
-```
-
-### matches[[kind, namespace, name, matched_resource_output]]  
-
-When defining a deny rule, you must find Kubernetes resources that match specific criteria, such as Ingress resources in a particular namespace. `kubernetes-policy-controller` provides the matches functionality by importing `data.kubernetes.matches`.
-
-```go
-import data.kubernetes.matches
-```
-
-Here are some examples of how matching can be used:
-
-* Find matching Ingress resources  
-
-```go
-import data.kubernetes.matches
-
-matches[["ingress", namespace, name, matched_ingress]]
-```
-
-* Find matching "ingress" resources in "production" namespace
-
-```go
-import data.kubernetes.matches
-
-matches[["ingress", "production", name, matched_ingress]]
-```
-
-* Find matching "ingress" resources in "production" namespace with name "my-ingress"
-
-```go
-import data.kubernetes.matches
-
-matches[["ingress", "production", "my-ingress", matched_ingress]]
-```
-
-#### Example Policy: Unique Ingress Hostnames
-
-Here is an example of a policy which validates that Ingress hostnames must be unique across Namespaces. This policy shows how you can express a pair-wise search. In this case, there is a violation if any two ingresses in different namespaces have the same hostname. Note, you can query OPA to determine whether a single Ingress violates the policy (in which case the cost is linear with the # of Ingresses) or you can query for the set of all Ingresses that violate the policy (in which case the cost is (# of Ingresses)^2.).
-Author : [Torrin Sandall](https://github.com/tsandall)
-
-```go
-package admission
-
-import data.kubernetes.matches
-
-deny[{
-    "id": "ingress-conflict",
-    "resource": {"kind": "ingresses", "namespace": namespace, "name": name},
-    "resolution": {"message": "ingress host conflicts with an existing ingress"},
-}] {
-    matches[["ingresses", namespace, name, matched_ingress]]
-    matches[["ingresses", other_ns, other_name, other_ingress]]
-    namespace != other_ns
-    other_ingress.spec.rules[_].host == matched_ingress.spec.rules[_].host
-}
-
-```
-
-#### Example Policy: Container image name from Registry
-
-Below is an example of Container image name check if it matches of the whitelisted patterns e.g. should be from a organization registry.
-
-```go
-package admission
-
-import data.k8s.matches
-
-###############################################################################
-#
-# Policy : Container image name check if it matches of the whitelisted patterns
-# e.g. should be from a organization registry. 
-#
-###############################################################################
-deny[{
-    "id": "container-image-whitelist",          # identifies type of violation
-    "resource": {
-        "kind": "pods",                 # identifies kind of resource
-        "namespace": namespace,         # identifies namespace of resource
-        "name": name                    # identifies name of resource
-    },
-    "resolution": {"message": msg},     # provides human-readable message to display
-}] {
-    matches[["pods", namespace, name, matched_pod]]
-    container = matched_pod.spec.containers[_]
-    not re_match("^registry.acmecorp.com/.+$", container.image)
-    msg := sprintf("invalid container registry image %q", [container.image])
-}
-```
-
-### patches resolution
-
-Patches field allows mutation of objects.
-
-#### Example patch
-
-```js
-package admission
-
-import data.k8s.matches
-
-##############################################################################
-#
-# Policy : Construct JSON Patch for annotating boject with foo=bar if it is
-# annotated with "test-mutation"
-#
-##############################################################################
-
-deny[{
-    "id": "conditional-annotation",
-    "resource": {"kind": kind, "namespace": namespace, "name": name},
-    "resolution": {"patches":  p, "message" : "conditional annotation"},
-}] {
-    matches[[kind, namespace, name, matched_object]]
-    matched_object.metadata.annotations["test-mutation"]
-    p = [{"op": "add", "path": "/metadata/annotations/foo", "value": "bar"}]
-}
-```
-
-### package authorization
-
-`kubernetes-policy-controller` defines a special package name `authorization` which is used to logically execute all the `authorization` rules.
-So any `authorization` rule defined should be part of this package.
-
-```go
-package authorization
-```
-
-#### Example
-
-Similar to the validation example above, authorization rules deny requests when they are matched. In contrast to `admission` rules, for `authorization` 
-rules the whole `SubjectAccesReview` request is send to OPA. So now we're able to deny requests on all available attributes of a `SubjectAccessReview`.
-
-```go
-package authorization
-
-##############################################################################
-#
-# Policy : Denys all create/update/delete requests to resources in the group 
-# crd.projectcalico.org, except for users calico, system:kube-controller-manager
-# and system:kube-scheduler
-#
-##############################################################################
-
-deny[{
-	"id": "crds-resources",
-	"resource": {"kind": kind, "namespace": namespace, "name": name},
-	"resolution": {"message": "Your're not allowed to create/update/delete resources of the group 'crd.projectcalico.org'"},
-}] {
-	matches[[kind, namespace, name, resource]]
-
-	not re_match("^(calico|system:kube-controller-manager|system:kube-scheduler)$", input.spec.user)
-	re_match("^(crd.projectcalico.org)$", input.spec.resourceAttributes.group)
-	re_match("^(create|patch|update|replace|delete|deletecollections)$", input.spec.resourceAttributes.verb)
-}
-````
-
-### Video
-
-[Demo video of Kubernetes Policy Controller](https://youtu.be/1WObJiTZDHc)
-
-## Dev Workflow
-
-### Build the Docker Image
-
-```bash
-make docker-build
-```
-
-### Push the Docker Image
-
-```bash
-make docker-push
-```
-
-### Deploy
-
-The following command deploys the latest pushed docker image to the currently active Kubernetes context
-
-```bash
-make deploy
-```
-
-### Rebuild Config Templates
-
-The following command rebuilds the config manifests used with `make deploy`:
-
-```bash
-make manifests
-```
-
-## Contributing
-
-This project welcomes contributions and suggestions.  Most contributions require you to agree to the CNCF Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://github.com/kubernetes/community/blob/master/CLA.md
-
-When you submit a pull request, a CLA-bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+The `demo` directory has an example of simple constraints, templates and configs to play with.

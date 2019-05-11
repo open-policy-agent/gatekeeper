@@ -1,0 +1,9 @@
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sRequiredLabel
+metadata:
+  name: bad-schema
+spec:
+  match:
+    namespaces: "should_be_list"
+  parameters:
+    labels: ["gato"]

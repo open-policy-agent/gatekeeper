@@ -1,16 +1,56 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= docker.io/nikhilbh/kubernetes-policy-controller:latest
+REGISTRY ?= quay.io
+REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
+
+IMG := $(REPOSITORY):latest
+
+VERSION := v3.0.1
+
+BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
+BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
+BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
+
+LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION) \
+	-X github.com/open-policy-agent/gatekeeper/version.Vcs=$(BUILD_COMMIT) \
+	-X github.com/open-policy-agent/gatekeeper/version.Timestamp=$(BUILD_TIMESTAMP) \
+	-X github.com/open-policy-agent/gatekeeper/version.Hostname=$(BUILD_HOSTNAME)"
+
+MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
+\nkind: StatefulSet\
+\nmetadata:\
+\n  name: controller-manager\
+\n  namespace: system\
+\nspec:\
+\n  template:\
+\n    spec:\
+\n      containers:\
+\n      - image: <your image file>\
+\n        name: manager"
 
 all: test manager
 
 # Run tests
-test: generate fmt vet manifests
+native-test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
+
+# Hook to run docker tests
+.PHONY: test
+test:
+	rm -rf .staging/test
+	mkdir -p .staging/test
+	cp -r * .staging/test
+	-rm .staging/test/Dockerfile
+	cp test/Dockerfile .staging/test/Dockerfile
+	docker build .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager github.com/open-policy-agent/kubernetes-policy-controller/cmd/manager
+	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
+
+# Build manager binary
+manager-osx: generate fmt vet
+	go build -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
@@ -22,9 +62,10 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-  # TODO: Re-enable below command once we have crds to deploy
-	# kubectl apply -f config/crds
-	kustomize build config/default | kubectl apply -f -
+	touch -a ./config/manager_image_patch.yaml
+	kubectl apply -f config/crds
+	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/config/crds
+	kustomize build config | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
@@ -42,12 +83,52 @@ vet:
 generate:
 	go generate ./pkg/... ./cmd/...
 
+# Docker Login
+docker-login:
+	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(REGISTRY)
+
+# Tag for Dev
+docker-tag-dev:
+	@docker tag $(IMG) $(REPOSITORY):dev
+
+# Tag for Dev
+docker-tag-release:
+	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
+	@docker tag $(IMG) $(REPOSITORY):latest	
+
+# Push for Dev
+docker-push-dev:  docker-tag-dev
+	@docker push $(REPOSITORY):dev
+
+# Push for Release
+docker-push-release:  docker-tag-release
+	@docker push $(REPOSITORY):$(VERSION)
+	@docker push $(REPOSITORY):latest
+
 # Build the docker image
-docker-build: test
+docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+
+	@test -s ./config/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/manager_image_patch.yaml'
+
+	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager_image_patch.yaml
+
+docker-build-ci:
+	docker build . -t $(IMG) -f Dockerfile_ci
 
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+# Travis Dev Deployment
+travis-dev-deploy: docker-login docker-build-ci docker-push-dev
+
+# Travis Release
+travis-dev-release: docker-login docker-build-ci docker-push-release
+
+# Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
+uninstall:
+	-kubectl delete -n gatekeeper-system Config config
+	sleep 5
+	kubectl delete ns gatekeeper-system

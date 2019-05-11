@@ -1,3 +1,5 @@
+# Staging dirs
+.staging/
 
 # Binaries for programs and plugins
 *.exe
@@ -12,6 +14,9 @@ bin
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# Manager image patch file
+config/manager_image_patch.yaml
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 
@@ -38,16 +43,16 @@ bin
 *.userprefs
 
 # Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
+/[Dd]ebug/
+/[Dd]ebugPublic/
+/[Rr]elease/
+/[Rr]eleases/
+/x64/
+/x86/
+/bld/
+/[Bb]in/
+/[Oo]bj/
+/[Ll]og/
 
 # Everything outside the src directory
 #/*
@@ -57,7 +62,6 @@ bld/
 #!owners*.txt
 /.corext
 /.gen*
-/vendor
 /deploy/secret
 /secret
 junit.xml
@@ -340,3 +344,6 @@ __pycache__/
 *.btm.cs
 *.odx.cs
 *.xsd.cs
+
+# always include vendor directory
+!/vendor/**

@@ -1,0 +1,166 @@
+# Grant OPA/kube-mgmt read-only access to resources. This let's kube-mgmt
+# replicate resources into OPA so they can be used in policies.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: opa-viewer
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: system
+---
+# Define role for OPA/kube-mgmt to update webhook configurations and watch secrets and services.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: gatekeeper-cluster-role
+rules:
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+# Grant OPA/kube-mgmt role defined above.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: gatekeeper-cluster-role
+roleRef:
+  kind: ClusterRole
+  name: gatekeeper-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: gatekeeper-system
+---
+# Define role for OPA/kube-mgmt to update configmaps and manage services and secrets
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: gatekeeper-system
+  name: gatekeeper-namespace-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["secrets", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# Grant OPA/kube-mgmt role defined above.
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: gatekeeper-system
+  name: gatekeeper-namespace-role
+roleRef:
+  kind: Role
+  name: gatekeeper-namespace-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: gatekeeper-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: gatekeeper-controller-manager-service
+  namespace: gatekeeper-system
+spec:
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 443
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  serviceName: gatekeeper-controller-manager-service
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+    spec:
+      containers:
+      - name: manager
+        args:
+          - --stderrthreshold=INFO
+        command:
+        - /root/manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: SECRET_NAME
+          value: gatekeeper-webhook-server-secret
+        image: docker.io/nikhilbh/gatekeeper:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 443
+          name: webhook-server
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
+      - name: opa
+        args:
+          - run
+          - --server
+          - --addr=http://127.0.0.1:8181
+        image: openpolicyagent/opa:0.10.1
+        imagePullPolicy: Always
+        resources: {}
+      - name: kube-mgmt
+        args:
+          - --replicate-cluster=v1/namespaces
+          - --replicate=extensions/v1beta1/ingresses
+          - --replicate=v1/pods
+          - --policies=gatekeeper-system
+        image: openpolicyagent/kube-mgmt:0.6
+        imagePullPolicy: Always
+        resources: {}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-webhook-server-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gatekeeper-webhook-server-secret
+  namespace: gatekeeper-system

@@ -1,0 +1,21 @@
+sudo: required
+language: go
+go_import_path: github.com/open-policy-agent/gatekeeper
+go:
+- "1.11"
+
+deploy:
+  - provider: script
+    skip_cleanup: true
+    script: make travis-dev-deploy
+    on:
+      repo: open-policy-agent/gatekeeper
+      branch: master
+      tags: false
+  - provider: script
+    skip_cleanup: true
+    script: make travis-dev-release
+    on:
+      repo: open-policy-agent/gatekeeper
+      branch: master
+      tags: true
