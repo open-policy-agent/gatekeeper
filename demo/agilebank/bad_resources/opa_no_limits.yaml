@@ -4,7 +4,7 @@ metadata:
   name: opa
   namespace: production
   labels:
-    owner: me.examplebank.demo
+    owner: me.agilebank.demo
 spec:
   containers:
     - name: opa

@@ -3,4 +3,4 @@ kind: K8sUniqueServiceSelector
 metadata:
   name: unique-service-selector
   labels:
-    owner: admin.examplebank.demo
+    owner: admin.agilebank.demo

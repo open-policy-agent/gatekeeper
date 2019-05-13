@@ -11,4 +11,4 @@ spec:
     message: "All namespaces must have an `owner` label that points to your company username"
     labels:
       - key: owner
-        allowedRegex: "^[a-zA-Z]+.examplebank.demo$"
+        allowedRegex: "^[a-zA-Z]+.agilebank.demo$"

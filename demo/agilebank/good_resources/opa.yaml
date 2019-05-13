@@ -4,7 +4,7 @@ metadata:
   name: opa
   namespace: production
   labels:
-    owner: me.examplebank.demo
+    owner: me.agilebank.demo
 spec:
   containers:
     - name: opa
@@ -15,5 +15,5 @@ spec:
         - "--addr=localhost:8080"
       resources:
         limits:
-          cpu: "300m"
-          memory: "4000Mi"
+          cpu: "100m"
+          memory: "30Mi"

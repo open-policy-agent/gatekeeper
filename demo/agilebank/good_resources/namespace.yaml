@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: production
   labels:
-    owner: "me.examplebank.demo"
+    owner: "me.agilebank.demo"

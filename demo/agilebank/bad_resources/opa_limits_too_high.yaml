@@ -4,16 +4,16 @@ metadata:
   name: opa
   namespace: production
   labels:
-    owner: me.examplebank.demo
+    owner: me.agilebank.demo
 spec:
   containers:
     - name: opa
-      image: gcr.io/smythe-kpc/testbuilds/opa:0.9.2
+      image: openpolicyagent/opa:0.9.2
       args:
         - "run"
         - "--server"
         - "--addr=localhost:8080"
       resources:
         limits:
-          cpu: "100m"
-          memory: "30Mi"
+          cpu: "300m"
+          memory: "4000Mi"

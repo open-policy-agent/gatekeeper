@@ -4,11 +4,11 @@ metadata:
   name: opa
   namespace: production
   labels:
-    owner: me.examplebank.demo
+    owner: me.agilebank.demo
 spec:
   containers:
     - name: opa
-      image: openpolicyagent/opa:0.9.2
+      image: gcr.io/smythe-kpc/testbuilds/opa:0.9.2
       args:
         - "run"
         - "--server"
