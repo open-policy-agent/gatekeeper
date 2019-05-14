@@ -36,7 +36,6 @@ package target
 matching_constraints[constraint] {
 	trace(sprintf("INPUT IS: %v", [input]))
 	constraint := {{.ConstraintsRoot}}[_][_]
-	groups := {input.review.kind.group, "*"}
 	spec := get_default(constraint, "spec", {})
 	match := get_default(spec, "match", {})
 

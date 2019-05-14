@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. ../third_party/demo-magic/demo-magic.sh
+. ../../third_party/demo-magic/demo-magic.sh
 
 clear
 

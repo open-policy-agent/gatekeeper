@@ -6,7 +6,6 @@ package target
 
 matching_constraints[constraint] {
 	constraint := data["{{.ConstraintsRoot}}"][_][_]
-	groups := {input.review.kind.group, "*"}
 	spec := get_default(constraint, "spec", {})
 	match := get_default(spec, "match", {})
 
