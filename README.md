@@ -193,7 +193,7 @@ Note that if multiple matchers are specified, a resource must satisfy each top-l
 
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
 
-Audit also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
+The audit feature also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
 
 Kubernetes data can be replicated into OPA via the sync config resource. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
 
@@ -229,6 +229,42 @@ The `data.inventory` document has the following format:
   * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
      * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-0"]`
 
+### Audit 
+
+The audit functionality enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations. Audit results are stored as violations listed in the `status` field of the failed constraint.
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sRequiredLabels
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    labels: ["gatekeeper"]
+status:
+  auditTimestamp: "2019-05-11T01:46:13Z"
+  enforced: true
+  violations:
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: default
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: gatekeeper-system
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: kube-public
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: kube-system
+```
+> NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
+
+To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`. 
 
 ## Kick The Tires
 
