@@ -154,7 +154,7 @@ spec:
 You can install this ConstraintTemplate with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/templates/k8srequiredlabels_template.yaml
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/templates/k8srequiredlabels_template.yaml
 ```
 
 ### Constraints
@@ -178,7 +178,7 @@ spec:
 You can install this Constraint with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/constraints/all_ns_must_have_gatekeeper.yaml
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
 ```
 
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
@@ -217,7 +217,7 @@ spec:
 You can install this config with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/sync.yaml
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/sync.yaml
 ```
 
 Once data is synced into OPA, rules can access the cached data under the `data.inventory` document.
@@ -232,4 +232,4 @@ The `data.inventory` document has the following format:
 
 ## Kick The Tires
 
-The `demo` directory has an example of simple constraints, templates and configs to play with, including the ones mentioned above. You can also find more useful examples and a demo script to run them at [https://github.com/maxsmythe/gatekeeper/tree/exm/demo/examplebank](https://github.com/maxsmythe/gatekeeper/tree/exm/demo/examplebank).
+The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
