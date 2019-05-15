@@ -101,6 +101,16 @@ echo
 pe "kubectl get k8sbannedimagetags -oyaml"
 echo
 
+NO_WAIT=true
+p "We need to get all the resources in the cluster that lack resource limits."
+read
+p "Let's checkout the audit results of the container-must-have-limits constraint!"
+read
+
+NO_WAIT=false
+pe "kubectl get k8scontainerlimits.constraints.gatekeeper.sh  container-must-have-limits -o yaml"
+echo
+
 p "THE END"
 
 kubectl delete -f good_resources
@@ -109,3 +119,4 @@ kubectl delete -f constraints
 kubectl delete -f templates
 kubectl delete -f remediation/ban_latest_tag.yaml
 kubectl delete -f remediation/k8sbannedimagetags_template.yaml
+kubectl delete -f sync.yaml
