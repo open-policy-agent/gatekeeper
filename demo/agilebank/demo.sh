@@ -100,11 +100,11 @@ echo
 
 pe "kubectl get k8sbannedimagetags -oyaml"
 echo
-
+read
 NO_WAIT=true
 p "We need to get all the resources in the cluster that lack resource limits."
 read
-p "Let's checkout the audit results of the container-must-have-limits constraint!"
+p "Let's check out the audit results of the container-must-have-limits constraint!"
 read
 
 NO_WAIT=false
