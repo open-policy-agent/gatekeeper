@@ -47,6 +47,14 @@ For either installation method, make sure you have cluster admin permissions:
     --user <YOUR USER NAME>
 ```
 
+#### Deploying a Release using Prebuilt Image
+
+If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+```
+
 #### Deploying HEAD Using make
 
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
@@ -59,14 +67,6 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * run `make docker-push-release REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
-
-#### Deploying a Release using Prebuilt Image
-
-If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
-
-  ```sh
-  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
-  ```
 
 ### Uninstallation
 
@@ -83,13 +83,6 @@ When Gatekeeper is running it is possible to remove unwanted constraints by:
 
 #### Uninstall Gatekeeper
 
-##### Using make
-
-If you used `make` to deploy, then run the following to uninstall Gatekeeper:
-
-   * cd to the repository directory
-   * run `make uninstall`
-
 ##### Using Prebuilt Image
 
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
@@ -97,6 +90,14 @@ If you used a prebuilt image to deploy Gatekeeper, then you can delete all the G
   ```sh
   kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
   ```
+
+##### Using make
+
+If you used `make` to deploy, then run the following to uninstall Gatekeeper:
+
+   * cd to the repository directory
+   * run `make uninstall`
+
 
 ##### Manually Removing Constraints
 
@@ -150,6 +151,12 @@ spec:
         }
 ```
 
+You can install this ConstraintTemplate with the following command:
+
+```sh
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/templates/k8srequiredlabels_template.yaml
+```
+
 ### Constraints
 
 Constraints are then used to inform Gatekeeper that the admin wants a ConstraintTemplate to be enforced, and how. This constraint uses the `K8sRequiredLabels` constraint template above to make sure the `gatekeeper` label is defined on all namespaces:
@@ -166,6 +173,12 @@ spec:
         kinds: ["Namespace"]
   parameters:
     labels: ["gatekeeper"]
+```
+
+You can install this Constraint with the following command:
+
+```sh
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
 ```
 
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
@@ -201,6 +214,12 @@ spec:
         kind: "Pod"
 ```
 
+You can install this config with the following command:
+
+```sh
+kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/sync.yaml
+```
+
 Once data is synced into OPA, rules can access the cached data under the `data.inventory` document.
 
 The `data.inventory` document has the following format:
@@ -213,4 +232,4 @@ The `data.inventory` document has the following format:
 
 ## Kick The Tires
 
-The `demo` directory has an example of simple constraints, templates and configs to play with.
+The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
