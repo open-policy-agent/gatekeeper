@@ -5,9 +5,6 @@
 clear
 
 kubectl apply -f sync.yaml >> /dev/null
-kubectl apply -f remediation/k8sbannedimagetags_template.yaml >> /dev/null
-sleep 1
-kubectl apply -f remediation/ban_latest_tag.yaml >> /dev/null
 
 echo "===== ENTER developer ====="
 echo
@@ -88,19 +85,13 @@ echo
 NO_WAIT=true
 p "All is well with the world, until the big outage. The bank is down for hours."
 read
-p "We must never again use the :latest tag in production!"
+p "We had no idea there were resources in the cluster without resource limits. Now they are causing issues in production!"
 echo
 NO_WAIT=false
 
 echo "===== ENTER admin ====="
 echo
 
-pe "cat remediation/k8sbannedimagetags_template.yaml"
-echo
-
-pe "kubectl get k8sbannedimagetags -oyaml"
-echo
-read
 NO_WAIT=true
 p "We need to get all the resources in the cluster that lack resource limits."
 read
@@ -117,6 +108,4 @@ kubectl delete -f good_resources
 kubectl delete ns advanced-transaction-system
 kubectl delete -f constraints
 kubectl delete -f templates
-kubectl delete -f remediation/ban_latest_tag.yaml
-kubectl delete -f remediation/k8sbannedimagetags_template.yaml
 kubectl delete -f sync.yaml
