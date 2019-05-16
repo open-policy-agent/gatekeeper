@@ -133,10 +133,19 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+
 	crd, err := r.opa.CreateCRD(context.Background(), instance)
+
 	if err != nil {
+		instance.Status.Error = fmt.Sprintf("%s", err)
+
+		if update_err := r.Update(context.Background(), instance); update_err != nil {
+			return reconcile.Result{}, err
+		}
+
 		return reconcile.Result{}, err
 	}
+
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	if instance.GetDeletionTimestamp().IsZero() {
