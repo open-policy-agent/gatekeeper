@@ -85,14 +85,11 @@ echo
 NO_WAIT=true
 p "All is well with the world, until the big outage. The bank is down for hours."
 read
-p "We had no idea there were resources in the cluster without resource limits. Now they are causing issues in production!"
-echo
-NO_WAIT=false
 
 echo "===== ENTER admin ====="
 echo
-
-NO_WAIT=true
+p "We had no idea there were resources in the cluster without resource limits. Now they are causing issues in production!"
+echo
 p "We need to get all the resources in the cluster that lack resource limits."
 read
 p "Let's check out the audit results of the container-must-have-limits constraint!"
