@@ -138,19 +138,21 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	for _, v := range instance.Spec.Targets {
 		src := v.Rego
 		_, _, parseErr := ast.ParseStatements("", src)
-		log.Info(fmt.Sprintf("ct3 %s", parseErr.Error()))
-		regoError := ast.Error{}
-		regoError.Code = "1234"
-		//@TODO fill in RegoErrors with actual parse error list
-		instance.Status.RegoErrors = append(instance.Status.RegoErrors, regoError)
+		if parseErr != nil {
+			log.Info(fmt.Sprintf("ct3 %s", parseErr.Error()))
+			regoError := ast.Error{}
+			regoError.Code = "1234"
+			//@TODO fill in RegoErrors with actual parse error list
+			instance.Status.RegoErrors = append(instance.Status.RegoErrors, regoError)
+		}
+	}
+
+	if len(instance.Status.RegoErrors) > 0 {
 		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
 			log.Error(updateErr, "update error", updateErr)
 			return reconcile.Result{Requeue: true}, nil
 		}
-		return reconcile.Result{}, err
-	}
 
-	if len(instance.Status.RegoErrors) > 0 {
 		return reconcile.Result{}, nil
 	}
 
