@@ -18,6 +18,7 @@ package constrainttemplate
 import (
 	"context"
 	"fmt"
+	"github.com/open-policy-agent/opa/ast"
 	"reflect"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
@@ -133,16 +134,33 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	instance.Status.RegoErrors = []ast.Error{}
+	for _, v := range instance.Spec.Targets {
+		src := v.Rego
+		_, _, parseErr := ast.ParseStatements("", src)
+		log.Info(fmt.Sprintf("ct3 %s", parseErr.Error()))
+		regoError := ast.Error{}
+		regoError.Code = "1234"
+		//@TODO fill in RegoErrors with actual parse error list
+		instance.Status.RegoErrors = append(instance.Status.RegoErrors, regoError)
+		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+			log.Error(updateErr, "update error", updateErr)
+			return reconcile.Result{Requeue: true}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
+	if len(instance.Status.RegoErrors) > 0 {
+		return reconcile.Result{}, nil
+	}
 
 	crd, err := r.opa.CreateCRD(context.Background(), instance)
-
 	if err != nil {
 		instance.Status.Error = fmt.Sprintf("%s", err)
-
-		if update_err := r.Update(context.Background(), instance); update_err != nil {
-			return reconcile.Result{}, err
+		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+			log.Error(updateErr, "update error", updateErr)
+			return reconcile.Result{Requeue: true}, nil
 		}
-
 		return reconcile.Result{}, err
 	}
 

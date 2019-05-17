@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/opa/ast"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -51,6 +52,7 @@ type Target struct {
 type ConstraintTemplateStatus struct {
 	Created bool   `json:"created,omitempty"`
 	Error   string `json:"error,omitempty"`
+	RegoErrors []ast.Error `json:"regoErrors,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }

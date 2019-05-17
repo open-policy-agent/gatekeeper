@@ -204,6 +204,9 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req atypes.Req
 	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, templ); err != nil {
 		return false, err
 	}
+	if _, err := h.opa.CreateCRD(ctx, templ); err != nil {
+		//return true, err @TODO uncomment this before PR
+	}
 	return false, nil
 }
 
