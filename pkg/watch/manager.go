@@ -130,8 +130,8 @@ func (wm *WatchManager) updateManager() (bool, error) {
 		return false, errp.Wrap(err, "could not filter pending resources, not restarting watch manager")
 	}
 
-	if len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
-		log.Info("no resources ready to watch and nothing to remove")
+	if wm.started == true && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
+		log.Info("All changes are pending additions, not restarting watch manager")
 		return false, nil
 	}
 
