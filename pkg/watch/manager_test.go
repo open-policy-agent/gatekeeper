@@ -155,6 +155,8 @@ func TestRegistrar(t *testing.T) {
 		}
 	})
 
+	wm.started = true
+
 	t.Run("Second add watch does nothing", func(t *testing.T) {
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error adding second watch: %s", err)
