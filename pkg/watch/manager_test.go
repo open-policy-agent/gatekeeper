@@ -155,9 +155,8 @@ func TestRegistrar(t *testing.T) {
 		}
 	})
 
-	wm.started = true
-
 	t.Run("Second add watch does nothing", func(t *testing.T) {
+		wm.started = true
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error adding second watch: %s", err)
 		}
@@ -272,6 +271,7 @@ func TestRegistrar(t *testing.T) {
 		t.Fatalf("Error adding watch: %s", err)
 	}
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
+		wm.started = true
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
 		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
