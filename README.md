@@ -20,14 +20,13 @@ Join us to help define the direction and implementation of this project!
 - Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
-## How is Gatekeeper different to OPA?
-Gatekeeper extends the vanilla [OPA Kubernetes admission aontroller] (https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) by introducing the following functionality:
-   * Constraint template and contraints expressed via CRDs
-   * Constraint templates with parameter type validation
-   * Ability to create reusable constraint template libraries
-   * Parameterized rego policy via constraint templates
+## How is Gatekeeper different than OPA?
+Gatekeeper extends the [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0) by introducing the following functionality:
+
+   * An extensible, parameterized policy library
+   * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
+   * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
    * Audit functionality
-   * Granular control of what Kubernetes resources are cached in OPA
 
 ## Goals
 
