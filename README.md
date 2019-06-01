@@ -20,7 +20,7 @@ Join us to help define the direction and implementation of this project!
 - Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
-## How is Gatekeeper different than OPA?
+## How is Gatekeeper different from OPA?
 Gatekeeper extends the [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0) by introducing the following functionality:
 
    * An extensible, parameterized policy library
