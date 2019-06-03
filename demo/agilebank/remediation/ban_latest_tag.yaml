@@ -1,0 +1,14 @@
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sBannedImageTags
+metadata:
+  name: ban-latest-tag
+  labels:
+    owner: admin.agilebank.demo
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    tags:
+      - "latest"
