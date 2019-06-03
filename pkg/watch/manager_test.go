@@ -27,9 +27,9 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
 		cfg:          nil,
 		newDiscovery: fn,
 	}
-	wm.managedKinds.mgr = wm
 	close(wm.stopped)
 	wm.started = true
+	wm.managedKinds.mgr = wm
 	return wm
 }
 
