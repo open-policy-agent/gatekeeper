@@ -274,6 +274,7 @@ func TestRegistrar(t *testing.T) {
 	}
 
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
+		wm.started = true
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
 		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
