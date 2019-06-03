@@ -22,13 +22,13 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
 		newMgrFn:     newFakeMgr,
 		stopper:      make(chan struct{}),
 		stopped:      make(chan struct{}),
+		started:      true,
 		managedKinds: newRecordKeeper(),
 		watchedKinds: make(map[schema.GroupVersionKind]watchVitals),
 		cfg:          nil,
 		newDiscovery: fn,
 	}
 	close(wm.stopped)
-	wm.started = true
 	wm.managedKinds.mgr = wm
 	return wm
 }
@@ -272,6 +272,7 @@ func TestRegistrar(t *testing.T) {
 	if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 		t.Fatalf("Error adding watch: %s", err)
 	}
+
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
