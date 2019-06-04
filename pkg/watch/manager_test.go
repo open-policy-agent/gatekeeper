@@ -334,4 +334,15 @@ func TestRegistrar(t *testing.T) {
 			t.Errorf("Manager should have updated now that CRD is found")
 		}
 	})
+
+	t.Run("Manager restarts when not started", func(t *testing.T) {
+		wm.started = false
+		b, err := wm.updateManager()
+		if err != nil {
+			t.Errorf("Could not update manager: %s", err)
+		}
+		if b == false {
+			t.Errorf("Manager not restarted")
+		}
+	})
 }
