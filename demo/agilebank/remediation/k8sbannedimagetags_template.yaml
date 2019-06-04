@@ -1,0 +1,33 @@
+apiVersion: templates.gatekeeper.sh/v1alpha1
+kind: ConstraintTemplate
+metadata:
+  name: k8sbannedimagetags
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBannedImageTags
+        listKind: K8sBannedImageTagsList
+        plural: k8sbannedimagetags
+        singular: k8sbannedimagetags
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            tags:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sbannedimagetags
+
+        deny[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          img_split := split(container.image, ":")
+          tag := img_split[count(img_split) - 1]
+          banned := {s | s = input.constraint.spec.parameters.tags[_]}
+          banned[tag]
+          msg := sprintf("container <%v> has banned image tag <%v>, banned tags are %v", [container.name, tag, banned])
+        }
