@@ -2,6 +2,7 @@ package watch
 
 import (
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
@@ -21,14 +22,11 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
 	wm := &WatchManager{
 		newMgrFn:     newFakeMgr,
 		stopper:      make(chan struct{}),
-		stopped:      make(chan struct{}),
-		started:      true,
 		managedKinds: newRecordKeeper(),
 		watchedKinds: make(map[schema.GroupVersionKind]watchVitals),
 		cfg:          nil,
 		newDiscovery: fn,
 	}
-	close(wm.stopped)
 	wm.managedKinds.mgr = wm
 	return wm
 }
@@ -123,6 +121,17 @@ func makeGvk(k string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{Kind: k}
 }
 
+func waitForWatchManagerStart(wm *WatchManager) bool {
+	for i := 0; i < 10; {
+		if wm.started == true {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+		i++
+	}
+	return false
+}
+
 func TestRegistrar(t *testing.T) {
 	wm := newForTest(newDiscoveryFactory(false, "FooCRD"))
 	defer wm.Close()
@@ -158,6 +167,10 @@ func TestRegistrar(t *testing.T) {
 		}
 	})
 
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
+
 	t.Run("Second add watch does nothing", func(t *testing.T) {
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error adding second watch: %s", err)
@@ -183,6 +196,10 @@ func TestRegistrar(t *testing.T) {
 			t.Errorf("Manager restarted, wanted no op")
 		}
 	})
+
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
 
 	reg2, err := wm.NewRegistrar("bar", nil)
 	if err != nil {
@@ -215,6 +232,10 @@ func TestRegistrar(t *testing.T) {
 		}
 	})
 
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
+
 	t.Run("First remove makes for a change", func(t *testing.T) {
 		if err := reg2.RemoveWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error removing watch: %s", err)
@@ -241,6 +262,10 @@ func TestRegistrar(t *testing.T) {
 			t.Errorf("Manager not restarted")
 		}
 	})
+
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
 
 	t.Run("Second remove makes for a remove", func(t *testing.T) {
 		if err := reg.RemoveWatch(makeGvk("FooCRD")); err != nil {
@@ -271,6 +296,10 @@ func TestRegistrar(t *testing.T) {
 
 	if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 		t.Fatalf("Error adding watch: %s", err)
+	}
+
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
 	}
 
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
@@ -308,6 +337,10 @@ func TestRegistrar(t *testing.T) {
 		}
 	})
 
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
+
 	if err := reg.ReplaceWatch([]schema.GroupVersionKind{}); err != nil {
 		t.Fatalf("Error replacing watch: %s", err)
 	}
@@ -334,6 +367,10 @@ func TestRegistrar(t *testing.T) {
 			t.Errorf("Manager should have updated now that CRD is found")
 		}
 	})
+
+	if waitForWatchManagerStart(wm) == false {
+		t.Errorf("Watch manager was not set to started")
+	}
 
 	t.Run("Manager restarts when not started", func(t *testing.T) {
 		wm.started = false
