@@ -123,15 +123,15 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	for k, _ := range changed {
 		a = append(c, k.String())
 	}
-	log.Info("Watcher registry found changes, attempting to apply them", "add", a, "remove", r, "change", c)
+	log.Info("Watcher registry found changes and/or needs restarting", "started", wm.started, "add", a, "remove", r, "change", c)
 
 	readyToAdd, err := wm.filterPendingResources(added)
 	if err != nil {
 		return false, errp.Wrap(err, "could not filter pending resources, not restarting watch manager")
 	}
 
-	if len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
-		log.Info("no resources ready to watch and nothing to remove")
+	if wm.started == true && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
+		log.Info("Only changes are pending additions; not restarting watch manager")
 		return false, nil
 	}
 
