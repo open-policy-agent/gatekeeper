@@ -122,12 +122,11 @@ func makeGvk(k string) schema.GroupVersionKind {
 }
 
 func waitForWatchManagerStart(wm *WatchManager) bool {
-	for i := 0; i < 10; {
+	for i := 0; i < 10; i++ {
 		if wm.started == true {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
-		i++
 	}
 	return false
 }
