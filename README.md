@@ -63,7 +63,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 ### Uninstallation
 
 Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
-the `Config` resource in in the `gatekeeper-system` namespace. This will make sure all finalizers
+the `Config` resource in the `gatekeeper-system` namespace. This will make sure all finalizers
 are removed by Gatekeeper. Otherwise the finalizers will need to be removed manually.
    
 #### Before Uninstall, Clean Up Old Constraints
