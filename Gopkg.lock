@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:67594ba9d45b6b38e6d37dcd075cedbba263196a140c4470994e88f0e5348c64"
+  digest = "1:82e7b5cc50fc317ed7c7a6587fac9e78222bf1cb0035f52f15126094015869bf"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -455,7 +455,7 @@
     "constraint/pkg/types",
   ]
   pruneopts = ""
-  revision = "83454dafc7be366c93d263bb3bd4bdd82ea196f1"
+  revision = "9d3b80201efc4569251c55d52b0a7626e35fe1a0"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"
@@ -1142,6 +1142,7 @@
   input-imports = [
     "github.com/davecgh/go-spew/spew",
     "github.com/emicklei/go-restful",
+    "github.com/ghodss/yaml",
     "github.com/go-logr/logr",
     "github.com/google/go-cmp/cmp",
     "github.com/onsi/ginkgo",
