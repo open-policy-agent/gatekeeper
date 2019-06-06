@@ -51,7 +51,6 @@ type Target struct {
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
 type ConstraintTemplateStatus struct {
 	Created bool   `json:"created,omitempty"`
-	Error   string `json:"error,omitempty"`
 	Errors	[]*ast.Error `json:"errors,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
