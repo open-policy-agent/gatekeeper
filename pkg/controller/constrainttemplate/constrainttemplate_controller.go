@@ -134,36 +134,34 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	instance.Status.RegoErrors = []ast.Error{}
-	for _, v := range instance.Spec.Targets {
-		src := v.Rego
-		_, _, parseErr := ast.ParseStatements("", src)
-		if parseErr != nil {
-			log.Info(fmt.Sprintf("ct3 %s", parseErr.Error()))
-			regoError := ast.Error{}
-			regoError.Code = "1234"
-			//@TODO fill in RegoErrors with actual parse error list
-			instance.Status.RegoErrors = append(instance.Status.RegoErrors, regoError)
+	instance.Status.Errors = []*ast.Error{}
+	crd, err := r.opa.CreateCRD(context.Background(), instance)
+	if err != nil {
+		instance.Status.Error = fmt.Sprintf("%s", err)
+		if parseErrs, ok := err.(ast.Errors); ok {
+			for i := 0; i < len(parseErrs); i++ {
+				parseErrs[i].Details = nil
+				instance.Status.Errors = append(instance.Status.Errors, parseErrs[i])
+			}
+		} else {
+			createErr := ast.NewError("unknown_error", nil, err.Error())
+			instance.Status.Errors = append(instance.Status.Errors, createErr)
 		}
+
+		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+			log.Error(updateErr, "update error", updateErr)
+			return reconcile.Result{Requeue: true}, nil
+		}
+		return reconcile.Result{}, err
 	}
 
-	if len(instance.Status.RegoErrors) > 0 {
+	if len(instance.Status.Errors) > 0 {
 		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
 			log.Error(updateErr, "update error", updateErr)
 			return reconcile.Result{Requeue: true}, nil
 		}
 
 		return reconcile.Result{}, nil
-	}
-
-	crd, err := r.opa.CreateCRD(context.Background(), instance)
-	if err != nil {
-		instance.Status.Error = fmt.Sprintf("%s", err)
-		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
-			log.Error(updateErr, "update error", updateErr)
-			return reconcile.Result{Requeue: true}, nil
-		}
-		return reconcile.Result{}, err
 	}
 
 	name := crd.GetName()

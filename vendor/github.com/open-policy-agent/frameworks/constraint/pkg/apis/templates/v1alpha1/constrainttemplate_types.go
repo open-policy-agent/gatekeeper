@@ -52,7 +52,7 @@ type Target struct {
 type ConstraintTemplateStatus struct {
 	Created bool   `json:"created,omitempty"`
 	Error   string `json:"error,omitempty"`
-	RegoErrors []ast.Error `json:"regoErrors,omitempty"`
+	Errors	[]*ast.Error `json:"errors,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
