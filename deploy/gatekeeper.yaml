@@ -1,88 +1,159 @@
-# Grant OPA/kube-mgmt read-only access to resources. This let's kube-mgmt
-# replicate resources into OPA so they can be used in policies.
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: opa-viewer
-roleRef:
-  kind: ClusterRole
-  name: view
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: system
----
-# Define role for OPA/kube-mgmt to update webhook configurations and watch secrets and services.
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: gatekeeper-cluster-role
-rules:
-- apiGroups: ["admissionregistration.k8s.io"]
-  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["*"]
-  resources: ["*"]
-  verbs: ["get", "list", "watch"]
----
-# Grant OPA/kube-mgmt role defined above.
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: gatekeeper-cluster-role
-roleRef:
-  kind: ClusterRole
-  name: gatekeeper-cluster-role
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: gatekeeper-system
----
-# Define role for OPA/kube-mgmt to update configmaps and manage services and secrets
-kind: Role
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  namespace: gatekeeper-system
-  name: gatekeeper-namespace-role
-rules:
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "watch", "update", "patch"]
-- apiGroups: [""]
-  resources: ["secrets", "services"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-# Grant OPA/kube-mgmt role defined above.
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  namespace: gatekeeper-system
-  name: gatekeeper-namespace-role
-roleRef:
-  kind: Role
-  name: gatekeeper-namespace-role
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: gatekeeper-system
----
 apiVersion: v1
-kind: Service
+kind: Namespace
 metadata:
-  labels:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-  name: gatekeeper-controller-manager-service
+  name: gatekeeper-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
   namespace: gatekeeper-system
-spec:
-  selector:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-  ports:
-  - port: 443
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
+  - configs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
+  - configs/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - constraints.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -106,10 +177,10 @@ spec:
     spec:
       containers:
       - name: manager
-        args:
-          - --stderrthreshold=INFO
         command:
         - /root/manager
+        args:
+          - "--auditInterval=30"
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -118,7 +189,7 @@ spec:
               fieldPath: metadata.namespace
         - name: SECRET_NAME
           value: gatekeeper-webhook-server-secret
-        image: docker.io/nikhilbh/gatekeeper:latest
+        image: quay.io/open-policy-agent/gatekeeper:v3.0.1
         imagePullPolicy: Always
         ports:
         - containerPort: 443
@@ -126,32 +197,15 @@ spec:
           protocol: TCP
         resources:
           limits:
-            cpu: 100m
-            memory: 30Mi
+            cpu: 1
+            memory: 500Mi
           requests:
             cpu: 100m
-            memory: 20Mi
+            memory: 300Mi
         volumeMounts:
         - mountPath: /certs
           name: cert
           readOnly: true
-      - name: opa
-        args:
-          - run
-          - --server
-          - --addr=http://127.0.0.1:8181
-        image: openpolicyagent/opa:0.10.1
-        imagePullPolicy: Always
-        resources: {}
-      - name: kube-mgmt
-        args:
-          - --replicate-cluster=v1/namespaces
-          - --replicate=extensions/v1beta1/ingresses
-          - --replicate=v1/pods
-          - --policies=gatekeeper-system
-        image: openpolicyagent/kube-mgmt:0.6
-        imagePullPolicy: Always
-        resources: {}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
@@ -160,7 +214,163 @@ spec:
           secretName: gatekeeper-webhook-server-secret
 ---
 apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-controller-manager-service
+  namespace:  gatekeeper-system
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 443
+---
+apiVersion: v1
 kind: Secret
 metadata:
   name: gatekeeper-webhook-server-secret
   namespace: gatekeeper-system
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validation.gatekeeper.sh
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: constrainttemplates.templates.gatekeeper.sh
+spec:
+  group: templates.gatekeeper.sh
+  names:
+    kind: ConstraintTemplate
+    plural: constrainttemplates
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            crd:
+              properties:
+                spec:
+                  properties:
+                    names:
+                      type: object
+                    validation:
+                      type: object
+                  type: object
+              type: object
+            targets:
+              items:
+                properties:
+                  rego:
+                    type: string
+                  target:
+                    type: string
+                type: object
+              type: array
+          type: object
+        status:
+          properties:
+            created:
+              type: boolean
+            error:
+              type: string
+          type: object
+  version: v1alpha1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: configs.config.gatekeeper.sh
+spec:
+  group: config.gatekeeper.sh
+  names:
+    kind: Config
+    plural: configs
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            sync:
+              description: Configuration for syncing k8s objects
+              properties:
+                syncOnly:
+                  description: If non-empty, only entries on this list will be replicated
+                    into OPA
+                  items:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      version:
+                        type: string
+                    type: object
+                  type: array
+              type: object
+          type: object
+        status:
+          properties:
+            allFinalizers:
+              description: List of Group/Version/Kinds with finalizers
+              items:
+                properties:
+                  group:
+                    type: string
+                  kind:
+                    type: string
+                  version:
+                    type: string
+                type: object
+              type: array
+          type: object
+  version: v1alpha1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

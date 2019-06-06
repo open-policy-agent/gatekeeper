@@ -1,2 +1,0 @@
-1. Get the policy running these commands:
- kubectl --namespace {{ .Release.Namespace }} get cm 
