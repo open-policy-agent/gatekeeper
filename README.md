@@ -14,6 +14,13 @@ Join us to help define the direction and implementation of this project!
 - Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
+## How is Gatekeeper different from OPA?
+Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
+
+   * An extensible, parameterized policy library
+   * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
+   * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
+   * Audit functionality
 
 ## Goals
 
