@@ -134,16 +134,17 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	instance.Status.Errors = []*ast.Error{}
+	instance.Status.Errors = []*v1alpha1.CreateCRDError{}
 	crd, err := r.opa.CreateCRD(context.Background(), instance)
 	if err != nil {
+		var createErr *v1alpha1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
-				parseErrs[i].Details = nil
-				instance.Status.Errors = append(instance.Status.Errors, parseErrs[i])
+				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location}
+				instance.Status.Errors = append(instance.Status.Errors, createErr)
 			}
 		} else {
-			createErr := ast.NewError("unknown_error", nil, err.Error())
+			createErr = &v1alpha1.CreateCRDError{Code: "unknown_error", Message: err.Error(), Location: nil}
 			instance.Status.Errors = append(instance.Status.Errors, createErr)
 		}
 
@@ -206,8 +207,8 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	log.Info("creating constraint CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
-		instance.Status.Errors = []*ast.Error{}
-		createErr := ast.NewError("unknown_error", nil, fmt.Sprintf("Could not create CRD: %s", err))
+		instance.Status.Errors = []*v1alpha1.CreateCRDError{}
+		createErr := &v1alpha1.CreateCRDError{Code: "unknown_error", Message: fmt.Sprintf("Could not create CRD: %s", err), Location: nil}
 		instance.Status.Errors = append(instance.Status.Errors, createErr)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
