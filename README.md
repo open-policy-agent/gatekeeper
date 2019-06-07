@@ -21,7 +21,7 @@ Join us to help define the direction and implementation of this project!
   to file bugs, request features, or ask questions asynchronously.
 
 ## How is Gatekeeper different from OPA?
-Gatekeeper extends the [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0) by introducing the following functionality:
+Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
 
    * An extensible, parameterized policy library
    * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
