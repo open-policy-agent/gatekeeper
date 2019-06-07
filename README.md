@@ -2,12 +2,6 @@
 
 [![Build Status](https://travis-ci.org/open-policy-agent/gatekeeper.svg?branch=master)](https://travis-ci.org/open-policy-agent/gatekeeper) [![Docker Repository on Quay](https://quay.io/repository/open-policy-agent/gatekeeper/status "Docker Repository on Quay")](https://quay.io/repository/open-policy-agent/gatekeeper)
 
-## Warning: Restructing underway
-
-This is a new project that is under development.  The architecture, interfaces, and code layout are all subject to change. The policy syntax and ConstraintTemplate spec schema should be stable enough for alpha. For information on constraints and constraint templates, see the [How to Use Gatekeeper](#how-to-use-gatekeeper) section.
-
-If you need OPA-style admission control right now, we recommend using the [OPA Kubernetes Admission Control tutorial](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html).
-
 ## Want to help?
 Join us to help define the direction and implementation of this project!
 
@@ -40,8 +34,6 @@ Finally, Gatekeeper's engine is designed to be portable, allowing administrators
 
 ## Installation Instructions
 
-WARNING: It is not recommended to install Gatekeeper on a production cluster. The project is in alpha and may or may not uninstall cleanly.
-
 ### Installation
 
 #### Prerequisites
@@ -59,7 +51,7 @@ For either installation method, make sure you have cluster admin permissions:
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
 ```
 
 #### Deploying HEAD Using make
@@ -77,7 +69,9 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 ### Uninstallation
 
-Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, `Constraint` CRDs and the `Configs` CRDs. 
+Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
+the `Config` resource in the `gatekeeper-system` namespace. This will make sure all finalizers
+are removed by Gatekeeper. Otherwise the finalizers will need to be removed manually.
    
 #### Before Uninstall, Clean Up Old Constraints
 
@@ -95,7 +89,7 @@ When Gatekeeper is running it is possible to remove unwanted constraints by:
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
   ```
 
 ##### Using make
@@ -104,7 +98,6 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
-
 
 ##### Manually Removing Constraints
 

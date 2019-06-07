@@ -154,7 +154,7 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			msgs = append(msgs, r.Msg)
+			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 		}
 		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
 		if vResp.Response.Result == nil {
