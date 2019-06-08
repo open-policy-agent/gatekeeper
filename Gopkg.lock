@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:67594ba9d45b6b38e6d37dcd075cedbba263196a140c4470994e88f0e5348c64"
+  digest = "1:d2afddba4d3c9291e6188573e13405315740eecc1fd813d7e65d57c1effaca68"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -455,7 +455,7 @@
     "constraint/pkg/types",
   ]
   pruneopts = ""
-  revision = "83454dafc7be366c93d263bb3bd4bdd82ea196f1"
+  revision = "697579360b78132279f519f2248fb9fa8abd845c"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"
@@ -1142,6 +1142,7 @@
   input-imports = [
     "github.com/davecgh/go-spew/spew",
     "github.com/emicklei/go-restful",
+    "github.com/ghodss/yaml",
     "github.com/go-logr/logr",
     "github.com/google/go-cmp/cmp",
     "github.com/onsi/ginkgo",
@@ -1150,6 +1151,7 @@
     "github.com/open-policy-agent/frameworks/constraint/pkg/client",
     "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local",
     "github.com/open-policy-agent/frameworks/constraint/pkg/types",
+    "github.com/open-policy-agent/opa/ast",
     "github.com/pkg/errors",
     "golang.org/x/net/context",
     "k8s.io/api/admission/v1beta1",
