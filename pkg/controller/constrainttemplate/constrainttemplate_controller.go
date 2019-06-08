@@ -140,7 +140,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		var createErr *v1alpha1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
-				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location}
+				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
 				instance.Status.Errors = append(instance.Status.Errors, createErr)
 			}
 		} else {
