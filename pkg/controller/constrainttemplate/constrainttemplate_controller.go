@@ -144,7 +144,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 				instance.Status.Errors = append(instance.Status.Errors, createErr)
 			}
 		} else {
-			createErr = &v1alpha1.CreateCRDError{Code: "unknown_error", Message: err.Error(), Location: nil}
+			createErr = &v1alpha1.CreateCRDError{Code: "unknown_error", Message: err.Error(), Location: ""}
 			instance.Status.Errors = append(instance.Status.Errors, createErr)
 		}
 
@@ -208,7 +208,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	log.Info("creating constraint CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
 		instance.Status.Errors = []*v1alpha1.CreateCRDError{}
-		createErr := &v1alpha1.CreateCRDError{Code: "unknown_error", Message: fmt.Sprintf("Could not create CRD: %s", err), Location: nil}
+		createErr := &v1alpha1.CreateCRDError{Code: "unknown_error", Message: fmt.Sprintf("Could not create CRD: %s", err), Location: ""}
 		instance.Status.Errors = append(instance.Status.Errors, createErr)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
