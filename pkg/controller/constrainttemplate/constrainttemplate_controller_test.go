@@ -47,6 +47,7 @@ import (
 var c client.Client
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "denyall"}}
+
 var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
 
 const timeout = time.Second * 5
