@@ -149,12 +149,12 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		}
 	}
 
-	if len(instance.Status.Errors) > 0 {
-		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
-			log.Error(updateErr, "update error", updateErr)
-			return reconcile.Result{Requeue: true}, nil
-		}
+	if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+		log.Error(updateErr, "update error", updateErr)
+		return reconcile.Result{Requeue: true}, nil
+	}
 
+	if len(instance.Status.Errors) > 0 {
 		return reconcile.Result{}, nil
 	}
 
