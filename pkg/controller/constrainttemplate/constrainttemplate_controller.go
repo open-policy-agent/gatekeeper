@@ -193,6 +193,11 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	log.Info("loading code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		instance.Status.Errors = append(instance.Status.Errors, updateErr)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("adding to watcher registry")
@@ -227,6 +232,11 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	log.Info("loading constraint code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		instance.Status.Errors = append(instance.Status.Errors, updateErr)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("making sure constraint is in watcher registry")
