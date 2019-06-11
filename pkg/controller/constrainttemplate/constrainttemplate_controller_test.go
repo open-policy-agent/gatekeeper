@@ -47,10 +47,7 @@ import (
 var c client.Client
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "denyall"}}
-
-var c2 client.Client
-
-var expectedRequest2 = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
+var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
 
 const timeout = time.Second * 5
 
@@ -197,11 +194,9 @@ deny[{"msg": "denied!"}] {
 		fmt.Println(opa.Dump(context.TODO()))
 	}
 	g.Expect(len(resp.Results())).Should(gomega.Equal(1))
-}
 
-func TestReconcileInvalidRego(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-	instance := &v1alpha1.ConstraintTemplate{
+	// Create template with invalid rego, should populate parse error in status
+	instanceInvalidRego := &v1alpha1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
 		Spec: v1alpha1.ConstraintTemplateSpec{
 			CRD: v1alpha1.CRD{
@@ -224,45 +219,14 @@ deny[}}}//invalid//rego
 		},
 	}
 
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
-	// channel when it is finished.
-	mgr, err := manager.New(cfg, manager.Options{})
+	err = c.Create(context.TODO(), instanceInvalidRego)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c2 = mgr.GetClient()
-
-	// initialize OPA
-	driver := local.New(local.Tracing(true))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("unable to set up OPA backend: %s", err)
-
-	}
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
-	if err != nil {
-		t.Fatalf("unable to set up OPA client: %s", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()))
-	recFn, requests := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
-
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
-	err = c2.Create(context.TODO(), instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c2.Delete(context.TODO(), instance)
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest2)))
+	defer c.Delete(context.TODO(), instanceInvalidRego)
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 
 	g.Eventually(func() error {
 		ct := &v1alpha1.ConstraintTemplate{}
-		if err := c2.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
+		if err := c.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
 			return err
 		}
 		if ct.Name == "invalidrego" {
