@@ -18,6 +18,7 @@ package constrainttemplate
 import (
 	"context"
 	"fmt"
+	"github.com/open-policy-agent/opa/ast"
 	"reflect"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
@@ -133,10 +134,30 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	instance.Status.Errors = nil
 	crd, err := r.opa.CreateCRD(context.Background(), instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		var createErr *v1alpha1.CreateCRDError
+		if parseErrs, ok := err.(ast.Errors); ok {
+			for i := 0; i < len(parseErrs); i++ {
+				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
+				instance.Status.Errors = append(instance.Status.Errors, createErr)
+			}
+		} else {
+			createErr = &v1alpha1.CreateCRDError{Code: "create_error", Message: err.Error()}
+			instance.Status.Errors = append(instance.Status.Errors, createErr)
+		}
 	}
+
+	if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+		log.Error(updateErr, "update error", updateErr)
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	if len(instance.Status.Errors) > 0 {
+		return reconcile.Result{}, nil
+	}
+
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	if instance.GetDeletionTimestamp().IsZero() {
@@ -172,6 +193,11 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	log.Info("loading code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		instance.Status.Errors = append(instance.Status.Errors, updateErr)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("adding to watcher registry")
@@ -180,7 +206,9 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	log.Info("creating constraint CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
-		instance.Status.Error = fmt.Sprintf("Could not create CRD: %s", err)
+		instance.Status.Errors = []*v1alpha1.CreateCRDError{}
+		createErr := &v1alpha1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
+		instance.Status.Errors = append(instance.Status.Errors, createErr)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 		}
@@ -204,6 +232,11 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	log.Info("loading constraint code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		instance.Status.Errors = append(instance.Status.Errors, updateErr)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("making sure constraint is in watcher registry")

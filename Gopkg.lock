@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:82e7b5cc50fc317ed7c7a6587fac9e78222bf1cb0035f52f15126094015869bf"
+  digest = "1:d2afddba4d3c9291e6188573e13405315740eecc1fd813d7e65d57c1effaca68"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -455,7 +455,7 @@
     "constraint/pkg/types",
   ]
   pruneopts = ""
-  revision = "9d3b80201efc4569251c55d52b0a7626e35fe1a0"
+  revision = "697579360b78132279f519f2248fb9fa8abd845c"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"
@@ -1151,6 +1151,7 @@
     "github.com/open-policy-agent/frameworks/constraint/pkg/client",
     "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local",
     "github.com/open-policy-agent/frameworks/constraint/pkg/types",
+    "github.com/open-policy-agent/opa/ast",
     "github.com/pkg/errors",
     "golang.org/x/net/context",
     "k8s.io/api/admission/v1beta1",
