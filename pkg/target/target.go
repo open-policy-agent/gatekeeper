@@ -235,8 +235,8 @@ matches_nsselector(match) {
 }
 
 matches_namespace_selector(match, ns) {
-	nslabels := ns.metadata.labels
-	count(nslabels) > 0
+	metadata := get_default(ns, "metadata", {})
+    nslabels := get_default(metadata, "labels", {})
 	namespace_selector := get_default(match, "namespaceSelector", {})
 	matches_label_selector(namespace_selector, nslabels)
 }
