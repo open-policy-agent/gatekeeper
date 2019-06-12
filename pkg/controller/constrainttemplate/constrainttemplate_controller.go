@@ -155,7 +155,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	if instance.GetDeletionTimestamp().IsZero() {
