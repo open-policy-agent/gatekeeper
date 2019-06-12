@@ -1,0 +1,20 @@
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sAllowedRepos
+metadata:
+  name: prodworkload-ns-is-openpolicyagent
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    labelSelector:
+      matchExpressions:
+      - key: gk
+        operator: Exists
+    namespaceSelector:
+      matchExpressions:
+      - key: prodworkload
+        operator: Exists
+  parameters:
+    repos:
+      - "openpolicyagent"

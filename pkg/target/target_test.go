@@ -124,6 +124,102 @@ func TestValidateConstraint(t *testing.T) {
 `,
 			ErrorExpected: true,
 		},
+		{
+			Name: "No NamespaceSelector",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"kind": "K8sAllowedRepos",
+	"metadata": {
+  	"name": "prod-nslabels-is-openpolicyagent"
+	},
+	"spec": {
+  	"match": {
+    	"kinds": [
+      	{
+			"apiGroups": [""],
+        	"kinds": ["Pod"]
+		}],
+		"labelSelector": {
+			"matchExpressions": [{
+	     		"key": "someKey",
+				"operator": "In",
+				"values": ["some value"]
+			}]
+		}
+	},
+  	"parameters": {
+    	"repos": ["openpolicyagent"]
+		}
+	}
+}
+`,
+			ErrorExpected: false,
+		},
+		{
+			Name: "Valid NamespaceSelector",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"kind": "K8sAllowedRepos",
+	"metadata": {
+  	"name": "prod-nslabels-is-openpolicyagent"
+	},
+	"spec": {
+  	"match": {
+    	"kinds": [
+      	{
+			"apiGroups": [""],
+        	"kinds": ["Pod"]
+		}],
+		"namespaceSelector": {
+			"matchExpressions": [{
+	     		"key": "someKey",
+				"operator": "In",
+				"values": ["some value"]
+			}]
+		}
+	},
+  	"parameters": {
+    	"repos": ["openpolicyagent"]
+		}
+	}
+}
+`,
+			ErrorExpected: false,
+		},
+		{
+			Name: "Invalid NamespaceSelector",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"kind": "K8sAllowedRepos",
+	"metadata": {
+  	"name": "prod-nslabels-is-openpolicyagent"
+	},
+	"spec": {
+  	"match": {
+    	"kinds": [
+      	{
+			"apiGroups": [""],
+        	"kinds": ["Pod"]
+		}],
+		"namespaceSelector": {
+			"matchExpressions": [{
+	     		"key": "someKey",
+				"operator": "Blah",
+				"values": ["some value"]
+			}]
+		}
+	},
+  	"parameters": {
+    	"repos": ["openpolicyagent"]
+		}
+	}
+}
+`,
+			ErrorExpected: true,
+		},
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
