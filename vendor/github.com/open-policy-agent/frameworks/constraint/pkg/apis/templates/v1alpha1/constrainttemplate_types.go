@@ -47,10 +47,17 @@ type Target struct {
 	Rego   string `json:"rego,omitempty"`
 }
 
+// CreateCRDError represents a single error caught during parsing, compiling, etc.
+type CreateCRDError struct {
+	Code     string  `json:"code"`
+	Message  string `json:"message"`
+	Location string	`json:"location,omitempty"`
+}
+
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
 type ConstraintTemplateStatus struct {
 	Created bool   `json:"created,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Errors	[]*CreateCRDError `json:"errors,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }

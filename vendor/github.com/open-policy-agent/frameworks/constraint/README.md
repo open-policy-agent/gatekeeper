@@ -320,8 +320,9 @@ and makes requests via HTTP/HTTPS.
 
 ### Debugging
 
-There are two helpful endpoints for debugging:
+There are three helpful levers for debugging:
 
    * `Client.Dump()` returns all data cached in OPA and every module created in OPA
    * Drivers can be initialized with a tracing option like so: `local.New(local.Tracing(true))`.
      These traces can then be viewed by calling `TraceDump()` on the response.
+   * Traces can be performed on a per-request basis for `Audit()` and `Review()` requests by providing the `client.Tracing(true)` option argument. Example: `results_with_tracing := c.Audit(context.Background(), client.Tracing(true))`

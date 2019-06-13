@@ -2,12 +2,6 @@
 
 [![Build Status](https://travis-ci.org/open-policy-agent/gatekeeper.svg?branch=master)](https://travis-ci.org/open-policy-agent/gatekeeper) [![Docker Repository on Quay](https://quay.io/repository/open-policy-agent/gatekeeper/status "Docker Repository on Quay")](https://quay.io/repository/open-policy-agent/gatekeeper)
 
-## Warning: Restructing underway
-
-This is a new project that is under development.  The architecture, interfaces, and code layout are all subject to change. The policy syntax and ConstraintTemplate spec schema should be stable enough for alpha. For information on constraints and constraint templates, see the [How to Use Gatekeeper](#how-to-use-gatekeeper) section.
-
-If you need OPA-style admission control right now, we recommend using the [OPA Kubernetes Admission Control tutorial](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html).
-
 ## Want to help?
 Join us to help define the direction and implementation of this project!
 
@@ -20,20 +14,25 @@ Join us to help define the direction and implementation of this project!
 - Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
+## How is Gatekeeper different from OPA?
+Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
+
+   * An extensible, parameterized policy library
+   * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
+   * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
+   * Audit functionality
 
 ## Goals
 
 Every organization has policies. Some are essential to meet governance and legal requirements. Others help ensure adherance to best practices and institutional conventions. Attempting to ensure compliance manually would be error-prone and frustrating. Automating policy enforcement ensures consistency, lowers development latency through immediate feedback, and helps with agility by allowing developers to operate independently without sacrificing compliance.
 
-Kubernetes allows decoupling policy decisions from the inner workings of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/), which are executed whenever a resource is created, updated or deleted. Gatekeeper is a validating (mutating TBA) webhook that enforces CRD-based policies executed by [Open Policy Agent](https://github.com/open-policy-agent/opa), a policy engine for Cloud Native environments hosted by CNCF as a sandbox-level project.
+Kubernetes allows decoupling policy decisions from the inner workings of the API Server by means of [admission controller webhooks](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/), which are executed whenever a resource is created, updated or deleted. Gatekeeper is a validating (mutating TBA) webhook that enforces CRD-based policies executed by [Open Policy Agent](https://github.com/open-policy-agent/opa), a policy engine for Cloud Native environments hosted by CNCF as an incubation-level project.
 
 In addition to the `admission` scenario, Gatekeeper's audit functionality allows administrators to see what resources are currently violating any given policy.
 
 Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
 ## Installation Instructions
-
-WARNING: It is not recommended to install Gatekeeper on a production cluster. The project is in alpha and may or may not uninstall cleanly.
 
 ### Installation
 
@@ -52,7 +51,7 @@ For either installation method, make sure you have cluster admin permissions:
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
 ```
 
 #### Deploying HEAD Using make
@@ -70,7 +69,9 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 ### Uninstallation
 
-Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, `Constraint` CRDs and the `Configs` CRDs. 
+Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
+the `Config` resource in the `gatekeeper-system` namespace. This will make sure all finalizers
+are removed by Gatekeeper. Otherwise the finalizers will need to be removed manually.
    
 #### Before Uninstall, Clean Up Old Constraints
 
@@ -88,7 +89,7 @@ When Gatekeeper is running it is possible to remove unwanted constraints by:
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper-constraint.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
   ```
 
 ##### Using make
@@ -97,7 +98,6 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
-
 
 ##### Manually Removing Constraints
 
@@ -193,7 +193,7 @@ Note that if multiple matchers are specified, a resource must satisfy each top-l
 
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
 
-Audit also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
+The audit feature also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
 
 Kubernetes data can be replicated into OPA via the sync config resource. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
 
@@ -229,6 +229,86 @@ The `data.inventory` document has the following format:
   * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
      * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-0"]`
 
+### Audit 
+
+The audit functionality enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations. Audit results are stored as violations listed in the `status` field of the failed constraint.
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sRequiredLabels
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    labels: ["gatekeeper"]
+status:
+  auditTimestamp: "2019-05-11T01:46:13Z"
+  enforced: true
+  violations:
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: default
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: gatekeeper-system
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: kube-public
+  - kind: Namespace
+    message: 'you must provide labels: {"gatekeeper"}'
+    name: kube-system
+```
+> NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
+
+To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`. 
+
+### Debugging
+
+In debugging decisions and constraints, a few pieces of information can be helpful:
+
+   * Cached data and existing rules at the time of the request
+   * A trace of the evaluation
+   * The input document being evaluated
+
+Writing out this information for every request would be very expensive, and it would be hard
+to find the relevant logs for a given request. Instead, Gatekeeper allows users to specify
+resources and requesting users for which information will be logged. They can do so by
+configuring the `Config` resource, which lives in the `gatekeeper-system` namespace.
+
+Below is an example of a config resource:
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  # Data to be replicated into OPA
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
+  validation:
+    # Requests for which we want to run traces
+    traces:
+        # The requesting user for which traces will be run
+      - user: "user_to_trace@company.com"
+        kind:
+          # The group, version, kind for which we want to run a trace
+          group: ""
+          version: "v1"
+          kind: "Namespace"
+          # If dump is defined and set to `All`, also dump the state of OPA
+          dump: "All"
+```
+
+Traces will be written to the stdout logs of the Gatekeeper controller.
 
 ## Kick The Tires
 

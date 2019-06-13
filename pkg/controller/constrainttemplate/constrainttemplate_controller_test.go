@@ -48,6 +48,8 @@ var c client.Client
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "denyall"}}
 
+var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
+
 const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
@@ -193,4 +195,51 @@ deny[{"msg": "denied!"}] {
 		fmt.Println(opa.Dump(context.TODO()))
 	}
 	g.Expect(len(resp.Results())).Should(gomega.Equal(1))
+
+	// Create template with invalid rego, should populate parse error in status
+	instanceInvalidRego := &v1alpha1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
+		Spec: v1alpha1.ConstraintTemplateSpec{
+			CRD: v1alpha1.CRD{
+				Spec: v1alpha1.CRDSpec{
+					Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+						Kind:   "InvalidRego",
+						Plural: "invalidrego",
+					},
+				},
+			},
+			Targets: []v1alpha1.Target{
+				{
+					Target: "admission.k8s.gatekeeper.sh",
+					Rego: `
+package foo
+
+deny[}}}//invalid//rego
+`},
+			},
+		},
+	}
+
+	err = c.Create(context.TODO(), instanceInvalidRego)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	defer c.Delete(context.TODO(), instanceInvalidRego)
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
+
+	g.Eventually(func() error {
+		ct := &v1alpha1.ConstraintTemplate{}
+		if err := c.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
+			return err
+		}
+		if ct.Name == "invalidrego" {
+			if len(ct.Status.Errors) != 1 {
+				return errors.New("InvalidRego template should contain 1 parse error")
+			} else {
+				if ct.Status.Errors[0].Code != "rego_parse_error" {
+					return errors.New(fmt.Sprintf("InvalidRego template returning unexpected error %s", ct.Status.Errors[0].Code))
+				}
+				return nil
+			}
+		}
+		return errors.New("InvalidRego not found")
+	}, timeout).Should(gomega.BeNil())
 }
