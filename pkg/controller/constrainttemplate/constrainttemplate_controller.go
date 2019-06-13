@@ -147,14 +147,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			createErr = &v1alpha1.CreateCRDError{Code: "create_error", Message: err.Error()}
 			instance.Status.Errors = append(instance.Status.Errors, createErr)
 		}
-	}
 
-	if updateErr := r.Update(context.Background(), instance); updateErr != nil {
-		log.Error(updateErr, "update error", updateErr)
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	if len(instance.Status.Errors) > 0 {
+		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+			log.Error(updateErr, "update error", updateErr)
+			return reconcile.Result{Requeue: true}, nil
+		}
 		return reconcile.Result{}, nil
 	}
 
@@ -250,6 +247,10 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if err := r.Update(context.Background(), found); err != nil {
 			return reconcile.Result{}, err
 		}
+	}
+	if err := r.Update(context.Background(), instance); err != nil {
+		log.Error(err, "update error", err)
+		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
 }
