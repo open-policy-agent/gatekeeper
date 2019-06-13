@@ -217,7 +217,7 @@ spec:
 You can install this config with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/sync.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/sync.yaml
 ```
 
 Once data is synced into OPA, rules can access the cached data under the `data.inventory` document.
