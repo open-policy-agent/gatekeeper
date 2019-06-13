@@ -154,7 +154,7 @@ spec:
 You can install this ConstraintTemplate with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/templates/k8srequiredlabels_template.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/templates/k8srequiredlabels_template.yaml
 ```
 
 ### Constraints
@@ -178,7 +178,7 @@ spec:
 You can install this Constraint with the following command:
 
 ```sh
-kubectl apply -f https://github.com/open-policy-agent/gatekeeper/blob/master/demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
 ```
 
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
