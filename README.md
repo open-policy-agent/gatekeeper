@@ -266,6 +266,50 @@ status:
 
 To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`. 
 
+### Debugging
+
+In debugging decisions and constraints, a few pieces of information can be helpful:
+
+   * Cached data and existing rules at the time of the request
+   * A trace of the evaluation
+   * The input document being evaluated
+
+Writing out this information for every request would be very expensive, and it would be hard
+to find the relevant logs for a given request. Instead, Gatekeeper allows users to specify
+resources and requesting users for which information will be logged. They can do so by
+configuring the `Config` resource, which lives in the `gatekeeper-system` namespace.
+
+Below is an example of a config resource:
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  # Data to be replicated into OPA
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
+  validation:
+    # Requests for which we want to run traces
+    traces:
+        # The requesting user for which traces will be run
+      - user: "user_to_trace@company.com"
+        kind:
+          # The group, version, kind for which we want to run a trace
+          group: ""
+          version: "v1"
+          kind: "Namespace"
+          # If dump is defined and set to `All`, also dump the state of OPA
+          dump: "All"
+```
+
+Traces will be written to the stdout logs of the Gatekeeper controller.
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
