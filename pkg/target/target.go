@@ -43,6 +43,8 @@ matching_constraints[constraint] {
 
 	matches_namespaces(match)
 
+	matches_nsselector(match)
+
   label_selector := get_default(match, "labelSelector", {})
 	obj := get_default(input.review, "object", {})
 	metadata := get_default(obj, "metadata", {})
@@ -221,6 +223,24 @@ matches_namespaces(match) {
 	ns := {n | n = match.namespaces[_]}
 	count({input.review.namespace} - ns) == 0
 }
+
+matches_nsselector(match) {
+	not has_field(match, "namespaceSelector")
+}
+
+matches_nsselector(match) {
+	has_field(match, "namespaceSelector")
+	ns := {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
+	matches_namespace_selector(match, ns)
+}
+
+matches_namespace_selector(match, ns) {
+	metadata := get_default(ns, "metadata", {})
+    nslabels := get_default(metadata, "labels", {})
+	namespace_selector := get_default(match, "namespaceSelector", {})
+	matches_label_selector(namespace_selector, nslabels)
+}
+
 `
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
@@ -390,6 +410,41 @@ func (h *K8sValidationTarget) MatchSchema() apiextensionsv1beta1.JSONSchemaProps
 					},
 				},
 			},
+			"namespaceSelector": apiextensionsv1beta1.JSONSchemaProps{
+				Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+					// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333
+					//"matchLabels": apiextensionsv1beta1.JSONSchemaProps{
+					//	AdditionalProperties: &apiextensionsv1beta1.JSONSchemaPropsOrBool{
+					//		Allows: true,
+					//		Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
+					//	},
+					//},
+					"matchExpressions": apiextensionsv1beta1.JSONSchemaProps{
+						Type: "array",
+						Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+							Schema: &apiextensionsv1beta1.JSONSchemaProps{
+								Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+									"key": apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
+									"operator": apiextensionsv1beta1.JSONSchemaProps{
+										Type: "string",
+										Enum: []apiextensionsv1beta1.JSON{
+											apiextensionsv1beta1.JSON{Raw: []byte(`"In"`)},
+											apiextensionsv1beta1.JSON{Raw: []byte(`"NotIn"`)},
+											apiextensionsv1beta1.JSON{Raw: []byte(`"Exists"`)},
+											apiextensionsv1beta1.JSON{Raw: []byte(`"DoesNotExist"`)},
+										}},
+									"values": apiextensionsv1beta1.JSONSchemaProps{
+										Type: "array",
+										Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
+											Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -399,15 +454,29 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 	if err != nil {
 		return err
 	}
-	if !found {
-		return nil
-	}
-	if labelSelector != nil {
+
+	if found && labelSelector != nil {
 		labelSelectorObj, err := convertToLabelSelector(labelSelector)
 		if err != nil {
 			return err
 		}
 		errorList := validation.ValidateLabelSelector(labelSelectorObj, field.NewPath("spec", "labelSelector"))
+		if len(errorList) > 0 {
+			return errorList.ToAggregate()
+		}
+	}
+
+	namespaceSelector, found, err := unstructured.NestedMap(u.Object, "spec", "match", "namespaceSelector")
+	if err != nil {
+		return err
+	}
+
+	if found && namespaceSelector != nil {
+		namespaceSelectorObj, err := convertToLabelSelector(namespaceSelector)
+		if err != nil {
+			return err
+		}
+		errorList := validation.ValidateLabelSelector(namespaceSelectorObj, field.NewPath("spec", "labelSelector"))
 		if len(errorList) > 0 {
 			return errorList.ToAggregate()
 		}
