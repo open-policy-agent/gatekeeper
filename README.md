@@ -72,7 +72,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
 the `Config` resource in the `gatekeeper-system` namespace. This will make sure all finalizers
 are removed by Gatekeeper. Otherwise the finalizers will need to be removed manually.
-   
+
 #### Before Uninstall, Clean Up Old Constraints
 
 Currently the uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate`, `Constraint`, and `Config` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
@@ -236,7 +236,7 @@ The `data.inventory` document has the following format:
   * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
      * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-0"]`
 
-### Audit 
+### Audit
 
 The audit functionality enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations. Audit results are stored as violations listed in the `status` field of the failed constraint.
 
@@ -271,7 +271,7 @@ status:
 ```
 > NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`. 
+To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`.
 
 ### Debugging
 
@@ -316,6 +316,14 @@ spec:
 ```
 
 Traces will be written to the stdout logs of the Gatekeeper controller.
+
+
+If there is an error in the Rego in the ConstraintTemplate, there are cases where it is still created via `kubectl apply -f constraint-template.yaml`.
+
+When applying the Constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to  recognize "constraint.yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1alpha1"`.
+
+To fix the error, it is useful to view the logs, by running the command `kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager`.
+To find the Rego errors more easily, it may be useful to pipe the output: `kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager | grep "ERROR"`
 
 ## Kick The Tires
 
