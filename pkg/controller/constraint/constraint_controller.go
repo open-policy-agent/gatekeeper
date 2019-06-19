@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -129,7 +128,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		// Handle deletion
 		if containsString(finalizerName, instance.GetFinalizers()) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
-				if reflect.TypeOf(err).String() == "client.UnrecognizedConstraintError" {
+				if _, ok := err.(*opa.UnrecognizedConstraintError); ok {
 					return reconcile.Result{}, err
 				}
 			}
