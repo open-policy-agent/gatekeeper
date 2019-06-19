@@ -13,6 +13,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,6 +126,24 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	log := log.WithValues("hookType", "validation")
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
+	}
+
+	if req.AdmissionRequest.Operation == admissionv1beta1.Delete {
+		// oldObject is the existing object.
+		// It is null for DELETE operations in API servers prior to v1.15.0.
+		// https://github.com/kubernetes/website/pull/14671
+		if req.AdmissionRequest.OldObject.Raw == nil {
+			vResp := admission.ValidationResponse(false, "For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
+			vResp.Response.Result.Code = http.StatusInternalServerError
+			return vResp
+		} else {
+			// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
+			// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
+			// object is the new object being admitted.
+			// It is null for DELETE operations.
+			// https://github.com/kubernetes/kubernetes/pull/76346
+			req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
+		}
 	}
 
 	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {
