@@ -317,7 +317,6 @@ If there is an error in the Rego in the ConstraintTemplate, there are cases wher
 When applying the Constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to  recognize "constraint.yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1alpha1"`.
 
 To fix the error, it is useful to view the logs, by running the command `kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager`.
-To find the Rego errors more easily, it may be useful to pipe the output: `kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager | grep "ERROR"`
 
 ## Kick The Tires
 
