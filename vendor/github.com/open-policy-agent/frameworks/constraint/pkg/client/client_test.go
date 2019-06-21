@@ -529,7 +529,7 @@ func TestRemoveConstraint(t *testing.T) {
 			Constraint:    newConstraint("Bar", "bar", nil),
 			OmitTemplate:  true,
 			ErrorExpected: true,
-			ExpectedErrorType: "client.UnrecognizedConstraintError",
+			ExpectedErrorType: "*client.UnrecognizedConstraintError",
 		},
 	}
 	for _, tt := range tc {
