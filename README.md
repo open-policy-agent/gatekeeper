@@ -312,11 +312,11 @@ spec:
 Traces will be written to the stdout logs of the Gatekeeper controller.
 
 
-If there is an error in the Rego in the ConstraintTemplate, there are cases where it is still created via `kubectl apply -f constraint-template.yaml`.
+If there is an error in the Rego in the ConstraintTemplate, there are cases where it is still created via `kubectl apply -f [CONSTRAINT_TEMPLATE_FILENAME].yaml`.
 
-When applying the Constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to  recognize "constraint.yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1alpha1"`.
+When applying the constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to recognize "[CONSTRAINT_FILENAME].yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1alpha1"`.
 
-To fix the error, it is useful to view the logs, by running the command `kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager`.
+To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
 
 ## Kick The Tires
 
