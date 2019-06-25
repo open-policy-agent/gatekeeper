@@ -18,8 +18,6 @@ package constraint
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -130,8 +128,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		// Handle deletion
 		if containsString(finalizerName, instance.GetFinalizers()) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
-				// TODO make the unrecognized constraint error detectable via class introspection
-				if !(strings.HasPrefix(err.Error(), "Constraint kind ") && strings.HasSuffix(err.Error(), " is not recognized")) {
+				if _, ok := err.(*opa.UnrecognizedConstraintError); ok {
 					return reconcile.Result{}, err
 				}
 			}
