@@ -33,6 +33,19 @@ package target
 # Required Hooks #
 ##################
 
+autoreject_review[rejection] {
+	constraint := {{.ConstraintsRoot}}[_][_]
+	spec := get_default(constraint, "spec", {})
+	match := get_default(spec, "match", {})
+	has_field(match, "namespaceSelector")
+	not {{.DataRoot}}.cluster["v1"]["Namespace"]
+	rejection := {
+		"msg": "NamespaceSelector requires Namespace to be replicated into OPA. To replicate namespaces, add Namespace to the sync config resource.",
+		"details": {},
+		"constraint": constraint,
+	}
+}
+
 matching_constraints[constraint] {
 	trace(sprintf("INPUT IS: %v", [input]))
 	constraint := {{.ConstraintsRoot}}[_][_]
@@ -226,6 +239,11 @@ matches_namespaces(match) {
 
 matches_nsselector(match) {
 	not has_field(match, "namespaceSelector")
+}
+
+matches_nsselector(match) {
+	has_field(match, "namespaceSelector")
+	not {{.DataRoot}}.cluster["v1"]["Namespace"]
 }
 
 matches_nsselector(match) {
