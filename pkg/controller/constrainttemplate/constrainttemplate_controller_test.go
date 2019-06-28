@@ -27,6 +27,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -160,7 +161,11 @@ deny[{"msg": "denied!"}] {
 		if err != nil {
 			return err
 		}
-		val, found, err := unstructured.NestedBool(o.Object, "status", "enforced")
+		status, err := util.GetHAStatus(o)
+		if err != nil {
+			return err
+		}
+		val, found, err := unstructured.NestedBool(status, "enforced")
 		if err != nil {
 			return err
 		}
@@ -231,11 +236,12 @@ deny[}}}//invalid//rego
 			return err
 		}
 		if ct.Name == "invalidrego" {
-			if len(ct.Status.Errors) != 1 {
+			status := util.GetCTHAStatus(ct)
+			if len(status.Errors) != 1 {
 				return errors.New("InvalidRego template should contain 1 parse error")
 			} else {
-				if ct.Status.Errors[0].Code != "rego_parse_error" {
-					return errors.New(fmt.Sprintf("InvalidRego template returning unexpected error %s", ct.Status.Errors[0].Code))
+				if status.Errors[0].Code != "rego_parse_error" {
+					return errors.New(fmt.Sprintf("InvalidRego template returning unexpected error %s", status.Errors[0].Code))
 				}
 				return nil
 			}

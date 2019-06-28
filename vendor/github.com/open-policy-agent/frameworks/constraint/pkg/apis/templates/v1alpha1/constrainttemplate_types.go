@@ -54,10 +54,18 @@ type CreateCRDError struct {
 	Location string	`json:"location,omitempty"`
 }
 
+// ByPodStatus defines the observed state of ConstraintTemplate as seen by
+// an individual controller
+type ByPodStatus struct {
+	// a unique identifier for the pod that wrote the status
+	ID string `json:"id,omitempty"`
+	Errors	[]*CreateCRDError `json:"errors,omitempty"`
+}
+
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
 type ConstraintTemplateStatus struct {
 	Created bool   `json:"created,omitempty"`
-	Errors	[]*CreateCRDError `json:"errors,omitempty"`
+	ByPod []*ByPodStatus `json:"byPod,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }

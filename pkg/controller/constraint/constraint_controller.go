@@ -18,8 +18,10 @@ package constraint
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -115,12 +117,22 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 		log.Info("instance will be added", "instance", instance)
-		unstructured.RemoveNestedField(instance.Object, "status", "errors")
+		status, err := util.GetHAStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		delete(status, "errors")
+		util.SetHAStatus(instance, status)
 
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
-		unstructured.SetNestedField(instance.Object, true, "status", "enforced")
+		status, err = util.GetHAStatus(instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		status["enforced"] = true
+		util.SetHAStatus(instance, status)
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
