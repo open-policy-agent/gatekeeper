@@ -190,9 +190,9 @@ spec:
               apiVersion: v1
               fieldPath: metadata.namespace
         - name: POD_NAME
-           valueFrom:
-             fieldRef:
-               fieldPath: metadata.name
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: SECRET_NAME
           value: gatekeeper-webhook-server-secret
         image: quay.io/open-policy-agent/gatekeeper:v3.0.2
