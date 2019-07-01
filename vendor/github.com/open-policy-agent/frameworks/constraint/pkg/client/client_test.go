@@ -502,6 +502,7 @@ func TestRemoveConstraint(t *testing.T) {
 		Constraint    *unstructured.Unstructured
 		OmitTemplate  bool
 		ErrorExpected bool
+		ExpectedErrorType string
 	}{
 		{
 			Name:       "Good Constraint",
@@ -522,6 +523,13 @@ func TestRemoveConstraint(t *testing.T) {
 			Constraint:    newConstraint("Foo", "foo", nil),
 			OmitTemplate:  true,
 			ErrorExpected: true,
+		},
+		{
+			Name:          "Unrecognized Constraint",
+			Constraint:    newConstraint("Bar", "bar", nil),
+			OmitTemplate:  true,
+			ErrorExpected: true,
+			ExpectedErrorType: "*client.UnrecognizedConstraintError",
 		},
 	}
 	for _, tt := range tc {
@@ -549,6 +557,9 @@ func TestRemoveConstraint(t *testing.T) {
 			}
 			if err == nil && tt.ErrorExpected {
 				t.Error("err = nil; want non-nil")
+			}
+			if tt.ErrorExpected && tt.ExpectedErrorType != "" && reflect.TypeOf(err).String() != tt.ExpectedErrorType {
+				t.Errorf("err type = %s; want %s", reflect.TypeOf(err).String(), tt.ExpectedErrorType)
 			}
 			expectedCount := 0
 			expectedHandled := make(map[string]bool)

@@ -56,12 +56,19 @@ type SyncOnlyEntry struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
+type ByPod struct {
+	// a unique identifier for the pod that wrote the status
+	ID string `json:"id,omitempty"`
+	// List of Group/Version/Kinds with finalizers
+	AllFinalizers []GVK `json:"allFinalizers,omitempty"`
+}
+
 // ConfigStatus defines the observed state of Config
 type ConfigStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// List of Group/Version/Kinds with finalizers
-	AllFinalizers []GVK `json:"allFinalizers,omitempty"`
+	// List of statuses as seen by individual pods
+	ByPod []*ByPod `json:"byPod,omitempty"`
 }
 
 func ToAPIGVK(gvk schema.GroupVersionKind) GVK {

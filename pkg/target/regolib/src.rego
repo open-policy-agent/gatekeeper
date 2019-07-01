@@ -6,13 +6,14 @@ package target
 
 matching_constraints[constraint] {
 	constraint := data["{{.ConstraintsRoot}}"][_][_]
-	groups := {input.review.kind.group, "*"}
 	spec := get_default(constraint, "spec", {})
 	match := get_default(spec, "match", {})
 
   any_kind_selector_matches(match)
 
 	matches_namespaces(match)
+
+	matches_nsselector(match)
 
   label_selector := get_default(match, "labelSelector", {})
 	obj := get_default(input.review, "object", {})
@@ -193,4 +194,23 @@ matches_namespaces(match) {
 	has_field(match, "namespaces")
 	ns := {n | n = match.namespaces[_]}
 	count({input.review.namespace} - ns) == 0
+}
+
+matches_nsselector(match) {
+	not has_field(match, "namespaceSelector")
+}
+
+matches_nsselector(match) {
+	has_field(match, "namespaceSelector")
+	ns := data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+	matches_namespace_selector(match, ns)
+}
+
+# Checks to see if a kubernetes NamespaceSelector matches a namespace with a given set of labels
+# A non-existent selector or labels should be represented by an empty object ("{}")
+matches_namespace_selector(match, ns) {
+	metadata := get_default(ns, "metadata", {})
+  nslabels := get_default(metadata, "labels", {})
+	namespace_selector := get_default(match, "namespaceSelector", {})
+	matches_label_selector(namespace_selector, nslabels)
 }

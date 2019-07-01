@@ -23,7 +23,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -133,10 +135,30 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	status := util.GetCTHAStatus(instance)
+	status.Errors = nil
 	crd, err := r.opa.CreateCRD(context.Background(), instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		var createErr *v1alpha1.CreateCRDError
+		if parseErrs, ok := err.(ast.Errors); ok {
+			for i := 0; i < len(parseErrs); i++ {
+				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
+				status.Errors = append(status.Errors, createErr)
+			}
+		} else {
+			createErr = &v1alpha1.CreateCRDError{Code: "create_error", Message: err.Error()}
+			status.Errors = append(status.Errors, createErr)
+		}
+
+		util.SetCTHAStatus(instance, status)
+		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+			log.Error(updateErr, "update error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		return reconcile.Result{}, nil
 	}
+	util.SetCTHAStatus(instance, status)
+
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	if instance.GetDeletionTimestamp().IsZero() {
@@ -172,15 +194,27 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	log.Info("loading code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		status := util.GetCTHAStatus(instance)
+		status.Errors = append(status.Errors, updateErr)
+		util.SetCTHAStatus(instance, status)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("adding to watcher registry")
 	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 		return reconcile.Result{}, err
 	}
+	// To support HA deployments, only one pod should be able to create CRDs
 	log.Info("creating constraint CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
-		instance.Status.Error = fmt.Sprintf("Could not create CRD: %s", err)
+		status := util.GetCTHAStatus(instance)
+		status.Errors = []*v1alpha1.CreateCRDError{}
+		createErr := &v1alpha1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
+		status.Errors = append(status.Errors, createErr)
+		util.SetCTHAStatus(instance, status)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 		}
@@ -204,6 +238,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	log.Info("loading constraint code into OPA")
 	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
+		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+		status := util.GetCTHAStatus(instance)
+		status.Errors = append(status.Errors, updateErr)
+		util.SetCTHAStatus(instance, status)
+		if err2 := r.Update(context.Background(), instance); err2 != nil {
+			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+		}
 		return reconcile.Result{}, err
 	}
 	log.Info("making sure constraint is in watcher registry")
@@ -217,6 +258,10 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if err := r.Update(context.Background(), found); err != nil {
 			return reconcile.Result{}, err
 		}
+	}
+	if err := r.Update(context.Background(), instance); err != nil {
+		log.Error(err, "update error", err)
+		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
 }

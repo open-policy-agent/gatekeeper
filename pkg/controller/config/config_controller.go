@@ -27,6 +27,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -169,7 +170,8 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 	}
 	// make sure old finalizers get cleaned up even on restart
-	for _, gvk := range instance.Status.AllFinalizers {
+	status := util.GetCfgHAStatus(instance)
+	for _, gvk := range status.AllFinalizers {
 		toClean.Add(configv1alpha1.ToGVK(gvk))
 	}
 
@@ -191,7 +193,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	for i, gvk := range items {
 		allFinalizers[i] = configv1alpha1.ToAPIGVK(gvk)
 	}
-	instance.Status.AllFinalizers = allFinalizers
+	status.AllFinalizers = allFinalizers
 	toClean.RemoveSet(newSyncOnly)
 	if toClean.Size() > 0 {
 		if r.fc != nil {
@@ -215,6 +217,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	util.SetCfgHAStatus(instance, status)
 	if err := r.Update(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -279,12 +282,14 @@ func (fc *finalizerCleanup) clean() {
 						log.Info("could not retrieve config to report removed finalizer")
 					}
 					var allFinalizers []configv1alpha1.GVK
-					for _, v := range instance.Status.AllFinalizers {
+					status := util.GetCfgHAStatus(instance)
+					for _, v := range status.AllFinalizers {
 						if configv1alpha1.ToGVK(v) != gvk {
 							allFinalizers = append(allFinalizers, v)
 						}
 					}
-					instance.Status.AllFinalizers = allFinalizers
+					status.AllFinalizers = allFinalizers
+					util.SetCfgHAStatus(instance, status)
 					if err := fc.c.Update(context.Background(), instance); err != nil {
 						log.Info("could not record removed finalizer")
 					}

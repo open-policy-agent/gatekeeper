@@ -76,15 +76,24 @@ spec:
           type: object
         status:
           properties:
-            allFinalizers:
-              description: List of Group/Version/Kinds with finalizers
+            byPod:
+              description: List of statuses as seen by individual pods
               items:
                 properties:
-                  group:
-                    type: string
-                  kind:
-                    type: string
-                  version:
+                  allFinalizers:
+                    description: List of Group/Version/Kinds with finalizers
+                    items:
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
                     type: string
                 type: object
               type: array
