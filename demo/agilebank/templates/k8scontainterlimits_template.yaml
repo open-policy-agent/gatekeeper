@@ -45,6 +45,7 @@ spec:
         canonify_cpu(orig) = new {
           not is_number(orig)
           not endswith(orig, "m")
+          re_match("^[0-9]+$", orig)
           new := to_number(orig) * 1000
         }
 
@@ -85,7 +86,7 @@ spec:
         mem_multiple("Pi") = 1125899906842624 { true }
 
         # 2 ** 60
-        mem_multiple("Pi") = 1152921504606846976 { true }
+        mem_multiple("Ei") = 1152921504606846976 { true }
 
         get_suffix(mem) = suffix {
           not is_string(mem)
@@ -121,6 +122,20 @@ spec:
           suffix := get_suffix(orig)
           raw := replace(orig, suffix, "")
           new := to_number(raw) * mem_multiple(suffix)
+        }
+
+        deny[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          cpu_orig := container.resources.limits.cpu
+          not canonify_cpu(cpu_orig)
+          msg := sprintf("container <%v> cpu limit <%v> could not be parsed", [container.name, cpu_orig])
+        }
+
+        deny[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          mem_orig := container.resources.limits.memory
+          not canonify_mem(mem_orig)
+          msg := sprintf("container <%v> memory limit <%v> could not be parsed", [container.name, mem_orig])
         }
 
         deny[{"msg": msg}] {
