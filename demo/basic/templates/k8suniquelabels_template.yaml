@@ -8,7 +8,7 @@ spec:
       names:
         kind: K8sUniqueLabel
         listKind: K8sUniqueLabelList
-        plural: k8suniquelabels
+        plural: k8suniquelabel
         singular: k8suniquelabel
       validation:
         # Schema for the `parameters` field
