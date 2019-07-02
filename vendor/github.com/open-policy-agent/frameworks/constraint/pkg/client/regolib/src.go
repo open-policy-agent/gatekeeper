@@ -5,7 +5,7 @@ const (
 package hooks["{{.Target}}"]
 
 # Finds all violations for a given target
-deny[response] {
+violation[response] {
 	data.hooks["{{.Target}}"].library.matching_constraints[constraint]
 	review := get_default(input, "review", {})
 	inp := {
@@ -13,7 +13,7 @@ deny[response] {
 		"constraint": constraint
 	}
 	inventory[inv]
-	data.templates["{{.Target}}"][constraint.kind].deny[r] with input as inp with data.inventory as inv
+	data.templates["{{.Target}}"][constraint.kind].violation[r] with input as inp with data.inventory as inv
 	response = {
 		"msg": r.msg,
 		"metadata": {"details": get_default(r, "details", {})},
@@ -31,7 +31,7 @@ audit[response] {
 		"constraint": constraint,
 	}
 	inventory[inv]
-	data.templates["{{.Target}}"][constraint.kind].deny[r] with input as inp with data.inventory as inv
+	data.templates["{{.Target}}"][constraint.kind].violation[r] with input as inp with data.inventory as inv
 	response = {
 		"msg": r.msg,
 		"metadata": {"details": get_default(r, "details", {})},

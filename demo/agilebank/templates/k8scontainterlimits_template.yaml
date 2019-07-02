@@ -124,45 +124,45 @@ spec:
           new := to_number(raw) * mem_multiple(suffix)
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           cpu_orig := container.resources.limits.cpu
           not canonify_cpu(cpu_orig)
           msg := sprintf("container <%v> cpu limit <%v> could not be parsed", [container.name, cpu_orig])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           mem_orig := container.resources.limits.memory
           not canonify_mem(mem_orig)
           msg := sprintf("container <%v> memory limit <%v> could not be parsed", [container.name, mem_orig])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           not container.resources
           msg := sprintf("container <%v> has no resource limits", [container.name])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           not container.resources.limits
           msg := sprintf("container <%v> has no resource limits", [container.name])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           missing(container.resources.limits, "cpu")
           msg := sprintf("container <%v> has no cpu limit", [container.name])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           missing(container.resources.limits, "memory")
           msg := sprintf("container <%v> has no memory limit", [container.name])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           cpu_orig := container.resources.limits.cpu
           cpu := canonify_cpu(cpu_orig)
@@ -172,7 +172,7 @@ spec:
           msg := sprintf("container <%v> cpu limit <%v> is higher than the maximum allowed of <%v>", [container.name, cpu_orig, max_cpu_orig])
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           mem_orig := container.resources.limits.memory
           mem := canonify_mem(mem_orig)

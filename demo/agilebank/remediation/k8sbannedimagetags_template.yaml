@@ -23,7 +23,7 @@ spec:
       rego: |
         package k8sbannedimagetags
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           img_split := split(container.image, ":")
           tag := img_split[count(img_split) - 1]

@@ -39,7 +39,7 @@ spec:
           msg := constraint.spec.parameters.message
         }
 
-        deny[{"msg": msg, "details": {"missing_labels": missing}}] {
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
           provided := {label | input.review.object.metadata.labels[label]}
           required := {label | label := input.constraint.spec.parameters.labels[_].key}
           missing := required - provided
@@ -48,7 +48,7 @@ spec:
           msg := get_message(input.constraint, def_msg)
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           value := input.review.object.metadata.labels[key]
           expected := input.constraint.spec.parameters.labels[_]
           expected.key == key

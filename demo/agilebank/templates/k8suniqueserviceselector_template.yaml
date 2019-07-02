@@ -39,7 +39,7 @@ spec:
           flattened := concat(",", sort(selectors))
         }
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           input.review.kind.kind == "Service"
           input.review.kind.version == "v1"
           input.review.kind.group == ""

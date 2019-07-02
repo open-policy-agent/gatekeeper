@@ -302,7 +302,7 @@ func TestAddTemplate(t *testing.T) {
 		{
 			Name:          "Good Template",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fakes"), crdNames("Fake", "fakes"), targets("h1")),
+			Template:      createTemplate(name("fakes"), crdNames("Fakes", "fakes"), targets("h1")),
 			ErrorExpected: false,
 		},
 		{
@@ -365,7 +365,7 @@ func TestAddTemplate(t *testing.T) {
 }
 
 func TestRemoveTemplate(t *testing.T) {
-	badRegoTempl := createTemplate(name("fake"), crdNames("Fake", "fakes"), targets("h1"))
+	badRegoTempl := createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h1"))
 	badRegoTempl.Spec.Targets[0].Rego = "asd{"
 	tc := []struct {
 		Name          string
@@ -376,13 +376,13 @@ func TestRemoveTemplate(t *testing.T) {
 		{
 			Name:          "Good Template",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fake", "fakes"), targets("h1")),
+			Template:      createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h1")),
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Unknown Target",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fake", "fakes"), targets("h2")),
+			Template:      createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h2")),
 			ErrorExpected: true,
 		},
 		{
@@ -435,11 +435,11 @@ func TestAddConstraint(t *testing.T) {
 	}{
 		{
 			Name:       "Good Constraint",
-			Constraint: newConstraint("Foo", "foo", nil),
+			Constraint: newConstraint("Foos", "foo", nil),
 		},
 		{
 			Name:          "No Name",
-			Constraint:    newConstraint("Foo", "", nil),
+			Constraint:    newConstraint("Foos", "", nil),
 			ErrorExpected: true,
 		},
 		{
@@ -467,7 +467,7 @@ func TestAddConstraint(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !tt.OmitTemplate {
-				tmpl := createTemplate(name("foos"), crdNames("Foo", "foos"), targets("h1"))
+				tmpl := createTemplate(name("foos"), crdNames("Foos", "foos"), targets("h1"))
 				_, err := c.AddTemplate(context.Background(), tmpl)
 				if err != nil {
 					t.Fatal(err)
@@ -498,19 +498,19 @@ func TestAddConstraint(t *testing.T) {
 
 func TestRemoveConstraint(t *testing.T) {
 	tc := []struct {
-		Name          string
-		Constraint    *unstructured.Unstructured
-		OmitTemplate  bool
-		ErrorExpected bool
+		Name              string
+		Constraint        *unstructured.Unstructured
+		OmitTemplate      bool
+		ErrorExpected     bool
 		ExpectedErrorType string
 	}{
 		{
 			Name:       "Good Constraint",
-			Constraint: newConstraint("Foo", "foo", nil),
+			Constraint: newConstraint("Foos", "foo", nil),
 		},
 		{
 			Name:          "No Name",
-			Constraint:    newConstraint("Foo", "", nil),
+			Constraint:    newConstraint("Foos", "", nil),
 			ErrorExpected: true,
 		},
 		{
@@ -525,10 +525,10 @@ func TestRemoveConstraint(t *testing.T) {
 			ErrorExpected: true,
 		},
 		{
-			Name:          "Unrecognized Constraint",
-			Constraint:    newConstraint("Bar", "bar", nil),
-			OmitTemplate:  true,
-			ErrorExpected: true,
+			Name:              "Unrecognized Constraint",
+			Constraint:        newConstraint("Bar", "bar", nil),
+			OmitTemplate:      true,
+			ErrorExpected:     true,
 			ExpectedErrorType: "*client.UnrecognizedConstraintError",
 		},
 	}
@@ -545,7 +545,7 @@ func TestRemoveConstraint(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !tt.OmitTemplate {
-				tmpl := createTemplate(name("foos"), crdNames("Foo", "foos"), targets("h1"))
+				tmpl := createTemplate(name("foos"), crdNames("Foos", "foos"), targets("h1"))
 				_, err := c.AddTemplate(context.Background(), tmpl)
 				if err != nil {
 					t.Fatal(err)

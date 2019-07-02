@@ -61,7 +61,7 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-deny[{"msg": msg, "details": {"missing_labels": missing}}] {
+violation[{"msg": msg, "details": {"missing_labels": missing}}] {
    provided := {label | input.request.object.metadata.labels[label]}
    required := {label | label := input.constraint.spec.parameters.labels[_]}
    missing := required - provided
@@ -96,12 +96,12 @@ to support their constraint, the main entry point called by the framework has a
 specific signature:
 
 ```rego
-deny[{"msg": msg, "details": {}}] {
+violation[{"msg": msg, "details": {}}] {
   # rule body
 }
 ```
 
-  * The rule name must be `deny`
+  * The rule name must be `violation`
   * `msg` is the string message returned to the violator. It is required.
   * `details` allows for custom values to be returned. This helps support uses like
      automated remediation. There is no predefined schema for the `details` object. 
