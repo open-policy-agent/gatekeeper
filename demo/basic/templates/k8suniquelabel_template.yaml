@@ -1,7 +1,7 @@
 apiVersion: templates.gatekeeper.sh/v1alpha1
 kind: ConstraintTemplate
 metadata:
-  name: k8suniquelabels
+  name: k8suniquelabel
 spec:
   crd:
     spec:
