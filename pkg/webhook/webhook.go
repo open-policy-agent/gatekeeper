@@ -18,20 +18,31 @@ package webhook
 import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager, client.Client) error
+var CreateWebhookFuncs []func(manager.Manager, client.Client) (webhook.Webhook, error)
 
 // AddToManager adds all Controllers to the Manager
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations;validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 func AddToManager(m manager.Manager, opa client.Client) error {
-	for _, f := range AddToManagerFuncs {
-		if err := f(m, opa); err != nil {
+
+	s, err := InitializeServer(m)
+	if err != nil {
+		return err
+	}
+
+	var webhooks []webhook.Webhook
+	for _, createWH := range CreateWebhookFuncs {
+		wh, err := createWH(m, opa)
+		if err != nil {
 			return err
 		}
+		webhooks = append(webhooks, wh)
 	}
+	s.Register(webhooks...)
+
 	return nil
 }
