@@ -23,7 +23,7 @@ spec:
       rego: |
         package k8sallowedrepos
 
-        deny[{"msg": msg}] {
+        violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
           satisfied := [good | repo = input.constraint.spec.parameters.repos[_] ; good = startswith(container.image, repo)]
           not any(satisfied)

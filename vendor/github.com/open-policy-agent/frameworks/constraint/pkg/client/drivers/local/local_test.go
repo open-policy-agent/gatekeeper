@@ -412,10 +412,10 @@ func TestQuery(t *testing.T) {
 			}
 		}
 
-		if err := d.PutModule(context.Background(), "test", `package hooks deny[r] { r = data.constraints[_] }`); err != nil {
+		if err := d.PutModule(context.Background(), "test", `package hooks violation[r] { r = data.constraints[_] }`); err != nil {
 			t.Fatal(err)
 		}
-		res, err := d.Query(context.Background(), "hooks.deny", nil)
+		res, err := d.Query(context.Background(), "hooks.violation", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

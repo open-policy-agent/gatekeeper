@@ -72,7 +72,7 @@ func TestReconcile(t *testing.T) {
 					Rego: `
 package foo
 
-deny[{"msg": "denied!"}] {
+violation[{"msg": "denied!"}] {
 	1 == 1
 }
 `},
@@ -219,7 +219,7 @@ deny[{"msg": "denied!"}] {
 					Rego: `
 package foo
 
-deny[}}}//invalid//rego
+violation[}}}//invalid//rego
 `},
 			},
 		},

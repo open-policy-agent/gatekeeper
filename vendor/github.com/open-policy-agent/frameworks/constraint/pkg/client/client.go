@@ -223,6 +223,9 @@ func (c *client) CreateCRD(ctx context.Context, templ *v1alpha1.ConstraintTempla
 	if templ.ObjectMeta.Name != templ.Spec.CRD.Spec.Names.Plural {
 		return nil, fmt.Errorf("Template's name %s is not equal to the CRD's plural name: %s", templ.ObjectMeta.Name, templ.Spec.CRD.Spec.Names.Plural)
 	}
+	if templ.ObjectMeta.Name != strings.ToLower(templ.Spec.CRD.Spec.Names.Kind) {
+		return nil, fmt.Errorf("Template's name %s is not equal to the lowercase of CRD's Kind: %s", templ.ObjectMeta.Name, strings.ToLower(templ.Spec.CRD.Spec.Names.Kind))
+	}
 
 	var src string
 	var target TargetHandler
@@ -552,7 +555,7 @@ TargetLoop:
 			continue
 		}
 		input := map[string]interface{}{"review": review}
-		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].deny`, name), input, drivers.Tracing(cfg.enableTracing))
+		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].violation`, name), input, drivers.Tracing(cfg.enableTracing))
 		if err != nil {
 			errMap[name] = err
 			continue
