@@ -38,23 +38,9 @@ autoreject_review[rejection] {
 	spec := get_default(constraint, "spec", {})
 	match := get_default(spec, "match", {})
 	has_field(match, "namespaceSelector")
-	not {{.DataRoot}}.cluster["v1"]["Namespace"]
-	rejection := {
-		"msg": "NamespaceSelector requires Namespace to be replicated into OPA. To replicate namespaces, add Namespace to the sync config resource.",
-		"details": {},
-		"constraint": constraint,
-	}
-}
-
-autoreject_review[rejection] {
-	constraint := {{.ConstraintsRoot}}[_][_]
-	spec := get_default(constraint, "spec", {})
-	match := get_default(spec, "match", {})
-	has_field(match, "namespaceSelector")
-	{{.DataRoot}}.cluster["v1"]["Namespace"]
 	not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
 	rejection := {
-		"msg": "Namespace is not replicated into OPA.",
+		"msg": "Namespace is not cached in OPA.",
 		"details": {},
 		"constraint": constraint,
 	}
