@@ -248,6 +248,12 @@ matches_nsselector(match) {
 
 matches_nsselector(match) {
 	has_field(match, "namespaceSelector")
+	{{.DataRoot}}.cluster["v1"]["Namespace"]
+	not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
+}
+
+matches_nsselector(match) {
+	has_field(match, "namespaceSelector")
 	ns := {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
 	matches_namespace_selector(match, ns)
 }
