@@ -34,8 +34,12 @@ type CRD struct {
 }
 
 type CRDSpec struct {
-	Names      apiextensionsv1beta1.CustomResourceDefinitionNames `json:"names,omitempty"`
-	Validation *Validation                                        `json:"validation,omitempty"`
+	Names      Names       `json:"names,omitempty"`
+	Validation *Validation `json:"validation,omitempty"`
+}
+
+type Names struct {
+	Kind string `json:"kind,omitempty"`
 }
 
 type Validation struct {

@@ -158,6 +158,11 @@ func TestGetRuleArity(t *testing.T) {
 			ArityExpected: 1,
 		},
 		{
+			Name:          "Object is unary",
+			Rego:          `package hello v[{"arg": a}]{a == 1}`,
+			ArityExpected: 1,
+		},
+		{
 			Name:          "Binary",
 			Rego:          `package hello v[[r, d]]{r == 1; d == 2}`,
 			ArityExpected: 2,
@@ -171,11 +176,6 @@ func TestGetRuleArity(t *testing.T) {
 			Name:          "Object in Array Allowed",
 			Rego:          `package hello v[[{"arg": a}, b]]{a == 1; b == 2}`,
 			ArityExpected: 2,
-		},
-		{
-			Name:          "No Object",
-			Rego:          `package hello v[{"arg": a}]{a == 1}`,
-			ErrorExpected: true,
 		},
 		{
 			Name:          "No String Key",

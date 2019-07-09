@@ -33,6 +33,9 @@ spec:
                 spec:
                   properties:
                     names:
+                      properties:
+                        kind:
+                          type: string
                       type: object
                     validation:
                       type: object

@@ -25,9 +25,8 @@ func newConstraintTemplate(name, rego string) *v1alpha1.ConstraintTemplate {
 		Spec: v1alpha1.ConstraintTemplateSpec{
 			CRD: v1alpha1.CRD{
 				Spec: v1alpha1.CRDSpec{
-					Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-						Kind:   name,
-						Plural: strings.ToLower(name),
+					Names: v1alpha1.Names{
+						Kind: name,
 					},
 					Validation: &v1alpha1.Validation{
 						OpenAPIV3Schema: &apiextensionsv1beta1.JSONSchemaProps{

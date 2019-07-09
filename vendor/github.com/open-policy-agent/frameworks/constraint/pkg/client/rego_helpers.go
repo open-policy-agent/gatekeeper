@@ -166,6 +166,8 @@ func getRuleArity(r *ast.Rule) (int, error) {
 	switch v := t.Value.(type) {
 	case ast.Var:
 		return 1, nil
+	case ast.Object:
+		return 1, nil
 	case ast.Array:
 		errs := false
 		for _, e := range v {

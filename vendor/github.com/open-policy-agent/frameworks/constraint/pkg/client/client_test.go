@@ -292,8 +292,25 @@ func TestRemoveData(t *testing.T) {
 }
 
 func TestAddTemplate(t *testing.T) {
-	badRegoTempl := createTemplate(name("fakes"), crdNames("Fake", "fakes"), targets("h1"))
+	badRegoTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
 	badRegoTempl.Spec.Targets[0].Rego = "asd{"
+	badArityTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
+	badArityTempl.Spec.Targets[0].Rego = `
+package foo
+
+violation {
+	true
+}
+`
+	missingRuleTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
+	missingRuleTempl.Spec.Targets[0].Rego = `
+package foo
+
+some_rule[r] {
+ r = 5
+}
+`
+
 	tc := []struct {
 		Name          string
 		Handler       TargetHandler
@@ -303,13 +320,13 @@ func TestAddTemplate(t *testing.T) {
 		{
 			Name:          "Good Template",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fakes"), crdNames("Fakes", "fakes"), targets("h1")),
+			Template:      createTemplate(name("fakes"), crdNames("Fakes"), targets("h1")),
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Unknown Target",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fakes"), crdNames("Fake", "fakes"), targets("h2")),
+			Template:      createTemplate(name("fakes"), crdNames("Fake"), targets("h2")),
 			ErrorExpected: true,
 		},
 		{
@@ -321,13 +338,25 @@ func TestAddTemplate(t *testing.T) {
 		{
 			Name:          "No Name",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(crdNames("Fake", "fakes"), targets("h1")),
+			Template:      createTemplate(crdNames("Fake"), targets("h1")),
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Bad Rego",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
 			Template:      badRegoTempl,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "Bad Arity",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      badArityTempl,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "Missing Rule",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      missingRuleTempl,
 			ErrorExpected: true,
 		},
 	}
@@ -366,7 +395,7 @@ func TestAddTemplate(t *testing.T) {
 }
 
 func TestRemoveTemplate(t *testing.T) {
-	badRegoTempl := createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h1"))
+	badRegoTempl := createTemplate(name("fake"), crdNames("Fakes"), targets("h1"))
 	badRegoTempl.Spec.Targets[0].Rego = "asd{"
 	tc := []struct {
 		Name          string
@@ -377,13 +406,13 @@ func TestRemoveTemplate(t *testing.T) {
 		{
 			Name:          "Good Template",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h1")),
+			Template:      createTemplate(name("fake"), crdNames("Fakes"), targets("h1")),
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Unknown Target",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fakes", "fakes"), targets("h2")),
+			Template:      createTemplate(name("fake"), crdNames("Fakes"), targets("h2")),
 			ErrorExpected: true,
 		},
 		{
@@ -468,7 +497,7 @@ func TestAddConstraint(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !tt.OmitTemplate {
-				tmpl := createTemplate(name("foos"), crdNames("Foos", "foos"), targets("h1"))
+				tmpl := createTemplate(name("foos"), crdNames("Foos"), targets("h1"))
 				_, err := c.AddTemplate(context.Background(), tmpl)
 				if err != nil {
 					t.Fatal(err)
@@ -546,7 +575,7 @@ func TestRemoveConstraint(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !tt.OmitTemplate {
-				tmpl := createTemplate(name("foos"), crdNames("Foos", "foos"), targets("h1"))
+				tmpl := createTemplate(name("foos"), crdNames("Foos"), targets("h1"))
 				_, err := c.AddTemplate(context.Background(), tmpl)
 				if err != nil {
 					t.Fatal(err)
