@@ -49,23 +49,23 @@ type Target struct {
 
 // CreateCRDError represents a single error caught during parsing, compiling, etc.
 type CreateCRDError struct {
-	Code     string  `json:"code"`
+	Code     string `json:"code"`
 	Message  string `json:"message"`
-	Location string	`json:"location,omitempty"`
+	Location string `json:"location,omitempty"`
 }
 
 // ByPodStatus defines the observed state of ConstraintTemplate as seen by
 // an individual controller
 type ByPodStatus struct {
 	// a unique identifier for the pod that wrote the status
-	ID string `json:"id,omitempty"`
-	Errors	[]*CreateCRDError `json:"errors,omitempty"`
+	ID     string            `json:"id,omitempty"`
+	Errors []*CreateCRDError `json:"errors,omitempty"`
 }
 
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
 type ConstraintTemplateStatus struct {
-	Created bool   `json:"created,omitempty"`
-	ByPod []*ByPodStatus `json:"byPod,omitempty"`
+	Created bool           `json:"created,omitempty"`
+	ByPod   []*ByPodStatus `json:"byPod,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }

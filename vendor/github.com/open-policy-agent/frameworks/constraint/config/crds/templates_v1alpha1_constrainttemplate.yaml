@@ -50,10 +50,30 @@ spec:
           type: object
         status:
           properties:
+            byPod:
+              items:
+                properties:
+                  errors:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        location:
+                          type: string
+                        message:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
+                    type: string
+                type: object
+              type: array
             created:
               type: boolean
-            error:
-              type: string
           type: object
   version: v1alpha1
 status:

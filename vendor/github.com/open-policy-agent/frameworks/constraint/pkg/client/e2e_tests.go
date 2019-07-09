@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -176,6 +177,71 @@ violation[{"msg": "DENIED", "details": {}}] {
 		}
 		if !reflect.DeepEqual(rsps.Results()[0].Resource, obj) {
 			return e(fmt.Sprintf("Resource %s != %s", spew.Sdump(rsps.Results()[0].Resource), spew.Sdump(obj)), rsps)
+		}
+		return nil
+	},
+
+	"Autoreject All": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+violation[{"msg": "DENIED", "details": {}}] {
+	"always" == "always"
+}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		goodNamespaceSelectorConstraint := `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"kind": "Foo",
+	"metadata": {
+  	"name": "foo-pod"
+	},
+	"spec": {
+  	"match": {
+    	"kinds": [
+      	{
+			"apiGroups": [""],
+        	"kinds": ["Pod"]
+		}],
+		"namespaceSelector": {
+			"matchExpressions": [{
+	     		"key": "someKey",
+				"operator": "Blah",
+				"values": ["some value"]
+			}]
+		}
+	},
+  	"parameters": {
+    	"key": ["value"]
+		}
+	}
+}
+`
+		u := &unstructured.Unstructured{}
+		err = json.Unmarshal([]byte(goodNamespaceSelectorConstraint), u)
+		if err != nil {
+			return errors.Wrap(err, "Unable to parse constraint JSON")
+		}
+		if _, err := c.AddConstraint(ctx, u); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		rsps, err := c.Review(ctx, targetData{Name: "Sara", ForConstraint: "Foo"})
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 2 {
+			return e("Bad number of results", rsps)
+		}
+		if rsps.Results()[0].Msg != "REJECTION" && rsps.Results()[1].Msg != "REJECTION" {
+			return e(fmt.Sprintf("res.Msg = %s; wanted at least one REJECTION", rsps.Results()[0].Msg), rsps)
+		}
+		for _, r := range rsps.Results() {
+			if r.Msg == "REJECTION" && !reflect.DeepEqual(r.Constraint, u) {
+				return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(r.Constraint), spew.Sdump(u)), rsps)
+			}
 		}
 		return nil
 	},

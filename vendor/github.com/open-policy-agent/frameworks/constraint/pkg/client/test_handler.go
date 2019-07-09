@@ -20,6 +20,19 @@ func (h *handler) GetName() string {
 var libTempl = template.Must(template.New("library").Parse(`
 package foo
 
+autoreject_review[rejection] {
+	constraint := {{.ConstraintsRoot}}[_][_]
+	spec := get_default(constraint, "spec", {})
+	match := get_default(spec, "match", {})
+	has_field(match, "namespaceSelector")
+	not {{.DataRoot}}.cluster["v1"]["Namespace"]
+	rejection := {
+		"msg": "REJECTION",
+		"details": {},
+		"constraint": constraint,
+	}
+}
+
 matching_constraints[constraint] {
 	constraint = {{.ConstraintsRoot}}[input.review.ForConstraint][_]
 }
@@ -28,6 +41,30 @@ matching_reviews_and_constraints[[review, constraint]] {
 	matching_constraints[constraint] with input as {"review": review}
 	review = {{.DataRoot}}[_]
 }
+
+has_field(object, field) = true {
+	object[field]
+}
+
+has_field(object, field) = true {
+object[field] == false
+}
+
+has_field(object, field) = false {
+not object[field]
+not object[field] == false
+}
+
+get_default(object, field, _default) = output {
+has_field(object, field)
+output = object[field]
+}
+
+get_default(object, field, _default) = output {
+has_field(object, field) == false
+output = _default
+}
+
 `))
 
 func (h *handler) Library() *template.Template {

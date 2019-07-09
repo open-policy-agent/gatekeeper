@@ -48,6 +48,7 @@ func (h *badHandler) Library() *template.Template {
 	}
 	return template.Must(template.New("foo").Parse(`
 package foo
+autoreject_review[r] {r = data.r}
 matching_constraints[c] {c = data.c}
 matching_reviews_and_constraints[[r,c]] {r = data.r; c = data.c}`))
 }
