@@ -33,6 +33,19 @@ package target
 # Required Hooks #
 ##################
 
+autoreject_review[rejection] {
+	constraint := {{.ConstraintsRoot}}[_][_]
+	spec := get_default(constraint, "spec", {})
+	match := get_default(spec, "match", {})
+	has_field(match, "namespaceSelector")
+	not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
+	rejection := {
+		"msg": "Namespace is not cached in OPA.",
+		"details": {},
+		"constraint": constraint,
+	}
+}
+
 matching_constraints[constraint] {
 	trace(sprintf("INPUT IS: %v", [input]))
 	constraint := {{.ConstraintsRoot}}[_][_]
@@ -236,7 +249,7 @@ matches_nsselector(match) {
 
 matches_namespace_selector(match, ns) {
 	metadata := get_default(ns, "metadata", {})
-    nslabels := get_default(metadata, "labels", {})
+  nslabels := get_default(metadata, "labels", {})
 	namespace_selector := get_default(match, "namespaceSelector", {})
 	matches_label_selector(namespace_selector, nslabels)
 }

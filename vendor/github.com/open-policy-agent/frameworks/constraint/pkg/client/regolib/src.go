@@ -4,6 +4,17 @@ const (
 	targetLibSrc = `
 package hooks["{{.Target}}"]
 
+violation[response] {
+	data.hooks["{{.Target}}"].library.autoreject_review[rejection]
+	review := get_default(input, "review", {})
+	response = {
+		"msg": get_default(rejection, "msg", ""),
+		"metadata": {"details": get_default(rejection, "details", {})},
+		"constraint": get_default(rejection, "constraint", {}),
+		"review": review,
+	}
+}
+
 # Finds all violations for a given target
 violation[response] {
 	data.hooks["{{.Target}}"].library.matching_constraints[constraint]
