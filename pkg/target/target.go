@@ -46,6 +46,20 @@ autoreject_review[rejection] {
 	}
 }
 
+autoreject_review[rejection] {
+	constraint := {{.ConstraintsRoot}}[_][_]
+	spec := get_default(constraint, "spec", {})
+	match := get_default(spec, "match", {})
+	has_field(match, "namespaceSelector")
+	{{.DataRoot}}.cluster["v1"]["Namespace"]
+	not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
+	rejection := {
+		"msg": "Namespace is not replicated into OPA.",
+		"details": {},
+		"constraint": constraint,
+	}
+}
+
 matching_constraints[constraint] {
 	trace(sprintf("INPUT IS: %v", [input]))
 	constraint := {{.ConstraintsRoot}}[_][_]
@@ -239,17 +253,6 @@ matches_namespaces(match) {
 
 matches_nsselector(match) {
 	not has_field(match, "namespaceSelector")
-}
-
-matches_nsselector(match) {
-	has_field(match, "namespaceSelector")
-	not {{.DataRoot}}.cluster["v1"]["Namespace"]
-}
-
-matches_nsselector(match) {
-	has_field(match, "namespaceSelector")
-	{{.DataRoot}}.cluster["v1"]["Namespace"]
-	not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
 }
 
 matches_nsselector(match) {
