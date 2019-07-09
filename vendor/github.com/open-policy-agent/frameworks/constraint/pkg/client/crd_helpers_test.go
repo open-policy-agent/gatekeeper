@@ -22,11 +22,10 @@ func name(name string) tmplArg {
 	}
 }
 
-func crdNames(kind, plural string) tmplArg {
+func crdNames(kind string) tmplArg {
 	return func(tmpl *v1alpha1.ConstraintTemplate) {
-		tmpl.Spec.CRD.Spec.Names = apiextensionsv1beta1.CustomResourceDefinitionNames{
-			Kind:   kind,
-			Plural: plural,
+		tmpl.Spec.CRD.Spec.Names = v1alpha1.Names{
+			Kind: kind,
 		}
 	}
 }
@@ -42,7 +41,7 @@ func schema(pm propMap) tmplArg {
 func targets(ts ...string) tmplArg {
 	targets := make([]v1alpha1.Target, len(ts))
 	for i, t := range ts {
-		targets[i] = v1alpha1.Target{Target: t, Rego: "package hello v{1 == 1}"}
+		targets[i] = v1alpha1.Target{Target: t, Rego: `package hello violation[{"msg": msg}] {msg = "hello"}`}
 	}
 
 	return func(tmpl *v1alpha1.ConstraintTemplate) {
@@ -255,7 +254,7 @@ func TestCRDCreationAndValidation(t *testing.T) {
 			Name: "Most Basic Valid Template",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			ErrorExpected: false,
@@ -264,7 +263,7 @@ func TestCRDCreationAndValidation(t *testing.T) {
 			Name: "Template With Parameter Schema",
 			Template: createTemplate(
 				name("morehorses"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{
 					"coat":  prop(propMap{"color": prop(), "clean": prop()}),
 					"speed": prop(),
@@ -277,7 +276,7 @@ func TestCRDCreationAndValidation(t *testing.T) {
 			Name: "Template With Parameter and Match Schema",
 			Template: createTemplate(
 				name("morehorses"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{
 					"coat":  prop(propMap{"color": prop(), "clean": prop()}),
 					"speed": prop(),
@@ -319,7 +318,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Empty Schema and CR",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			CR:            createCR(crName("mycr"), kind("Horse")),
@@ -329,7 +328,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Correct Prop Type",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{"fast": tProp("boolean")}),
 			),
 			Handler: createTestTargetHandler(),
@@ -344,7 +343,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Correct Prop And Match Type",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{"fast": tProp("boolean")}),
 			),
 			Handler: createTestTargetHandler(
@@ -362,7 +361,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "No Name",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			CR:            createCR(kind("Horse")),
@@ -372,7 +371,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Wrong Kind",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			CR:            createCR(crName("mycr"), kind("Cat")),
@@ -382,7 +381,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Wrong Version",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			CR:            createCR(crName("mycr"), gvk(constraintGroup, "badversion", "Horse")),
@@ -392,7 +391,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Wrong Group",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 			),
 			Handler:       createTestTargetHandler(),
 			CR:            createCR(crName("mycr"), gvk("badgroup", "v1alpha1", "Horse")),
@@ -402,7 +401,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Wrong Prop Type",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{"fast": tProp("boolean")}),
 			),
 			Handler: createTestTargetHandler(),
@@ -417,7 +416,7 @@ func TestCRValidation(t *testing.T) {
 			Name: "Wrong Prop And Match Type",
 			Template: createTemplate(
 				name("SomeName"),
-				crdNames("Horse", "horses"),
+				crdNames("Horse"),
 				schema(propMap{"fast": tProp("boolean")}),
 			),
 			Handler: createTestTargetHandler(

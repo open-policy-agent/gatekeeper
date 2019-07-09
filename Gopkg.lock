@@ -444,7 +444,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:18b1c344b52e82107a8a6ef21b0d807d72232e898d40a5c0f85d36f4094b2115"
+  digest = "1:4ed6af7e93b6532a5729e2a46e8b1bd76f618da9c293d1fdacfa5e1fc24e4eb6"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -455,7 +455,7 @@
     "constraint/pkg/types",
   ]
   pruneopts = ""
-  revision = "774ba73571ae8efe421228e8a704845a3cd199c2"
+  revision = "56f84380fff164368d23f7640df4fc1a2f13fbf0"
 
 [[projects]]
   digest = "1:37eca0e6103236bc41d65f3d31a3a756f0ed1c96427a6a63746dae208ce1726a"

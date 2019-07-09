@@ -60,9 +60,8 @@ func TestReconcile(t *testing.T) {
 		Spec: v1alpha1.ConstraintTemplateSpec{
 			CRD: v1alpha1.CRD{
 				Spec: v1alpha1.CRDSpec{
-					Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-						Kind:   "DenyAll",
-						Plural: "denyall",
+					Names: v1alpha1.Names{
+						Kind: "DenyAll",
 					},
 				},
 			},
@@ -207,9 +206,8 @@ violation[{"msg": "denied!"}] {
 		Spec: v1alpha1.ConstraintTemplateSpec{
 			CRD: v1alpha1.CRD{
 				Spec: v1alpha1.CRDSpec{
-					Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-						Kind:   "InvalidRego",
-						Plural: "invalidrego",
+					Names: v1alpha1.Names{
+						Kind: "InvalidRego",
 					},
 				},
 			},

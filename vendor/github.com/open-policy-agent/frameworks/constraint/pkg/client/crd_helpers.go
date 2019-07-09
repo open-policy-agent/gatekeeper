@@ -65,7 +65,12 @@ func (h *crdHelper) createCRD(
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{
 		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
 			Group: constraintGroup,
-			Names: templ.Spec.CRD.Spec.Names,
+			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+				Kind:     templ.Spec.CRD.Spec.Names.Kind,
+				ListKind: templ.Spec.CRD.Spec.Names.Kind + "List",
+				Plural:   strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
+				Singular: strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
+			},
 			Validation: &apiextensionsv1beta1.CustomResourceValidation{
 				OpenAPIV3Schema: schema,
 			},

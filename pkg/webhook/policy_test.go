@@ -36,7 +36,7 @@ spec:
       rego: |
         package badrego
 
-        some_rule[{"msg": msg}] {
+        violation[{"msg": msg}] {
         msg := "I'm sure this will work"
 `
 
@@ -58,7 +58,7 @@ spec:
       rego: |
         package goodrego
 
-        some_rule[{"msg": msg}] {
+        violation[{"msg": msg}] {
           msg := "Maybe this will work?"
         }
 `
