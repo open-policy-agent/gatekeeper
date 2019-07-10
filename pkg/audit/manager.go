@@ -48,22 +48,24 @@ type AuditManager struct {
 }
 
 type auditResult struct {
-	cname       string
-	cnamespace  string
-	cgvk        schema.GroupVersionKind
-	capiversion string
-	rkind       string
-	rname       string
-	rnamespace  string
-	message     string
+	cname             string
+	cnamespace        string
+	cgvk              schema.GroupVersionKind
+	capiversion       string
+	rkind             string
+	rname             string
+	rnamespace        string
+	message           string
+	enforcementaction string
 }
 
 // StatusViolation represents each violation under status
 type StatusViolation struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-	Message   string `json:"message"`
+	Kind              string `json:"kind"`
+	Name              string `json:"name"`
+	Namespace         string `json:"namespace,omitempty"`
+	Message           string `json:"message"`
+	EnforcementAction string `json:"enforcementaction"`
 }
 
 // New creates a new manager for audit
@@ -182,14 +184,15 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 		rkind := resource.GetKind()
 		rnamespace := resource.GetNamespace()
 		updateLists[selfLink] = append(updateLists[selfLink], auditResult{
-			cgvk:        gvk,
-			capiversion: apiVersion,
-			cname:       name,
-			cnamespace:  namespace,
-			rkind:       rkind,
-			rname:       rname,
-			rnamespace:  rnamespace,
-			message:     message,
+			cgvk:              gvk,
+			capiversion:       apiVersion,
+			cname:             name,
+			cnamespace:        namespace,
+			rkind:             rkind,
+			rname:             rname,
+			rnamespace:        rnamespace,
+			message:           message,
+			enforcementaction: "deny", // default value to "deny" until we have more actions to support
 		})
 	}
 	return updateLists, nil
@@ -251,10 +254,11 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
 		statusViolations = append(statusViolations, StatusViolation{
-			Kind:      ar.rkind,
-			Name:      ar.rname,
-			Namespace: ar.rnamespace,
-			Message:   ar.message,
+			Kind:              ar.rkind,
+			Name:              ar.rname,
+			Namespace:         ar.rnamespace,
+			Message:           ar.message,
+			EnforcementAction: ar.enforcementaction,
 		})
 	}
 	raw, err := json.Marshal(statusViolations)
@@ -271,12 +275,12 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
 	// update constraint status violations
 	if len(violations) == 0 {
-		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violations")
+		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violationsByAction")
 		if err != nil {
 			return err
 		}
 		if found {
-			unstructured.RemoveNestedField(instance.Object, "status", "violations")
+			unstructured.RemoveNestedField(instance.Object, "status", "violationsByAction")
 			log.Info("removed status violations", "constraintName", constraintName)
 		}
 		err = ucloop.client.Update(ctx, instance)
@@ -284,7 +288,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 	} else {
-		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
+		unstructured.SetNestedSlice(instance.Object, violations, "status", "violationsByAction")
 		log.Info("update constraint", "object", instance)
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
