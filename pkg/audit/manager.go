@@ -65,7 +65,7 @@ type StatusViolation struct {
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
 	Message           string `json:"message"`
-	EnforcementAction string `json:"enforcementaction"`
+	EnforcementAction string `json:"enforcementAction"`
 }
 
 // New creates a new manager for audit
@@ -275,12 +275,12 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
 	// update constraint status violations
 	if len(violations) == 0 {
-		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violationsByAction")
+		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violations")
 		if err != nil {
 			return err
 		}
 		if found {
-			unstructured.RemoveNestedField(instance.Object, "status", "violationsByAction")
+			unstructured.RemoveNestedField(instance.Object, "status", "violations")
 			log.Info("removed status violations", "constraintName", constraintName)
 		}
 		err = ucloop.client.Update(ctx, instance)
@@ -288,7 +288,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 	} else {
-		unstructured.SetNestedSlice(instance.Object, violations, "status", "violationsByAction")
+		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
 		log.Info("update constraint", "object", instance)
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
