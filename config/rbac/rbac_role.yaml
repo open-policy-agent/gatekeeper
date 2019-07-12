@@ -79,6 +79,26 @@ rules:
   - update
   - patch
 - apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - mutationtemplates
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - mutationtemplates/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
   - constraints.gatekeeper.sh
   resources:
   - '*'
