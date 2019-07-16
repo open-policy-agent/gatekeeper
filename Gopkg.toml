@@ -47,7 +47,7 @@ required = [
   version = "1.5.0"
 
 [[constraint]]
-  branch = "master"
+  branch = "mutation"
   name = "github.com/open-policy-agent/frameworks"
 
 [[constraint]]
