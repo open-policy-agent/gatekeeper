@@ -39,7 +39,7 @@ var (
 // AuditManager allows us to audit resources periodically
 type AuditManager struct {
 	client  client.Client
-	opa     opa.Client
+	opa     *opa.Client
 	stopper chan struct{}
 	stopped chan struct{}
 	cfg     *rest.Config
@@ -69,7 +69,7 @@ type StatusViolation struct {
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, cfg *rest.Config, opa opa.Client) (*AuditManager, error) {
+func New(ctx context.Context, cfg *rest.Config, opa *opa.Client) (*AuditManager, error) {
 	am := &AuditManager{
 		opa:     opa,
 		stopper: make(chan struct{}),

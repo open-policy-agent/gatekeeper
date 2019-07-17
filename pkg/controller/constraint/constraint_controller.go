@@ -40,7 +40,7 @@ var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 const project = "gatekeeper.sh"
 
 type Adder struct {
-	Opa opa.Client
+	Opa *opa.Client
 }
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -51,7 +51,7 @@ func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
@@ -86,7 +86,7 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 type ReconcileConstraint struct {
 	client.Client
 	scheme *runtime.Scheme
-	opa    opa.Client
+	opa    *opa.Client
 	gvk    schema.GroupVersionKind
 	log    logr.Logger
 }

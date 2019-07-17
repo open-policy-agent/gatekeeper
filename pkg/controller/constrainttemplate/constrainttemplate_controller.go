@@ -49,7 +49,7 @@ const (
 var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate")
 
 type Adder struct {
-	Opa          opa.Client
+	Opa          *opa.Client
 	WatchManager *watch.WatchManager
 }
 
@@ -63,7 +63,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o opa.Client) {
+func (a *Adder) InjectOpa(o *opa.Client) {
 	a.Opa = o
 }
 
@@ -72,7 +72,7 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
 	constraintAdder := constraint.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
@@ -112,7 +112,7 @@ type ReconcileConstraintTemplate struct {
 	client.Client
 	scheme  *runtime.Scheme
 	watcher *watch.Registrar
-	opa     opa.Client
+	opa     *opa.Client
 }
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
