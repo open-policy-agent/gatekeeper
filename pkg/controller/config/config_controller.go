@@ -56,7 +56,7 @@ var CfgKey = types.NamespacedName{Namespace: "gatekeeper-system", Name: "config"
 var log = logf.Log.WithName("controller")
 
 type Adder struct {
-	Opa          opa.Client
+	Opa          *opa.Client
 	WatchManager *watch.WatchManager
 }
 
@@ -70,7 +70,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o opa.Client) {
+func (a *Adder) InjectOpa(o *opa.Client) {
 	a.Opa = o
 }
 
@@ -79,7 +79,7 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
 	syncAdder := syncc.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
@@ -119,7 +119,7 @@ var _ reconcile.Reconciler = &ReconcileConfig{}
 type ReconcileConfig struct {
 	client.Client
 	scheme  *runtime.Scheme
-	opa     opa.Client
+	opa     *opa.Client
 	watcher *watch.Registrar
 	watched *watchSet
 	fc      *finalizerCleanup
