@@ -17,8 +17,11 @@ package mutationtemplate
 
 import (
 	"context"
+	"fmt"
 
 	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 /**
@@ -38,15 +41,36 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues("kind", "MutationTemplate")
 
+type Adder struct {
+	Opa          opa.Client
+	WatchManager *watch.WatchManager
+}
+
 // Add creates a new MutationTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func (a *Adder) Add(mgr manager.Manager) error {
+	r, err := newReconciler(mgr, a.Opa)
+	if err != nil {
+		return err
+	}
+	return add(mgr, r)
+}
+
+func (a *Adder) InjectOpa(o opa.Client) {
+	a.Opa = o
+}
+
+func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
+	a.WatchManager = wm
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileMutationTemplate{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+func newReconciler(mgr manager.Manager, opa opa.Client) (reconcile.Reconciler, error) {
+	return &ReconcileMutationTemplate{
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		opa:    opa,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -82,6 +106,7 @@ var _ reconcile.Reconciler = &ReconcileMutationTemplate{}
 type ReconcileMutationTemplate struct {
 	client.Client
 	scheme *runtime.Scheme
+	opa    opa.Client
 }
 
 // Reconcile reads that state of the cluster for a MutationTemplate object and makes changes based on the state read
@@ -104,6 +129,7 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 	log.Info("Reconciling", "MutationTemplate", instance)
+	log.Info("There is also an", "opa.Client", fmt.Sprintf("%p", r.opa))
 
 	return reconcile.Result{}, nil
 }
