@@ -60,9 +60,9 @@ func newConstraint(kind, name string, params map[string]string) *unstructured.Un
 	return c
 }
 
-var tests = map[string]func(Client) error{
+var tests = map[string]func(*Client) error{
 
-	"Add Template": func(c Client) error {
+	"Add Template": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 violation[{"msg": "DENIED", "details": {}}] {
 	"always" == "always"
@@ -70,7 +70,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return errors.Wrap(err, "AddTemplate")
 	},
 
-	"Deny All": func(c Client) error {
+	"Deny All": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 violation[{"msg": "DENIED", "details": {}}] {
 	"always" == "always"
@@ -101,7 +101,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Deny All Audit x2": func(c Client) error {
+	"Deny All Audit x2": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -142,7 +142,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Deny All Audit": func(c Client) error {
+	"Deny All Audit": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -180,7 +180,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Autoreject All": func(c Client) error {
+	"Autoreject All": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 violation[{"msg": "DENIED", "details": {}}] {
 	"always" == "always"
@@ -245,7 +245,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Remove Data": func(c Client) error {
+	"Remove Data": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -309,7 +309,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Remove Constraint": func(c Client) error {
+	"Remove Constraint": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -358,7 +358,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Remove Template": func(c Client) error {
+	"Remove Template": func(c *Client) error {
 		tmpl := newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -408,7 +408,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Tracing Off": func(c Client) error {
+	"Tracing Off": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 violation[{"msg": "DENIED", "details": {}}] {
 	"always" == "always"
@@ -438,7 +438,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Tracing On": func(c Client) error {
+	"Tracing On": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 violation[{"msg": "DENIED", "details": {}}] {
 	"always" == "always"
@@ -468,7 +468,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Audit Tracing Enabled": func(c Client) error {
+	"Audit Tracing Enabled": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
@@ -506,7 +506,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		return nil
 	},
 
-	"Audit Tracing Disabled": func(c Client) error {
+	"Audit Tracing Disabled": func(c *Client) error {
 		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
 	violation[{"msg": "DENIED", "details": {}}] {
 		"always" == "always"
