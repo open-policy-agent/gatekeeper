@@ -28,12 +28,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
+
+var log = logf.Log.WithName("controller").WithValues("kind", "MutationTemplate")
 
 // Add creates a new MutationTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -100,6 +103,7 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	log.Info("Reconciling", "MutationTemplate", instance)
 
 	return reconcile.Result{}, nil
 }
