@@ -21,6 +21,9 @@ import (
 
 	"github.com/onsi/gomega"
 	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"golang.org/x/net/context"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +49,20 @@ func TestReconcile(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
 
-	recFn, requests := SetupTestReconcile(newReconciler(mgr))
+	// initialize OPA
+	driver := local.New(local.Tracing(true))
+	backend, err := opa.NewBackend(opa.Driver(driver))
+	if err != nil {
+		t.Fatalf("unable to set up OPA backend: %s", err)
+	}
+
+	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	if err != nil {
+		t.Fatalf("unable to set up OPA client: %s", err)
+	}
+
+	rec, _ := newReconciler(mgr, opa)
+	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
