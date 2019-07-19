@@ -21,6 +21,7 @@ import (
 
 	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -139,5 +140,18 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 
 	log.Info("I've created a Go CRD", "apiextensionsv1beta1.CustomResourceDefinition", fmt.Sprintf("%v", crd))
 
+	//we are temporarily assuming you're creating a new template and mutation crd
+	return r.handleCreate(instance, crd)
+}
+
+func (r *ReconcileMutationTemplate) handleCreate(instance *templatesv1alpha1.MutationTemplate, crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	log.Info("creating mutation CRD")
+	if err := r.Create(context.TODO(), crd); err != nil {
+		return reconcile.Result{}, err
+	}
+	instance.Status.Created = true
+	if err := r.Update(context.Background(), instance); err != nil {
+		return reconcile.Result{Requeue: true}, nil
+	}
 	return reconcile.Result{}, nil
 }
