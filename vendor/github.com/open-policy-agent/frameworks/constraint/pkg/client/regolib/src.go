@@ -21,7 +21,7 @@ violation[response] {
 	review := get_default(input, "review", {})
 	inp := {
 		"review": review,
-		"constraint": constraint
+		"parameters": get_default(get_default(constraint, "spec", {}), "parameters", {}),
 	}
 	inventory[inv]
 	data.templates["{{.Target}}"][constraint.kind].violation[r] with input as inp with data.inventory as inv
@@ -39,7 +39,7 @@ audit[response] {
 	data.hooks["{{.Target}}"].library.matching_reviews_and_constraints[[review, constraint]]
 	inp := {
 		"review": review,
-		"constraint": constraint,
+		"parameters": get_default(get_default(constraint, "spec", {}), "parameters", {}),
 	}
 	inventory[inv]
 	data.templates["{{.Target}}"][constraint.kind].violation[r] with input as inp with data.inventory as inv

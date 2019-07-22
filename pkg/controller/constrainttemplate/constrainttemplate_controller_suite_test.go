@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "..", "config", "crds"),
-			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "config", "crds"),
+			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
 	}
 	apis.AddToScheme(scheme.Scheme)
@@ -46,6 +46,7 @@ func TestMain(m *testing.M) {
 	if cfg, err = t.Start(); err != nil {
 		stdlog.Fatal(err)
 	}
+	stdlog.Print("STARTED")
 
 	code := m.Run()
 	t.Stop()

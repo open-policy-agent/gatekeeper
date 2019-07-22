@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/ghodss/yaml"
-	templv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -19,7 +20,7 @@ import (
 
 const (
 	bad_rego_template = `
-apiVersion: templates.gatekeeper.sh/v1alpha1
+apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8sbadrego
@@ -41,7 +42,7 @@ spec:
 `
 
 	good_rego_template = `
-apiVersion: templates.gatekeeper.sh/v1alpha1
+apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8sgoodrego
@@ -64,7 +65,7 @@ spec:
 `
 
 	bad_labelselector = `
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
   name: bad-labelselector
@@ -80,7 +81,7 @@ spec:
 `
 
 	good_labelselector = `
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
   name: good-labelselector
@@ -97,7 +98,7 @@ spec:
 `
 
 	bad_namespaceselector = `
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
   name: bad-namespaceselector
@@ -113,7 +114,7 @@ spec:
 `
 
 	good_namespaceselector = `
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
   name: good-namespaceselector
@@ -176,7 +177,7 @@ func TestTemplateValidation(t *testing.T) {
 				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "templates.gatekeeper.sh",
-						Version: "v1alpha1",
+						Version: "v1beta1",
 						Kind:    "ConstraintTemplate",
 					},
 					Object: runtime.RawExtension{
@@ -233,11 +234,15 @@ func TestConstraintValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			cstr := &templv1alpha1.ConstraintTemplate{}
+			cstr := &templv1beta1.ConstraintTemplate{}
 			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
 				t.Fatalf("Could not instantiate template: %s", err)
 			}
-			if _, err := opa.AddTemplate(context.Background(), cstr); err != nil {
+			unversioned := &templates.ConstraintTemplate{}
+			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
+				t.Fatalf("Could not convert to unversioned: %v", err)
+			}
+			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa}
@@ -249,7 +254,7 @@ func TestConstraintValidation(t *testing.T) {
 				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "constraints.gatekeeper.sh",
-						Version: "v1alpha1",
+						Version: "v1beta1",
 						Kind:    "K8sGoodRego",
 					},
 					Object: runtime.RawExtension{
@@ -349,11 +354,15 @@ func TestTracing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			cstr := &templv1alpha1.ConstraintTemplate{}
+			cstr := &templv1beta1.ConstraintTemplate{}
 			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
 				t.Fatalf("Could not instantiate template: %s", err)
 			}
-			if _, err := opa.AddTemplate(context.Background(), cstr); err != nil {
+			unversioned := &templates.ConstraintTemplate{}
+			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
+				t.Fatalf("Could not convert to unversioned: %v", err)
+			}
+			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg}

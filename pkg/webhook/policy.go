@@ -8,11 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	templv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -28,10 +26,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
+
+	"github.com/open-policy-agent/gatekeeper/pkg/apis"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
+	apis.AddToScheme(runtimeScheme)
 }
 
 const (
@@ -219,11 +222,15 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 }
 
 func (h *validationHandler) validateTemplate(ctx context.Context, req atypes.Request) (bool, error) {
-	templ := &templv1alpha1.ConstraintTemplate{}
-	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, templ); err != nil {
+	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
 		return false, err
 	}
-	if _, err := h.opa.CreateCRD(ctx, templ); err != nil {
+	unversioned := &templates.ConstraintTemplate{}
+	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
+		return false, err
+	}
+	if _, err := h.opa.CreateCRD(ctx, unversioned); err != nil {
 		return true, err
 	}
 	return false, nil

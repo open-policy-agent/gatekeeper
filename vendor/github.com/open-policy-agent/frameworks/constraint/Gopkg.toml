@@ -28,6 +28,7 @@ required = [
     "github.com/onsi/gomega", # for test matchers
     "k8s.io/code-generator/cmd/client-gen", # for go generate
     "k8s.io/code-generator/cmd/deepcopy-gen", # for go generate
+    "k8s.io/code-generator/cmd/conversion-gen", # for go generate
     "sigs.k8s.io/controller-tools/cmd/controller-gen", # for crd/rbac generation
    	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",
     ]
@@ -63,3 +64,7 @@ required = [
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "github.com/google/go-cmp"
+  version = "0.3.0"

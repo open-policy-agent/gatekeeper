@@ -22,9 +22,9 @@ pe "cat good/good_ns.yaml"
 
 pe "kubectl apply -f good/good_ns.yaml"
 
-pe "cat templates/k8suniquelabels_template.yaml"
+pe "cat templates/k8suniquelabel_template.yaml"
 
-pe "kubectl apply -f templates/k8suniquelabels_template.yaml"
+pe "kubectl apply -f templates/k8suniquelabel_template.yaml"
 
 pe "kubectl apply -f constraints/all_ns_gatekeeper_label_unique.yaml"
 

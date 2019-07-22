@@ -36,7 +36,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "No LabelSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
   	"name": "ns-must-have-gk"
@@ -62,7 +62,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "Valid LabelSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
   	"name": "ns-must-have-gk"
@@ -95,7 +95,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "Invalid LabelSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
   	"name": "ns-must-have-gk"
@@ -128,7 +128,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "No NamespaceSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
   	"name": "prod-nslabels-is-openpolicyagent"
@@ -160,7 +160,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "Valid NamespaceSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
   	"name": "prod-nslabels-is-openpolicyagent"
@@ -192,7 +192,7 @@ func TestValidateConstraint(t *testing.T) {
 			Name: "Invalid NamespaceSelector",
 			Constraint: `
 {
-	"apiVersion": "constraints.gatekeeper.sh/v1alpha1",
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
   	"name": "prod-nslabels-is-openpolicyagent"
@@ -345,18 +345,18 @@ func TestProcessData(t *testing.T) {
 	}{
 		{
 			Name:         "Cluster Object",
-			JSON:         `{"apiVersion": "v1alpha1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-			ExpectedPath: "cluster/v1alpha1/Rock/myrock",
+			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
+			ExpectedPath: "cluster/v1beta1/Rock/myrock",
 		},
 		{
 			Name:         "Namespace Object",
-			JSON:         `{"apiVersion": "v1alpha1", "kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
-			ExpectedPath: "namespace/foo/v1alpha1/Rock/myrock",
+			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
+			ExpectedPath: "namespace/foo/v1beta1/Rock/myrock",
 		},
 		{
 			Name:         "Grouped Object",
-			JSON:         `{"apiVersion": "mygroup/v1alpha1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-			ExpectedPath: "cluster/mygroup%2Fv1alpha1/Rock/myrock",
+			JSON:         `{"apiVersion": "mygroup/v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
+			ExpectedPath: "cluster/mygroup%2Fv1beta1/Rock/myrock",
 		},
 		{
 			Name:          "No Version",

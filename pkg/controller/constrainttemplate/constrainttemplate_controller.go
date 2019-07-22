@@ -20,13 +20,15 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -97,7 +99,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to ConstraintTemplate
-	err = c.Watch(&source.Kind{Type: &v1alpha1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1beta1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -123,7 +125,7 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the ConstraintTemplate instance
-	instance := &v1alpha1.ConstraintTemplate{}
+	instance := &v1beta1.ConstraintTemplate{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -137,16 +139,21 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 
 	status := util.GetCTHAStatus(instance)
 	status.Errors = nil
-	crd, err := r.opa.CreateCRD(context.Background(), instance)
+	versionless := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{Requeue: true}, nil
+	}
+	crd, err := r.opa.CreateCRD(context.Background(), versionless)
 	if err != nil {
-		var createErr *v1alpha1.CreateCRDError
+		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
-				createErr = &v1alpha1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
+				createErr = &v1beta1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
 				status.Errors = append(status.Errors, createErr)
 			}
 		} else {
-			createErr = &v1alpha1.CreateCRDError{Code: "create_error", Message: err.Error()}
+			createErr = &v1beta1.CreateCRDError{Code: "create_error", Message: err.Error()}
 			status.Errors = append(status.Errors, createErr)
 		}
 
@@ -172,7 +179,12 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			return reconcile.Result{}, err
 
 		} else {
-			return r.handleUpdate(instance, crd, found)
+			unversionedCRD := &apiextensions.CustomResourceDefinition{}
+			if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
+				log.Error(err, "conversion error")
+				return reconcile.Result{Requeue: true}, nil
+			}
+			return r.handleUpdate(instance, crd, unversionedCRD)
 		}
 
 	}
@@ -180,21 +192,26 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 }
 
 func (r *ReconcileConstraintTemplate) handleCreate(
-	instance *v1alpha1.ConstraintTemplate,
-	crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	instance *v1beta1.ConstraintTemplate,
+	crd *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
 	name := crd.GetName()
 	log := log.WithValues("name", name)
 	log.Info("creating constraint")
 	if !containsString(finalizerName, instance.GetFinalizers()) {
 		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 		if err := r.Update(context.Background(), instance); err != nil {
-			log.Error(err, "update error", err)
+			log.Error(err, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
 	log.Info("loading code into OPA")
-	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
-		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+	versionless := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{Requeue: true}, nil
+	}
+	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
+		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
 		status := util.GetCTHAStatus(instance)
 		status.Errors = append(status.Errors, updateErr)
 		util.SetCTHAStatus(instance, status)
@@ -209,10 +226,15 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	// To support HA deployments, only one pod should be able to create CRDs
 	log.Info("creating constraint CRD")
-	if err := r.Create(context.TODO(), crd); err != nil {
+	crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
+	if err := r.scheme.Convert(crd, crdv1beta1, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{Requeue: true}, nil
+	}
+	if err := r.Create(context.TODO(), crdv1beta1); err != nil {
 		status := util.GetCTHAStatus(instance)
-		status.Errors = []*v1alpha1.CreateCRDError{}
-		createErr := &v1alpha1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
+		status.Errors = []*v1beta1.CreateCRDError{}
+		createErr := &v1beta1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
 		status.Errors = append(status.Errors, createErr)
 		util.SetCTHAStatus(instance, status)
 		if err2 := r.Update(context.Background(), instance); err2 != nil {
@@ -228,8 +250,8 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 }
 
 func (r *ReconcileConstraintTemplate) handleUpdate(
-	instance *v1alpha1.ConstraintTemplate,
-	crd, found *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	instance *v1beta1.ConstraintTemplate,
+	crd, found *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
 	// TODO: We may want to only check in code if it has changed. This is harder to do than it sounds
 	// because even if the hash hasn't changed, OPA may have been restarted and needs code re-loaded
 	// anyway. We should see if the OPA server is smart enough to look for changes on its own, otherwise
@@ -237,8 +259,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	name := crd.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	log.Info("loading constraint code into OPA")
-	if _, err := r.opa.AddTemplate(context.Background(), instance); err != nil {
-		updateErr := &v1alpha1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
+	versionless := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{Requeue: true}, nil
+	}
+	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
+		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
 		status := util.GetCTHAStatus(instance)
 		status.Errors = append(status.Errors, updateErr)
 		util.SetCTHAStatus(instance, status)
@@ -255,25 +282,35 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if !reflect.DeepEqual(crd.Spec, found.Spec) {
 		log.Info("difference in spec found, updating")
 		found.Spec = crd.Spec
-		if err := r.Update(context.Background(), found); err != nil {
+		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
+		if err := r.scheme.Convert(found, crdv1beta1, nil); err != nil {
+			log.Error(err, "conversion error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		if err := r.Update(context.Background(), crdv1beta1); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 	if err := r.Update(context.Background(), instance); err != nil {
-		log.Error(err, "update error", err)
+		log.Error(err, "update error")
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
-	instance *v1alpha1.ConstraintTemplate,
-	crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	instance *v1beta1.ConstraintTemplate,
+	crd *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	if containsString(finalizerName, instance.GetFinalizers()) {
-		if err := r.Delete(context.Background(), crd); err != nil && !errors.IsNotFound(err) {
+		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
+		if err := r.scheme.Convert(crd, crdv1beta1, nil); err != nil {
+			log.Error(err, "conversion error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		if err := r.Delete(context.Background(), crdv1beta1); err != nil && !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		found := &apiextensionsv1beta1.CustomResourceDefinition{}
@@ -292,7 +329,12 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		if err := r.watcher.RemoveWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 			return reconcile.Result{}, err
 		}
-		if _, err := r.opa.RemoveTemplate(context.Background(), instance); err != nil {
+		versionless := &templates.ConstraintTemplate{}
+		if err := r.scheme.Convert(instance, versionless, nil); err != nil {
+			log.Error(err, "conversion error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
 			return reconcile.Result{}, err
 		}
 		instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
@@ -306,7 +348,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 func makeGvk(kind string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
-		Version: "v1alpha1",
+		Version: "v1beta1",
 		Kind:    kind,
 	}
 }

@@ -26,7 +26,7 @@ var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
 
 const (
 	crdName       = "constrainttemplates.templates.gatekeeper.sh"
-	constraintsGV = "constraints.gatekeeper.sh/v1alpha1"
+	constraintsGV = "constraints.gatekeeper.sh/v1beta1"
 	msgSize       = 256
 )
 

@@ -43,17 +43,19 @@ spec:
       containers:
       - command:
         - /root/manager
-        # args:
+        args:
+          - "--auditInterval=30"
           # - "--alsologtostderr"
           # - "--stderrthreshold=INFO"
           # - "-v=100"
-        image: controller:latest
+        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-alpha.0
         imagePullPolicy: Always
         name: manager
         env:
           - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
+                apiVersion: v1
                 fieldPath: metadata.namespace
           - name: POD_NAME
             valueFrom:
@@ -69,7 +71,7 @@ spec:
             cpu: 100m
             memory: 256Mi
         ports:
-        - containerPort: 9876
+        - containerPort: 443
           name: webhook-server
           protocol: TCP
         volumeMounts:

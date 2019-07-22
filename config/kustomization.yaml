@@ -21,9 +21,7 @@ resources:
 - rbac/rbac_role.yaml
 - rbac/rbac_role_binding.yaml
 - manager/manager.yaml
-
-patches:
-- manager_image_patch.yaml
+- crds/config_v1alpha1_config.yaml
 
 vars:
 - name: WEBHOOK_SECRET_NAME

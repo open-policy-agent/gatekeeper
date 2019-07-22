@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
@@ -55,17 +55,17 @@ const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &v1alpha1.ConstraintTemplate{
+	instance := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
-		Spec: v1alpha1.ConstraintTemplateSpec{
-			CRD: v1alpha1.CRD{
-				Spec: v1alpha1.CRDSpec{
-					Names: v1alpha1.Names{
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
 						Kind: "DenyAll",
 					},
 				},
 			},
-			Targets: []v1alpha1.Target{
+			Targets: []v1beta1.Target{
 				{
 					Target: "admission.k8s.gatekeeper.sh",
 					Rego: `
@@ -122,7 +122,7 @@ violation[{"msg": "denied!"}] {
 		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}, crd); err != nil {
 			return err
 		}
-		rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1alpha1")
+		rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ violation[{"msg": "denied!"}] {
 	cstr := &unstructured.Unstructured{}
 	cstr.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
-		Version: "v1alpha1",
+		Version: "v1beta1",
 		Kind:    "DenyAll",
 	})
 	cstr.SetName("denyall")
@@ -149,14 +149,14 @@ violation[{"msg": "denied!"}] {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	dynamic := dynamic.NewForConfigOrDie(cfg)
-	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1alpha1", Resource: "denyall"})
+	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: "denyall"})
 	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), cstr)
 
 	g.Eventually(func() error {
 
-		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1alpha1"}})
+		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
 		if err != nil {
 			return err
 		}
@@ -201,17 +201,17 @@ violation[{"msg": "denied!"}] {
 	g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 
 	// Create template with invalid rego, should populate parse error in status
-	instanceInvalidRego := &v1alpha1.ConstraintTemplate{
+	instanceInvalidRego := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
-		Spec: v1alpha1.ConstraintTemplateSpec{
-			CRD: v1alpha1.CRD{
-				Spec: v1alpha1.CRDSpec{
-					Names: v1alpha1.Names{
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
 						Kind: "InvalidRego",
 					},
 				},
 			},
-			Targets: []v1alpha1.Target{
+			Targets: []v1beta1.Target{
 				{
 					Target: "admission.k8s.gatekeeper.sh",
 					Rego: `
@@ -232,7 +232,7 @@ anyrule[}}}//invalid//rego
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 
 	g.Eventually(func() error {
-		ct := &v1alpha1.ConstraintTemplate{}
+		ct := &v1beta1.ConstraintTemplate{}
 		if err := c.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
 			return err
 		}
