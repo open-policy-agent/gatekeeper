@@ -21,13 +21,13 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"open-policy-agent/gatekeeper/pkg/target"
+	"open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	configv1alpha1 "open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

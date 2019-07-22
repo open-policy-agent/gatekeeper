@@ -22,9 +22,9 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"open-policy-agent/gatekeeper/pkg/controller/constraint"
+	"open-policy-agent/gatekeeper/pkg/util"
+	"open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"

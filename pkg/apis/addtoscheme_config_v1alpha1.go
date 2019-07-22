@@ -16,7 +16,7 @@ limitations under the License.
 package apis
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 )
 
 func init() {

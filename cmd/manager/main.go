@@ -19,17 +19,18 @@ import (
 	"flag"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis"
-	"github.com/open-policy-agent/gatekeeper/pkg/audit"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	"open-policy-agent/gatekeeper/pkg/apis"
+	"open-policy-agent/gatekeeper/pkg/audit"
+	"open-policy-agent/gatekeeper/pkg/controller"
+	"open-policy-agent/gatekeeper/pkg/target"
+	"open-policy-agent/gatekeeper/pkg/webhook"
 )
 
 func main() {

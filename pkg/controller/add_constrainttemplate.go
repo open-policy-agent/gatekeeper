@@ -16,7 +16,7 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
+	"open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 )
 
 func init() {
