@@ -241,6 +241,11 @@ metadata:
   namespace: gatekeeper-system
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutation.gatekeeper.sh
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: validation.gatekeeper.sh
