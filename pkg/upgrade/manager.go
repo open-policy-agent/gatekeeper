@@ -1,5 +1,8 @@
 package upgrade
 
+// TODO consider whether this needs to exist after https://github.com/kubernetes/kubernetes/pull/79495
+// is merged, or we make the minimum supported version of k8s v1.14
+
 import (
 	"context"
 	"strings"
