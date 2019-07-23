@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// AddToManager adds audit manager to the Manager
+// AddToManager adds upgrade manager to the Manager
 func AddToManager(m manager.Manager) error {
 	am, err := New(context.Background(), m.GetConfig())
 	if err != nil {

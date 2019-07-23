@@ -40,7 +40,7 @@ func New(ctx context.Context, cfg *rest.Config) (*UpgradeManager, error) {
 }
 
 
-// Start implements controller.Controller
+// Start implements the Runnable interface
 func (um *UpgradeManager) Start(stop <-chan struct{}) error {
 	log.Info("Starting Upgrade Manager")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,7 +87,7 @@ func (um *UpgradeManager) upgrade(ctx context.Context) error {
 	return nil
 }
 
-// upgrade touches each resource in a given groupVersion, incrementing its storage version
+// upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version
 func (um *UpgradeManager) upgradeGroupVersion(ctx context.Context, groupVersion string) error {
 	// new client to get updated restmapper
 	c, err := client.New(um.cfg, client.Options{Scheme: nil, Mapper: nil})
