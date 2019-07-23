@@ -21,6 +21,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
+	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
@@ -92,6 +93,12 @@ func main() {
 	log.Info("setting up audit")
 	if err := audit.AddToManager(mgr, client); err != nil {
 		log.Error(err, "unable to register audit to the manager")
+		os.Exit(1)
+	}
+
+	log.Info("setting up upgrade")
+	if err := upgrade.AddToManager(mgr); err != nil {
+		log.Error(err, "unable to register upgrade to the manager")
 		os.Exit(1)
 	}
 
