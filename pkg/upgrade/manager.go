@@ -10,6 +10,7 @@ import (
 
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -105,8 +106,10 @@ func (um *UpgradeManager) upgradeGroupVersion(ctx context.Context, groupVersion 
 	// get all resource kinds
 	resourceList, err := um.getAllKinds(groupVersion)
 	if err != nil {
-		// if no resource is found with the constraint apiversion, then return
-		log.Info("no resource kind is found with apiversion", "apiversion", groupVersion)
+		// If the resource doesn't exist, it doesn't need upgrading
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
 
