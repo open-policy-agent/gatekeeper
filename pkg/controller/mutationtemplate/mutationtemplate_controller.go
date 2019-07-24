@@ -130,15 +130,11 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 		return reconcile.Result{}, err
 	}
 	log.Info("Reconciling", "MutationTemplate", instance)
-	log.Info("There is also an", "opa.Client", fmt.Sprintf("%v", r.opa))
 
 	crd, err := r.opa.CreateMutationCRD(context.Background(), instance)
 	if err != nil {
-		fmt.Printf("entering err block")
 		log.Info("CreateMutationCRD failed, apparently.", "error", fmt.Sprintf("%v",err))
 	}
-
-	log.Info("I've created a Go CRD", "apiextensionsv1beta1.CustomResourceDefinition", fmt.Sprintf("%v", crd))
 
 	//we are temporarily assuming you're creating a new template and mutation crd
 	return r.handleCreate(instance, crd)
