@@ -3,10 +3,11 @@ package util
 import (
 	"os"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 )
 
 func getID() string {
@@ -19,17 +20,17 @@ func blankStatus(id string) map[string]interface{} {
 	}
 }
 
-func GetCTHAStatus(template *v1alpha1.ConstraintTemplate) *v1alpha1.ByPodStatus {
+func GetCTHAStatus(template *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 	id := getID()
 	for _, status := range template.Status.ByPod {
 		if status.ID == id {
 			return status
 		}
 	}
-	return &v1alpha1.ByPodStatus{ID: id}
+	return &v1beta1.ByPodStatus{ID: id}
 }
 
-func SetCTHAStatus(template *v1alpha1.ConstraintTemplate, status *v1alpha1.ByPodStatus) {
+func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodStatus) {
 	id := getID()
 	status.ID = id
 	for i, status := range template.Status.ByPod {

@@ -1,4 +1,4 @@
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sUniqueServiceSelector
 metadata:
   name: unique-service-selector

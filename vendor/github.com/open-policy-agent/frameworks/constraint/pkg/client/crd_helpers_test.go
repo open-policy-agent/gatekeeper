@@ -6,25 +6,25 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // helpers for creating a ConstraintTemplate for test
 
-type tmplArg func(*v1alpha1.ConstraintTemplate)
+type tmplArg func(*templates.ConstraintTemplate)
 
 func name(name string) tmplArg {
-	return func(tmpl *v1alpha1.ConstraintTemplate) {
+	return func(tmpl *templates.ConstraintTemplate) {
 		tmpl.ObjectMeta.Name = name
 	}
 }
 
 func crdNames(kind string) tmplArg {
-	return func(tmpl *v1alpha1.ConstraintTemplate) {
-		tmpl.Spec.CRD.Spec.Names = v1alpha1.Names{
+	return func(tmpl *templates.ConstraintTemplate) {
+		tmpl.Spec.CRD.Spec.Names = templates.Names{
 			Kind: kind,
 		}
 	}
@@ -32,25 +32,25 @@ func crdNames(kind string) tmplArg {
 
 func schema(pm propMap) tmplArg {
 	p := prop(pm)
-	return func(tmpl *v1alpha1.ConstraintTemplate) {
-		tmpl.Spec.CRD.Spec.Validation = &v1alpha1.Validation{}
+	return func(tmpl *templates.ConstraintTemplate) {
+		tmpl.Spec.CRD.Spec.Validation = &templates.Validation{}
 		tmpl.Spec.CRD.Spec.Validation.OpenAPIV3Schema = &p
 	}
 }
 
 func targets(ts ...string) tmplArg {
-	targets := make([]v1alpha1.Target, len(ts))
+	targets := make([]templates.Target, len(ts))
 	for i, t := range ts {
-		targets[i] = v1alpha1.Target{Target: t, Rego: `package hello violation[{"msg": msg}] {msg = "hello"}`}
+		targets[i] = templates.Target{Target: t, Rego: `package hello violation[{"msg": msg}] {msg = "hello"}`}
 	}
 
-	return func(tmpl *v1alpha1.ConstraintTemplate) {
+	return func(tmpl *templates.ConstraintTemplate) {
 		tmpl.Spec.Targets = targets
 	}
 }
 
-func createTemplate(args ...tmplArg) *v1alpha1.ConstraintTemplate {
-	tmpl := &v1alpha1.ConstraintTemplate{}
+func createTemplate(args ...tmplArg) *templates.ConstraintTemplate {
+	tmpl := &templates.ConstraintTemplate{}
 	for _, arg := range args {
 		arg(tmpl)
 	}
@@ -70,7 +70,7 @@ func matchSchema(pm propMap) targetHandlerArg {
 var _ MatchSchemaProvider = &testTargetHandler{}
 
 type testTargetHandler struct {
-	matchSchema apiextensionsv1beta1.JSONSchemaProps
+	matchSchema apiextensions.JSONSchemaProps
 }
 
 func createTestTargetHandler(args ...targetHandlerArg) MatchSchemaProvider {
@@ -81,28 +81,28 @@ func createTestTargetHandler(args ...targetHandlerArg) MatchSchemaProvider {
 	return h
 }
 
-func (h testTargetHandler) MatchSchema() apiextensionsv1beta1.JSONSchemaProps {
+func (h testTargetHandler) MatchSchema() apiextensions.JSONSchemaProps {
 	return h.matchSchema
 }
 
 // schema Helpers
 
-type propMap map[string]apiextensionsv1beta1.JSONSchemaProps
+type propMap map[string]apiextensions.JSONSchemaProps
 
 // prop currently expects 0 or 1 prop map. More is unsupported.
-func prop(pm ...map[string]apiextensionsv1beta1.JSONSchemaProps) apiextensionsv1beta1.JSONSchemaProps {
+func prop(pm ...map[string]apiextensions.JSONSchemaProps) apiextensions.JSONSchemaProps {
 	if len(pm) == 0 {
-		return apiextensionsv1beta1.JSONSchemaProps{}
+		return apiextensions.JSONSchemaProps{}
 	}
-	return apiextensionsv1beta1.JSONSchemaProps{Properties: pm[0]}
+	return apiextensions.JSONSchemaProps{Properties: pm[0]}
 }
 
 // tProp creates a typed property
-func tProp(t string) apiextensionsv1beta1.JSONSchemaProps {
-	return apiextensionsv1beta1.JSONSchemaProps{Type: t}
+func tProp(t string) apiextensions.JSONSchemaProps {
+	return apiextensions.JSONSchemaProps{Type: t}
 }
 
-func expectedSchema(pm propMap) *apiextensionsv1beta1.JSONSchemaProps {
+func expectedSchema(pm propMap) *apiextensions.JSONSchemaProps {
 	p := prop(propMap{"spec": prop(pm)})
 	return &p
 }
@@ -118,7 +118,7 @@ func gvk(group, version, kind string) customResourceArg {
 }
 
 func kind(kind string) customResourceArg {
-	return gvk(constraintGroup, "v1alpha1", kind)
+	return gvk(constraintGroup, "v1beta1", kind)
 }
 
 func params(s string) customResourceArg {
@@ -159,10 +159,10 @@ func createCR(args ...customResourceArg) *unstructured.Unstructured {
 
 type crdTestCase struct {
 	Name           string
-	Template       *v1alpha1.ConstraintTemplate
+	Template       *templates.ConstraintTemplate
 	Handler        MatchSchemaProvider
 	CR             *unstructured.Unstructured
-	ExpectedSchema *apiextensionsv1beta1.JSONSchemaProps
+	ExpectedSchema *apiextensions.JSONSchemaProps
 	ErrorExpected  bool
 }
 
@@ -239,8 +239,12 @@ func TestCreateSchema(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
+		h := newCRDHelper()
 		t.Run(tc.Name, func(t *testing.T) {
-			schema := createSchema(tc.Template, tc.Handler)
+			schema, err := h.createSchema(tc.Template, tc.Handler)
+			if err != nil {
+				t.Errorf("error = %v; want nil", err)
+			}
 			if !reflect.DeepEqual(schema, tc.ExpectedSchema) {
 				t.Errorf("createSchema(%#v) = \n%#v; \nwant %#v", tc.Template, *schema, *tc.ExpectedSchema)
 			}
@@ -299,9 +303,15 @@ func TestCRDCreationAndValidation(t *testing.T) {
 	h := newCRDHelper()
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
-			schema := createSchema(tc.Template, tc.Handler)
-			crd := h.createCRD(tc.Template, schema)
-			err := h.validateCRD(crd)
+			schema, err := h.createSchema(tc.Template, tc.Handler)
+			if err != nil {
+				t.Errorf("err = %v; want nil", err)
+			}
+			crd, err := h.createCRD(tc.Template, schema)
+			if err != nil {
+				t.Errorf("err = %v; want nil", err)
+			}
+			err = h.validateCRD(crd)
 			if (err == nil) && tc.ErrorExpected {
 				t.Errorf("err = nil; want non-nil")
 			}
@@ -434,12 +444,18 @@ func TestCRValidation(t *testing.T) {
 	h := newCRDHelper()
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
-			schema := createSchema(tc.Template, tc.Handler)
-			crd := h.createCRD(tc.Template, schema)
+			schema, err := h.createSchema(tc.Template, tc.Handler)
+			if err != nil {
+				t.Errorf("err = %v; want nil", err)
+			}
+			crd, err := h.createCRD(tc.Template, schema)
+			if err != nil {
+				t.Errorf("err = %v; want nil", err)
+			}
 			if err := h.validateCRD(crd); err != nil {
 				t.Errorf("Bad test setup: Bad CRD: %s", err)
 			}
-			err := h.validateCR(tc.CR, crd)
+			err = h.validateCR(tc.CR, crd)
 			if (err == nil) && tc.ErrorExpected {
 				t.Errorf("err = nil; want non-nil")
 			}

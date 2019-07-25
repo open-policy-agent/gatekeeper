@@ -20,6 +20,7 @@ install: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+	kustomize build config -o deploy/crds.yaml
 
 # Run go fmt against code
 fmt:

@@ -1,4 +1,4 @@
-apiVersion: templates.gatekeeper.sh/v1alpha1
+apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8scontainerlimits
@@ -166,7 +166,7 @@ spec:
           container := input.review.object.spec.containers[_]
           cpu_orig := container.resources.limits.cpu
           cpu := canonify_cpu(cpu_orig)
-          max_cpu_orig := input.constraint.spec.parameters.cpu
+          max_cpu_orig := input.parameters.cpu
           max_cpu := canonify_cpu(max_cpu_orig)
           cpu > max_cpu
           msg := sprintf("container <%v> cpu limit <%v> is higher than the maximum allowed of <%v>", [container.name, cpu_orig, max_cpu_orig])
@@ -176,7 +176,7 @@ spec:
           container := input.review.object.spec.containers[_]
           mem_orig := container.resources.limits.memory
           mem := canonify_mem(mem_orig)
-          max_mem_orig := input.constraint.spec.parameters.memory
+          max_mem_orig := input.parameters.memory
           max_mem := canonify_mem(max_mem_orig)
           mem > max_mem
           msg := sprintf("container <%v> memory limit <%v> is higher than the maximum allowed of <%v>", [container.name, mem_orig, max_mem_orig])

@@ -62,14 +62,16 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	touch -a ./config/manager_image_patch.yaml
+	touch -a ./overlays/dev/manager_image_patch.yaml
 	kubectl apply -f config/crds
-	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/config/crds
-	kustomize build config | kubectl apply -f -
+	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/deploy
+	kustomize build overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+	kustomize build config  -o deploy/gatekeeper.yaml
+	bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
 
 # Run go fmt against code
 fmt:
@@ -94,7 +96,7 @@ docker-tag-dev:
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
-	@docker tag $(IMG) $(REPOSITORY):latest	
+	@docker tag $(IMG) $(REPOSITORY):latest
 
 # Push for Dev
 docker-push-dev:  docker-tag-dev
@@ -110,9 +112,9 @@ docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 
-	@test -s ./config/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/manager_image_patch.yaml'
+	@test -s ./overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./overlays/dev/manager_image_patch.yaml'
 
-	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/manager_image_patch.yaml
+	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
 
 docker-build-ci:
 	docker build . -t $(IMG) -f Dockerfile_ci

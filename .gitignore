@@ -16,7 +16,7 @@ bin
 *.out
 
 # Manager image patch file
-config/manager_image_patch.yaml
+overlays/dev/manager_image_patch.yaml
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 

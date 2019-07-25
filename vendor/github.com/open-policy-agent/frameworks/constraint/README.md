@@ -10,7 +10,7 @@ I want to make sure that every object has a `billing` label, I might write the
 following constraint YAML:
 
 ```yaml
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: FooSystemRequiredLabel
 metadata:
   name: require-billing-label
@@ -39,7 +39,7 @@ intent. For example, to define the `FooSystemRequiredLabel` constraint kind
 implemented above, I might write the following template YAML:
 
 ```yaml
-apiVersion: gatekeeper.sh/v1alpha1
+apiVersion: gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: foosystemrequiredlabels
@@ -48,9 +48,6 @@ spec:
     spec:
       names:
         kind: FooSystemRequiredLabel
-        listKind: FooSystemRequiredLabelsList
-        plural: foosystemrequiredlabels
-        singular: foosystemrequiredlabel
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
@@ -63,7 +60,7 @@ spec:
       rego: |
 violation[{"msg": msg, "details": {"missing_labels": missing}}] {
    provided := {label | input.request.object.metadata.labels[label]}
-   required := {label | label := input.constraint.spec.parameters.labels[_]}
+   required := {label | label := input.parameters.labels[_]}
    missing := required - provided
    count(missing) > 0
    msg := sprintf("you must provide labels: %v", [missing])
@@ -152,7 +149,7 @@ type TargetHandler interface {
 	GetName() string
 	
 	// MatchSchema returns the JSON Schema for the `match` field of a constraint
-	MatchSchema() apiextensionsv1beta1.JSONSchemaProps
+	MatchSchema() apiextensions.JSONSchemaProps
 	
 	// Library returns the pieces of Rego code required to stitch together constraint evaluation  // for the target. Current required libraries are `matching_constraints` and
 	// `matching_reviews_and_constraints` 
@@ -206,11 +203,12 @@ text template that forms a Rego module with at least two rules:
 
    * `matching_constraints[constraint]`
       * Returns all `constraint` objects that satisfy the `match` criteria for
-        a given `input`. This `constraint` will be assigned to `input.constraint`.
+        a given `input`. This `perameters` of this `constraint` will be assigned
+        to `input.parameters`.
    * `matching_reviews_and_constraints[[review, constraint]]`
       * Returns a `review` that corresponds to all cached data for the target. It
         also returns a `constraint` for every constraint relevant to a review.
-        Values will be made available to constraint rules as `input.constraint` and
+        Values will be made available to constraint rules as `input.parameters` and
         `input.review`.
    
 Note that the `Library()` module will be sandboxed much like how constraint rules
@@ -245,9 +243,9 @@ type Client interface {
 	AddData(context.Context, interface{}) (*types.Responses, error)
 	RemoveData(context.Context, interface{}) (*types.Responses, error)
 
-	CreateCRD(context.Context, *v1alpha1.ConstraintTemplate) (*apiextensionsv1beta1.CustomResourceDefinition, error)
-	AddTemplate(context.Context, *v1alpha1.ConstraintTemplate) (*types.Responses, error)
-	RemoveTemplate(context.Context, *v1alpha1.ConstraintTemplate) (*types.Responses, error)
+	CreateCRD(context.Context, *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error)
+	AddTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
+	RemoveTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
 
 	AddConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)
 	RemoveConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)

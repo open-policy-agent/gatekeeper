@@ -1,29 +1,124 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: gatekeeper-system
   labels:
     control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: gatekeeper-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
 metadata:
   creationTimestamp: null
-  name: manager-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: manager-role
-subjects:
-- kind: ServiceAccount
-  name: default
-  namespace: gatekeeper-system
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: configs.config.gatekeeper.sh
+spec:
+  group: config.gatekeeper.sh
+  names:
+    kind: Config
+    plural: configs
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            sync:
+              description: Configuration for syncing k8s objects
+              properties:
+                syncOnly:
+                  description: If non-empty, only entries on this list will be replicated
+                    into OPA
+                  items:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      version:
+                        type: string
+                    type: object
+                  type: array
+              type: object
+            validation:
+              description: Configuration for validation
+              properties:
+                traces:
+                  description: List of requests to trace. Both "user" and "kinds"
+                    must be specified
+                  items:
+                    properties:
+                      dump:
+                        description: Also dump the state of OPA with the trace. Set
+                          to `All` to dump everything.
+                        type: string
+                      kind:
+                        description: Only trace requests of the following GroupVersionKind
+                        properties:
+                          group:
+                            type: string
+                          kind:
+                            type: string
+                          version:
+                            type: string
+                        type: object
+                      user:
+                        description: Only trace requests from the specified user
+                        type: string
+                    type: object
+                  type: array
+              type: object
+          type: object
+        status:
+          properties:
+            byPod:
+              description: List of statuses as seen by individual pods
+              items:
+                properties:
+                  allFinalizers:
+                    description: List of Group/Version/Kinds with finalizers
+                    items:
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        version:
+                          type: string
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
+                    type: string
+                type: object
+              type: array
+          type: object
+  version: v1alpha1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: manager-role
+  name: gatekeeper-manager-role
 rules:
 - apiGroups:
   - '*'
@@ -100,6 +195,18 @@ rules:
   - update
   - patch
 - apiGroups:
+  - constraints.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
   - '*'
   resources:
   - '*'
@@ -157,6 +264,41 @@ rules:
   - patch
   - delete
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: gatekeeper-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gatekeeper-manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: gatekeeper-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gatekeeper-webhook-server-secret
+  namespace: gatekeeper-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: gatekeeper-controller-manager-service
+  namespace: gatekeeper-system
+spec:
+  ports:
+  - port: 443
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -178,11 +320,10 @@ spec:
         controller-tools.k8s.io: "1.0"
     spec:
       containers:
-      - name: manager
+      - args:
+        - --auditInterval=30
         command:
         - /root/manager
-        args:
-          - "--auditInterval=30"
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -197,17 +338,18 @@ spec:
           value: gatekeeper-webhook-server-secret
         image: quay.io/open-policy-agent/gatekeeper:v3.0.4-alpha.0
         imagePullPolicy: Always
+        name: manager
         ports:
         - containerPort: 443
           name: webhook-server
           protocol: TCP
         resources:
           limits:
-            cpu: 1
-            memory: 500Mi
+            cpu: 100m
+            memory: 512Mi
           requests:
             cpu: 100m
-            memory: 300Mi
+            memory: 256Mi
         volumeMounts:
         - mountPath: /certs
           name: cert
@@ -218,32 +360,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-secret
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: gatekeeper-controller-manager-service
-  namespace:  gatekeeper-system
-  labels:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-spec:
-  selector:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-  ports:
-  - port: 443
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: gatekeeper-webhook-server-secret
-  namespace: gatekeeper-system
----
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: ValidatingWebhookConfiguration
-metadata:
-  name: validation.gatekeeper.sh
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -280,6 +396,9 @@ spec:
                 spec:
                   properties:
                     names:
+                      properties:
+                        kind:
+                          type: string
                       type: object
                     validation:
                       type: object
@@ -297,83 +416,39 @@ spec:
           type: object
         status:
           properties:
-            created:
-              type: boolean
-            error:
-              type: string
-          type: object
-  version: v1alpha1
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  creationTimestamp: null
-  labels:
-    controller-tools.k8s.io: "1.0"
-  name: configs.config.gatekeeper.sh
-spec:
-  group: config.gatekeeper.sh
-  names:
-    kind: Config
-    plural: configs
-  scope: Namespaced
-  validation:
-    openAPIV3Schema:
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          properties:
-            sync:
-              description: Configuration for syncing k8s objects
-              properties:
-                syncOnly:
-                  description: If non-empty, only entries on this list will be replicated
-                    into OPA
-                  items:
-                    properties:
-                      group:
-                        type: string
-                      kind:
-                        type: string
-                      version:
-                        type: string
-                    type: object
-                  type: array
-              type: object
-          type: object
-        status:
-          properties:
-            allFinalizers:
-              description: List of Group/Version/Kinds with finalizers
+            byPod:
               items:
                 properties:
-                  group:
-                    type: string
-                  kind:
-                    type: string
-                  version:
+                  errors:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        location:
+                          type: string
+                        message:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
                     type: string
                 type: object
               type: array
+            created:
+              type: boolean
           type: object
-  version: v1alpha1
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false
 status:
   acceptedNames:
     kind: ""

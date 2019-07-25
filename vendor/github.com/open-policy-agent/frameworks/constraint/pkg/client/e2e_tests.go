@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,26 +19,26 @@ import (
 
 var ctx = context.Background()
 
-func newConstraintTemplate(name, rego string) *v1alpha1.ConstraintTemplate {
-	return &v1alpha1.ConstraintTemplate{
+func newConstraintTemplate(name, rego string) *templates.ConstraintTemplate {
+	return &templates.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(name)},
-		Spec: v1alpha1.ConstraintTemplateSpec{
-			CRD: v1alpha1.CRD{
-				Spec: v1alpha1.CRDSpec{
-					Names: v1alpha1.Names{
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
 						Kind: name,
 					},
-					Validation: &v1alpha1.Validation{
-						OpenAPIV3Schema: &apiextensionsv1beta1.JSONSchemaProps{
-							Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-								"expected": apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
+					Validation: &templates.Validation{
+						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"expected": apiextensions.JSONSchemaProps{Type: "string"},
 							},
 						},
 					},
 				},
 			},
-			Targets: []v1alpha1.Target{
-				v1alpha1.Target{Target: "test.target", Rego: rego},
+			Targets: []templates.Target{
+				templates.Target{Target: "test.target", Rego: rego},
 			},
 		},
 	}
@@ -97,6 +97,48 @@ violation[{"msg": "DENIED", "details": {}}] {
 		}
 		if rsps.Results()[0].Msg != "DENIED" {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
+		}
+		return nil
+	},
+
+	"Deny By Parameter": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+violation[{"msg": "DENIED", "details": {}}] {
+	input.parameters.name == input.review.Name
+}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		cstr := newConstraint("Foo", "ph", map[string]string{"name": "deny_me"})
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		rsps, err := c.Review(ctx, targetData{Name: "deny_me", ForConstraint: "Foo"})
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 1 {
+			return e("Bad number of results", rsps)
+		}
+		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
+			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
+		}
+		if rsps.Results()[0].Msg != "DENIED" {
+			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
+		}
+
+		rsps, err = c.Review(ctx, targetData{Name: "Sara", ForConstraint: "Foo"})
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned for second test")
+		}
+		if len(rsps.Results()) != 0 {
+			return e("Expected no results", rsps)
 		}
 		return nil
 	},

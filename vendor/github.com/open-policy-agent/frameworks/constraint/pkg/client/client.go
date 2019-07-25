@@ -11,11 +11,11 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -25,9 +25,9 @@ type Client interface {
 	AddData(context.Context, interface{}) (*types.Responses, error)
 	RemoveData(context.Context, interface{}) (*types.Responses, error)
 
-	CreateCRD(context.Context, *v1alpha1.ConstraintTemplate) (*apiextensionsv1beta1.CustomResourceDefinition, error)
-	AddTemplate(context.Context, *v1alpha1.ConstraintTemplate) (*types.Responses, error)
-	RemoveTemplate(context.Context, *v1alpha1.ConstraintTemplate) (*types.Responses, error)
+	CreateCRD(context.Context, *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error)
+	AddTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
+	RemoveTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
 
 	AddConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)
 	RemoveConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)
@@ -97,7 +97,7 @@ func Targets(ts ...TargetHandler) ClientOpt {
 
 type MatchSchemaProvider interface {
 	// MatchSchema returns the JSON Schema for the `match` field of a constraint
-	MatchSchema() apiextensionsv1beta1.JSONSchemaProps
+	MatchSchema() apiextensions.JSONSchemaProps
 }
 
 type TargetHandler interface {
@@ -137,7 +137,7 @@ type TargetHandler interface {
 var _ Client = &client{}
 
 type constraintEntry struct {
-	CRD     *apiextensionsv1beta1.CustomResourceDefinition
+	CRD     *apiextensions.CustomResourceDefinition
 	Targets []string
 }
 
@@ -213,7 +213,7 @@ func createTemplatePath(target, name string) string {
 }
 
 // CreateCRD creates a CRD from template
-func (c *client) CreateCRD(ctx context.Context, templ *v1alpha1.ConstraintTemplate) (*apiextensionsv1beta1.CustomResourceDefinition, error) {
+func (c *client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
 	if err := validateTargets(templ); err != nil {
 		return nil, err
 	}
@@ -236,9 +236,15 @@ func (c *client) CreateCRD(ctx context.Context, templ *v1alpha1.ConstraintTempla
 		src = v.Rego
 	}
 
-	schema := createSchema(templ, target)
-	crd := c.backend.crd.createCRD(templ, schema)
-	if err := c.backend.crd.validateCRD(crd); err != nil {
+	schema, err := c.backend.crd.createSchema(templ, target)
+	if err != nil {
+		return nil, err
+	}
+	crd, err := c.backend.crd.createCRD(templ, schema)
+	if err != nil {
+		return nil, err
+	}
+	if err = c.backend.crd.validateCRD(crd); err != nil {
 		return nil, err
 	}
 
@@ -251,7 +257,7 @@ func (c *client) CreateCRD(ctx context.Context, templ *v1alpha1.ConstraintTempla
 		return nil, fmt.Errorf("Invalid rego: %s", err)
 	}
 
-	_, err := ensureRegoConformance(crd.Spec.Names.Kind, path, src)
+	_, err = ensureRegoConformance(crd.Spec.Names.Kind, path, src)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +268,7 @@ func (c *client) CreateCRD(ctx context.Context, templ *v1alpha1.ConstraintTempla
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
 // schema validation on calls to AddConstraint. It also returns a copy of the CRD describing
 // the constraint.
-func (c *client) AddTemplate(ctx context.Context, templ *v1alpha1.ConstraintTemplate) (*types.Responses, error) {
+func (c *client) AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 	crd, err := c.CreateCRD(ctx, templ)
 	if err != nil {
@@ -301,7 +307,7 @@ func (c *client) AddTemplate(ctx context.Context, templ *v1alpha1.ConstraintTemp
 
 // RemoveTemplate removes the template source code from OPA and removes the CRD from the validation
 // registry.
-func (c *client) RemoveTemplate(ctx context.Context, templ *v1alpha1.ConstraintTemplate) (*types.Responses, error) {
+func (c *client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 	if err := validateTargets(templ); err != nil {
 		return resp, err
@@ -317,8 +323,14 @@ func (c *client) RemoveTemplate(ctx context.Context, templ *v1alpha1.ConstraintT
 		target = t
 	}
 
-	schema := createSchema(templ, target)
-	crd := c.backend.crd.createCRD(templ, schema)
+	schema, err := c.backend.crd.createSchema(templ, target)
+	if err != nil {
+		return resp, err
+	}
+	crd, err := c.backend.crd.createCRD(templ, schema)
+	if err != nil {
+		return resp, err
+	}
 	if err := c.backend.crd.validateCRD(crd); err != nil {
 		return resp, err
 	}
@@ -327,7 +339,7 @@ func (c *client) RemoveTemplate(ctx context.Context, templ *v1alpha1.ConstraintT
 
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
-	_, err := c.backend.driver.DeleteModule(ctx, path)
+	_, err = c.backend.driver.DeleteModule(ctx, path)
 	if err != nil {
 		return resp, err
 	}
@@ -345,13 +357,10 @@ func createConstraintPath(target string, constraint *unstructured.Unstructured) 
 	if gvk.Group == "" {
 		return "", fmt.Errorf("Empty group for the constrant named %s", constraint.GetName())
 	}
-	if gvk.Version == "" {
-		return "", fmt.Errorf("Empty version for the constraint named %s", constraint.GetName())
-	}
 	if gvk.Kind == "" {
 		return "", fmt.Errorf("Empty kind for the constraint named %s", constraint.GetName())
 	}
-	return "/" + path.Join("constraints", target, "cluster", gvk.Group, gvk.Version, gvk.Kind, constraint.GetName()), nil
+	return "/" + path.Join("constraints", target, "cluster", gvk.Group, gvk.Kind, constraint.GetName()), nil
 }
 
 // getConstraintEntry returns the constraint entry for a given constraint
@@ -481,7 +490,7 @@ func (c *client) init() error {
 		}
 		libBuf := &bytes.Buffer{}
 		if err := libTempl.Execute(libBuf, map[string]string{
-			"ConstraintsRoot": fmt.Sprintf(`data.constraints["%s"].cluster["%s"].v1alpha1`, t.GetName(), constraintGroup),
+			"ConstraintsRoot": fmt.Sprintf(`data.constraints["%s"].cluster["%s"]`, t.GetName(), constraintGroup),
 			"DataRoot":        fmt.Sprintf(`data.external["%s"]`, t.GetName()),
 		}); err != nil {
 			return err

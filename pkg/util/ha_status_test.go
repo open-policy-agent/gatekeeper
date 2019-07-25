@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -175,31 +175,31 @@ func TestCTHAStatus(t *testing.T) {
 	tc := []struct {
 		Name string
 		// One error per pretend Pod
-		Errors []*v1alpha1.CreateCRDError
+		Errors []*v1beta1.CreateCRDError
 	}{
 		{
 			Name:   "One Status",
-			Errors: []*v1alpha1.CreateCRDError{{Message: "one_status"}},
+			Errors: []*v1beta1.CreateCRDError{{Message: "one_status"}},
 		},
 		{
 			Name:   "Two Statuses",
-			Errors: []*v1alpha1.CreateCRDError{{Message: "one"}, {Message: "two"}},
+			Errors: []*v1beta1.CreateCRDError{{Message: "one"}, {Message: "two"}},
 		},
 		{
 			Name:   "Three Statuses",
-			Errors: []*v1alpha1.CreateCRDError{{Message: "one"}, {Message: "two"}, {Message: "three"}},
+			Errors: []*v1beta1.CreateCRDError{{Message: "one"}, {Message: "two"}, {Message: "three"}},
 		},
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			obj := &v1alpha1.ConstraintTemplate{}
+			obj := &v1beta1.ConstraintTemplate{}
 			for i, e := range tt.Errors {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
 					t.Fatal(err)
 				}
 				st := GetCTHAStatus(obj)
-				es := []*v1alpha1.CreateCRDError{e}
+				es := []*v1beta1.CreateCRDError{e}
 				st.Errors = es
 				SetCTHAStatus(obj, st)
 				st2 := GetCTHAStatus(obj)
@@ -219,7 +219,7 @@ func TestCTHAStatus(t *testing.T) {
 				if err := os.Setenv("POD_NAME", pod); err != nil {
 					t.Fatal(err)
 				}
-				es := []*v1alpha1.CreateCRDError{e}
+				es := []*v1beta1.CreateCRDError{e}
 				st2 := GetCTHAStatus(obj)
 				if st2.ID != pod {
 					t.Errorf("t2: id = %v; want %v", st2.ID, pod)

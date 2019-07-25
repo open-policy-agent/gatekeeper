@@ -5,7 +5,7 @@ import (
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -100,10 +100,10 @@ func (h *handler) HandleViolation(result *types.Result) error {
 	return nil
 }
 
-func (h *handler) MatchSchema() apiextensionsv1beta1.JSONSchemaProps {
-	return apiextensionsv1beta1.JSONSchemaProps{
-		Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-			"label": apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
+func (h *handler) MatchSchema() apiextensions.JSONSchemaProps {
+	return apiextensions.JSONSchemaProps{
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"label": apiextensions.JSONSchemaProps{Type: "string"},
 		},
 	}
 }

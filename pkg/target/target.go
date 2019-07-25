@@ -11,7 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
@@ -368,96 +368,64 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	return nil
 }
 
-func (h *K8sValidationTarget) MatchSchema() apiextensionsv1beta1.JSONSchemaProps {
-	stringList := &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-		Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"}}
-	return apiextensionsv1beta1.JSONSchemaProps{
-		Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-			"kinds": apiextensionsv1beta1.JSONSchemaProps{
+func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
+	stringList := &apiextensions.JSONSchemaPropsOrArray{
+		Schema: &apiextensions.JSONSchemaProps{Type: "string"}}
+	labelSelectorSchema := apiextensions.JSONSchemaProps{
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333
+			//"matchLabels": apiextensions.JSONSchemaProps{
+			//	AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+			//		Allows: true,
+			//		Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+			//	},
+			//},
+			"matchExpressions": apiextensions.JSONSchemaProps{
 				Type: "array",
-				Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-					Schema: &apiextensionsv1beta1.JSONSchemaProps{
-						Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
+				Items: &apiextensions.JSONSchemaPropsOrArray{
+					Schema: &apiextensions.JSONSchemaProps{
+						Properties: map[string]apiextensions.JSONSchemaProps{
+							"key": apiextensions.JSONSchemaProps{Type: "string"},
+							"operator": apiextensions.JSONSchemaProps{
+								Type: "string",
+								Enum: []apiextensions.JSON{
+									"In",
+									"NotIn",
+									"Exists",
+									"DoesNotExist",
+								},
+							},
+							"values": apiextensions.JSONSchemaProps{
+								Type: "array",
+								Items: &apiextensions.JSONSchemaPropsOrArray{
+									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return apiextensions.JSONSchemaProps{
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"kinds": apiextensions.JSONSchemaProps{
+				Type: "array",
+				Items: &apiextensions.JSONSchemaPropsOrArray{
+					Schema: &apiextensions.JSONSchemaProps{
+						Properties: map[string]apiextensions.JSONSchemaProps{
 							"apiGroups": {Items: stringList},
 							"kinds":     {Items: stringList},
 						},
 					},
 				},
 			},
-			"namespaces": apiextensionsv1beta1.JSONSchemaProps{
+			"namespaces": apiextensions.JSONSchemaProps{
 				Type: "array",
-				Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-					Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"}}},
-			"labelSelector": apiextensionsv1beta1.JSONSchemaProps{
-				Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-					// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333
-					//"matchLabels": apiextensionsv1beta1.JSONSchemaProps{
-					//	AdditionalProperties: &apiextensionsv1beta1.JSONSchemaPropsOrBool{
-					//		Allows: true,
-					//		Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-					//	},
-					//},
-					"matchExpressions": apiextensionsv1beta1.JSONSchemaProps{
-						Type: "array",
-						Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-							Schema: &apiextensionsv1beta1.JSONSchemaProps{
-								Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-									"key": apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-									"operator": apiextensionsv1beta1.JSONSchemaProps{
-										Type: "string",
-										Enum: []apiextensionsv1beta1.JSON{
-											apiextensionsv1beta1.JSON{Raw: []byte(`"In"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"NotIn"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"Exists"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"DoesNotExist"`)},
-										}},
-									"values": apiextensionsv1beta1.JSONSchemaProps{
-										Type: "array",
-										Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-											Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			"namespaceSelector": apiextensionsv1beta1.JSONSchemaProps{
-				Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-					// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333
-					//"matchLabels": apiextensionsv1beta1.JSONSchemaProps{
-					//	AdditionalProperties: &apiextensionsv1beta1.JSONSchemaPropsOrBool{
-					//		Allows: true,
-					//		Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-					//	},
-					//},
-					"matchExpressions": apiextensionsv1beta1.JSONSchemaProps{
-						Type: "array",
-						Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-							Schema: &apiextensionsv1beta1.JSONSchemaProps{
-								Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
-									"key": apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-									"operator": apiextensionsv1beta1.JSONSchemaProps{
-										Type: "string",
-										Enum: []apiextensionsv1beta1.JSON{
-											apiextensionsv1beta1.JSON{Raw: []byte(`"In"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"NotIn"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"Exists"`)},
-											apiextensionsv1beta1.JSON{Raw: []byte(`"DoesNotExist"`)},
-										}},
-									"values": apiextensionsv1beta1.JSONSchemaProps{
-										Type: "array",
-										Items: &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-											Schema: &apiextensionsv1beta1.JSONSchemaProps{Type: "string"},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+				Items: &apiextensions.JSONSchemaPropsOrArray{
+					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
+			"labelSelector":     labelSelectorSchema,
+			"namespaceSelector": labelSelectorSchema,
 		},
 	}
 }
