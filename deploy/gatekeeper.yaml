@@ -276,7 +276,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: system
+  namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Secret
