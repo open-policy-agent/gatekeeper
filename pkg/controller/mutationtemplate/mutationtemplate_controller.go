@@ -17,8 +17,12 @@ package mutationtemplate
 
 import (
 	"context"
+	"fmt"
 
 	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 /**
@@ -38,15 +42,36 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues("kind", "MutationTemplate")
 
+type Adder struct {
+	Opa          opa.Client
+	WatchManager *watch.WatchManager
+}
+
 // Add creates a new MutationTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func (a *Adder) Add(mgr manager.Manager) error {
+	r, err := newReconciler(mgr, a.Opa)
+	if err != nil {
+		return err
+	}
+	return add(mgr, r)
+}
+
+func (a *Adder) InjectOpa(o opa.Client) {
+	a.Opa = o
+}
+
+func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
+	a.WatchManager = wm
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileMutationTemplate{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+func newReconciler(mgr manager.Manager, opa opa.Client) (reconcile.Reconciler, error) {
+	return &ReconcileMutationTemplate{
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		opa:    opa,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -82,6 +107,7 @@ var _ reconcile.Reconciler = &ReconcileMutationTemplate{}
 type ReconcileMutationTemplate struct {
 	client.Client
 	scheme *runtime.Scheme
+	opa    opa.Client
 }
 
 // Reconcile reads that state of the cluster for a MutationTemplate object and makes changes based on the state read
@@ -105,5 +131,23 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 	}
 	log.Info("Reconciling", "MutationTemplate", instance)
 
+	crd, err := r.opa.CreateMutationCRD(context.Background(), instance)
+	if err != nil {
+		log.Info("CreateMutationCRD failed", "error", fmt.Sprintf("%v",err))
+	}
+
+	//we are temporarily assuming you're creating a new template and mutation crd
+	return r.handleCreate(instance, crd)
+}
+
+func (r *ReconcileMutationTemplate) handleCreate(instance *templatesv1alpha1.MutationTemplate, crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	log.Info("creating mutation CRD")
+	if err := r.Create(context.TODO(), crd); err != nil {
+		return reconcile.Result{}, err
+	}
+	instance.Status.Created = true
+	if err := r.Update(context.Background(), instance); err != nil {
+		return reconcile.Result{Requeue: true}, nil
+	}
 	return reconcile.Result{}, nil
 }
