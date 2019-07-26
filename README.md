@@ -118,7 +118,7 @@ Before you can define a constraint, you must first define a `ConstraintTemplate`
 Here is an example constraint template that requires all labels described by the constraint to be present:
 
 ```yaml
-apiVersion: templates.gatekeeper.sh/v1alpha1
+apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredlabels
@@ -162,7 +162,7 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 Constraints are then used to inform Gatekeeper that the admin wants a ConstraintTemplate to be enforced, and how. This constraint uses the `K8sRequiredLabels` constraint template above to make sure the `gatekeeper` label is defined on all namespaces:
 
 ```yaml
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
   name: ns-must-have-gk
@@ -235,7 +235,7 @@ The `data.inventory` document has the following format:
 The audit functionality enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations. Audit results are stored as violations listed in the `status` field of the failed constraint.
 
 ```yaml
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
   name: ns-must-have-gk
@@ -314,7 +314,7 @@ Traces will be written to the stdout logs of the Gatekeeper controller.
 
 If there is an error in the Rego in the ConstraintTemplate, there are cases where it is still created via `kubectl apply -f [CONSTRAINT_TEMPLATE_FILENAME].yaml`.
 
-When applying the constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to recognize "[CONSTRAINT_FILENAME].yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1alpha1"`.
+When applying the constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to recognize "[CONSTRAINT_FILENAME].yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1beta1"`.
 
 To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
 
