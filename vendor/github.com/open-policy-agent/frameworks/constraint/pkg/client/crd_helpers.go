@@ -16,25 +16,25 @@ import (
 )
 
 // validateTargets ensures that the targets field has the appropriate values
-func validateTargets(templ *v1alpha1.ConstraintTemplate) error {
-	if len(templ.Spec.Targets) > 1 {
+func validateTargets(targets []v1alpha1.Target) error {
+	if len(targets) > 1 {
 		return errors.New("Multi-target templates are not currently supported")
-	} else if templ.Spec.Targets == nil {
-		return errors.New(`Field "targets" not specified in ConstraintTemplate spec`)
-	} else if len(templ.Spec.Targets) == 0 {
-		return errors.New("No targets specified. ConstraintTemplate must specify one target")
+	} else if targets == nil {
+		return errors.New(`Field "targets" not specified in Template spec`)
+	} else if len(targets) == 0 {
+		return errors.New("No targets specified. Template must specify one target")
 	}
 	return nil
 }
 
 // createSchema combines the schema of the match target and the ConstraintTemplate parameters
 // to form the schema of the actual constraint resource
-func createSchema(templ *v1alpha1.ConstraintTemplate, target MatchSchemaProvider) *apiextensionsv1beta1.JSONSchemaProps {
+func createSchema(validation v1alpha1.CRDSpec, target MatchSchemaProvider) *apiextensionsv1beta1.JSONSchemaProps {
 	props := map[string]apiextensionsv1beta1.JSONSchemaProps{
 		"match": target.MatchSchema(),
 	}
-	if templ.Spec.CRD.Spec.Validation != nil && templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema != nil {
-		props["parameters"] = *templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema
+	if validation.Validation != nil && validation.Validation.OpenAPIV3Schema != nil {
+		props["parameters"] = *validation.Validation.OpenAPIV3Schema
 	}
 	schema := &apiextensionsv1beta1.JSONSchemaProps{
 		Properties: map[string]apiextensionsv1beta1.JSONSchemaProps{
@@ -60,16 +60,16 @@ func newCRDHelper() *crdHelper {
 
 // createCRD takes a template and a schema and converts it to a CRD
 func (h *crdHelper) createCRD(
-	templ *v1alpha1.ConstraintTemplate,
-	schema *apiextensionsv1beta1.JSONSchemaProps) *apiextensionsv1beta1.CustomResourceDefinition {
+	kind string,
+	schema *apiextensionsv1beta1.JSONSchemaProps, group k8sGroup) *apiextensionsv1beta1.CustomResourceDefinition {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{
 		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
-			Group: constraintGroup,
+			Group: string(group),
 			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
-				Kind:     templ.Spec.CRD.Spec.Names.Kind,
-				ListKind: templ.Spec.CRD.Spec.Names.Kind + "List",
-				Plural:   strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
-				Singular: strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
+				Kind:     kind,
+				ListKind: kind + "List",
+				Plural:   strings.ToLower(kind),
+				Singular: strings.ToLower(kind),
 			},
 			Validation: &apiextensionsv1beta1.CustomResourceValidation{
 				OpenAPIV3Schema: schema,
@@ -79,7 +79,7 @@ func (h *crdHelper) createCRD(
 		},
 	}
 	h.scheme.Default(crd)
-	crd.ObjectMeta.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, constraintGroup)
+	crd.ObjectMeta.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, group)
 	return crd
 }
 
@@ -97,7 +97,7 @@ func (h *crdHelper) validateCRD(crd *apiextensionsv1beta1.CustomResourceDefiniti
 }
 
 // validateCR validates the provided custom resource against its CustomResourceDefinition
-func (h *crdHelper) validateCR(cr *unstructured.Unstructured, crd *apiextensionsv1beta1.CustomResourceDefinition) error {
+func (h *crdHelper) validateCR(cr *unstructured.Unstructured, crd *apiextensionsv1beta1.CustomResourceDefinition, group k8sGroup) error {
 	internalCRD := &apiextensions.CustomResourceDefinition{}
 	if err := h.scheme.Convert(crd, internalCRD, nil); err != nil {
 		return err
@@ -115,8 +115,8 @@ func (h *crdHelper) validateCR(cr *unstructured.Unstructured, crd *apiextensions
 	if cr.GetKind() != crd.Spec.Names.Kind {
 		return fmt.Errorf("Wrong kind for constraint %s. Have %s, want %s", cr.GetName(), cr.GetKind(), crd.Spec.Names.Kind)
 	}
-	if cr.GroupVersionKind().Group != constraintGroup {
-		return fmt.Errorf("Wrong group for constraint %s. Have %s, want %s", cr.GetName(), cr.GroupVersionKind().Group, constraintGroup)
+	if cr.GroupVersionKind().Group != string(group) {
+		return fmt.Errorf("Wrong group for constraint %s. Have %s, want %s", cr.GetName(), cr.GroupVersionKind().Group, group)
 	}
 	if cr.GroupVersionKind().Version != crd.Spec.Version {
 		return fmt.Errorf("Wrong version for constraint %s. Have %s, want %s", cr.GetName(), cr.GroupVersionKind().Version, crd.Spec.Version)
