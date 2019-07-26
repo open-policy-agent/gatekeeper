@@ -133,7 +133,7 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 
 	crd, err := r.opa.CreateMutationCRD(context.Background(), instance)
 	if err != nil {
-		log.Info("CreateMutationCRD failed, apparently.", "error", fmt.Sprintf("%v",err))
+		log.Info("CreateMutationCRD failed", "error", fmt.Sprintf("%v",err))
 	}
 
 	//we are temporarily assuming you're creating a new template and mutation crd
