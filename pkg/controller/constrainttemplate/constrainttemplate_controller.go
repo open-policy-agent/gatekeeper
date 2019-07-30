@@ -142,7 +142,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
 		log.Error(err, "conversion error")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	crd, err := r.opa.CreateCRD(context.Background(), versionless)
 	if err != nil {
@@ -182,7 +182,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			unversionedCRD := &apiextensions.CustomResourceDefinition{}
 			if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
 				log.Error(err, "conversion error")
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{}, err
 			}
 			return r.handleUpdate(instance, crd, unversionedCRD)
 		}
@@ -208,7 +208,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
 		log.Error(err, "conversion error")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
 		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
@@ -229,7 +229,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := r.scheme.Convert(crd, crdv1beta1, nil); err != nil {
 		log.Error(err, "conversion error")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	if err := r.Create(context.TODO(), crdv1beta1); err != nil {
 		status := util.GetCTHAStatus(instance)
@@ -262,7 +262,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
 		log.Error(err, "conversion error")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{}, err
 	}
 	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
 		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
@@ -285,7 +285,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
 		if err := r.scheme.Convert(found, crdv1beta1, nil); err != nil {
 			log.Error(err, "conversion error")
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{}, err
 		}
 		if err := r.Update(context.Background(), crdv1beta1); err != nil {
 			return reconcile.Result{}, err
@@ -308,7 +308,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
 		if err := r.scheme.Convert(crd, crdv1beta1, nil); err != nil {
 			log.Error(err, "conversion error")
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{}, err
 		}
 		if err := r.Delete(context.Background(), crdv1beta1); err != nil && !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -332,7 +332,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		versionless := &templates.ConstraintTemplate{}
 		if err := r.scheme.Convert(instance, versionless, nil); err != nil {
 			log.Error(err, "conversion error")
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{}, err
 		}
 		if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
 			return reconcile.Result{}, err
