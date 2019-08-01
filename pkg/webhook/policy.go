@@ -172,14 +172,18 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			if r.EnforcementAction == "deny" {
+				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			}
 		}
-		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
-		if vResp.Response.Result == nil {
-			vResp.Response.Result = &metav1.Status{}
+		if len(msgs) > 0 {
+			vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+			if vResp.Response.Result == nil {
+				vResp.Response.Result = &metav1.Status{}
+			}
+			vResp.Response.Result.Code = http.StatusForbidden
+			return vResp
 		}
-		vResp.Response.Result.Code = http.StatusForbidden
-		return vResp
 	}
 	return admission.ValidationResponse(true, "")
 }

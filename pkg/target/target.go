@@ -257,6 +257,10 @@ matches_namespace_selector(match, ns) {
 `
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
+var supportedEnforcementActions = []string{
+	"deny",
+	"dryrun",
+}
 
 func (h *K8sValidationTarget) Library() *template.Template {
 	return libTempl
@@ -462,6 +466,20 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 			return errorList.ToAggregate()
 		}
 	}
+
+	enforcementActionString, found, err := unstructured.NestedString(u.Object, "spec", "enforcementaction")
+	if err != nil {
+		return err
+	}
+
+	if found && enforcementActionString != "" {
+
+		err = validateEnforcementAction(enforcementActionString)
+		if err != nil {
+			return err
+		}
+
+	}
 	return nil
 }
 
@@ -475,4 +493,25 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 		return nil, errors.Wrap(err, "Could not convert JSON to LabelSelector")
 	}
 	return obj, nil
+}
+
+func convertToString(object map[string]interface{}) (*string, error) {
+	j, err := json.Marshal(object)
+	if err != nil {
+		return nil, errors.Wrap(err, "Could not convert unknown object to JSON")
+	}
+	var obj *string
+	if err := json.Unmarshal(j, obj); err != nil {
+		return nil, errors.Wrap(err, "Could not convert JSON to string")
+	}
+	return obj, nil
+}
+
+func validateEnforcementAction(input string) error {
+	for _, n := range supportedEnforcementActions {
+		if input == n {
+			return nil
+		}
+	}
+	return fmt.Errorf("Could not find the provided enforcementaction value within the supported list %v", supportedEnforcementActions)
 }
