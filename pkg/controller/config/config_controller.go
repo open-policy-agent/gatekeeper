@@ -52,7 +52,7 @@ const (
 	finalizerName = "finalizers.gatekeeper.sh/config"
 )
 
-var CfgKey = types.NamespacedName{Namespace: "gatekeeper-system", Name: "config"}
+var CfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"}
 var log = logf.Log.WithName("controller")
 
 type Adder struct {
