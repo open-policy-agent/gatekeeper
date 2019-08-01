@@ -42,7 +42,7 @@ test:
 	cp -r * .staging/test
 	-rm .staging/test/Dockerfile
 	cp test/Dockerfile .staging/test/Dockerfile
-	docker build .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
+	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
 # Build manager binary
 manager: generate fmt vet
@@ -109,7 +109,7 @@ docker-push-release:  docker-tag-release
 
 # Build the docker image
 docker-build:
-	docker build . -t ${IMG}
+	docker build --pull . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 
 	@test -s ./overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./overlays/dev/manager_image_patch.yaml'
@@ -117,7 +117,7 @@ docker-build:
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
 
 docker-build-ci:
-	docker build . -t $(IMG) -f Dockerfile_ci
+	docker build --pull . -t $(IMG) -f Dockerfile_ci
 
 # Push the docker image
 docker-push:
