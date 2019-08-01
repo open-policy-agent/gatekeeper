@@ -26,20 +26,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
-
 	"github.com/open-policy-agent/gatekeeper/pkg/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
 	apis.AddToScheme(runtimeScheme)
 }
-
-const (
-	namespace = "gatekeeper-system"
-)
 
 var log = logf.Log.WithName("webhook")
 
@@ -85,11 +81,11 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 		serverOptions.BootstrapOptions = &webhook.BootstrapOptions{
 			ValidatingWebhookConfigName: *webhookName,
 			Secret: &types.NamespacedName{
-				Namespace: namespace,
+				Namespace: util.GetNamespace(),
 				Name:      "gatekeeper-webhook-server-secret",
 			},
 			Service: &webhook.Service{
-				Namespace: namespace,
+				Namespace: util.GetNamespace(),
 				Name:      "gatekeeper-controller-manager-service",
 				Selectors: map[string]string{
 					"control-plane":           "controller-manager",
@@ -200,7 +196,7 @@ func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, er
 }
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", namespace)
+	saGroup := fmt.Sprintf("system:serviceaccounts:%s", util.GetNamespace())
 	for _, g := range user.Groups {
 		if g == saGroup {
 			return true
