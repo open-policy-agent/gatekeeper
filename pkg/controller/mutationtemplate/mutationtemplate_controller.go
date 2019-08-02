@@ -17,15 +17,15 @@ package mutationtemplate
 
 import (
 	"context"
-	"fmt"
 
 	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	appsv1 "k8s.io/api/apps/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -39,6 +39,8 @@ import (
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
+
+const finalizerName = "mutationtemplate.finalizers.gatekeeper.sh"
 
 var log = logf.Log.WithName("controller").WithValues("kind", "MutationTemplate")
 
@@ -127,20 +129,45 @@ func (r *ReconcileMutationTemplate) Reconcile(request reconcile.Request) (reconc
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		log.Info("some other error occurred in getting the instance, requeuing")
+		return reconcile.Result{Requeue: true}, err
 	}
 	log.Info("Reconciling", "MutationTemplate", instance)
 
 	crd, err := r.opa.CreateMutationCRD(context.Background(), instance)
 	if err != nil {
-		log.Info("CreateMutationCRD failed", "error", fmt.Sprintf("%v",err))
+		log.Error(err, "CreatMutationCRD error")
+		return reconcile.Result{}, nil
 	}
 
-	//we are temporarily assuming you're creating a new template and mutation crd
-	return r.handleCreate(instance, crd)
+	// If the MutationTemplate is not currently being deleted,
+	// check to see if the corresponding Mutation CRD exists
+	if instance.GetDeletionTimestamp().IsZero() {
+		// Check if the mutation already exists
+		found := &apiextensionsv1beta1.CustomResourceDefinition{}
+		err = r.Get(context.TODO(), types.NamespacedName{Name: crd.GetName()}, found)
+		if err != nil && errors.IsNotFound(err) {
+			return r.handleCreate(instance, crd)
+		}
+		log.Info("didn't create or delete")
+		return reconcile.Result{}, err //update handling would go here
+	}
+
+	log.Info("Deletion timestamp of this", "object", instance.GetDeletionTimestamp())
+
+	return r.handleDelete(instance, crd)
 }
 
 func (r *ReconcileMutationTemplate) handleCreate(instance *templatesv1alpha1.MutationTemplate, crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	log := log.WithValues("name", crd.GetName())
+	log.Info("creating mutation")
+	if !containsString(finalizerName, instance.GetFinalizers()) {
+		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
+		if err := r.Update(context.Background(), instance); err != nil {
+			log.Error(err, "update error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
 	log.Info("creating mutation CRD")
 	if err := r.Create(context.TODO(), crd); err != nil {
 		return reconcile.Result{}, err
@@ -150,4 +177,48 @@ func (r *ReconcileMutationTemplate) handleCreate(instance *templatesv1alpha1.Mut
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileMutationTemplate) handleDelete(instance *templatesv1alpha1.MutationTemplate, crd *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	log := log.WithValues("name", instance.GetName(), "crdName", crd.GetName())
+	if containsString(finalizerName, instance.GetFinalizers()) {
+		if err := r.Delete(context.Background(), crd); err != nil && !errors.IsNotFound(err) {
+			log.Error(err, "deletion error")
+			return reconcile.Result{}, err
+		}
+
+		found := &apiextensionsv1beta1.CustomResourceDefinition{}
+		if err := r.Get(context.Background(), types.NamespacedName{Name: crd.GetName()}, found); err == nil {
+			log.Info("mutation CRD has not yet been deleted, waiting")
+			return reconcile.Result{Requeue: true}, nil
+		} else if err != nil && !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+
+		instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+		if err := r.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func containsString(s string, items []string) bool {
+	for _, item := range items {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(s string, items []string) []string {
+	var rval []string
+	for _, item := range items {
+		if item != s {
+			rval = append(rval, item)
+		}
+	}
+	return rval
 }
