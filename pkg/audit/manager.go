@@ -172,7 +172,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 		namespace := r.Constraint.GetNamespace()
 		apiVersion := r.Constraint.GetAPIVersion()
 		gvk := r.Constraint.GroupVersionKind()
-		enforcementaction := r.EnforcementAction
+		enforcementAction := r.EnforcementAction
 		message := r.Msg
 		if len(message) > msgSize {
 			message = truncateString(message, msgSize)
@@ -193,7 +193,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 			rname:             rname,
 			rnamespace:        rnamespace,
 			message:           message,
-			enforcementaction: enforcementaction,
+			enforcementaction: enforcementAction,
 		})
 	}
 	return updateLists, nil

@@ -11,6 +11,10 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -26,10 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
 func init() {
@@ -172,7 +172,7 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			if r.EnforcementAction == "deny" {
+			if r.EnforcementAction == "DENY" {
 				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 			}
 		}

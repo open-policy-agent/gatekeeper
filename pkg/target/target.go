@@ -258,8 +258,8 @@ matches_namespace_selector(match, ns) {
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
 var supportedEnforcementActions = []string{
-	"deny",
-	"dryrun",
+	"DENY",
+	"DRYRUN",
 }
 
 func (h *K8sValidationTarget) Library() *template.Template {
@@ -467,7 +467,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		}
 	}
 
-	enforcementActionString, found, err := unstructured.NestedString(u.Object, "spec", "enforcementaction")
+	enforcementActionString, found, err := unstructured.NestedString(u.Object, "spec", "enforcementAction")
 	if err != nil {
 		return err
 	}
@@ -513,5 +513,5 @@ func validateEnforcementAction(input string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("Could not find the provided enforcementaction value within the supported list %v", supportedEnforcementActions)
+	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }

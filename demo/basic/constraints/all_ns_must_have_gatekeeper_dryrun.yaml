@@ -3,7 +3,7 @@ kind: K8sRequiredLabels
 metadata:
   name: ns-must-have-gk-dryrun
 spec:
-  enforcementaction: dryrun
+  enforcementAction: DRYRUN #DENY
   match:
     kinds:
       - apiGroups: [""]
