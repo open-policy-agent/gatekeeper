@@ -230,7 +230,7 @@ func TestValidateConstraint(t *testing.T) {
   	"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-	"enforcementAction": "DRYRUN",
+	"enforcementAction": "dryrun",
   	"match": {
     	"kinds": [
       	{
@@ -256,7 +256,7 @@ func TestValidateConstraint(t *testing.T) {
   	"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-	"enforcementAction": "TEST",
+	"enforcementAction": "test",
   	"match": {
     	"kinds": [
       	{

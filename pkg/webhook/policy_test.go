@@ -136,7 +136,7 @@ kind: K8sGoodRego
 metadata:
   name: good-namespaceselector
 spec:
-  enforcementAction: DRYRUN
+  enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: [""]
@@ -149,7 +149,7 @@ kind: K8sGoodRego
 metadata:
   name: bad-namespaceselector
 spec:
-  enforcementAction: TEST
+  enforcementAction: test
   match:
     kinds:
       - apiGroups: [""]

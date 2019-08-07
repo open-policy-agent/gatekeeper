@@ -258,8 +258,8 @@ matches_namespace_selector(match, ns) {
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
 var supportedEnforcementActions = []string{
-	"DENY",
-	"DRYRUN",
+	"deny",
+	"dryrun",
 }
 
 func (h *K8sValidationTarget) Library() *template.Template {

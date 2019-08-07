@@ -172,7 +172,7 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			if r.EnforcementAction == "DENY" {
+			if r.EnforcementAction == "deny" {
 				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 			}
 		}

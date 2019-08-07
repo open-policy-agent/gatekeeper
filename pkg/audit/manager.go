@@ -56,7 +56,7 @@ type auditResult struct {
 	rname             string
 	rnamespace        string
 	message           string
-	enforcementaction string
+	enforcementAction string
 }
 
 // StatusViolation represents each violation under status
@@ -193,7 +193,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 			rname:             rname,
 			rnamespace:        rnamespace,
 			message:           message,
-			enforcementaction: enforcementAction,
+			enforcementAction: enforcementAction,
 		})
 	}
 	return updateLists, nil
@@ -259,7 +259,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			Name:              ar.rname,
 			Namespace:         ar.rnamespace,
 			Message:           ar.message,
-			EnforcementAction: ar.enforcementaction,
+			EnforcementAction: ar.enforcementAction,
 		})
 	}
 	raw, err := json.Marshal(statusViolations)
