@@ -2,6 +2,7 @@ package target
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/url"
 	"path"
@@ -19,6 +20,7 @@ import (
 )
 
 var _ client.TargetHandler = &K8sValidationTarget{}
+var disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "allow users to disable enforcementAction validation")
 
 type K8sValidationTarget struct{}
 
@@ -473,12 +475,12 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 	}
 
 	if found && enforcementActionString != "" {
-
-		err = validateEnforcementAction(enforcementActionString)
-		if err != nil {
-			return err
+		if *disableEnforcementActionValidation == false {
+			err = validateEnforcementAction(enforcementActionString)
+			if err != nil {
+				return err
+			}
 		}
-
 	}
 	return nil
 }
