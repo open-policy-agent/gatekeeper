@@ -1,0 +1,9 @@
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: K8sPSPReadOnlyRootFilesystem
+metadata:
+  name: psp-readonlyrootfilesystem
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]

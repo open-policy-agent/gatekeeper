@@ -1,0 +1,28 @@
+apiVersion: templates.gatekeeper.sh/v1alpha1
+kind: ConstraintTemplate
+metadata:
+  name: k8spsphostnamespace
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sPSPHostNamespace
+        listKind: K8sPSPHostNamespaceList
+        plural: k8spsphostnamespace
+        singular: k8spsphostnamespace
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8spsphostnamespace
+
+        violation[{"msg": msg, "details": {}}] {
+            input_share_hostnamespace(input.review.object)
+            msg := sprintf("Sharing the host namespace is not allowed: %v", [input.review.object.metadata.name])
+        }
+
+        input_share_hostnamespace(o) {
+            o.spec.hostPID
+        }
+        input_share_hostnamespace(o) {
+            o.spec.hostIPC
+        }
