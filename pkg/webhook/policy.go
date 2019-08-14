@@ -40,13 +40,19 @@ func init() {
 var log = logf.Log.WithName("webhook")
 
 var (
-	runtimeScheme      = k8sruntime.NewScheme()
-	codecs             = serializer.NewCodecFactory(runtimeScheme)
-	deserializer       = codecs.UniversalDeserializer()
-	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
-	port               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	webhookName        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
+	runtimeScheme                      = k8sruntime.NewScheme()
+	codecs                             = serializer.NewCodecFactory(runtimeScheme)
+	deserializer                       = codecs.UniversalDeserializer()
+	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable enforcementAction validation")
+	enableManualDeploy                 = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
+	port                               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
 )
+
+var supportedEnforcementActions = []string{
+	"deny",
+	"dryrun",
+}
 
 // AddPolicyWebhook registers the policy webhook server with the manager
 // below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
@@ -244,7 +250,31 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 	if err := h.opa.ValidateConstraint(ctx, obj); err != nil {
 		return true, err
 	}
+
+	enforcementActionString, found, err := unstructured.NestedString(obj.Object, "spec", "enforcementAction")
+	if err != nil {
+		return false, err
+	}
+	if found && enforcementActionString != "" {
+		if *disableEnforcementActionValidation == false {
+			err = validateEnforcementAction(enforcementActionString)
+			if err != nil {
+				return false, err
+			}
+		}
+	} else {
+		return true, nil
+	}
 	return false, nil
+}
+
+func validateEnforcementAction(input string) error {
+	for _, n := range supportedEnforcementActions {
+		if input == n {
+			return nil
+		}
+	}
+	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }
 
 // traceSwitch returns true if a request should be traced

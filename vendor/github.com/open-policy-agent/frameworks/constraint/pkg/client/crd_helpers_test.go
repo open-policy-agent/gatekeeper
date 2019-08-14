@@ -103,6 +103,7 @@ func tProp(t string) apiextensions.JSONSchemaProps {
 }
 
 func expectedSchema(pm propMap) *apiextensions.JSONSchemaProps {
+	pm["enforcementAction"] = apiextensions.JSONSchemaProps{Type: "string"}
 	p := prop(propMap{"spec": prop(pm)})
 	return &p
 }
@@ -144,6 +145,12 @@ func match(s string) customResourceArg {
 func crName(name string) customResourceArg {
 	return func(u *unstructured.Unstructured) {
 		u.SetName(name)
+	}
+}
+
+func enforcementAction(s string) customResourceArg {
+	return func(u *unstructured.Unstructured) {
+		unstructured.SetNestedField(u.Object, s, "spec", "enforcementAction")
 	}
 }
 
@@ -200,7 +207,7 @@ func TestValidateTemplate(t *testing.T) {
 func TestCreateSchema(t *testing.T) {
 	tests := []crdTestCase{
 		{
-			Name:           "No Schema",
+			Name:           "Just EnforcementAction",
 			Template:       createTemplate(),
 			Handler:        createTestTargetHandler(),
 			ExpectedSchema: expectedSchema(propMap{"match": prop()}),
@@ -439,6 +446,16 @@ func TestCRValidation(t *testing.T) {
 				match(`{"heavierThanLbs": "one hundred"}`),
 			),
 			ErrorExpected: true,
+		},
+		{
+			Name: "None default EnforcementAction",
+			Template: createTemplate(
+				name("SomeName"),
+				crdNames("Horse"),
+			),
+			Handler:       createTestTargetHandler(),
+			CR:            createCR(crName("mycr"), kind("Horse"), enforcementAction("dryrun")),
+			ErrorExpected: false,
 		},
 	}
 	h := newCRDHelper()

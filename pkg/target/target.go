@@ -2,7 +2,6 @@ package target
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/url"
 	"path"
@@ -20,7 +19,6 @@ import (
 )
 
 var _ client.TargetHandler = &K8sValidationTarget{}
-var disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "allow users to disable enforcementAction validation")
 
 type K8sValidationTarget struct{}
 
@@ -259,10 +257,6 @@ matches_namespace_selector(match, ns) {
 `
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
-var supportedEnforcementActions = []string{
-	"deny",
-	"dryrun",
-}
 
 func (h *K8sValidationTarget) Library() *template.Template {
 	return libTempl
@@ -469,19 +463,6 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		}
 	}
 
-	enforcementActionString, found, err := unstructured.NestedString(u.Object, "spec", "enforcementAction")
-	if err != nil {
-		return err
-	}
-
-	if found && enforcementActionString != "" {
-		if *disableEnforcementActionValidation == false {
-			err = validateEnforcementAction(enforcementActionString)
-			if err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
@@ -507,13 +488,4 @@ func convertToString(object map[string]interface{}) (*string, error) {
 		return nil, errors.Wrap(err, "Could not convert JSON to string")
 	}
 	return obj, nil
-}
-
-func validateEnforcementAction(input string) error {
-	for _, n := range supportedEnforcementActions {
-		if input == n {
-			return nil
-		}
-	}
-	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }

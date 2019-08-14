@@ -246,32 +246,6 @@ func TestValidateConstraint(t *testing.T) {
 `,
 			ErrorExpected: false,
 		},
-		{
-			Name: "Invalid EnforcementAction",
-			Constraint: `
-{
-	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
-	"kind": "K8sAllowedRepos",
-	"metadata": {
-  	"name": "prod-nslabels-is-openpolicyagent"
-	},
-	"spec": {
-	"enforcementAction": "test",
-  	"match": {
-    	"kinds": [
-      	{
-			"apiGroups": [""],
-        	"kinds": ["Pod"]
-		}]
-	},
-  	"parameters": {
-    	"repos": ["openpolicyagent"]
-		}
-	}
-}
-`,
-			ErrorExpected: true,
-		},
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {

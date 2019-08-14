@@ -38,7 +38,8 @@ func validateTargets(templ *templates.ConstraintTemplate) error {
 // to form the schema of the actual constraint resource
 func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvider) (*apiextensions.JSONSchemaProps, error) {
 	props := map[string]apiextensions.JSONSchemaProps{
-		"match": target.MatchSchema(),
+		"match":             target.MatchSchema(),
+		"enforcementAction": apiextensions.JSONSchemaProps{Type: "string"},
 	}
 	if templ.Spec.CRD.Spec.Validation != nil && templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema != nil {
 		internalSchema := &apiextensions.JSONSchemaProps{}
