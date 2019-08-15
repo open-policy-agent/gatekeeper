@@ -465,21 +465,21 @@ func TestAddConstraint(t *testing.T) {
 	}{
 		{
 			Name:       "Good Constraint",
-			Constraint: newConstraint("Foos", "foo", nil),
+			Constraint: newConstraint("Foos", "foo", nil, nil),
 		},
 		{
 			Name:          "No Name",
-			Constraint:    newConstraint("Foos", "", nil),
+			Constraint:    newConstraint("Foos", "", nil, nil),
 			ErrorExpected: true,
 		},
 		{
 			Name:          "No Kind",
-			Constraint:    newConstraint("", "foo", nil),
+			Constraint:    newConstraint("", "foo", nil, nil),
 			ErrorExpected: true,
 		},
 		{
 			Name:          "No Template",
-			Constraint:    newConstraint("Foo", "foo", nil),
+			Constraint:    newConstraint("Foo", "foo", nil, nil),
 			OmitTemplate:  true,
 			ErrorExpected: true,
 		},
@@ -536,27 +536,27 @@ func TestRemoveConstraint(t *testing.T) {
 	}{
 		{
 			Name:       "Good Constraint",
-			Constraint: newConstraint("Foos", "foo", nil),
+			Constraint: newConstraint("Foos", "foo", nil, nil),
 		},
 		{
 			Name:          "No Name",
-			Constraint:    newConstraint("Foos", "", nil),
+			Constraint:    newConstraint("Foos", "", nil, nil),
 			ErrorExpected: true,
 		},
 		{
 			Name:          "No Kind",
-			Constraint:    newConstraint("", "foo", nil),
+			Constraint:    newConstraint("", "foo", nil, nil),
 			ErrorExpected: true,
 		},
 		{
 			Name:          "No Template",
-			Constraint:    newConstraint("Foo", "foo", nil),
+			Constraint:    newConstraint("Foo", "foo", nil, nil),
 			OmitTemplate:  true,
 			ErrorExpected: true,
 		},
 		{
 			Name:              "Unrecognized Constraint",
-			Constraint:        newConstraint("Bar", "bar", nil),
+			Constraint:        newConstraint("Bar", "bar", nil, nil),
 			OmitTemplate:      true,
 			ErrorExpected:     true,
 			ExpectedErrorType: "*client.UnrecognizedConstraintError",

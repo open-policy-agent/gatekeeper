@@ -22,6 +22,9 @@ type Result struct {
 
 	// The violating Resource, filled out by the Target
 	Resource interface{}
+
+	// The enforcement action of the constraint
+	EnforcementAction string `json:"enforcementAction,omitempty"`
 }
 
 type Response struct {

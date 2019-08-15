@@ -48,7 +48,7 @@ func e(s string, r *types.Responses) error {
 	return fmt.Errorf("%s\n%s", s, r.TraceDump())
 }
 
-func newConstraint(kind, name string, params map[string]string) *unstructured.Unstructured {
+func newConstraint(kind, name string, params map[string]string, enforcementAction *string) *unstructured.Unstructured {
 	c := &unstructured.Unstructured{}
 	c.SetGroupVersionKind(k8schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
@@ -56,6 +56,9 @@ func newConstraint(kind, name string, params map[string]string) *unstructured.Un
 		Kind:    kind,
 	})
 	c.SetName(name)
+	if enforcementAction != nil {
+		unstructured.SetNestedField(c.Object, *enforcementAction, "spec", "enforcementAction")
+	}
 	unstructured.SetNestedStringMap(c.Object, params, "spec", "parameters")
 	return c
 }
@@ -78,7 +81,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -98,6 +101,41 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if rsps.Results()[0].Msg != "DENIED" {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
+		if rsps.Results()[0].EnforcementAction != "deny" {
+			return e(fmt.Sprintf("res.EnforcementAction = %s; wanted default value deny", rsps.Results()[0].EnforcementAction), rsps)
+		}
+		return nil
+	},
+
+	"Dryrun All": func(c Client) error {
+		_, err := c.AddTemplate(ctx, newConstraintTemplate("Foo", `package foo
+violation[{"msg": "DRYRUN", "details": {}}] {
+	"always" == "always"
+}`))
+		if err != nil {
+			return errors.Wrap(err, "AddTemplate")
+		}
+		testEnforcementAction := "dryrun"
+		cstr := newConstraint("Foo", "ph", nil, &testEnforcementAction)
+		if _, err := c.AddConstraint(ctx, cstr); err != nil {
+			return errors.Wrap(err, "AddConstraint")
+		}
+		rsps, err := c.Review(ctx, targetData{Name: "Sara", ForConstraint: "Foo"})
+		if err != nil {
+			return errors.Wrap(err, "Review")
+		}
+		if len(rsps.ByTarget) == 0 {
+			return errors.New("No responses returned")
+		}
+		if len(rsps.Results()) != 1 {
+			return e("Bad number of results", rsps)
+		}
+		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
+			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
+		}
+		if rsps.Results()[0].EnforcementAction != testEnforcementAction {
+			return e(fmt.Sprintf("res.EnforcementAction = %s; wanted default value dryrun", rsps.Results()[0].EnforcementAction), rsps)
+		}
 		return nil
 	},
 
@@ -109,7 +147,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", map[string]string{"name": "deny_me"})
+		cstr := newConstraint("Foo", "ph", map[string]string{"name": "deny_me"}, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -151,7 +189,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -192,7 +230,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -295,7 +333,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -359,7 +397,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -409,7 +447,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -458,7 +496,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -488,7 +526,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -518,7 +556,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}
@@ -556,7 +594,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if err != nil {
 			return errors.Wrap(err, "AddTemplate")
 		}
-		cstr := newConstraint("Foo", "ph", nil)
+		cstr := newConstraint("Foo", "ph", nil, nil)
 		if _, err := c.AddConstraint(ctx, cstr); err != nil {
 			return errors.Wrap(err, "AddConstraint")
 		}

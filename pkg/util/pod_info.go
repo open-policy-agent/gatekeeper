@@ -9,4 +9,3 @@ func GetNamespace() string {
 	}
 	return ns
 }
-

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,25 +24,24 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "upgrade")
 
 const (
-	crdName       = "constrainttemplates.templates.gatekeeper.sh"
+	crdName = "constrainttemplates.templates.gatekeeper.sh"
 )
 
 // UpgradeManager allows us to upgrade resources on startup
 type UpgradeManager struct {
-	client  client.Client
-	cfg     *rest.Config
-	ctx     context.Context
+	client client.Client
+	cfg    *rest.Config
+	ctx    context.Context
 }
 
 // New creates a new manager for audit
 func New(ctx context.Context, cfg *rest.Config) (*UpgradeManager, error) {
 	am := &UpgradeManager{
-		cfg:     cfg,
-		ctx:     ctx,
+		cfg: cfg,
+		ctx: ctx,
 	}
 	return am, nil
 }
-
 
 // Start implements the Runnable interface
 func (um *UpgradeManager) Start(stop <-chan struct{}) error {
@@ -51,7 +50,7 @@ func (um *UpgradeManager) Start(stop <-chan struct{}) error {
 	defer cancel()
 	defer log.Info("Stopping upgrade manager workers")
 	errCh := make(chan error)
-	go func() {errCh <- um.upgrade(ctx)}()
+	go func() { errCh <- um.upgrade(ctx) }()
 	select {
 	case <-stop:
 		return nil

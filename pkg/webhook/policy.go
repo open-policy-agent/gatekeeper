@@ -11,6 +11,10 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis"
+	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -26,10 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/builder"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
 func init() {
@@ -40,13 +40,19 @@ func init() {
 var log = logf.Log.WithName("webhook")
 
 var (
-	runtimeScheme      = k8sruntime.NewScheme()
-	codecs             = serializer.NewCodecFactory(runtimeScheme)
-	deserializer       = codecs.UniversalDeserializer()
-	enableManualDeploy = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
-	port               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	webhookName        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
+	runtimeScheme                      = k8sruntime.NewScheme()
+	codecs                             = serializer.NewCodecFactory(runtimeScheme)
+	deserializer                       = codecs.UniversalDeserializer()
+	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable enforcementAction validation")
+	enableManualDeploy                 = flag.Bool("enable-manual-deploy", false, "allow users to manually create webhook related objects")
+	port                               = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
 )
+
+var supportedEnforcementActions = []string{
+	"deny",
+	"dryrun",
+}
 
 // AddPolicyWebhook registers the policy webhook server with the manager
 // below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
@@ -172,14 +178,18 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			if r.EnforcementAction == "deny" {
+				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			}
 		}
-		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
-		if vResp.Response.Result == nil {
-			vResp.Response.Result = &metav1.Status{}
+		if len(msgs) > 0 {
+			vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+			if vResp.Response.Result == nil {
+				vResp.Response.Result = &metav1.Status{}
+			}
+			vResp.Response.Result.Code = http.StatusForbidden
+			return vResp
 		}
-		vResp.Response.Result.Code = http.StatusForbidden
-		return vResp
 	}
 	return admission.ValidationResponse(true, "")
 }
@@ -240,7 +250,31 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 	if err := h.opa.ValidateConstraint(ctx, obj); err != nil {
 		return true, err
 	}
+
+	enforcementActionString, found, err := unstructured.NestedString(obj.Object, "spec", "enforcementAction")
+	if err != nil {
+		return false, err
+	}
+	if found && enforcementActionString != "" {
+		if *disableEnforcementActionValidation == false {
+			err = validateEnforcementAction(enforcementActionString)
+			if err != nil {
+				return false, err
+			}
+		}
+	} else {
+		return true, nil
+	}
 	return false, nil
+}
+
+func validateEnforcementAction(input string) error {
+	for _, n := range supportedEnforcementActions {
+		if input == n {
+			return nil
+		}
+	}
+	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }
 
 // traceSwitch returns true if a request should be traced

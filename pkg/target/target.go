@@ -462,6 +462,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 			return errorList.ToAggregate()
 		}
 	}
+
 	return nil
 }
 

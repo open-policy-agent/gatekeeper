@@ -129,6 +129,32 @@ spec:
           key: "something"
           values: ["anything"]
 `
+
+	good_enforcementaction = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sGoodRego
+metadata:
+  name: good-namespaceselector
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+`
+
+	bad_enforcementaction = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sGoodRego
+metadata:
+  name: bad-namespaceselector
+spec:
+  enforcementAction: test
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+`
 )
 
 func makeOpaClient() (client.Client, error) {
@@ -225,6 +251,18 @@ func TestConstraintValidation(t *testing.T) {
 			Name:          "Invalid Constraint namespaceselector",
 			Template:      good_rego_template,
 			Constraint:    bad_namespaceselector,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "Valid Constraint enforcementaction",
+			Template:      good_rego_template,
+			Constraint:    good_enforcementaction,
+			ErrorExpected: false,
+		},
+		{
+			Name:          "Invalid Constraint enforcementaction",
+			Template:      good_rego_template,
+			Constraint:    bad_enforcementaction,
 			ErrorExpected: true,
 		},
 	}
