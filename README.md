@@ -269,7 +269,7 @@ status:
 ```
 > NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-To configure Audit frequency, update the `auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `constraintViolationsLimit` flag, which defaults to `20`.
+To configure Audit frequency, update the `--auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `--constraintViolationsLimit` flag, which defaults to `20`.
 
 ### Dry Run
 
@@ -305,7 +305,7 @@ status:
     name: gatekeeper-system
 
 ```
-> NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `disable-enforcementaction-validation` flag to `true` if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
+> NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
 ### Debugging
 

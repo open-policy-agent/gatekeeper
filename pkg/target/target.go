@@ -477,15 +477,3 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 	}
 	return obj, nil
 }
-
-func convertToString(object map[string]interface{}) (*string, error) {
-	j, err := json.Marshal(object)
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not convert unknown object to JSON")
-	}
-	var obj *string
-	if err := json.Unmarshal(j, obj); err != nil {
-		return nil, errors.Wrap(err, "Could not convert JSON to string")
-	}
-	return obj, nil
-}
