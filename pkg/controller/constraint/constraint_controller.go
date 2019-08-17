@@ -140,7 +140,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		// Handle deletion
 		if containsString(finalizerName, instance.GetFinalizers()) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
-				if _, ok := err.(*opa.UnrecognizedConstraintError); ok {
+				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
 					return reconcile.Result{}, err
 				}
 			}
