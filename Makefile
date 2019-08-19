@@ -26,6 +26,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
+\n        imagePullPolicy: IfNotPresent\
 \n        name: manager"
 
 all: test manager
@@ -43,6 +44,9 @@ test:
 	-rm .staging/test/Dockerfile
 	cp test/Dockerfile .staging/test/Dockerfile
 	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
+
+test-e2e:
+	bats -t test/bats/test.bats
 
 # Build manager binary
 manager: generate fmt vet
