@@ -39,7 +39,7 @@ jobs:
       provider: script
       skip_cleanup: true
       script: make travis-dev-deploy
-      if: (branch = master) AND (repo = open-policy-agent/gatekeeper) AND (tags = true)
+      if: (branch = master) AND (repo = open-policy-agent/gatekeeper) AND (tags = false)
     - stage: release
       provider: script
       skip_cleanup: true
