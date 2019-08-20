@@ -63,6 +63,8 @@ BATS_TESTS_DIR=test/bats/tests
   assert_equal 'true' "$output"
   assert_success
 
+  sleep 60
+
   run kubectl apply -f ${BATS_TESTS_DIR}/good/no_dupe_ns.yaml
   assert_success
 
