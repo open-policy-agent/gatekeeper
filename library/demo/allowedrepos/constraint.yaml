@@ -11,4 +11,4 @@ spec:
       - "production"
   parameters:
     repos:
-      - "openpolicyagent"
+      - "only-this-repo"

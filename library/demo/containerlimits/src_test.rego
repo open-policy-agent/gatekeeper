@@ -90,6 +90,11 @@ test_no_resources {
     results := violation with input as input
     count(results) == 1
 }
+test_init_containers_checked {
+    input := {"review": init_review([ctr("a", "5", "5"), ctr("b", "5", "5")]), "parameters": {"memory": "2", "cpu": "4"}}
+    results := violation with input as input
+    count(results) == 4
+}
 
 # MEM SCALE TESTS
 test_input_no_violations_mem_K {
@@ -165,6 +170,17 @@ review(containers) = output {
         "name": "nginx",
       },
       "spec": {"containers": containers}
+    }
+  }
+}
+
+init_review(containers) = output {
+  output = {
+    "object": {
+      "metadata": {
+        "name": "nginx",
+      },
+      "spec": {"initContainers": containers}
     }
   }
 }

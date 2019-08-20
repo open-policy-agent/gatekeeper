@@ -55,6 +55,16 @@ test_input_two_wrong {
     results := violation with input as input
     count(results) == 2
 }
+test_input_two_allowed {
+    input := { "review": review({"some": "gray", "other": "grey"}), "parameters": {"labels": [lbl("some", "gr[ae]y"), lbl("other", "gr[ae]y")]}}
+    results := violation with input as input
+    count(results) == 0
+}
+test_input_message {
+    input := { "review": review({"some": "label2"}), "parameters": {"message": "WRONG_VALUE", "labels": [lbl("some", "label$")]}}
+    results := violation with input as input
+    results[_].msg == "WRONG_VALUE"
+}
 
 empty = {
   "object": {
