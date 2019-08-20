@@ -13,8 +13,10 @@ jobs:
       script: make
     - stage: e2e
       before_script:
+      - KIND_VERSION=0.4.0
+      - KUSTOMIZE_VERSION=3.1.0
       # Download and install kind
-      - curl -L https://github.com/kubernetes-sigs/kind/releases/download/v0.4.0/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
+      - curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
       # Create kind cluster
       - |
         if [ $(kind get clusters) ]; then
@@ -31,7 +33,7 @@ jobs:
       # Download and install kubectl
       - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
       # Download and install kustomize
-      - curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v3.1.0/kustomize_3.1.0_linux_amd64 --output kustomize && chmod +x kustomize && sudo mv kustomize /usr/local/bin/
+      - curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 --output kustomize && chmod +x kustomize && sudo mv kustomize /usr/local/bin/
       script:
       - make deploy
       - make test-e2e

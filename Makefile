@@ -26,7 +26,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
-\n        imagePullPolicy: IfNotPresent\
 \n        name: manager"
 
 all: test manager
@@ -117,6 +116,10 @@ docker-build:
 	@echo "updating kustomize image patch file for manager resource"
 
 	@test -s ./overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./overlays/dev/manager_image_patch.yaml'
+
+ifeq ($(TRAVIS),true)
+	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./overlays/dev/manager_image_patch.yaml
+endif
 
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
 
