@@ -39,16 +39,22 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func main() {
-	var (
-		debug = flag.Bool("debug", false, "Enable debug and info level logging")
-	)
-	flag.Parse()
+var (
+	logLevel = flag.String("log-level", "INFO", "Minimum log level")
+)
 
-	if *debug {
+func main() {
+
+	flag.Parse()
+	switch *logLevel {
+	case "DEBUG":
 		logf.SetLogger(logf.ZapLogger(true))
-	} else {
+	case "WARNING", "ERROR":
 		setLoggerForProduction()
+	case "INFO":
+		fallthrough
+	default:
+		logf.SetLogger(logf.ZapLogger(false))
 	}
 
 	log := logf.Log.WithName("entrypoint")
