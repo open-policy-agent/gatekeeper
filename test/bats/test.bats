@@ -2,6 +2,8 @@
 
 load helpers
 
+BATS_TESTS_DIR=test/bats/tests
+
 @test "gatekeeper-controller-manager running" {
   run kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod/gatekeeper-controller-manager-0
   assert_success
@@ -13,17 +15,17 @@ load helpers
 }
 
 @test "apply config" {
-  run kubectl apply -f demo/basic/sync.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/sync.yaml
   assert_success
 }
 
 @test "required labels test" {
-  run kubectl apply -f demo/basic/templates/k8srequiredlabels_template.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   assert_success
 
   while [[ -z $(kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh) ]]; do echo "waiting for crd" && sleep 1; done
 
-  run kubectl apply -f demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
   assert_success
 
   while [[ $(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.byPod[].enforced') != "true" ]]; do echo "waiting for constraint" && sleep 1; done
@@ -34,10 +36,10 @@ load helpers
 
   sleep 60
 
-  run kubectl apply -f demo/basic/good/good_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_success
 
-  run kubectl apply -f demo/basic/bad/bad_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_match 'denied the request' "$output"
   assert_failure
 
@@ -46,12 +48,12 @@ load helpers
 }
 
 @test "unique labels test" {
-  run kubectl apply -f demo/basic/templates/k8suniquelabel_template.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8suniquelabel_template.yaml
   assert_success
 
   while [[ -z $(kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8suniquelabel.constraints.gatekeeper.sh) ]]; do echo "waiting for crd" && sleep 1; done
 
-  run kubectl apply -f demo/basic/constraints/all_ns_gatekeeper_label_unique.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_gatekeeper_label_unique.yaml
   assert_match 'k8suniquelabel.constraints.gatekeeper.sh/ns-gk-label-unique created' "$output"
   assert_success
 
@@ -63,10 +65,10 @@ load helpers
 
   sleep 60
 
-  run kubectl apply -f demo/basic/good/no_dupe_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/no_dupe_ns.yaml
   assert_success
 
-  run kubectl apply -f demo/basic/bad/no_dupe_ns_2.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/no_dupe_ns_2.yaml
   assert_match 'denied the request' "$output"
   assert_failure
 }
