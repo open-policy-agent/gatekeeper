@@ -17,6 +17,9 @@ package main
 
 import (
 	"flag"
+	"os"
+	"time"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis"
@@ -26,17 +29,28 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
+	var (
+		debug = flag.Bool("debug", false, "Enable debug and info level logging")
+	)
 	flag.Parse()
-	// TODO make development logging mode toggleable
-	logf.SetLogger(logf.ZapLogger(true))
+
+	if *debug {
+		logf.SetLogger(logf.ZapLogger(true))
+	} else {
+		setLoggerForProduction()
+	}
+
 	log := logf.Log.WithName("entrypoint")
 
 	// Get a config to talk to the apiserver
@@ -108,4 +122,21 @@ func main() {
 		log.Error(err, "unable to run the manager")
 		os.Exit(1)
 	}
+}
+
+func setLoggerForProduction() {
+	sink := zapcore.AddSync(os.Stderr)
+	var opts []zap.Option
+	encCfg := zap.NewProductionEncoderConfig()
+	enc := zapcore.NewJSONEncoder(encCfg)
+	lvl := zap.NewAtomicLevelAt(zap.WarnLevel)
+	opts = append(opts, zap.AddStacktrace(zap.ErrorLevel),
+		zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return zapcore.NewSampler(core, time.Second, 100, 100)
+		}))
+	opts = append(opts, zap.AddCallerSkip(1), zap.ErrorOutput(sink))
+	zlog := zap.New(zapcore.NewCore(&logf.KubeAwareEncoder{Encoder: enc, Verbose: false}, sink, lvl))
+	zlog = zlog.WithOptions(opts...)
+	newlogger := zapr.NewLogger(zlog)
+	logf.SetLogger(newlogger)
 }

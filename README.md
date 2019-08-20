@@ -309,6 +309,8 @@ status:
 
 ### Debugging
 
+> NOTE: Verbose logging with DEBUG level can be turned on with the `--debug=true` flag.  The `--debug` flag is set to `false` by default with WARN level. In production, this flag should not be set to `true`.
+
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
    * Cached data and existing rules at the time of the request
