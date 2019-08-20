@@ -44,7 +44,7 @@ BATS_TESTS_DIR=test/bats/tests
   assert_failure
 
   result=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[] | length' | head -1)
-  [[ "$result" -eq 4 ]]
+  [[ "$result" -eq 3 ]]
 }
 
 @test "unique labels test" {
