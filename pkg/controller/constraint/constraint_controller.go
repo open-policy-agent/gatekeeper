@@ -37,25 +37,30 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 
-const project = "gatekeeper.sh"
+const (
+	finalizerName = "finalizers.gatekeeper.sh/constraint"
+	project       = "gatekeeper.sh"
+)
 
 type Adder struct {
-	Opa opa.Client
+	Opa    opa.Client
+	Toggle *util.Toggle
 }
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
-	r := newReconciler(mgr, gvk, a.Opa)
+	r := newReconciler(mgr, gvk, a.Opa, a.Toggle)
 	return add(mgr, r, gvk)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client, t *util.Toggle) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		opa:    opa,
+		toggle: t,
 		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
 		gvk:    gvk,
 	}
@@ -87,6 +92,7 @@ type ReconcileConstraint struct {
 	client.Client
 	scheme *runtime.Scheme
 	opa    opa.Client
+	toggle *util.Toggle
 	gvk    schema.GroupVersionKind
 	log    logr.Logger
 }
@@ -95,6 +101,9 @@ type ReconcileConstraint struct {
 // and what is in the constraint.Spec
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	if !r.toggle.Enabled() {
+		return reconcile.Result{}, nil
+	}
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(r.gvk)
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -108,7 +117,6 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	finalizerName := "finalizers.gatekeeper.sh/constraint"
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !containsString(finalizerName, instance.GetFinalizers()) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
@@ -144,7 +152,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 					return reconcile.Result{}, err
 				}
 			}
-			instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+			RemoveFinalizer(instance)
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
 			}
@@ -152,6 +160,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func RemoveFinalizer(instance *unstructured.Unstructured) {
+	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
 }
 
 func containsString(s string, items []string) bool {

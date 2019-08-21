@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -31,9 +32,11 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -53,12 +56,13 @@ var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate
 type Adder struct {
 	Opa          opa.Client
 	WatchManager *watch.WatchManager
+	Toggle       *util.Toggle
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.Toggle)
 	if err != nil {
 		return err
 	}
@@ -73,9 +77,13 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 	a.WatchManager = wm
 }
 
+func (a *Adder) InjectToggle(t *util.Toggle) {
+	a.Toggle = t
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
-	constraintAdder := constraint.Adder{Opa: opa}
+func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager, toggle *util.Toggle) (reconcile.Reconciler, error) {
+	constraintAdder := constraint.Adder{Opa: opa, Toggle: toggle}
 	w, err := wm.NewRegistrar(
 		ctrlName,
 		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})
@@ -87,6 +95,7 @@ func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) 
 		scheme:  mgr.GetScheme(),
 		opa:     opa,
 		watcher: w,
+		toggle:  toggle,
 	}, nil
 }
 
@@ -115,6 +124,7 @@ type ReconcileConstraintTemplate struct {
 	scheme  *runtime.Scheme
 	watcher *watch.Registrar
 	opa     opa.Client
+	toggle  *util.Toggle
 }
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
@@ -124,6 +134,9 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	if !r.toggle.Enabled() {
+		return reconcile.Result{}, nil
+	}
 	// Fetch the ConstraintTemplate instance
 	instance := &v1beta1.ConstraintTemplate{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -258,6 +271,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// this may be too expensive to do in large clusters
 	name := crd.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
+	if !containsString(finalizerName, instance.GetFinalizers()) {
+		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
+		if err := r.Update(context.Background(), instance); err != nil {
+			log.Error(err, "update error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
 	log.Info("loading constraint code into OPA")
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
@@ -337,12 +357,17 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
 			return reconcile.Result{}, err
 		}
-		instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+		RemoveConstraint(instance)
+
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func RemoveConstraint(instance *v1beta1.ConstraintTemplate) {
+	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
 }
 
 func makeGvk(kind string) schema.GroupVersionKind {
@@ -370,4 +395,81 @@ func removeString(s string, items []string) []string {
 		}
 	}
 	return rval
+}
+
+// RemoveAllFinalizers removes all finalizers from constraints and
+// constraint templates
+func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
+	defer close(finished)
+	toList := func(m map[types.NamespacedName]string) []string {
+		var out []string
+		for k := range m {
+			out = append(out, k.Name)
+		}
+		return out
+	}
+
+	templates := &v1beta1.ConstraintTemplateList{}
+	names := make(map[types.NamespacedName]string)
+	if err := c.List(context.Background(), nil, templates); err != nil {
+		log.Error(err, "could not clean all contraint/template finalizers")
+		return
+	}
+	for _, templ := range templates.Items {
+		names[types.NamespacedName{Name: templ.GetName()}] = templ.Spec.CRD.Spec.Names.Kind
+	}
+	log.Info("found constraint templates to scrub", "templates", toList(names))
+	cleanLoop := func() (bool, error) {
+		log.Info("removing finalizers from constraint templates", "templates", toList(names))
+		for nn, kind := range names {
+			listKind := kind + "List"
+			// TODO these should be constants somewhere
+			gvk := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: listKind}
+			objs := &unstructured.UnstructuredList{}
+			objs.SetGroupVersionKind(gvk)
+			if err := c.List(context.Background(), nil, objs); err != nil {
+				log.Error(err, fmt.Sprintf("while listing constraints for cleanup", "kind", listKind))
+				continue
+			}
+			success := true
+			for _, obj := range objs.Items {
+				log.Info("scrubing contraint finalizer", "name", obj.GetName())
+				constraint.RemoveFinalizer(&obj)
+				if err := c.Update(context.Background(), &obj); err != nil {
+					success = false
+					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
+				}
+			}
+			if success == true {
+				templ := &v1beta1.ConstraintTemplate{}
+				if err := c.Get(context.Background(), nn, templ); err != nil {
+					if errors.IsNotFound(err) {
+						delete(names, nn)
+						continue
+					} else {
+						log.Error(err, "while retrieving constraint template for cleanup", "template", nn)
+						continue
+					}
+				}
+				RemoveConstraint(templ)
+				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
+					log.Error(err, "while writing a constraint template for cleanup", "template", nn)
+					continue
+				}
+				delete(names, nn)
+			}
+		}
+		if len(names) == 0 {
+			return true, nil
+		}
+		return false, nil
+	}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 5 * time.Second,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, cleanLoop); err != nil {
+		log.Error(err, "max retries for cleanup", "remaining constraint kinds", names)
+	}
 }
