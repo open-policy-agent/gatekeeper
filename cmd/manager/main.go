@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	logLevel = flag.String("log-level", "INFO", "Minimum log level")
+	logLevel = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
 )
 
 func main() {
