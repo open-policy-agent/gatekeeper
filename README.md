@@ -309,6 +309,8 @@ status:
 
 ### Debugging
 
+> NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
+
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
    * Cached data and existing rules at the time of the request
