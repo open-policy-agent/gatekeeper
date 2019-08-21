@@ -27,9 +27,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
@@ -139,7 +139,7 @@ func main() {
 	// Unfortunately there is no way to block until all child
 	// goroutines of the manager have finished, so sleep long
 	// enough for dangling reconciles to finish
-	time.Sleep(5*time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Create a fresh client to be sure RESTmapper is up-to-date
 	log.Info("removing finalizers...")
@@ -158,8 +158,8 @@ func main() {
 	templatesCleaned := make(chan struct{})
 	go constrainttemplate.RemoveAllFinalizers(cli, templatesCleaned)
 
-	<- syncCleaned
-	<- templatesCleaned
+	<-syncCleaned
+	<-templatesCleaned
 	log.Info("finalizers removed")
 	if hadError {
 		os.Exit(1)

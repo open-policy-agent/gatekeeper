@@ -428,7 +428,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			objs := &unstructured.UnstructuredList{}
 			objs.SetGroupVersionKind(gvk)
 			if err := c.List(context.Background(), nil, objs); err != nil {
-				log.Error(err, fmt.Sprintf("while listing constraints for cleanup", "kind", listKind))
+				log.Error(err, "while listing constraints for cleanup", "kind", listKind)
 				continue
 			}
 			success := true

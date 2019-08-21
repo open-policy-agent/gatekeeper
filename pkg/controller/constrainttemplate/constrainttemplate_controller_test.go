@@ -99,7 +99,7 @@ violation[{"msg": "denied!"}] {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()))
+	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()), util.NewToggle())
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
