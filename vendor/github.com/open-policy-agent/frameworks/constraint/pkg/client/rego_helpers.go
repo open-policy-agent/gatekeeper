@@ -8,10 +8,32 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 )
 
+var (
+	// Currently rules should only access data.inventory
+	validDataFields = map[string]bool{
+		"inventory": true,
+	}
+)
+
+func newRegoConformer(allowedDataFields []string) *regoConformer {
+	allowed := make(map[string]bool)
+	for _, v := range allowedDataFields {
+		if !validDataFields[v] {
+			continue
+		}
+		allowed[v] = true
+	}
+	return &regoConformer{allowedDataFields: allowed}
+}
+
+type regoConformer struct {
+	allowedDataFields map[string]bool
+}
+
 // ensureRegoConformance rewrites the package path and ensures there is no access of `data`
 // beyond the whitelisted bits. Note that this rewriting will currently modify the Rego to look
 // potentially very different from the input, but it will still be functionally equivalent.
-func ensureRegoConformance(kind, path, rego string) (string, error) {
+func (rc *regoConformer) ensureRegoConformance(kind, path, rego string) (string, error) {
 	if rego == "" {
 		return "", errors.New("Rego source code is empty")
 	}
@@ -24,7 +46,7 @@ func ensureRegoConformance(kind, path, rego string) (string, error) {
 	}
 	// Temporarily unset Package.Path to avoid triggering a "prohibited data field" error
 	module.Package.Path = nil
-	if err := checkDataAccess(module); err != nil {
+	if err := rc.checkDataAccess(module); err != nil {
 		return "", err
 	}
 	module.Package.Path, err = packageRef(path)
@@ -61,6 +83,9 @@ func packageRef(path string) (ast.Ref, error) {
 }
 
 func makeInvalidRootFieldErr(val ast.Value, allowed map[string]bool) error {
+	if len(allowed) == 0 {
+		return fmt.Errorf("Template is attempting to access `data.%s`. Access to the data document is disabled", val.String())
+	}
 	var validFields []string
 	for field := range allowed {
 		validFields = append(validFields, field)
@@ -81,12 +106,7 @@ func (errs Errors) Error() string {
 }
 
 // checkDataAccess makes sure that data is only referenced in terms of valid subfields
-func checkDataAccess(module *ast.Module) Errors {
-	// Currently rules should only access data.inventory
-	validDataFields := map[string]bool{
-		"inventory": true,
-	}
-
+func (rc *regoConformer) checkDataAccess(module *ast.Module) Errors {
 	var errs Errors
 	ast.WalkRefs(module, func(r ast.Ref) bool {
 		if r.HasPrefix(ast.DefaultRootRef) {
@@ -100,11 +120,11 @@ func checkDataAccess(module *ast.Module) Errors {
 			}
 			v := r[1].Value
 			if val, ok := v.(ast.String); !ok {
-				errs = append(errs, makeInvalidRootFieldErr(v, validDataFields))
+				errs = append(errs, makeInvalidRootFieldErr(v, rc.allowedDataFields))
 				return false
 			} else {
-				if !validDataFields[string(val)] {
-					errs = append(errs, makeInvalidRootFieldErr(v, validDataFields))
+				if !rc.allowedDataFields[string(val)] {
+					errs = append(errs, makeInvalidRootFieldErr(v, rc.allowedDataFields))
 					return false
 				}
 			}

@@ -41,9 +41,14 @@ func (b *Backend) NewClient(opts ...ClientOpt) (Client, error) {
 	if b.hasClient {
 		return nil, errors.New("Currently only one client per backend is supported")
 	}
+	var fields []string
+	for k := range validDataFields {
+		fields = append(fields, k)
+	}
 	c := &client{
-		backend:     b,
-		constraints: make(map[string]*constraintEntry),
+		backend:           b,
+		constraints:       make(map[string]*constraintEntry),
+		allowedDataFields: fields,
 	}
 	var errs Errors
 	for _, opt := range opts {
@@ -54,6 +59,7 @@ func (b *Backend) NewClient(opts ...ClientOpt) (Client, error) {
 	if len(errs) > 0 {
 		return nil, errs
 	}
+	c.rConformer = newRegoConformer(c.allowedDataFields)
 	if len(c.targets) == 0 {
 		return nil, errors.New("No targets registered. Please register a target via client.Targets()")
 	}
