@@ -6,7 +6,7 @@ BATS_TESTS_DIR=test/bats/tests
 
 @test "gatekeeper-controller-manager is running" {
   cmd="kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod/gatekeeper-controller-manager-0"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl -n gatekeeper-system get pod/gatekeeper-controller-manager-0
   assert_success
@@ -14,7 +14,7 @@ BATS_TESTS_DIR=test/bats/tests
 
 @test "constrainttemplates crd is established" {
   cmd="kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/constrainttemplates.templates.gatekeeper.sh"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl -n gatekeeper-system get crd/constrainttemplates.templates.gatekeeper.sh
   assert_success
@@ -22,7 +22,7 @@ BATS_TESTS_DIR=test/bats/tests
 
 @test "waiting for validating webhook" {
   cmd="kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io validation.gatekeeper.sh"
-	waitForProcess "60" "1" "$cmd"
+	wait_for_process "60" "1" "$cmd"
 
   run kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io validation.gatekeeper.sh
   assert_success
@@ -44,7 +44,7 @@ BATS_TESTS_DIR=test/bats/tests
   assert_success
 
   cmd="kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8scontainerlimits.constraints.gatekeeper.sh"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl get crd/k8scontainerlimits.constraints.gatekeeper.sh
   assert_success
@@ -54,7 +54,7 @@ BATS_TESTS_DIR=test/bats/tests
   assert_success
 
   cmd="kubectl get k8scontainerlimits.constraints.gatekeeper.sh container-must-have-limits -o yaml | grep enforced"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl create ns production
   assert_success
@@ -72,13 +72,13 @@ BATS_TESTS_DIR=test/bats/tests
   assert_success
 
   cmd="kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
-	waitForProcess "60" "1" "$cmd"
+	wait_for_process "60" "1" "$cmd"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
   assert_success
 
   cmd="kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o yaml | grep enforced"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_success
@@ -86,12 +86,19 @@ BATS_TESTS_DIR=test/bats/tests
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_match 'denied the request' "$output"
   assert_failure
+}
 
-  # waiting for audit interval (default is 60s)
+# waiting for audit interval (default is 60s)
+@test "required labels audit test" {
   sleep 60
 
   result=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[] | length' | head -1)
   [[ "$result" -eq 4 ]]
+}
+
+@test "waiting for namespaces to be synced" {
+  cmd="kubectl get ns no-dupes -o jsonpath='{.metadata.finalizers}' | grep finalizers.gatekeeper.sh/sync"
+	wait_for_process "60" "1" "$cmd"
 }
 
 @test "unique labels test" {
@@ -99,14 +106,14 @@ BATS_TESTS_DIR=test/bats/tests
   assert_success
 
   cmd="kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8suniquelabel.constraints.gatekeeper.sh"
-	waitForProcess "60" "1" "$cmd"
+	wait_for_process "60" "1" "$cmd"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_gatekeeper_label_unique.yaml
   assert_match 'k8suniquelabel.constraints.gatekeeper.sh/ns-gk-label-unique created' "$output"
   assert_success
 
   cmd="kubectl get k8suniquelabel.constraints.gatekeeper.sh ns-gk-label-unique -o yaml | grep enforced"
-  waitForProcess "60" "1" "$cmd"
+  wait_for_process "60" "1" "$cmd"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/no_dupe_ns_2.yaml
   assert_match 'denied the request' "$output"

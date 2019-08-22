@@ -50,7 +50,7 @@ assert_not_match() {
   fi
 }
 
-function waitForProcess(){
+wait_for_process(){
   wait_time="$1"
   sleep_time="$2"
   cmd="$3"
