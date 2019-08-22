@@ -14,7 +14,7 @@ jobs:
     - stage: e2e
       before_script:
       - KIND_VERSION=0.4.0
-      - KUSTOMIZE_VERSION=3.1.0
+      - KUSTOMIZE_VERSION=3.0.2
       # Download and install kind
       - curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
       # Create kind cluster
