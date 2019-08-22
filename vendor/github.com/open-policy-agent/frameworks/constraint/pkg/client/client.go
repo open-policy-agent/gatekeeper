@@ -95,6 +95,16 @@ func Targets(ts ...TargetHandler) ClientOpt {
 	}
 }
 
+// AllowedDataFields sets the fields under `data` that Rego in ConstraintTemplates
+// can access. If unset, all fields can be accessed. Only fields recognized by
+// the system can be enabled.
+func AllowedDataFields(fields ...string) ClientOpt {
+	return func(c *client) error {
+		c.allowedDataFields = fields
+		return nil
+	}
+}
+
 type MatchSchemaProvider interface {
 	// MatchSchema returns the JSON Schema for the `match` field of a constraint
 	MatchSchema() apiextensions.JSONSchemaProps
@@ -142,10 +152,12 @@ type constraintEntry struct {
 }
 
 type client struct {
-	backend        *Backend
-	targets        map[string]TargetHandler
-	constraintsMux sync.RWMutex
-	constraints    map[string]*constraintEntry
+	backend           *Backend
+	targets           map[string]TargetHandler
+	constraintsMux    sync.RWMutex
+	constraints       map[string]*constraintEntry
+	allowedDataFields []string
+	rConformer        *regoConformer
 }
 
 // createDataPath compiles the data destination: data.external.<target>.<path>
@@ -257,7 +269,7 @@ func (c *client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 		return nil, fmt.Errorf("Invalid rego: %s", err)
 	}
 
-	_, err = ensureRegoConformance(crd.Spec.Names.Kind, path, src)
+	_, err = c.rConformer.ensureRegoConformance(crd.Spec.Names.Kind, path, src)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +300,7 @@ func (c *client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 	}
 
 	path := createTemplatePath(target.GetName(), crd.Spec.Names.Kind)
-	conformingSrc, err := ensureRegoConformance(crd.Spec.Names.Kind, path, src)
+	conformingSrc, err := c.rConformer.ensureRegoConformance(crd.Spec.Names.Kind, path, src)
 	if err != nil {
 		return resp, err
 	}

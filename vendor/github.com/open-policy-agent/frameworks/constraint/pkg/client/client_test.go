@@ -292,9 +292,9 @@ func TestRemoveData(t *testing.T) {
 }
 
 func TestAddTemplate(t *testing.T) {
-	badRegoTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
+	badRegoTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
 	badRegoTempl.Spec.Targets[0].Rego = "asd{"
-	badArityTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
+	badArityTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
 	badArityTempl.Spec.Targets[0].Rego = `
 package foo
 
@@ -302,7 +302,7 @@ violation {
 	true
 }
 `
-	missingRuleTempl := createTemplate(name("fakes"), crdNames("Fake"), targets("h1"))
+	missingRuleTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
 	missingRuleTempl.Spec.Targets[0].Rego = `
 package foo
 
@@ -326,7 +326,7 @@ some_rule[r] {
 		{
 			Name:          "Unknown Target",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fakes"), crdNames("Fake"), targets("h2")),
+			Template:      createTemplate(name("fake"), crdNames("Fake"), targets("h2")),
 			ErrorExpected: true,
 		},
 		{
@@ -395,7 +395,7 @@ some_rule[r] {
 }
 
 func TestRemoveTemplate(t *testing.T) {
-	badRegoTempl := createTemplate(name("fake"), crdNames("Fakes"), targets("h1"))
+	badRegoTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
 	badRegoTempl.Spec.Targets[0].Rego = "asd{"
 	tc := []struct {
 		Name          string
@@ -406,13 +406,13 @@ func TestRemoveTemplate(t *testing.T) {
 		{
 			Name:          "Good Template",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fakes"), targets("h1")),
+			Template:      createTemplate(name("fake"), crdNames("Fake"), targets("h1")),
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Unknown Target",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
-			Template:      createTemplate(name("fake"), crdNames("Fakes"), targets("h2")),
+			Template:      createTemplate(name("fake"), crdNames("Fake"), targets("h2")),
 			ErrorExpected: true,
 		},
 		{
@@ -605,4 +605,142 @@ func TestRemoveConstraint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllowedDataFields(t *testing.T) {
+	inventoryTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
+	inventoryTempl.Spec.Targets[0].Rego = `
+package something
+
+violation[{"msg": "msg"}] {
+	data.inventory = "something_else"
+}
+`
+
+	tc := []struct {
+		Name          string
+		Handler       TargetHandler
+		Template      *templates.ConstraintTemplate
+		ErrorExpected bool
+		InvAllowed    bool
+	}{
+		{
+			Name:          "Inventory Not Used",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      createTemplate(name("fakes"), crdNames("Fakes"), targets("h1")),
+			ErrorExpected: false,
+		},
+		{
+			Name:          "Inventory Used",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      inventoryTempl,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "Inventory Used But Allowed",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      inventoryTempl,
+			ErrorExpected: false,
+			InvAllowed:    true,
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			d := local.New()
+			b, err := NewBackend(Driver(d))
+			if err != nil {
+				t.Fatalf("Could not create backend: %s", err)
+			}
+			f := AllowedDataFields()
+			if tt.InvAllowed {
+				f = AllowedDataFields("inventory")
+			}
+			c, err := b.NewClient(Targets(tt.Handler), f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := c.AddTemplate(context.Background(), tt.Template)
+			if err != nil && !tt.ErrorExpected {
+				t.Errorf("err = %v; want nil", err)
+			}
+			if err == nil && tt.ErrorExpected {
+				t.Error("err = nil; want non-nil")
+			}
+			expectedCount := 0
+			expectedHandled := make(map[string]bool)
+			if !tt.ErrorExpected {
+				expectedCount = 1
+				expectedHandled = map[string]bool{"h1": true}
+			}
+			if r.HandledCount() != expectedCount {
+				t.Errorf("HandledCount() = %v; want %v", r.HandledCount(), expectedCount)
+			}
+			if !reflect.DeepEqual(r.Handled, expectedHandled) {
+				t.Errorf("r.Handled = %v; want %v", r.Handled, expectedHandled)
+			}
+		})
+	}
+}
+
+func TestAllowedDataFieldsIntersection(t *testing.T) {
+	tc := []struct {
+		Name     string
+		Allowed  []string
+		Expected []string
+	}{
+		{
+			Name:     "Nothing Used",
+			Allowed:  []string{},
+			Expected: []string{},
+		},
+		{
+			Name:     "Inventory Used",
+			Allowed:  []string{"inventory"},
+			Expected: []string{"inventory"},
+		},
+		{
+			Name:     "No Overlap",
+			Allowed:  []string{"no_overlap"},
+			Expected: []string{},
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			d := local.New()
+			b, err := NewBackend(Driver(d))
+			if err != nil {
+				t.Fatalf("Could not create backend: %s", err)
+			}
+			c, err := b.NewClient(Targets(&badHandler{Name: "h1", HasLib: true}), AllowedDataFields(tt.Allowed...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c2 := c.(*client)
+			expected := make(map[string]bool)
+			for _, v := range tt.Expected {
+				expected[v] = true
+			}
+			if !reflect.DeepEqual(c2.rConformer.allowedDataFields, expected) {
+				t.Errorf("c2.rConformer.allowedDataFields = %v; want %v", c2.rConformer.allowedDataFields, expected)
+			}
+		})
+	}
+}
+
+func TestAllowedDataFieldsNotSpecified(t *testing.T) {
+	t.Run("No Restrictions", func(t *testing.T) {
+		d := local.New()
+		b, err := NewBackend(Driver(d))
+		if err != nil {
+			t.Fatalf("Could not create backend: %s", err)
+		}
+		c, err := b.NewClient(Targets(&badHandler{Name: "h1", HasLib: true}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2 := c.(*client)
+		if !reflect.DeepEqual(c2.rConformer.allowedDataFields, validDataFields) {
+			t.Errorf("c2.rConformer.allowedDataFields = %v; want %v", c2.rConformer.allowedDataFields, validDataFields)
+		}
+	})
 }
