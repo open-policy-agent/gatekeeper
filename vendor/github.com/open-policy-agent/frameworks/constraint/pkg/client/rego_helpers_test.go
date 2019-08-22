@@ -17,13 +17,18 @@ type regoTestCase struct {
 }
 
 func runRegoTests(tt []regoTestCase, t *testing.T) {
+	var fields []string
+	for k := range validDataFields {
+		fields = append(fields, k)
+	}
+	rc := newRegoConformer(fields)
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
 			path := tc.Path
 			if path == "" {
 				path = "def.test.path"
 			}
-			rego, err := ensureRegoConformance("test", path, tc.Rego)
+			rego, err := rc.ensureRegoConformance("test", path, tc.Rego)
 			if (err == nil) && tc.ErrorExpected {
 				t.Errorf("err = nil; want non-nil")
 			}
