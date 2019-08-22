@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: opa
-  namespace: production
+  namespace: good-ns
   labels:
     owner: me.agilebank.demo
 spec:
