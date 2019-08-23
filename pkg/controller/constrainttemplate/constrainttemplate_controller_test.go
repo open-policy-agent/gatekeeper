@@ -267,12 +267,27 @@ anyrule[}}}//invalid//rego
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	RemoveAllFinalizers(newCli, finished)
+	<- finished
 
-	obj := &v1beta1.ConstraintTemplate{}
-	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj)).NotTo(gomega.HaveOccurred())
-	g.Expect(containsString(finalizerName, obj.GetFinalizers())).Should(gomega.BeFalse())
+	g.Eventually(func() error {
+		obj := &v1beta1.ConstraintTemplate{}
+		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
+			return err
+		}
+		if containsString(finalizerName, obj.GetFinalizers()) {
+			return errors.New("denyall constraint template still has finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
 
-	cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(constraint.HasFinalizer(cleanCstr)).Should(gomega.BeFalse())
+	g.Eventually(func() error {
+		cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+		if err != nil {
+			return err
+		}
+		if constraint.HasFinalizer(cleanCstr) {
+			return errors.New("denyall constraint still has finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
 }

@@ -163,7 +163,14 @@ func TestReconcile(t *testing.T) {
 		return nil
 	}, timeout).Should(gomega.BeNil())
 
-	cleanNs := &unstructured.Unstructured{}
-	g.Expect(c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns)).NotTo(gomega.HaveOccurred())
-	g.Expect(sync.HasFinalizer(cleanNs)).Should(gomega.BeFalse())
+	g.Eventually(func() error {
+		cleanNs := &unstructured.Unstructured{}
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
+			return err
+		}
+		if sync.HasFinalizer(cleanNs) {
+			return errors.New("testns namespace still has sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
 }
