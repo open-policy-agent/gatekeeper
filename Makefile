@@ -44,6 +44,9 @@ test:
 	cp test/Dockerfile .staging/test/Dockerfile
 	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
+test-e2e:
+	bats -t test/bats/test.bats
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
@@ -113,6 +116,10 @@ docker-build:
 	@echo "updating kustomize image patch file for manager resource"
 
 	@test -s ./overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./overlays/dev/manager_image_patch.yaml'
+
+ifeq ($(TRAVIS),true)
+	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./overlays/dev/manager_image_patch.yaml
+endif
 
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
 
