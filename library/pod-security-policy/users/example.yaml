@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-slave
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      role: slave
+      tier: backend
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: slave
+        tier: backend
+    spec:
+      containers:
+        - name: slave
+          args: ["--port=8080"]
+          image: k8s.gcr.io/test-webserver
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          ports:
+            - containerPort: 6379
+          securityContext:
+            runAsUser: 177 # constraint range is 100-200
+        - name: slave2
+          args: ["--port=8081"]
+          image: k8s.gcr.io/test-webserver
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          env:
+            - name: GET_HOSTS_FROM
+              value: dns
+          ports:
+            - containerPort: 6379
+          securityContext:
+            runAsUser: 101 # constraint range is 100-200

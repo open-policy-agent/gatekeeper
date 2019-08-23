@@ -1,0 +1,16 @@
+apiVersion: constraints.gatekeeper.sh/v1alpha1
+kind: AllowedUsersConstraint
+metadata:
+  name: default-ns-pods-allowed-user-ranges
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+        namespace: ["default"]
+  parameters:
+    runAsUser:
+      rule: MustRunAs
+      ranges:
+        - min: 100
+          max: 200
