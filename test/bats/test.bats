@@ -112,6 +112,9 @@ SLEEP_TIME=1
 }
 
 @test "required labels audit test" {
+  cmd="kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "$cmd"
+
   result=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[] | length' | head -1)
   [[ "$result" -eq 4 ]]
 }
