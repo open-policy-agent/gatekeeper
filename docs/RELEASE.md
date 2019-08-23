@@ -17,7 +17,7 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 
 ## Versioning
 
-1. Obtain a copy of repository.
+1. Obtain a copy of the repository.
 
 	```
 	git clone git@github.com:open-policy-agent/gatekeeper.git
