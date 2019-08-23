@@ -160,8 +160,7 @@ func (wm *WatchManager) updateManager() (bool, error) {
 
 // updateManagerLoop looks for changes to the watch roster every 5 seconds. This method has a dual
 // benefit compared to restarting the manager every time a controller changes the watch
-// of placing an upper bound on how often the manager restarts and allowing the manager to
-// catch changes to the CRD version, will break the watch if it is not updated.
+// of placing an upper bound on how often the manager restarts.
 func (wm *WatchManager) updateManagerLoop(ctx context.Context) {
 	for {
 		select {

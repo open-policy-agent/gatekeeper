@@ -163,7 +163,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	newSyncOnly := newSet()
 	toClean := newSet()
 	if instance.GetDeletionTimestamp().IsZero() {
-		if !containsString(finalizerName, instance.GetFinalizers()) {
+		if !hasFinalizer(instance) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
@@ -175,7 +175,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 		// Handle deletion
 	} else {
-		if containsString(finalizerName, instance.GetFinalizers()) {
+		if hasFinalizer(instance) {
 			removeFinalizer(instance)
 		}
 	}
@@ -289,7 +289,7 @@ func RemoveAllConfigFinalizers(c client.Client, finished chan struct{}) {
 			return true, nil
 		}
 		if err := wait.ExponentialBackoff(wait.Backoff{
-			Duration: 5 * time.Second,
+			Duration: 500 * time.Millisecond,
 			Factor:   2,
 			Jitter:   1,
 			Steps:    10,
@@ -297,6 +297,10 @@ func RemoveAllConfigFinalizers(c client.Client, finished chan struct{}) {
 			log.Error(err, "max retries for removal of config finalizer reached")
 		}
 	}
+}
+
+func hasFinalizer(instance *configv1alpha1.Config) bool {
+	return containsString(finalizerName, instance.GetFinalizers())
 }
 
 func removeFinalizer(instance *configv1alpha1.Config) {
@@ -374,7 +378,7 @@ func (fc *finalizerCleanup) Clean() {
 	}
 
 	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 5 * time.Second,
+		Duration: 500 * time.Millisecond,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    10,

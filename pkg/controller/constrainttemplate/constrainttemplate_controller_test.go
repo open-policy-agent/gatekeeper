@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -99,7 +100,8 @@ violation[{"msg": "denied!"}] {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()), util.NewToggle())
+	toggle := util.NewToggle()
+	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()), toggle)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -249,4 +251,28 @@ anyrule[}}}//invalid//rego
 		}
 		return errors.New("InvalidRego not found")
 	}, timeout).Should(gomega.BeNil())
+	g.Expect(c.Delete(context.TODO(), instanceInvalidRego)).NotTo(gomega.HaveOccurred())
+
+	// Test finalizer removal
+	orig := &v1beta1.ConstraintTemplate{}
+	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(containsString(finalizerName, orig.GetFinalizers())).Should(gomega.BeTrue())
+
+	origCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
+
+	toggle.Disable()
+	finished := make(chan struct{})
+	newCli, err := client.New(mgr.GetConfig(), client.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	RemoveAllFinalizers(newCli, finished)
+
+	obj := &v1beta1.ConstraintTemplate{}
+	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj)).NotTo(gomega.HaveOccurred())
+	g.Expect(containsString(finalizerName, obj.GetFinalizers())).Should(gomega.BeFalse())
+
+	cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(constraint.HasFinalizer(cleanCstr)).Should(gomega.BeFalse())
 }

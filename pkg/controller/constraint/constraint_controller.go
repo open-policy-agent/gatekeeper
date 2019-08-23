@@ -118,7 +118,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	if instance.GetDeletionTimestamp().IsZero() {
-		if !containsString(finalizerName, instance.GetFinalizers()) {
+		if !HasFinalizer(instance) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
@@ -146,7 +146,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	} else {
 		// Handle deletion
-		if containsString(finalizerName, instance.GetFinalizers()) {
+		if HasFinalizer(instance) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
 				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
 					return reconcile.Result{}, err
@@ -164,6 +164,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 
 func RemoveFinalizer(instance *unstructured.Unstructured) {
 	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+}
+
+func HasFinalizer(instance *unstructured.Unstructured) bool {
+	return containsString(finalizerName, instance.GetFinalizers())
 }
 
 func containsString(s string, items []string) bool {

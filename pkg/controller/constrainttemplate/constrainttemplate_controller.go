@@ -465,7 +465,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 		return false, nil
 	}
 	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 5 * time.Second,
+		Duration: 500 * time.Millisecond,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    10,

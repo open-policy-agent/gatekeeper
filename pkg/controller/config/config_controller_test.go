@@ -16,6 +16,7 @@ limitations under the License.
 package config
 
 import (
+	"errors"
 	"sort"
 	"testing"
 	"time"
@@ -24,11 +25,13 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,7 +46,7 @@ var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
 	Namespace: "gatekeeper-system",
 }}
 
-const timeout = time.Second * 5
+const timeout = time.Second * 20
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
@@ -83,7 +86,8 @@ func TestReconcile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	watcher := watch.New(ctx, mgr.GetConfig())
-	rec, _ := newReconciler(mgr, opa, watcher, util.NewToggle())
+	toggle := util.NewToggle()
+	rec, _ := newReconciler(mgr, opa, watcher, toggle)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -115,4 +119,51 @@ func TestReconcile(t *testing.T) {
 		{Group: "", Version: "v1", Kind: "Namespace"},
 		{Group: "", Version: "v1", Kind: "Pod"},
 	}))
+
+	ns := &unstructured.Unstructured{}
+	ns.SetName("testns")
+	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
+	ns.SetGroupVersionKind(nsGvk)
+	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
+
+	// Test finalizer removal
+	orig := &configv1alpha1.Config{}
+	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
+
+	g.Eventually(func() error {
+		ns := &unstructured.Unstructured{}
+		ns.SetGroupVersionKind(nsGvk)
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
+			return err
+		}
+		if !sync.HasFinalizer(ns) {
+			return errors.New("namespace has no sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+
+	toggle.Disable()
+	time.Sleep(1 * time.Second)
+	finished := make(chan struct{})
+	newCli, err := client.New(mgr.GetConfig(), client.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	RemoveAllConfigFinalizers(newCli, finished)
+	<-finished
+	time.Sleep(1 * time.Second)
+
+	g.Eventually(func() error {
+		obj := &configv1alpha1.Config{}
+		if err := c.Get(context.TODO(), CfgKey, obj); err != nil {
+			return err
+		}
+		if hasFinalizer(obj) {
+			return errors.New("config resource still has sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+
+	cleanNs := &unstructured.Unstructured{}
+	g.Expect(c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns)).NotTo(gomega.HaveOccurred())
+	g.Expect(sync.HasFinalizer(cleanNs)).Should(gomega.BeFalse())
 }
