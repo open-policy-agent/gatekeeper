@@ -2,6 +2,7 @@ package util
 
 import "sync"
 
+// Toggle is a thread-safe toggle that allows switching behavior across multiple threads
 type Toggle struct {
 	enabled bool
 	mux     sync.RWMutex

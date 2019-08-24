@@ -357,7 +357,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
 			return reconcile.Result{}, err
 		}
-		RemoveConstraint(instance)
+		RemoveFinalizer(instance)
 
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
@@ -366,7 +366,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	return reconcile.Result{}, nil
 }
 
-func RemoveConstraint(instance *v1beta1.ConstraintTemplate) {
+func RemoveFinalizer(instance *v1beta1.ConstraintTemplate) {
 	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
 }
 
@@ -433,7 +433,10 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			}
 			success := true
 			for _, obj := range objs.Items {
-				log.Info("scrubing contraint finalizer", "name", obj.GetName())
+				if !constraint.HasFinalizer(&obj) {
+					continue
+				}
+				log.Info("scrubing constraint finalizer", "name", obj.GetName())
 				constraint.RemoveFinalizer(&obj)
 				if err := c.Update(context.Background(), &obj); err != nil {
 					success = false
@@ -451,7 +454,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 						continue
 					}
 				}
-				RemoveConstraint(templ)
+				RemoveFinalizer(templ)
 				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
 					log.Error(err, "while writing a constraint template for cleanup", "template", nn)
 					continue

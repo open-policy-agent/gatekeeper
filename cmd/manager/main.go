@@ -134,6 +134,7 @@ func main() {
 		log.Error(err, "unable to run the manager")
 		hadError = true
 	}
+	// Short-circuit the reconciliation logic of the controllers, as they can continue to reconcile even after the manager shuts down.
 	toggle.Disable()
 
 	// Unfortunately there is no way to block until all child
