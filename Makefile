@@ -130,6 +130,10 @@ docker-build-ci:
 docker-push:
 	docker push ${IMG}
 
+release:
+	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
+	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
 
