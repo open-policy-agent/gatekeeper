@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -339,7 +340,13 @@ func (fc *finalizerCleanup) Clean() {
 				listGvk := gvk
 				listGvk.Kind = listGvk.Kind + "List"
 				l.SetGroupVersionKind(listGvk)
-				fc.c.List(context.TODO(), nil, l)
+				if err := fc.c.List(context.TODO(), nil, l); err != nil {
+					// If the kind is not recognized, there is nothing to clean
+					if !meta.IsNoMatchError(err) {
+						log.Error(err, "while listing synced resources for cleanup", "kind", listGvk.Kind)
+						continue
+					}
+				}
 				failure := false
 				for _, obj := range l.Items {
 					if !syncc.HasFinalizer(&obj) {

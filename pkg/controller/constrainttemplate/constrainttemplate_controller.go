@@ -32,6 +32,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -428,8 +429,11 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			objs := &unstructured.UnstructuredList{}
 			objs.SetGroupVersionKind(gvk)
 			if err := c.List(context.Background(), nil, objs); err != nil {
-				log.Error(err, "while listing constraints for cleanup", "kind", listKind)
-				continue
+				// If the kind is not recognized, there is nothing to clean
+				if !meta.IsNoMatchError(err) {
+					log.Error(err, "while listing constraints for cleanup", "kind", listKind)
+					continue
+				}
 			}
 			success := true
 			for _, obj := range objs.Items {
