@@ -57,13 +57,12 @@ var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate
 type Adder struct {
 	Opa          opa.Client
 	WatchManager *watch.WatchManager
-	Toggle       *util.Toggle
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.Toggle)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager)
 	if err != nil {
 		return err
 	}
@@ -78,13 +77,9 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 	a.WatchManager = wm
 }
 
-func (a *Adder) InjectToggle(t *util.Toggle) {
-	a.Toggle = t
-}
-
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager, toggle *util.Toggle) (reconcile.Reconciler, error) {
-	constraintAdder := constraint.Adder{Opa: opa, Toggle: toggle}
+func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+	constraintAdder := constraint.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
 		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})
@@ -96,7 +91,6 @@ func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager, 
 		scheme:  mgr.GetScheme(),
 		opa:     opa,
 		watcher: w,
-		toggle:  toggle,
 	}, nil
 }
 
@@ -125,7 +119,6 @@ type ReconcileConstraintTemplate struct {
 	scheme  *runtime.Scheme
 	watcher *watch.Registrar
 	opa     opa.Client
-	toggle  *util.Toggle
 }
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
@@ -135,9 +128,6 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if !r.toggle.Enabled() {
-		return reconcile.Result{}, nil
-	}
 	// Fetch the ConstraintTemplate instance
 	instance := &v1beta1.ConstraintTemplate{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)

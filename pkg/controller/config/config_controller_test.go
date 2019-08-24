@@ -27,7 +27,6 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,8 +85,7 @@ func TestReconcile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	watcher := watch.New(ctx, mgr.GetConfig())
-	toggle := util.NewToggle()
-	rec, _ := newReconciler(mgr, opa, watcher, toggle)
+	rec, _ := newReconciler(mgr, opa, watcher)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -143,7 +141,7 @@ func TestReconcile(t *testing.T) {
 		return nil
 	}, timeout).Should(gomega.BeNil())
 
-	toggle.Disable()
+	cancel()
 	time.Sleep(1 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})

@@ -100,8 +100,7 @@ violation[{"msg": "denied!"}] {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	toggle := util.NewToggle()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()), toggle)
+	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()))
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -262,12 +261,13 @@ anyrule[}}}//invalid//rego
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
 
-	toggle.Disable()
+	cancel()
+	time.Sleep(5 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	RemoveAllFinalizers(newCli, finished)
-	<- finished
+	<-finished
 
 	g.Eventually(func() error {
 		obj := &v1beta1.ConstraintTemplate{}

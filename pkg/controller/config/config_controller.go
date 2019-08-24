@@ -59,13 +59,12 @@ var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 type Adder struct {
 	Opa          opa.Client
 	WatchManager *watch.WatchManager
-	Toggle       *util.Toggle
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.Toggle)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager)
 	if err != nil {
 		return err
 	}
@@ -80,13 +79,9 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 	a.WatchManager = wm
 }
 
-func (a *Adder) InjectToggle(t *util.Toggle) {
-	a.Toggle = t
-}
-
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager, t *util.Toggle) (reconcile.Reconciler, error) {
-	syncAdder := syncc.Adder{Opa: opa, Toggle: t}
+func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+	syncAdder := syncc.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
 		[]func(manager.Manager, schema.GroupVersionKind) error{syncAdder.Add})
@@ -99,7 +94,6 @@ func newReconciler(mgr manager.Manager, opa opa.Client, wm *watch.WatchManager, 
 		opa:     opa,
 		watcher: w,
 		watched: newSet(),
-		toggle:  t,
 	}, nil
 }
 
@@ -127,7 +121,6 @@ type ReconcileConfig struct {
 	client.Client
 	scheme  *runtime.Scheme
 	opa     opa.Client
-	toggle  *util.Toggle
 	watcher *watch.Registrar
 	watched *watchSet
 	fc      *finalizerCleanup
@@ -141,9 +134,6 @@ type ReconcileConfig struct {
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
 func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if !r.toggle.Enabled() {
-		return reconcile.Result{}, nil
-	}
 	// Fetch the Config instance
 	if request.NamespacedName != CfgKey {
 		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)

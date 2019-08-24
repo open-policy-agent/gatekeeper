@@ -43,24 +43,22 @@ const (
 )
 
 type Adder struct {
-	Opa    opa.Client
-	Toggle *util.Toggle
+	Opa opa.Client
 }
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
-	r := newReconciler(mgr, gvk, a.Opa, a.Toggle)
+	r := newReconciler(mgr, gvk, a.Opa)
 	return add(mgr, r, gvk)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client, t *util.Toggle) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa opa.Client) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		opa:    opa,
-		toggle: t,
 		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
 		gvk:    gvk,
 	}
@@ -92,7 +90,6 @@ type ReconcileConstraint struct {
 	client.Client
 	scheme *runtime.Scheme
 	opa    opa.Client
-	toggle *util.Toggle
 	gvk    schema.GroupVersionKind
 	log    logr.Logger
 }
@@ -101,9 +98,6 @@ type ReconcileConstraint struct {
 // and what is in the constraint.Spec
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if !r.toggle.Enabled() {
-		return reconcile.Result{}, nil
-	}
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(r.gvk)
 	err := r.Get(context.TODO(), request.NamespacedName, instance)

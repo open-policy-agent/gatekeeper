@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
@@ -30,7 +31,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -100,11 +101,12 @@ func main() {
 		log.Error(err, "unable to set up OPA client")
 	}
 
-	toggle := util.NewToggle()
+	wmCtx, wmCancel := context.WithCancel(context.Background())
+	wm := watch.New(wmCtx, mgr.GetConfig())
 
 	// Setup all Controllers
 	log.Info("Setting up controller")
-	if err := controller.AddToManager(mgr, client, toggle); err != nil {
+	if err := controller.AddToManager(mgr, client, wm); err != nil {
 		log.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
@@ -134,12 +136,12 @@ func main() {
 		log.Error(err, "unable to run the manager")
 		hadError = true
 	}
-	// Short-circuit the reconciliation logic of the controllers, as they can continue to reconcile even after the manager shuts down.
-	toggle.Disable()
+	wmCancel()
 
 	// Unfortunately there is no way to block until all child
 	// goroutines of the manager have finished, so sleep long
 	// enough for dangling reconciles to finish
+	// time.Sleep(5 * time.Second)
 	time.Sleep(5 * time.Second)
 
 	// Create a fresh client to be sure RESTmapper is up-to-date
