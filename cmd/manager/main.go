@@ -85,8 +85,7 @@ func main() {
 	}
 
 	// initialize OPA
-	// TODO: make tracing toggle-able
-	driver := local.New(local.Tracing(true))
+	driver := local.New(local.Tracing(false))
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		log.Error(err, "unable to set up OPA backend")
