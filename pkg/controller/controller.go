@@ -16,8 +16,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -37,10 +35,7 @@ var Injectors []Injector
 var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, client opa.Client) error {
-
-	wm := watch.New(context.Background(), m.GetConfig())
-
+func AddToManager(m manager.Manager, client opa.Client, wm *watch.WatchManager) error {
 	for _, a := range Injectors {
 		a.InjectOpa(client)
 		a.InjectWatchManager(wm)

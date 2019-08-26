@@ -71,7 +71,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKin
 		return err
 	}
 
-	// Watch for changes to the provided constraint
+	// Watch for changes to the provided resource
 	instance := unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
@@ -84,7 +84,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKin
 
 var _ reconcile.Reconciler = &ReconcileSync{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileSync reconciles an arbitrary object described by Kind
 type ReconcileSync struct {
 	client.Client
 	scheme *runtime.Scheme
@@ -93,7 +93,7 @@ type ReconcileSync struct {
 	log    logr.Logger
 }
 
-// Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
+// Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {

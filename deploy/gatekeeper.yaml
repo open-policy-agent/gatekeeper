@@ -354,7 +354,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 60
       volumes:
       - name: cert
         secret:

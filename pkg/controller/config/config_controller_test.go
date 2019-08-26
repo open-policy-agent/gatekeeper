@@ -16,20 +16,22 @@ limitations under the License.
 package config
 
 import (
+	"errors"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -43,7 +45,7 @@ var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
 	Namespace: "gatekeeper-system",
 }}
 
-const timeout = time.Second * 5
+const timeout = time.Second * 20
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
@@ -115,4 +117,58 @@ func TestReconcile(t *testing.T) {
 		{Group: "", Version: "v1", Kind: "Namespace"},
 		{Group: "", Version: "v1", Kind: "Pod"},
 	}))
+
+	ns := &unstructured.Unstructured{}
+	ns.SetName("testns")
+	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
+	ns.SetGroupVersionKind(nsGvk)
+	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
+
+	// Test finalizer removal
+	orig := &configv1alpha1.Config{}
+	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
+
+	g.Eventually(func() error {
+		ns := &unstructured.Unstructured{}
+		ns.SetGroupVersionKind(nsGvk)
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
+			return err
+		}
+		if !sync.HasFinalizer(ns) {
+			return errors.New("namespace has no sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+
+	cancel()
+	time.Sleep(1 * time.Second)
+	finished := make(chan struct{})
+	newCli, err := client.New(mgr.GetConfig(), client.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	RemoveAllConfigFinalizers(newCli, finished)
+	<-finished
+	time.Sleep(1 * time.Second)
+
+	g.Eventually(func() error {
+		obj := &configv1alpha1.Config{}
+		if err := c.Get(context.TODO(), CfgKey, obj); err != nil {
+			return err
+		}
+		if hasFinalizer(obj) {
+			return errors.New("config resource still has sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+
+	g.Eventually(func() error {
+		cleanNs := &unstructured.Unstructured{}
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
+			return err
+		}
+		if sync.HasFinalizer(cleanNs) {
+			return errors.New("testns namespace still has sync finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
 }

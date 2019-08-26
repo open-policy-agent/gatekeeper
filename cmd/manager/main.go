@@ -16,27 +16,31 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
 
+	"github.com/go-logr/zapr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
+	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
-
-	"github.com/go-logr/zapr"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -96,9 +100,12 @@ func main() {
 		log.Error(err, "unable to set up OPA client")
 	}
 
+	wmCtx, wmCancel := context.WithCancel(context.Background())
+	wm := watch.New(wmCtx, mgr.GetConfig())
+
 	// Setup all Controllers
 	log.Info("Setting up controller")
-	if err := controller.AddToManager(mgr, client); err != nil {
+	if err := controller.AddToManager(mgr, client, wm); err != nil {
 		log.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
@@ -123,8 +130,40 @@ func main() {
 
 	// Start the Cmd
 	log.Info("Starting the Cmd.")
+	hadError := false
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "unable to run the manager")
+		hadError = true
+	}
+	wmCancel()
+
+	// Unfortunately there is no way to block until all child
+	// goroutines of the manager have finished, so sleep long
+	// enough for dangling reconciles to finish
+	// time.Sleep(5 * time.Second)
+	time.Sleep(5 * time.Second)
+
+	// Create a fresh client to be sure RESTmapper is up-to-date
+	log.Info("removing finalizers...")
+	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: nil, Mapper: nil})
+	if err != nil {
+		log.Error(err, "unable to create cleanup client")
+		os.Exit(1)
+	}
+
+	// Clean up sync finalizers
+	// This logic should be disabled if OPA is run as a sidecar
+	syncCleaned := make(chan struct{})
+	go configController.RemoveAllConfigFinalizers(cli, syncCleaned)
+
+	// Clean up constraint finalizers
+	templatesCleaned := make(chan struct{})
+	go constrainttemplate.RemoveAllFinalizers(cli, templatesCleaned)
+
+	<-syncCleaned
+	<-templatesCleaned
+	log.Info("finalizers removed")
+	if hadError {
 		os.Exit(1)
 	}
 }

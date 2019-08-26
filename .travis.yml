@@ -37,6 +37,7 @@ jobs:
       script:
       - make deploy
       - make test-e2e
+      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
     - stage: deploy
       provider: script
       skip_cleanup: true
