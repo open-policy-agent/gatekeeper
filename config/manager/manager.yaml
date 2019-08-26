@@ -49,7 +49,7 @@ spec:
           # - "--alsologtostderr"
           # - "--stderrthreshold=INFO"
           # - "-v=100"
-        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.0
+        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.1
         imagePullPolicy: Always
         name: manager
         env:
