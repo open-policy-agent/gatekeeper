@@ -1,6 +1,6 @@
 package allowedusersconstraint
 
-deny {
+violation {
   rule := input.constraint.spec.parameters.runAsUser.rule
   input_container := input.review.object.spec.containers[i]
   provided_user := input_container.securityContext.runAsUser

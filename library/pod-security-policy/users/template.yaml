@@ -1,4 +1,4 @@
-apiVersion: templates.gatekeeper.sh/v1alpha1
+apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: allowedusersconstraint
@@ -21,8 +21,8 @@ spec:
       rego: |
         package allowedusersconstraint
 
-        deny[{"msg": msg}] {
-          rule := input.constraint.spec.parameters.runAsUser.rule
+        violation[{"msg": msg}] {
+          rule := input.parameters.runAsUser.rule
           input_container := input.review.object.spec.containers[i]
           provided_user := input_container.securityContext.runAsUser
 
@@ -35,7 +35,7 @@ spec:
         accept_users("MustRunAsNonRoot", provided_user) = res {res := provided_user != 0}
 
         accept_users("MustRunAs", provided_user) = res  {
-          ranges := input.constraint.spec.parameters.runAsUser.ranges
+          ranges := input.parameters.runAsUser.ranges
           matching := {1 | provided_user >= ranges[j].min; provided_user <= ranges[j].max}
           res := count(matching) > 0
         }
