@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -31,9 +32,12 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -258,6 +262,13 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// this may be too expensive to do in large clusters
 	name := crd.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
+	if !containsString(finalizerName, instance.GetFinalizers()) {
+		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
+		if err := r.Update(context.Background(), instance); err != nil {
+			log.Error(err, "update error")
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
 	log.Info("loading constraint code into OPA")
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
@@ -337,12 +348,17 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
 			return reconcile.Result{}, err
 		}
-		instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+		RemoveFinalizer(instance)
+
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func RemoveFinalizer(instance *v1beta1.ConstraintTemplate) {
+	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
 }
 
 func makeGvk(kind string) schema.GroupVersionKind {
@@ -370,4 +386,87 @@ func removeString(s string, items []string) []string {
 		}
 	}
 	return rval
+}
+
+// RemoveAllFinalizers removes all finalizers from constraints and
+// constraint templates
+func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
+	defer close(finished)
+	toList := func(m map[types.NamespacedName]string) []string {
+		var out []string
+		for k := range m {
+			out = append(out, k.Name)
+		}
+		return out
+	}
+
+	templates := &v1beta1.ConstraintTemplateList{}
+	names := make(map[types.NamespacedName]string)
+	if err := c.List(context.Background(), nil, templates); err != nil {
+		log.Error(err, "could not clean all contraint/template finalizers")
+		return
+	}
+	for _, templ := range templates.Items {
+		names[types.NamespacedName{Name: templ.GetName()}] = templ.Spec.CRD.Spec.Names.Kind
+	}
+	log.Info("found constraint templates to scrub", "templates", toList(names))
+	cleanLoop := func() (bool, error) {
+		log.Info("removing finalizers from constraint templates", "templates", toList(names))
+		for nn, kind := range names {
+			listKind := kind + "List"
+			// TODO these should be constants somewhere
+			gvk := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: listKind}
+			objs := &unstructured.UnstructuredList{}
+			objs.SetGroupVersionKind(gvk)
+			if err := c.List(context.Background(), nil, objs); err != nil {
+				// If the kind is not recognized, there is nothing to clean
+				if !meta.IsNoMatchError(err) {
+					log.Error(err, "while listing constraints for cleanup", "kind", listKind)
+					continue
+				}
+			}
+			success := true
+			for _, obj := range objs.Items {
+				if !constraint.HasFinalizer(&obj) {
+					continue
+				}
+				log.Info("scrubing constraint finalizer", "name", obj.GetName())
+				constraint.RemoveFinalizer(&obj)
+				if err := c.Update(context.Background(), &obj); err != nil {
+					success = false
+					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
+				}
+			}
+			if success == true {
+				templ := &v1beta1.ConstraintTemplate{}
+				if err := c.Get(context.Background(), nn, templ); err != nil {
+					if errors.IsNotFound(err) {
+						delete(names, nn)
+						continue
+					} else {
+						log.Error(err, "while retrieving constraint template for cleanup", "template", nn)
+						continue
+					}
+				}
+				RemoveFinalizer(templ)
+				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
+					log.Error(err, "while writing a constraint template for cleanup", "template", nn)
+					continue
+				}
+				delete(names, nn)
+			}
+		}
+		if len(names) == 0 {
+			return true, nil
+		}
+		return false, nil
+	}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 500 * time.Millisecond,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, cleanLoop); err != nil {
+		log.Error(err, "max retries for cleanup", "remaining constraint kinds", names)
+	}
 }

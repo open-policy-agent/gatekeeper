@@ -5,7 +5,7 @@ REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
 
-VERSION := v3.0.4-beta.0
+VERSION := v3.0.4-beta.1
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -129,6 +129,10 @@ docker-build-ci:
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+release:
+	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
+	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
