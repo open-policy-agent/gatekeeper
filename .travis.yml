@@ -39,12 +39,8 @@ jobs:
       - make test-e2e
       - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
     - stage: deploy
-      provider: script
-      skip_cleanup: true
+      if: branch = master AND repo = open-policy-agent/gatekeeper AND type = push AND tag IS blank
       script: make travis-dev-deploy
-      if: (branch = master) AND (repo = open-policy-agent/gatekeeper) AND (tags = false)
     - stage: release
-      provider: script
-      skip_cleanup: true
+      if:  branch = master AND repo = open-policy-agent/gatekeeper AND type = push AND tag IS present  
       script: make travis-dev-release
-      if: (branch = master) AND (repo = open-policy-agent/gatekeeper) AND (tags = true)
