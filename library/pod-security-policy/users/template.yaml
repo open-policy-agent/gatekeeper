@@ -13,9 +13,8 @@ spec:
       validation:
         openAPIV3Schema:
           properties:
-            labels:
-              type: array
-              items: string
+            runAsUser:
+              type: integer
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
