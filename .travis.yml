@@ -9,8 +9,6 @@ services:
 
 jobs:
   include:
-    - stage: test
-      script: make
     - stage: e2e
       before_script:
       - KIND_VERSION=0.4.0
@@ -38,9 +36,21 @@ jobs:
       - make deploy
       - make test-e2e
       - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
-    - stage: deploy
-      if: branch = master AND repo = open-policy-agent/gatekeeper AND type = push AND tag IS blank
-      script: make travis-dev-deploy
-    - stage: release
-      if:  branch = master AND repo = open-policy-agent/gatekeeper AND type = push AND tag IS present  
-      script: make travis-dev-release
+    - stage: "build, test, deploy"
+      script: make
+      deploy:
+        - provider: script
+          skip_cleanup: true
+          script: make travis-dev-deploy
+          on:
+            repo: open-policy-agent/gatekeeper
+            branch: master
+            tags: false
+        - provider: script
+          skip_cleanup: true
+          script: make travis-dev-release
+          on:
+            repo: open-policy-agent/gatekeeper
+            branch: master
+            tags: true
+
