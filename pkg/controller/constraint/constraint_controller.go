@@ -37,7 +37,10 @@ import (
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 
-const project = "gatekeeper.sh"
+const (
+	finalizerName = "finalizers.gatekeeper.sh/constraint"
+	project       = "gatekeeper.sh"
+)
 
 type Adder struct {
 	Opa opa.Client
@@ -108,9 +111,8 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	finalizerName := "finalizers.gatekeeper.sh/constraint"
 	if instance.GetDeletionTimestamp().IsZero() {
-		if !containsString(finalizerName, instance.GetFinalizers()) {
+		if !HasFinalizer(instance) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
@@ -138,13 +140,13 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	} else {
 		// Handle deletion
-		if containsString(finalizerName, instance.GetFinalizers()) {
+		if HasFinalizer(instance) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
 				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
 					return reconcile.Result{}, err
 				}
 			}
-			instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+			RemoveFinalizer(instance)
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
 			}
@@ -152,6 +154,14 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func RemoveFinalizer(instance *unstructured.Unstructured) {
+	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
+}
+
+func HasFinalizer(instance *unstructured.Unstructured) bool {
+	return containsString(finalizerName, instance.GetFinalizers())
 }
 
 func containsString(s string, items []string) bool {

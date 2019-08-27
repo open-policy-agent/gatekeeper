@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -248,5 +249,45 @@ anyrule[}}}//invalid//rego
 			}
 		}
 		return errors.New("InvalidRego not found")
+	}, timeout).Should(gomega.BeNil())
+	g.Expect(c.Delete(context.TODO(), instanceInvalidRego)).NotTo(gomega.HaveOccurred())
+
+	// Test finalizer removal
+	orig := &v1beta1.ConstraintTemplate{}
+	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(containsString(finalizerName, orig.GetFinalizers())).Should(gomega.BeTrue())
+
+	origCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
+
+	cancel()
+	time.Sleep(5 * time.Second)
+	finished := make(chan struct{})
+	newCli, err := client.New(mgr.GetConfig(), client.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	RemoveAllFinalizers(newCli, finished)
+	<-finished
+
+	g.Eventually(func() error {
+		obj := &v1beta1.ConstraintTemplate{}
+		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
+			return err
+		}
+		if containsString(finalizerName, obj.GetFinalizers()) {
+			return errors.New("denyall constraint template still has finalizer")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+
+	g.Eventually(func() error {
+		cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+		if err != nil {
+			return err
+		}
+		if constraint.HasFinalizer(cleanCstr) {
+			return errors.New("denyall constraint still has finalizer")
+		}
+		return nil
 	}, timeout).Should(gomega.BeNil())
 }

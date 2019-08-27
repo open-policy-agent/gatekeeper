@@ -1,4 +1,4 @@
-apiVersion: constraints.gatekeeper.sh/v1alpha1
+apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sPSPProcMount
 metadata:
   name: psp-proc-mount

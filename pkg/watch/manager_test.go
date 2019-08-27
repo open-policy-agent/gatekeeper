@@ -133,7 +133,7 @@ func waitForWatchManagerStart(wm *WatchManager) bool {
 
 func TestRegistrar(t *testing.T) {
 	wm := newForTest(newDiscoveryFactory(false, "FooCRD"))
-	defer wm.Close()
+	defer wm.close()
 	reg, err := wm.NewRegistrar("foo", nil)
 	if err != nil {
 		t.Fatalf("Error setting up registrar: %s", err)

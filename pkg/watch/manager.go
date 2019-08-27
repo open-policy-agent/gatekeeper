@@ -160,13 +160,13 @@ func (wm *WatchManager) updateManager() (bool, error) {
 
 // updateManagerLoop looks for changes to the watch roster every 5 seconds. This method has a dual
 // benefit compared to restarting the manager every time a controller changes the watch
-// of placing an upper bound on how often the manager restarts and allowing the manager to
-// catch changes to the CRD version, will break the watch if it is not updated.
+// of placing an upper bound on how often the manager restarts.
 func (wm *WatchManager) updateManagerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			wm.Close()
+			log.Info("watch manager shutting down")
+			wm.close()
 			return
 		default:
 			time.Sleep(5 * time.Second)
@@ -255,8 +255,8 @@ func (wm *WatchManager) startMgr(mgr manager.Manager, stopper chan struct{}, sto
 		log.Error(err, "error starting watch manager")
 	}
 	// mgr.Start() only returns after the manager has completely stopped
-	close(stopped)
 	wm.started = false
+	close(stopped)
 	log.Info("sub-manager exiting", "kinds", kinds)
 }
 
@@ -326,8 +326,11 @@ func (wm *WatchManager) filterPendingResources(kinds map[schema.GroupVersionKind
 	return liveResources, nil
 }
 
-func (wm *WatchManager) Close() {
+func (wm *WatchManager) close() {
 	close(wm.stopper)
+	log.Info("waiting for watch manager to shut down")
+	<-wm.stopped
+	log.Info("watch manager finished shutting down")
 }
 
 func (wm *WatchManager) GetManaged() map[string]map[schema.GroupVersionKind]watchVitals {
