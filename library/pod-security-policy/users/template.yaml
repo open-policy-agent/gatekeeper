@@ -1,15 +1,15 @@
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
-  name: allowedusersconstraint
+  name: k8spspallowedusers
 spec:
   crd:
     spec:
       names:
-        kind: AllowedUsersConstraint
-        listKind: AllowedUsersConstraintList
-        plural: allowedusersconstraint
-        singular: alloweduserconstraint
+        kind: K8sPSPAllowedUsers
+        listKind: K8sPSPAllowedUsersList
+        plural: k8spspallowedusers
+        singular: k8spspallowedusers
       validation:
         openAPIV3Schema:
           properties:
@@ -18,7 +18,7 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package allowedusersconstraint
+        package k8spspallowedusers
 
         violation[{"msg": msg}] {
           rule := input.parameters.runAsUser.rule

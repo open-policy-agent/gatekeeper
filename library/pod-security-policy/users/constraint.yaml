@@ -1,7 +1,7 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: AllowedUsersConstraint
+kind: K8sPSPAllowedUsers
 metadata:
-  name: default-ns-pods-allowed-user-ranges
+  name: psp-pods-allowed-user-ranges
 spec:
   match:
     kinds:
