@@ -18,9 +18,5 @@ input_sysctls(sysctls) {
 }
 
 input_sysctls(sysctls) {
-    prefix_matches(input.parameters.forbiddenSysctls[_], sysctls[_])
-}
-
-prefix_matches(prefix, sysctl) {
-    contains(sysctl, trim(prefix, "*"))
+    startswith(sysctls[_], trim(input.parameters.forbiddenSysctls[_], "*"))
 }
