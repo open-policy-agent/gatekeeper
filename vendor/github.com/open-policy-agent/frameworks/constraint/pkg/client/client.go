@@ -246,6 +246,9 @@ func (c *client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 		}
 		target = t
 		src = v.Rego
+		if src == "" {
+			return nil, fmt.Errorf("Target %s has an empty Rego source string", k)
+		}
 	}
 
 	schema, err := c.backend.crd.createSchema(templ, target)
