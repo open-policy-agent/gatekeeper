@@ -6,18 +6,18 @@ spec:
   selector:
     matchLabels:
       app: redis
-      role: slave
+      role: replica
       tier: backend
   replicas: 2
   template:
     metadata:
       labels:
         app: redis
-        role: slave
+        role: replica
         tier: backend
     spec:
       containers:
-        - name: slave
+        - name: replica
           args: ["--port=8080"]
           image: k8s.gcr.io/test-webserver
           resources:
@@ -28,7 +28,7 @@ spec:
             - containerPort: 6379
           securityContext:
             runAsUser: 177 # constraint range is 100-200
-        - name: slave2
+        - name: replica2
           args: ["--port=8081"]
           image: k8s.gcr.io/test-webserver
           resources:
