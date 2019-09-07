@@ -2,7 +2,7 @@ package k8spspallowedusers
 
 violation[{"msg": msg}] {
   rule := input.parameters.runAsUser.rule
-  input_container := input_containers[_]
+  input_containers[input_container]
   provided_user := input_container.securityContext.runAsUser
   not accept_users(rule, provided_user)
   msg := sprintf("Container %v is attempting to run as user %v", [input_container.name, provided_user])
