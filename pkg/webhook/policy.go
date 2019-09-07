@@ -58,7 +58,7 @@ var supportedEnforcementActions = []string{
 // below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 // +kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 	validatingWh, err := builder.NewWebhookBuilder().
 		Validating().
 		Name(*webhookName).
@@ -119,7 +119,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa opa.Client) error {
 var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
-	opa    opa.Client
+	opa    *opa.Client
 	client client.Client
 
 	// for testing

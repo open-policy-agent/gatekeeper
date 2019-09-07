@@ -8,7 +8,7 @@ import (
 )
 
 type Probe struct {
-	client Client
+	client *Client
 }
 
 func NewProbe(d drivers.Driver) (*Probe, error) {
