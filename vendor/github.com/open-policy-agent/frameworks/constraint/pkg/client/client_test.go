@@ -310,6 +310,8 @@ some_rule[r] {
  r = 5
 }
 `
+	emptyRegoTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
+	emptyRegoTempl.Spec.Targets[0].Rego = ""
 
 	tc := []struct {
 		Name          string
@@ -345,6 +347,12 @@ some_rule[r] {
 			Name:          "Bad Rego",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
 			Template:      badRegoTempl,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "No Rego",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      emptyRegoTempl,
 			ErrorExpected: true,
 		},
 		{
