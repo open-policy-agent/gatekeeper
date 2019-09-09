@@ -9,8 +9,8 @@ spec:
   - name: nginx
     image: nginx
     securityContext:
-        seLinuxOptions:
-            level: s1:c234,c567
-            user: sysadm_u
-            role: sysadm_r
-            type: svirt_lxc_net_t
+      seLinuxOptions:
+        level: s1:c234,c567
+        user: sysadm_u
+        role: sysadm_r
+        type: svirt_lxc_net_t
