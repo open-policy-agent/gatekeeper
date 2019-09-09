@@ -30,6 +30,12 @@ test_input_sysctls_allowed_not_in_list_wildcard {
     count(results) == 0
 }
 
+test_input_sysctls_empty_allowed {
+    input := { "review": input_review, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 0
+}
+
 input_review = {
     "object": {
         "metadata": {
@@ -86,4 +92,8 @@ input_parameters_not_in_list_wildcard = {
     "forbiddenSysctls": [
         "kernel.msg*"
     ]
+}
+
+input_parameters_empty = {
+    "forbiddenSysctls": []
 }
