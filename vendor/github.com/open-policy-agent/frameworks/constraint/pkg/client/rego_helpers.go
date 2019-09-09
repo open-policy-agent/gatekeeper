@@ -41,6 +41,9 @@ func (rc *regoConformer) ensureRegoConformance(kind, path, rego string) (string,
 	if err != nil {
 		return "", err
 	}
+	if module == nil {
+		return "", errors.New("Module could not be parsed")
+	}
 	if len(module.Imports) != 0 {
 		return "", errors.New("Use of the `import` keyword is not allowed")
 	}
@@ -64,6 +67,9 @@ func rewritePackage(path, rego string) (string, error) {
 	module, err := ast.ParseModule(path, rego)
 	if err != nil {
 		return "", err
+	}
+	if module == nil {
+		return "", errors.New("Module could not be parsed")
 	}
 	module.Package.Path, err = packageRef(path)
 	if err != nil {
@@ -143,9 +149,15 @@ type ruleArities map[string]int
 
 // requireRules makes sure the listed rules are specified with the required arity
 func requireRules(name, rego string, reqs ruleArities) error {
+	if rego == "" {
+		return errors.New("Rego source code is empty")
+	}
 	module, err := ast.ParseModule(name, rego)
 	if err != nil {
 		return err
+	}
+	if module == nil {
+		return errors.New("Module could not be parsed")
 	}
 
 	arities := make(ruleArities, len(module.Rules))
