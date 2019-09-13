@@ -157,7 +157,7 @@ spec:
 `
 )
 
-func makeOpaClient() (client.Client, error) {
+func makeOpaClient() (*client.Client, error) {
 	target := &target.K8sValidationTarget{}
 	driver := local.New(local.Tracing(false))
 	backend, err := client.NewBackend(client.Driver(driver))
