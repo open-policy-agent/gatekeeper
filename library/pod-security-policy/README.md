@@ -24,6 +24,6 @@ An adminstrator can control the following by setting the field in PSP or by depl
 | The Allowed Proc Mount types for the container    | `allowedProcMountTypes`                                                     | [proc-mount](proc-mount)                                 |
 | The AppArmor profile used by containers           | annotations                                                                 |
 | The seccomp profile used by containers            | annotations                                                                 |
-| The sysctl profile used by containers             | `forbiddenSysctls`,`allowedUnsafeSysctls`                                   |                                                          |
+| The sysctl profile used by containers             | `forbiddenSysctls`,`allowedUnsafeSysctls`                                   | [forbidden-sysctls](forbidden-sysctls)                   |
 
 <sup>\*</sup> For PSP rules that apply default value or mutations, Gatekeeper v3 currently cannot apply mutation.
