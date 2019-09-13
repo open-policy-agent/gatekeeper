@@ -21,31 +21,6 @@ import (
 
 const constraintGroup = "constraints.gatekeeper.sh"
 
-type Client interface {
-	AddData(context.Context, interface{}) (*types.Responses, error)
-	RemoveData(context.Context, interface{}) (*types.Responses, error)
-
-	CreateCRD(context.Context, *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error)
-	AddTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
-	RemoveTemplate(context.Context, *templates.ConstraintTemplate) (*types.Responses, error)
-
-	AddConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)
-	RemoveConstraint(context.Context, *unstructured.Unstructured) (*types.Responses, error)
-	ValidateConstraint(context.Context, *unstructured.Unstructured) error
-
-	// Reset the state of OPA
-	Reset(context.Context) error
-
-	// Review makes sure the provided object satisfies all stored constraints
-	Review(context.Context, interface{}, ...QueryOpt) (*types.Responses, error)
-
-	// Audit makes sure the cached state of the system satisfies all stored constraints
-	Audit(context.Context, ...QueryOpt) (*types.Responses, error)
-
-	// Dump dumps the state of OPA to aid in debugging
-	Dump(context.Context) (string, error)
-}
-
 type UnrecognizedConstraintError struct {
 	s string
 }
@@ -68,14 +43,14 @@ func (e ErrorMap) Error() string {
 	return b.String()
 }
 
-type ClientOpt func(*client) error
+type ClientOpt func(*Client) error
 
 // Client options
 
 var targetNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9.]*$`)
 
 func Targets(ts ...TargetHandler) ClientOpt {
-	return func(c *client) error {
+	return func(c *Client) error {
 		var errs Errors
 		handlers := make(map[string]TargetHandler, len(ts))
 		for _, t := range ts {
@@ -99,7 +74,7 @@ func Targets(ts ...TargetHandler) ClientOpt {
 // can access. If unset, all fields can be accessed. Only fields recognized by
 // the system can be enabled.
 func AllowedDataFields(fields ...string) ClientOpt {
-	return func(c *client) error {
+	return func(c *Client) error {
 		c.allowedDataFields = fields
 		return nil
 	}
@@ -144,14 +119,12 @@ type TargetHandler interface {
 	ValidateConstraint(*unstructured.Unstructured) error
 }
 
-var _ Client = &client{}
-
 type constraintEntry struct {
 	CRD     *apiextensions.CustomResourceDefinition
 	Targets []string
 }
 
-type client struct {
+type Client struct {
 	backend           *Backend
 	targets           map[string]TargetHandler
 	constraintsMux    sync.RWMutex
@@ -170,7 +143,7 @@ func createDataPath(target, subpath string) string {
 }
 
 // AddData inserts the provided data into OPA for every target that can handle the data.
-func (c *client) AddData(ctx context.Context, data interface{}) (*types.Responses, error) {
+func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Responses, error) {
 	resp := types.NewResponses()
 	errMap := make(ErrorMap)
 	for target, h := range c.targets {
@@ -195,7 +168,7 @@ func (c *client) AddData(ctx context.Context, data interface{}) (*types.Response
 }
 
 // RemoveData removes data from OPA for every target that can handle the data.
-func (c *client) RemoveData(ctx context.Context, data interface{}) (*types.Responses, error) {
+func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Responses, error) {
 	resp := types.NewResponses()
 	errMap := make(ErrorMap)
 	for target, h := range c.targets {
@@ -225,7 +198,7 @@ func createTemplatePath(target, name string) string {
 }
 
 // CreateCRD creates a CRD from template
-func (c *client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
 	if err := validateTargets(templ); err != nil {
 		return nil, err
 	}
@@ -283,7 +256,7 @@ func (c *client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
 // schema validation on calls to AddConstraint. It also returns a copy of the CRD describing
 // the constraint.
-func (c *client) AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
+func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 	crd, err := c.CreateCRD(ctx, templ)
 	if err != nil {
@@ -322,7 +295,7 @@ func (c *client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 
 // RemoveTemplate removes the template source code from OPA and removes the CRD from the validation
 // registry.
-func (c *client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
+func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 	if err := validateTargets(templ); err != nil {
 		return resp, err
@@ -379,7 +352,7 @@ func createConstraintPath(target string, constraint *unstructured.Unstructured) 
 }
 
 // getConstraintEntry returns the constraint entry for a given constraint
-func (c *client) getConstraintEntry(constraint *unstructured.Unstructured, lock bool) (*constraintEntry, error) {
+func (c *Client) getConstraintEntry(constraint *unstructured.Unstructured, lock bool) (*constraintEntry, error) {
 	kind := constraint.GetKind()
 	if kind == "" {
 		return nil, fmt.Errorf("Constraint %s has no kind", constraint.GetName())
@@ -396,7 +369,7 @@ func (c *client) getConstraintEntry(constraint *unstructured.Unstructured, lock 
 }
 
 // AddConstraint validates the constraint and, if valid, inserts it into OPA
-func (c *client) AddConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
+func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
 	c.constraintsMux.RLock()
 	defer c.constraintsMux.RUnlock()
 	resp := types.NewResponses()
@@ -429,7 +402,7 @@ func (c *client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 }
 
 // RemoveConstraint removes a constraint from OPA
-func (c *client) RemoveConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
+func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
 	c.constraintsMux.RLock()
 	defer c.constraintsMux.RUnlock()
 	resp := types.NewResponses()
@@ -459,7 +432,7 @@ func (c *client) RemoveConstraint(ctx context.Context, constraint *unstructured.
 
 // validateConstraint is an internal function that allows us to toggle whether we use a read lock
 // when validating a constraint
-func (c *client) validateConstraint(constraint *unstructured.Unstructured, lock bool) error {
+func (c *Client) validateConstraint(constraint *unstructured.Unstructured, lock bool) error {
 	entry, err := c.getConstraintEntry(constraint, lock)
 	if err != nil {
 		return err
@@ -478,12 +451,12 @@ func (c *client) validateConstraint(constraint *unstructured.Unstructured, lock 
 
 // ValidateConstraint returns an error if the constraint is not recognized or does not conform to
 // the registered CRD for that constraint.
-func (c *client) ValidateConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
+func (c *Client) ValidateConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
 	return c.validateConstraint(constraint, true)
 }
 
 // init initializes the OPA backend for the client
-func (c *client) init() error {
+func (c *Client) init() error {
 	for _, t := range c.targets {
 		hooks := fmt.Sprintf(`hooks["%s"]`, t.GetName())
 		templMap := map[string]string{"Target": t.GetName()}
@@ -532,7 +505,8 @@ func (c *client) init() error {
 	return nil
 }
 
-func (c *client) Reset(ctx context.Context) error {
+// Reset the state of OPA
+func (c *Client) Reset(ctx context.Context) error {
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
 	for name := range c.targets {
@@ -566,7 +540,8 @@ func Tracing(enabled bool) QueryOpt {
 	}
 }
 
-func (c *client) Review(ctx context.Context, obj interface{}, opts ...QueryOpt) (*types.Responses, error) {
+// Review makes sure the provided object satisfies all stored constraints
+func (c *Client) Review(ctx context.Context, obj interface{}, opts ...QueryOpt) (*types.Responses, error) {
 	cfg := &queryCfg{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -605,7 +580,8 @@ TargetLoop:
 	return responses, errMap
 }
 
-func (c *client) Audit(ctx context.Context, opts ...QueryOpt) (*types.Responses, error) {
+// Audit makes sure the cached state of the system satisfies all stored constraints
+func (c *Client) Audit(ctx context.Context, opts ...QueryOpt) (*types.Responses, error) {
 	cfg := &queryCfg{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -635,6 +611,7 @@ TargetLoop:
 	return responses, errMap
 }
 
-func (c *client) Dump(ctx context.Context) (string, error) {
+// Dump dumps the state of OPA to aid in debugging
+func (c *Client) Dump(ctx context.Context) (string, error) {
 	return c.backend.driver.Dump(ctx)
 }
