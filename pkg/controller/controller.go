@@ -22,7 +22,7 @@ import (
 )
 
 type Injector interface {
-	InjectOpa(opa.Client)
+	InjectOpa(*opa.Client)
 	InjectWatchManager(*watch.WatchManager)
 	Add(mgr manager.Manager) error
 }
@@ -35,7 +35,7 @@ var Injectors []Injector
 var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, client opa.Client, wm *watch.WatchManager) error {
+func AddToManager(m manager.Manager, client *opa.Client, wm *watch.WatchManager) error {
 	for _, a := range Injectors {
 		a.InjectOpa(client)
 		a.InjectWatchManager(wm)
