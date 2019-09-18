@@ -9,22 +9,8 @@ services:
 
 jobs:
   include:
-    - stage: "build, unit test"
+    - stage: "build, unit test, dev deploy"
       script: make
-    - stage: "e2e"
-      before_script:
-      - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
-      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
-      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-      script:
-      - make deploy 
-      - make test-e2e
-      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
-    - stage: "dev deploy"
-      if: repo = open-policy-agent/gatekeeper AND type != pull_request
-      script: 
-      - make manager
       deploy:
         - provider: script
           skip_cleanup: true
@@ -33,13 +19,19 @@ jobs:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
-    - stage: "release deploy, verify release"
+    - stage: "e2e"
+      script:
+      - make e2e-bootstrap
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
+      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+      - make deploy 
+      - make test-e2e
+      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
+    - stage: "release deploy"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
       script: 
       - make manager
-      before_deploy:
-        - make e2e-bootstrap
-        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
       deploy:
         - provider: script
           skip_cleanup: true
@@ -48,6 +40,14 @@ jobs:
             repo: open-policy-agent/gatekeeper
             branch: master # only push release image tag for tags on master
             tags: true
+    - stage: "verify release"
+      if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
+      script: 
+      - make manager
+      before_deploy:
+        - make e2e-bootstrap
+        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+      deploy:
         - provider: script
           skip_cleanup: true
           script: make e2e-verify-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} USE_LOCAL_IMG=false
