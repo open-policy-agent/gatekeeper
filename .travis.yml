@@ -38,6 +38,11 @@ jobs:
             repo: open-policy-agent/gatekeeper
             branch: master # only push release image tag for tags on master
             tags: true
+      branches:
+        only:
+          # Pushes and PR to the master branch
+          - master
+
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
       script:
