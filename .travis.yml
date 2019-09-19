@@ -9,7 +9,7 @@ services:
 
 jobs:
   include:
-    - stage: "build, unit test, e2e, dev deploy, release deploy"
+    - stage: "build, unit test, e2e, dev deploy"
       script: 
       - make
       # - make e2e-bootstrap
@@ -27,6 +27,10 @@ jobs:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
+    - stage: "release deploy"
+      script: 
+      - make manager
+      deploy:
         - provider: script
           skip_cleanup: true
           script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
