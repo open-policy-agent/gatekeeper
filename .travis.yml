@@ -12,13 +12,13 @@ jobs:
     - stage: "build, unit test, e2e, dev deploy, release deploy"
       script: 
       - make
-      - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
-      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
-      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-      - make deploy 
-      - make test-e2e
-      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
+      # - make e2e-bootstrap
+      # - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
+      # - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+      # - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+      # - make deploy 
+      # - make test-e2e
+      # - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
       deploy:
         - provider: script
           skip_cleanup: true
@@ -36,9 +36,9 @@ jobs:
             tags: true
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
-      before_deploy:
-        - make e2e-bootstrap
-        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+      script:
+      - make e2e-bootstrap
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
       deploy:
         - provider: script
           skip_cleanup: true
