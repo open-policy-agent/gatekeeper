@@ -9,8 +9,16 @@ services:
 
 jobs:
   include:
-    - stage: "build, unit test, dev deploy"
-      script: make
+    - stage: "build, unit test, e2e, dev deploy, release deploy"
+      script: 
+      - make
+      - make e2e-bootstrap
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
+      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+      - make deploy 
+      - make test-e2e
+      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
       deploy:
         - provider: script
           skip_cleanup: true
@@ -19,20 +27,6 @@ jobs:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
-    - stage: "e2e"
-      script:
-      - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
-      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
-      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-      - make deploy 
-      - make test-e2e
-      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
-    - stage: "release deploy"
-      if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
-      script: 
-      - make manager
-      deploy:
         - provider: script
           skip_cleanup: true
           script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
@@ -42,8 +36,6 @@ jobs:
             tags: true
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
-      script: 
-      - make manager
       before_deploy:
         - make e2e-bootstrap
         - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
@@ -53,5 +45,5 @@ jobs:
           script: make e2e-verify-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} USE_LOCAL_IMG=false
           on:
             repo: open-policy-agent/gatekeeper
-            branch: master # only run verify e2e on the released image tag for tags on master
+            branch: e2e # only run verify e2e on the released image tag for tags on master
             tags: true
