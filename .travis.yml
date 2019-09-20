@@ -9,48 +9,39 @@ services:
 
 jobs:
   include:
-    - stage: e2e
-      before_script:
-      - KIND_VERSION=0.4.0
-      - KUSTOMIZE_VERSION=3.0.2
-      # Download and install kind
-      - curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
-      # Create kind cluster
-      - |
-        if [ $(kind get clusters) ]; then
-          export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-        else
-          kind create cluster
-        fi
-      # Get kubeconfig
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-      # Build image and tag as gatekeeper-e2e:latest
-      - make docker-build REPOSITORY=gatekeeper-e2e
-      # Load Gatekeeper image into kind cluster
-      - kind load docker-image --name kind gatekeeper-e2e:latest
-      # Download and install kubectl
-      - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
-      # Download and install kustomize
-      - curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 --output kustomize && chmod +x kustomize && sudo mv kustomize /usr/local/bin/
-      script:
-      - make deploy
+    - stage: "build, unit test, e2e, dev deploy on master, release deploy"
+      script: 
+      - make
+      - make e2e-bootstrap
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
+      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+      - make deploy 
       - make test-e2e
       - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
-    - stage: "build, test, deploy"
-      script: make
       deploy:
         - provider: script
           skip_cleanup: true
           script: make travis-dev-deploy
           on:
             repo: open-policy-agent/gatekeeper
-            branch: master
+            branch: master # only push dev image tag for master commits
             tags: false
         - provider: script
           skip_cleanup: true
-          script: make travis-dev-release
+          script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
           on:
             repo: open-policy-agent/gatekeeper
-            branch: master
-            tags: true
-
+            tags: true # only push release image tag for tags
+    - stage: "verify release"
+      if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
+      script:
+      - make e2e-bootstrap
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+      deploy:
+        - provider: script
+          skip_cleanup: true
+          script: make e2e-verify-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} USE_LOCAL_IMG=false
+          on:
+            repo: open-policy-agent/gatekeeper
+            tags: true # only run verify e2e on the released image tag for tags
