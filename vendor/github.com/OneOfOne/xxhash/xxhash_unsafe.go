@@ -4,6 +4,7 @@
 // +build !mipsle
 // +build !ppc64be
 // +build !mips
+// +build !s390x
 
 package xxhash
 
