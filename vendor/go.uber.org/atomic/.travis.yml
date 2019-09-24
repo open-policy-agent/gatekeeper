@@ -3,9 +3,13 @@ language: go
 go_import_path: go.uber.org/atomic
 
 go:
-  - 1.5
-  - 1.6
-  - tip
+  - 1.11.x
+  - 1.12.x
+
+matrix:
+  include:
+  - go: 1.12.x
+    env: NO_TEST=yes LINT=yes
 
 cache:
   directories:
@@ -15,7 +19,9 @@ install:
   - make install_ci
 
 script:
-  - make test_ci
-  - scripts/test-ubergo.sh
-  - make lint
-  - travis_retry goveralls -coverprofile=cover.out -service=travis-ci
+  - test -n "$NO_TEST" || make test_ci
+  - test -n "$NO_TEST" || scripts/test-ubergo.sh
+  - test -z "$LINT" || make install_lint lint
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
