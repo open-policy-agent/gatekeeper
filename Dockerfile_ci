@@ -1,4 +1,12 @@
 FROM ubuntu:latest
-WORKDIR /root/
+
+RUN apt update && apt upgrade -y \
+    && useradd -rm -u 1000 -U manager
+
+WORKDIR /home/manager/
 COPY bin/manager .
+RUN chown manager:manager manager
+
+USER 1000
+
 ENTRYPOINT ["./manager"]
