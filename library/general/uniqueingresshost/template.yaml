@@ -18,7 +18,13 @@ spec:
         violation[{"msg": msg}] {
           input.review.kind.kind == "Ingress"              
           host := input.review.object.spec.rules[_].host
-          ingresses := data.inventory.namespace[_][_]["Ingress"]
-          ingresses[_].spec.rules[_].host == host
+          other := data.inventory.namespace[ns][_]["Ingress"][name]
+          other.spec.rules[_].host == host
+          not identical(other, input.review)
           msg := sprintf("ingress host conflicts with an existing ingress <%v>", [host])
+        }
+
+        identical(obj, review) {
+          obj.metadata.namespace == review.object.metadata.namespace
+          obj.metadata.name == review.object.metadata.name
         }
