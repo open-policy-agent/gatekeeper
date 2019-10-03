@@ -1,5 +1,7 @@
 package target
 
+const templSrc = `package target
+
 ##################
 # Required Hooks #
 ##################
@@ -9,7 +11,7 @@ autoreject_review[rejection] {
   spec := get_default(constraint, "spec", {})
   match := get_default(spec, "match", {})
   has_field(match, "namespaceSelector")
-  not data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+  not {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
   rejection := {
     "msg": "Namespace is not cached in OPA.",
     "details": {},
@@ -37,7 +39,7 @@ matching_constraints[constraint] {
 
 # Namespace-scoped objects
 matching_reviews_and_constraints[[review, constraint]] {
-  obj = data["{{.DataRoot}}"].namespace[namespace][api_version][kind][name]
+  obj = {{.DataRoot}}.namespace[namespace][api_version][kind][name]
   r := make_review(obj, api_version, kind, name)
   review := add_field(r, "namespace", namespace)
   matching_constraints[constraint] with input as {"review": review}
@@ -45,7 +47,7 @@ matching_reviews_and_constraints[[review, constraint]] {
 
 # Cluster-scoped objects
 matching_reviews_and_constraints[[review, constraint]] {
-  obj = data["{{.DataRoot}}"].cluster[api_version][kind][name]
+  obj = {{.DataRoot}}.cluster[api_version][kind][name]
   review = make_review(obj, api_version, kind, name)
   matching_constraints[constraint] with input as {"review": review}
 }
@@ -213,7 +215,7 @@ matches_nsselector(match) {
 
 matches_nsselector(match) {
   has_field(match, "namespaceSelector")
-  ns := data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+  ns := {{.DataRoot}}.cluster["v1"]["Namespace"][input.review.namespace]
   matches_namespace_selector(match, ns)
 }
 
@@ -223,3 +225,4 @@ matches_namespace_selector(match, ns) {
   namespace_selector := get_default(match, "namespaceSelector", {})
   matches_label_selector(namespace_selector, nslabels)
 }
+`

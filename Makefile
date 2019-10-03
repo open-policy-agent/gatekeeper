@@ -146,6 +146,13 @@ ifeq ($(USE_LOCAL_IMG),true)
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
 
+# Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
+target-template-source:
+	@rm pkg/target/target_template_source.go
+	@printf "package target\n\nconst templSrc = \`" >> pkg/target/target_template_source.go
+	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
+	@printf "\`" >> pkg/target/target_template_source.go
+
 docker-build-ci:
 	docker build --pull . -t $(IMG) -f Dockerfile_ci
 
