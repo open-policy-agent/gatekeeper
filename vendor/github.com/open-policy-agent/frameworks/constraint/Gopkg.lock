@@ -455,10 +455,11 @@
   version = "v1.5.0"
 
 [[projects]]
-  digest = "1:304dfaef5e7d868ab8322efdd0b5ce8413e963877fccbdb8b54269e6526df3be"
+  digest = "1:a5215d382645b5fdf7f847a47b89ef9d27e47ef38d5294cf251f6ef925c8b52a"
   name = "github.com/open-policy-agent/opa"
   packages = [
     "ast",
+    "format",
     "internal/compiler/wasm",
     "internal/compiler/wasm/opa",
     "internal/ir",
@@ -1122,14 +1123,18 @@
   analyzer-version = 1
   input-imports = [
     "github.com/davecgh/go-spew/spew",
+    "github.com/golang/glog",
     "github.com/google/go-cmp/cmp",
     "github.com/onsi/gomega",
     "github.com/open-policy-agent/opa/ast",
+    "github.com/open-policy-agent/opa/format",
     "github.com/open-policy-agent/opa/rego",
     "github.com/open-policy-agent/opa/storage",
     "github.com/open-policy-agent/opa/storage/inmem",
     "github.com/open-policy-agent/opa/topdown",
     "github.com/pkg/errors",
+    "github.com/spf13/cobra",
+    "github.com/spf13/pflag",
     "golang.org/x/net/context",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions",
     "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1",

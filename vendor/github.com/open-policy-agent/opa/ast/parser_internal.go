@@ -100,7 +100,11 @@ func makeImport(loc *Location, path, alias interface{}) (interface{}, error) {
 	return imp, nil
 }
 
-func makeDefaultRule(loc *Location, name, value interface{}) (interface{}, error) {
+func makeDefaultRule(loc *Location, name, operator, value interface{}) (interface{}, error) {
+
+	if string(operator.([]uint8)) == Assign.Infix {
+		return nil, fmt.Errorf("default rules must use = operator (not := operator)")
+	}
 
 	term := value.(*Term)
 	var err error
@@ -166,6 +170,10 @@ func makeRule(loc *Location, head, rest interface{}) (interface{}, error) {
 		next := elem.([]interface{})
 		re := next[1].(ruleExt)
 
+		if rules[0].Head.Assign {
+			return nil, errElseAssignOperator
+		}
+
 		if re.term == nil {
 			if ordered {
 				return nil, fmt.Errorf("expected 'else' keyword")
@@ -222,6 +230,17 @@ func makeRuleHead(loc *Location, name, args, key, value interface{}) (interface{
 
 	if value != nil {
 		valueSlice := value.([]interface{})
+		operator := string(valueSlice[1].([]uint8))
+
+		if operator == Assign.Infix {
+			if head.Key != nil {
+				return nil, errPartialRuleAssignOperator
+			} else if len(head.Args) > 0 {
+				return nil, errFunctionAssignOperator
+			}
+			head.Assign = true
+		}
+
 		// Head definition above describes the "value" slice. We care about the "Term" element.
 		head.Value = valueSlice[len(valueSlice)-1].(*Term)
 	}
@@ -297,6 +316,28 @@ func makeLiteralExpr(loc *Location, lhs, rest interface{}) (interface{}, error) 
 	expr := NewExpr(terms).SetLocation(loc)
 
 	return expr, nil
+}
+
+func makeSomeDeclLiteral(loc *Location, sl interface{}) (interface{}, error) {
+	symbols := sl.([]*Term)
+	return NewExpr(&SomeDecl{Location: loc, Symbols: symbols}).SetLocation(loc), nil
+}
+
+func makeSomeDeclSymbols(head interface{}, rest interface{}) (interface{}, error) {
+
+	var symbols []*Term
+
+	symbols = append(symbols, head.(*Term))
+
+	if sl1, ok := rest.([]interface{}); ok {
+		for i := range sl1 {
+			if sl2, ok := sl1[i].([]interface{}); ok {
+				symbols = append(symbols, sl2[3].(*Term))
+			}
+		}
+	}
+
+	return symbols, nil
 }
 
 func makeWithKeywordList(head, tail interface{}) (interface{}, error) {

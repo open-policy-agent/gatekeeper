@@ -64,6 +64,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * cd to the repository directory
    * run `make docker-build REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
    * run `make docker-push-release REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
+   * run `make patch-image REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
 

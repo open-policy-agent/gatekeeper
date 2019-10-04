@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -23,6 +24,8 @@ import (
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/topdown/builtins"
+	"github.com/open-policy-agent/opa/topdown/internal/jwx/jwk"
+	"github.com/open-policy-agent/opa/topdown/internal/jwx/jws"
 )
 
 var (
@@ -166,35 +169,47 @@ func builtinJWTVerifyES256(a ast.Value, b ast.Value) (ast.Value, error) {
 	})
 }
 
-// getKeyFromCert returns the public key found in a X.509 certificate.
-func getKeyFromCert(certificate string) (key interface{}, err error) {
-	block, rest := pem.Decode([]byte(certificate))
-	if block == nil || block.Type != "CERTIFICATE" || len(rest) > 0 {
-		return nil, fmt.Errorf("failed to decode PEM block containing certificate")
+// getKeyFromCertOrJWK returns the public key found in a X.509 certificate or JWK key.
+// A valid PEM block is never valid JSON (and vice versa), hence can try parsing both.
+func getKeyFromCertOrJWK(certificate string) (key interface{}, err error) {
+	if block, rest := pem.Decode([]byte(certificate)); block != nil {
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("failed to find a PEM certificate block")
+		}
+
+		if len(rest) > 0 {
+			return nil, fmt.Errorf("extra data after a PEM certificate block")
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse a PEM certificate")
+		}
+
+		return cert.PublicKey, nil
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	keys, err := jwk.ParseString(certificate)
 	if err != nil {
-		return nil, errors.Wrap(err, "PEM parse error")
+		return nil, errors.Wrap(err, "failed to parse a JWK key (set)")
 	}
-	key = cert.PublicKey
-	return
+
+	return keys.Keys[0].Materialize()
 }
 
 // Implements JWT signature verification.
 func builtinJWTVerify(a ast.Value, b ast.Value, verify func(publicKey interface{}, digest []byte, signature []byte) error) (ast.Value, error) {
-	// Decode the JSON Web Token
 	token, err := decodeJWT(a)
 	if err != nil {
 		return nil, err
 	}
 
-	// Process PEM encoded certificate input
-	astCertificate, err := builtins.StringOperand(b, 2)
+	s, err := builtins.StringOperand(b, 2)
 	if err != nil {
 		return nil, err
 	}
-	key, err := getKeyFromCert(string(astCertificate))
+
+	key, err := getKeyFromCertOrJWK(string(s))
 	if err != nil {
 		return nil, err
 	}
@@ -296,15 +311,13 @@ var tokenConstraintTypes = map[string]tokenConstraintHandler{
 
 // tokenConstraintCert handles the `cert` constraint.
 func tokenConstraintCert(value ast.Value, constraints *tokenConstraints) (err error) {
-	var cert ast.String
+	var s ast.String
 	var ok bool
-	if cert, ok = value.(ast.String); !ok {
-		err = fmt.Errorf("cert constraint: must be a string")
-		return
+	if s, ok = value.(ast.String); !ok {
+		return fmt.Errorf("cert constraint: must be a string")
 	}
-	if constraints.key, err = getKeyFromCert(string(cert)); err != nil {
-		return
-	}
+
+	constraints.key, err = getKeyFromCertOrJWK(string(s))
 	return
 }
 
@@ -635,7 +648,70 @@ func (header *tokenHeader) valid() bool {
 	return true
 }
 
-// The full verifier/decoder
+func commonBuiltinJWTEncodeSign(inputHeaders, jwsPayload, jwkSrc string) (v ast.Value, err error) {
+
+	keys, err := jwk.ParseString(jwkSrc)
+	if err != nil {
+		return nil, err
+	}
+	key, err := keys.Keys[0].Materialize()
+	if err != nil {
+		return nil, err
+	}
+	if jwk.GetKeyTypeFromKey(key) != keys.Keys[0].GetKeyType() {
+		return nil, fmt.Errorf("JWK derived key type and keyType parameter do not match")
+	}
+
+	standardHeaders := &jws.StandardHeaders{}
+	jwsHeaders := []byte(inputHeaders)
+	err = json.Unmarshal(jwsHeaders, standardHeaders)
+	if err != nil {
+		return nil, err
+	}
+	alg := standardHeaders.GetAlgorithm()
+
+	if (standardHeaders.Type == "" || standardHeaders.Type == "JWT") && !json.Valid([]byte(jwsPayload)) {
+		return nil, fmt.Errorf("type is JWT but payload is not JSON")
+	}
+
+	// process payload and sign
+	var jwsCompact []byte
+	jwsCompact, err = jws.SignLiteral([]byte(jwsPayload), alg, key, jwsHeaders)
+	if err != nil {
+		return nil, err
+	}
+	return ast.String(jwsCompact[:]), nil
+
+}
+
+func builtinJWTEncodeSign(a ast.Value, b ast.Value, c ast.Value) (v ast.Value, err error) {
+
+	jwkSrc := c.String()
+
+	inputHeaders := a.String()
+
+	jwsPayload := b.String()
+
+	return commonBuiltinJWTEncodeSign(inputHeaders, jwsPayload, jwkSrc)
+
+}
+
+func builtinJWTEncodeSignRaw(a ast.Value, b ast.Value, c ast.Value) (v ast.Value, err error) {
+
+	jwkSrc, err := builtins.StringOperand(c, 1)
+	if err != nil {
+		return nil, err
+	}
+	inputHeaders, err := builtins.StringOperand(a, 1)
+	if err != nil {
+		return nil, err
+	}
+	jwsPayload, err := builtins.StringOperand(b, 1)
+	if err != nil {
+		return nil, err
+	}
+	return commonBuiltinJWTEncodeSign(string(inputHeaders), string(jwsPayload), string(jwkSrc))
+}
 
 // Implements full JWT decoding, validation and verification.
 func builtinJWTDecodeVerify(a ast.Value, b ast.Value) (v ast.Value, err error) {
@@ -855,4 +931,6 @@ func init() {
 	RegisterFunctionalBuiltin2(ast.JWTVerifyES256.Name, builtinJWTVerifyES256)
 	RegisterFunctionalBuiltin2(ast.JWTVerifyHS256.Name, builtinJWTVerifyHS256)
 	RegisterFunctionalBuiltin2(ast.JWTDecodeVerify.Name, builtinJWTDecodeVerify)
+	RegisterFunctionalBuiltin3(ast.JWTEncodeSignRaw.Name, builtinJWTEncodeSignRaw)
+	RegisterFunctionalBuiltin3(ast.JWTEncodeSign.Name, builtinJWTEncodeSign)
 }
