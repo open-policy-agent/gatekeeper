@@ -515,3 +515,181 @@ test_one_container_one_initcontainer_run_in_range_user_not_in_range {
   }
   count(results) > 0
 }
+
+test_one_container_empty_security_context {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+  			"spec": {
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
+
+test_one_container_empty_security_context_empty_pod_security_context {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+        "kind": "Pod",
+  			"spec": {
+    			"securityContext": {},
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
+
+test_one_container_pod_defined_run_in_range_user_in_range {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+        "kind": "Pod",
+  			"spec": {
+  			  "securityContext": {
+  			    "runAsUser": 150
+  			  },
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) == 0
+}
+
+test_one_container_pod_defined_run_in_range_user_not_in_range {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+        "kind": "Pod",
+  			"spec": {
+  			  "securityContext": {
+  			    "runAsUser": 250
+  			  },
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
+
+test_one_container_pod_defined_run_in_range_container_overrides_user_in_range {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+  		  "kind": "Pod",
+  			"spec": {
+  			  "securityContext": {
+  			    "runAsUser": 250
+  			  },
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {
+  					  "runAsUser": 150
+  					}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) == 0
+}
+
+test_one_container_pod_defined_run_in_range_container_overrides_user_not_in_range {
+  results := violation with input as
+  {
+  	"review": {
+  		"object": {
+        "kind": "Pod",
+  			"spec": {
+  			  "securityContext": {
+  			    "runAsUser": 150
+  			  },
+  				"containers": [{
+  					"name": "container1",
+  					"securityContext": {
+  					  "runAsUser": 250
+  					}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
