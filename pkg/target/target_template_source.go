@@ -1,5 +1,8 @@
 package target
 
+// This file is generated from pkg/target/regolib/src.rego via "make target-template-source"
+// Do not modify this file directly!
+
 const templSrc = `package target
 
 ##################

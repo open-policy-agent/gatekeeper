@@ -149,7 +149,7 @@ endif
 # Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
 target-template-source:
 	@rm -f pkg/target/target_template_source.go
-	@printf "package target\n\nconst templSrc = \`" >> pkg/target/target_template_source.go
+	@printf "package target\n\n// This file is generated from pkg/target/regolib/src.rego via \"make target-template-source\"\n// Do not modify this file directly!\n\nconst templSrc = \`" >> pkg/target/target_template_source.go
 	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
 	@printf "\`" >> pkg/target/target_template_source.go
 
