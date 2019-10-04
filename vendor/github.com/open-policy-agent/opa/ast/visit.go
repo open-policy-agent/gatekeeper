@@ -12,7 +12,7 @@ type Visitor interface {
 	Visit(v interface{}) (w Visitor)
 }
 
-// BeforeAndAfterVisitor wraps Visitor to provie hooks for being called before
+// BeforeAndAfterVisitor wraps Visitor to provide hooks for being called before
 // and after the AST has been visited.
 type BeforeAndAfterVisitor interface {
 	Visitor
@@ -23,18 +23,22 @@ type BeforeAndAfterVisitor interface {
 // Walk iterates the AST by calling the Visit function on the Visitor
 // v for x before recursing.
 func Walk(v Visitor, x interface{}) {
-	wrapped, ok := v.(BeforeAndAfterVisitor)
-	if !ok {
-		wrapped = noopBeforeAndAfterVisitor{v}
+	if bav, ok := v.(BeforeAndAfterVisitor); !ok {
+		walk(v, x)
+	} else {
+		bav.Before(x)
+		defer bav.After(x)
+		walk(bav, x)
 	}
-	WalkBeforeAndAfter(wrapped, x)
 }
 
 // WalkBeforeAndAfter iterates the AST by calling the Visit function on the
 // Visitor v for x before recursing.
 func WalkBeforeAndAfter(v BeforeAndAfterVisitor, x interface{}) {
-	v.Before(x)
-	defer v.After(x)
+	Walk(v, x)
+}
+
+func walk(v Visitor, x interface{}) {
 	w := v.Visit(x)
 	if w == nil {
 		return
@@ -81,6 +85,8 @@ func WalkBeforeAndAfter(v BeforeAndAfterVisitor, x interface{}) {
 		}
 	case *Expr:
 		switch ts := x.Terms.(type) {
+		case *SomeDecl:
+			Walk(w, ts)
 		case []*Term:
 			for _, t := range ts {
 				Walk(w, t)
@@ -220,7 +226,12 @@ func WalkBodies(x interface{}, f func(Body) bool) {
 func WalkRules(x interface{}, f func(*Rule) bool) {
 	vis := &GenericVisitor{func(x interface{}) bool {
 		if r, ok := x.(*Rule); ok {
-			return f(r)
+			stop := f(r)
+			// NOTE(tsandall): since rules cannot be embedded inside of queries
+			// we can stop early if there is no else block.
+			if stop || r.Else == nil {
+				return true
+			}
 		}
 		return false
 	}}
@@ -362,10 +373,3 @@ func (vis *VarVisitor) Visit(v interface{}) Visitor {
 	}
 	return vis
 }
-
-type noopBeforeAndAfterVisitor struct {
-	Visitor
-}
-
-func (noopBeforeAndAfterVisitor) Before(interface{}) {}
-func (noopBeforeAndAfterVisitor) After(interface{})  {}

@@ -17,3 +17,4 @@ linters:
   disable:
     - maligned
     - lll
+    - gochecknoglobals

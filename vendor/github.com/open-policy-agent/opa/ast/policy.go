@@ -84,6 +84,7 @@ var Keywords = [...]string{
 	"null",
 	"true",
 	"false",
+	"some",
 }
 
 // IsKeyword returns true if s is a language keyword.
@@ -167,6 +168,7 @@ type (
 		Args     Args      `json:"args,omitempty"`
 		Key      *Term     `json:"key,omitempty"`
 		Value    *Term     `json:"value,omitempty"`
+		Assign   bool      `json:"assign,omitempty"`
 	}
 
 	// Args represents zero or more arguments to a rule.
@@ -184,6 +186,12 @@ type (
 		Negated   bool        `json:"negated,omitempty"`
 		Terms     interface{} `json:"terms"`
 		With      []*With     `json:"with,omitempty"`
+	}
+
+	// SomeDecl represents a variable declaration statement. The symbols are variables.
+	SomeDecl struct {
+		Location *Location `json:"-"`
+		Symbols  []*Term   `json:"symbols"`
 	}
 
 	// With represents a modifier on an expression.
@@ -583,6 +591,11 @@ func (head *Head) Compare(other *Head) int {
 	} else if other == nil {
 		return 1
 	}
+	if head.Assign && !other.Assign {
+		return -1
+	} else if !head.Assign && other.Assign {
+		return 1
+	}
 	if cmp := Compare(head.Args, other.Args); cmp != 0 {
 		return cmp
 	}
@@ -619,7 +632,11 @@ func (head *Head) String() string {
 		buf = append(buf, head.Name.String())
 	}
 	if head.Value != nil {
-		buf = append(buf, "=")
+		if head.Assign {
+			buf = append(buf, ":=")
+		} else {
+			buf = append(buf, "=")
+		}
 		buf = append(buf, head.Value.String())
 	}
 	return strings.Join(buf, " ")
@@ -850,9 +867,10 @@ func (expr *Expr) Equal(other *Expr) bool {
 //
 // Expressions are compared as follows:
 //
-// 1. Preceding expression (by Index) is always less than the other expression.
-// 2. Non-negated expressions are always less than than negated expressions.
-// 3. Single term expressions are always less than built-in expressions.
+// 1. Declarations are always less than other expressions.
+// 2. Preceding expression (by Index) is always less than the other expression.
+// 3. Non-negated expressions are always less than than negated expressions.
+// 4. Single term expressions are always less than built-in expressions.
 //
 // Otherwise, the expression terms are compared normally. If both expressions
 // have the same terms, the modifiers are compared.
@@ -864,6 +882,14 @@ func (expr *Expr) Compare(other *Expr) int {
 		}
 		return -1
 	} else if other == nil {
+		return 1
+	}
+
+	o1 := expr.sortOrder()
+	o2 := other.sortOrder()
+	if o1 < o2 {
+		return -1
+	} else if o2 < o1 {
 		return 1
 	}
 
@@ -883,24 +909,32 @@ func (expr *Expr) Compare(other *Expr) int {
 
 	switch t := expr.Terms.(type) {
 	case *Term:
-		u, ok := other.Terms.(*Term)
-		if !ok {
-			return -1
-		}
-		if cmp := Compare(t.Value, u.Value); cmp != 0 {
+		if cmp := Compare(t.Value, other.Terms.(*Term).Value); cmp != 0 {
 			return cmp
 		}
 	case []*Term:
-		u, ok := other.Terms.([]*Term)
-		if !ok {
-			return 1
+		if cmp := termSliceCompare(t, other.Terms.([]*Term)); cmp != 0 {
+			return cmp
 		}
-		if cmp := termSliceCompare(t, u); cmp != 0 {
+	case *SomeDecl:
+		if cmp := Compare(t, other.Terms.(*SomeDecl)); cmp != 0 {
 			return cmp
 		}
 	}
 
 	return withSliceCompare(expr.With, other.With)
+}
+
+func (expr *Expr) sortOrder() int {
+	switch expr.Terms.(type) {
+	case *SomeDecl:
+		return 0
+	case *Term:
+		return 1
+	case []*Term:
+		return 2
+	}
+	return -1
 }
 
 // Copy returns a deep copy of expr.
@@ -909,6 +943,8 @@ func (expr *Expr) Copy() *Expr {
 	cpy := *expr
 
 	switch ts := expr.Terms.(type) {
+	case *SomeDecl:
+		cpy.Terms = ts.Copy()
 	case []*Term:
 		cpyTs := make([]*Term, len(ts))
 		for i := range ts {
@@ -931,6 +967,8 @@ func (expr *Expr) Copy() *Expr {
 func (expr *Expr) Hash() int {
 	s := expr.Index
 	switch ts := expr.Terms.(type) {
+	case *SomeDecl:
+		s += ts.Hash()
 	case []*Term:
 		for _, t := range ts {
 			s += t.Value.Hash()
@@ -962,20 +1000,12 @@ func (expr *Expr) NoWith() *Expr {
 
 // IsEquality returns true if this is an equality expression.
 func (expr *Expr) IsEquality() bool {
-	terms, ok := expr.Terms.([]*Term)
-	if !ok {
-		return false
-	}
-	return terms[0].Value.Compare(Equality.Ref()) == 0
+	return isglobalbuiltin(expr, Var(Equality.Name))
 }
 
 // IsAssignment returns true if this an assignment expression.
 func (expr *Expr) IsAssignment() bool {
-	terms, ok := expr.Terms.([]*Term)
-	if !ok {
-		return false
-	}
-	return terms[0].Value.Compare(Assign.Ref()) == 0
+	return isglobalbuiltin(expr, Var(Assign.Name))
 }
 
 // IsCall returns true if this expression calls a function.
@@ -1072,6 +1102,8 @@ func (expr *Expr) String() string {
 		}
 	case *Term:
 		buf = append(buf, t.String())
+	case *SomeDecl:
+		buf = append(buf, t.String())
 	}
 
 	for i := range expr.With {
@@ -1102,6 +1134,42 @@ func (expr *Expr) Vars(params VarVisitorParams) VarSet {
 // The builtin operator must be the first term.
 func NewBuiltinExpr(terms ...*Term) *Expr {
 	return &Expr{Terms: terms}
+}
+
+func (d *SomeDecl) String() string {
+	buf := make([]string, len(d.Symbols))
+	for i := range buf {
+		buf[i] = d.Symbols[i].String()
+	}
+	return "var " + strings.Join(buf, ", ")
+}
+
+// SetLoc sets the Location on d.
+func (d *SomeDecl) SetLoc(loc *Location) {
+	d.Location = loc
+}
+
+// Loc returns the Location of d.
+func (d *SomeDecl) Loc() *Location {
+	return d.Location
+}
+
+// Copy returns a deep copy of d.
+func (d *SomeDecl) Copy() *SomeDecl {
+	cpy := *d
+	cpy.Symbols = termSliceCopy(d.Symbols)
+	return &cpy
+}
+
+// Compare returns an integer indicating whether d is less than, equal to, or
+// greater than other.
+func (d *SomeDecl) Compare(other *SomeDecl) int {
+	return termSliceCompare(d.Symbols, other.Symbols)
+}
+
+// Hash returns a hash code of d.
+func (d *SomeDecl) Hash() int {
+	return termSliceHash(d.Symbols)
 }
 
 func (w *With) String() string {
@@ -1240,4 +1308,24 @@ func (s ruleSlice) Len() int           { return len(s) }
 // has a valid number of arguments.
 func validEqAssignArgCount(expr *Expr) bool {
 	return len(expr.Operands()) == 2
+}
+
+// this function checks if the expr refers to a non-namespaced (global) built-in
+// function like eq, gt, plus, etc.
+func isglobalbuiltin(expr *Expr, name Var) bool {
+	terms, ok := expr.Terms.([]*Term)
+	if !ok {
+		return false
+	}
+
+	// NOTE(tsandall): do not use Term#Equal or Value#Compare to avoid
+	// allocation here.
+	ref, ok := terms[0].Value.(Ref)
+	if !ok || len(ref) != 1 {
+		return false
+	} else if head, ok := ref[0].Value.(Var); !ok {
+		return false
+	} else {
+		return head.Equal(name)
+	}
 }
