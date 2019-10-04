@@ -217,6 +217,8 @@ matches_nsselector(match) {
   matches_namespace_selector(match, ns)
 }
 
+# Checks to see if a kubernetes NamespaceSelector matches a namespace with a given set of labels
+# A non-existent selector or labels should be represented by an empty object ("{}")
 matches_namespace_selector(match, ns) {
   metadata := get_default(ns, "metadata", {})
   nslabels := get_default(metadata, "labels", {})
