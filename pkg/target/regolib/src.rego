@@ -5,7 +5,7 @@ package target
 ##################
 
 autoreject_review[rejection] {
-  constraint := {{.ConstraintsRoot}}[_][_]
+  constraint := data["{{.ConstraintsRoot}}"][_][_]
   spec := get_default(constraint, "spec", {})
   match := get_default(spec, "match", {})
   has_field(match, "namespaceSelector")
@@ -18,7 +18,7 @@ autoreject_review[rejection] {
 }
 
 matching_constraints[constraint] {
-  constraint := {{.ConstraintsRoot}}[_][_]
+  constraint := data["{{.ConstraintsRoot}}"][_][_]
   spec := get_default(constraint, "spec", {})
   match := get_default(spec, "match", {})
 
