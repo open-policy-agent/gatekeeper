@@ -1,0 +1,6 @@
+metadata:
+  labels:
+    app: '{{ include "gatekeeper-operator.name" . }}'
+    chart: '{{ include "gatekeeper-operator.chart" . }}'
+    release: '{{ .Release.Name }}'
+    heritage: '{{ .Release.Service }}'

@@ -6,6 +6,7 @@ REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 IMG := $(REPOSITORY):latest
 
 VERSION := v3.0.4-beta.1
+CHARTDIR ?= $(PWD)/chart/gatekeeper-operator
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.4.0
@@ -98,6 +99,11 @@ manifests:
 	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 	kustomize build config  -o deploy/gatekeeper.yaml
 	bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+	cd hack && ./generate_chart_manifests.sh
+
+.PHONY: chart
+chart: generate manifests
+	cd hack && ./generate_chart.sh $(VERSION)
 
 # Run go fmt against code
 fmt:

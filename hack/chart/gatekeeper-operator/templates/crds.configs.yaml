@@ -1,0 +1,24 @@
+{{- if (and .Values.installCRDs (not (.Capabilities.APIVersions.Has "config.gatekeeper.sh/v1alpha1"))) }}
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    app: '{{ include "gatekeeper-operator.name" . }}'
+    chart: '{{ include "gatekeeper-operator.chart" . }}'
+    controller-tools.k8s.io: "1.0"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: configs.config.gatekeeper.sh
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  group: config.gatekeeper.sh
+  names:
+    kind: Config
+    plural: configs
+    shortNames:
+    - config
+  scope: Namespaced
+  version: v1alpha1
+{{- end }}

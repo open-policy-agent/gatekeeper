@@ -1,0 +1,19 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "gatekeeper-operator.fullname" . }}
+  labels:
+    app: {{ template "gatekeeper-operator.name" . }}
+    chart: {{ template "gatekeeper-operator.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ template "gatekeeper-operator.fullname" . }}
+subjects:
+  - name: {{ template "gatekeeper-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace | quote }}
+    kind: ServiceAccount
+{{- end -}}
