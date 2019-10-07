@@ -1,0 +1,6 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sUniqueIngressHostnames
+metadata:
+  name: unique-ingress-hostnames
+  labels:
+    owner: admin.agilebank.demo
