@@ -33,8 +33,6 @@ test_input_container_not_set_pod_level_allowed {
 test_input_container_not_set_pod_level_disallowed {
     input := { "review": pod_level_review(false)}
     results := violation with input as input
-    trace(sprintf("%v", [input]))
-    trace(sprintf("%v", [results]))
     count(results) == 0
 }
 test_input_container_allowed_override_pod_level_disallowed {
