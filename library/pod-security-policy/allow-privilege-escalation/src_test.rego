@@ -1,17 +1,17 @@
 package k8spspallowprivilegeescalationcontainer
 
 test_input_container_not_privilege_escalation_allowed {
-    input := { "review": input_review }
+    input := { "review": input_review}
     results := violation with input as input
     count(results) == 0
 }
 test_input_container_privilege_escalation_not_allowed {
-    input := { "review": input_review_priv_allowed }
+    input := { "review": input_review_priv}
     results := violation with input as input
     count(results) == 1
 }
 test_input_container_many_not_privilege_escalation_allowed {
-    input := { "review": input_review_many_disallowed_and_unset}
+    input := { "review": input_review_many}
     results := violation with input as input
     count(results) == 2
 }
@@ -54,30 +54,30 @@ input_review = {
             "name": "nginx"
         },
         "spec": {
-            "containers": input_containers_one_disallowed
+            "containers": input_containers_one
         }
     }
 }
 
-input_review_priv_allowed = {
+input_review_priv = {
     "object": {
         "metadata": {
             "name": "nginx"
         },
         "spec": {
-            "containers": input_containers_one_priv_allowed,
+            "containers": input_containers_one_priv,
       }
     }
 }
 
-input_review_many_disallowed_and_unset = {
+input_review_many = {
     "object": {
         "metadata": {
             "name": "nginx"
         },
         "spec": {
-            "containers": input_containers_many_disallowed_and_unset,
-            "initContainers": input_containers_one_disallowed
+            "containers": input_containers_many,
+            "initContainers": input_containers_one
       }
     }
 }
@@ -88,8 +88,8 @@ input_review_many_mixed = {
             "name": "nginx"
         },
         "spec": {
-            "containers": input_containers_many_disallowed_and_unset,
-            "initContainers": input_containers_one_priv_allowed
+            "containers": input_containers_many,
+            "initContainers": input_containers_one_priv
       }
     }
 }
@@ -101,12 +101,12 @@ input_review_many_mixed_two = {
         },
         "spec": {
             "containers": input_containers_many_mixed,
-            "initContainers": input_containers_one_priv_allowed
+            "initContainers": input_containers_one_priv
       }
     }
 }
 
-input_containers_one_disallowed = [
+input_containers_one = [
 {
     "name": "nginx",
     "image": "nginx",
@@ -115,7 +115,7 @@ input_containers_one_disallowed = [
     }
 }]
 
-input_containers_one_priv_allowed = [
+input_containers_one_priv = [
 {
     "name": "nginx",
     "image": "nginx",
@@ -124,7 +124,7 @@ input_containers_one_priv_allowed = [
     }
 }]
 
-input_containers_many_disallowed_and_unset = [
+input_containers_many = [
 {
     "name": "nginx",
     "image": "nginx",
