@@ -134,7 +134,7 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):latest
 
 # Build the docker image
-docker-build:
+docker-build: target-template-source
 	docker build --pull . -t ${IMG}
 
 # Update manager_image_patch.yaml with image tag
