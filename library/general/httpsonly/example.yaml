@@ -2,8 +2,10 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: ingress-demo
-  annotations:
-    kubernetes.io/ingress.allow-http: false
 spec:
-  tls:
-  - secretName: secret-cert-myown
+  - host: example-host.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: nginx
+          servicePort: 80
