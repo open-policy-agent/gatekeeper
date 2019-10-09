@@ -108,7 +108,7 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate:
+generate: target-template-source
 	go generate ./pkg/... ./cmd/...
 
 # Docker Login
@@ -134,7 +134,7 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):latest
 
 # Build the docker image
-docker-build: target-template-source
+docker-build:
 	docker build --pull . -t ${IMG}
 
 # Update manager_image_patch.yaml with image tag
