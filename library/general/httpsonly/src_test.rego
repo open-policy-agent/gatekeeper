@@ -40,7 +40,7 @@ review_ingress(annotationVal, tlsVal) = out {
   out = {
     "object": {
       "kind": "Ingress",
-      "apiVersion": "v1",
+      "apiVersion": "extensions/v1beta1",
       "metadata": {
         "name": "my-ingress",
         "annotations": annotationVal
