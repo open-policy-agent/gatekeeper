@@ -51,8 +51,14 @@ test_collision_with_multiple_apis {
     results := violation with input as input with data.inventory as inv
     count(results) == 2
 }
-test_no_collision_with_multiple_bad_apis {
+test_no_collision_with_multiple_bad_review_apis {
     input := {"review": review(ingress("my-ingress", "prod", my_rules1, "app/v1beta1"), "app")}
+    inv := inventory_data([ingress("my-ingress", "prod2", my_rules1, "extensions/v1beta1"), ingress("my-ingress", "prod3", my_rules2, "extensions/v1beta1")])
+    results := violation with input as input with data.inventory as inv
+    count(results) == 0
+}
+test_no_collision_with_multiple_bad_review_apis2 {
+    input := {"review": review(ingress("my-ingress", "prod", my_rules1, "test.extensions/v1beta1"), "test.extensions")}
     inv := inventory_data([ingress("my-ingress", "prod2", my_rules1, "extensions/v1beta1"), ingress("my-ingress", "prod3", my_rules2, "extensions/v1beta1")])
     results := violation with input as input with data.inventory as inv
     count(results) == 0
@@ -62,6 +68,12 @@ test_collision_with_multiple_apis_mixed {
     inv := inventory_data([ingress("my-ingress", "prod2", my_rules1, "extensions/v1beta1"), ingress("my-ingress", "prod3", my_rules2, "extensions/v1beta1")])
     results := violation with input as input with data.inventory as inv
     count(results) == 1
+}
+test_no_collision_with_multiple_apis_slash {
+    input := {"review": review(ingress("my-ingress", "prod", my_rules1, "networking.k8s.io/v1beta1"), "networking.k8s.io")}
+    inv := inventory_data1([ingress("my-ingress", "prod2", my_rules1, "extensions.something.io/v1beta1"), ingress("my-ingress", "prod3", my_rules2, "extensions.something.io/v1beta1")])
+    results := violation with input as input with data.inventory as inv
+    count(results) == 0
 }
 
 
@@ -124,6 +136,19 @@ inventory_data(ingresses) = out {
     "namespace": {
       ns: {
         "extensions/v1beta1": {
+          "Ingress": flatten_by_name(ingresses, ns)
+        }
+      } | ns := namespaces[_]
+    }
+  }
+}
+
+inventory_data1(ingresses) = out {
+  namespaces := {ns | ns = ingresses[_].metadata.namespace}
+  out = {
+    "namespace": {
+      ns: {
+        "extensions.something.io/v1beta1": {
           "Ingress": flatten_by_name(ingresses, ns)
         }
       } | ns := namespaces[_]
