@@ -1,5 +1,11 @@
 package k8spspseccomp
 
+test_input_seccomp_allowed_empty {
+    input := { "review": input_review, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) > 0
+}
+
 test_input_seccomp_allowed_all {
     input := { "review": input_review, "parameters": input_parameters_wildcard}
     results := violation with input as input
@@ -121,6 +127,10 @@ input_review_no_annotation = {
             }]
         }
     }
+}
+
+input_parameters_empty = {
+    "allowedProfiles": []
 }
 
 input_parameters_wildcard = {
