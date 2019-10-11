@@ -31,5 +31,5 @@ input_containers[c] {
 }
 
 split_annotation(annotation) = [prefix, name] {
-	[prefix, name] = split(annotation, "/")
+    [prefix, name] = split(annotation, "/")
 }

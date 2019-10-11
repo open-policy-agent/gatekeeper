@@ -7,14 +7,6 @@ violation[{"msg": msg, "details": {}}] {
 }
 
 input_apparmor_allowed(metadata) {
-    input.parameters.allowedProfiles[_] == "*"
-}
-
-input_apparmor_allowed(metadata) {
-    metadata.annotations["apparmor.security.beta.kubernetes.io/pod"] == input.parameters.allowedProfiles[_]
-}
-
-input_apparmor_allowed(metadata) {
     metadata.annotations[key]
     [prefix, name] = split_annotation(key)
     prefix == "container.apparmor.security.beta.kubernetes.io"
@@ -31,5 +23,5 @@ input_containers[c] {
 }
 
 split_annotation(annotation) = [prefix, name] {
-	[prefix, name] = split(annotation, "/")
+    [prefix, name] = split(annotation, "/")
 }
