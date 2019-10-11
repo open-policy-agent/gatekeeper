@@ -34,26 +34,27 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 	git diff
 	```
 
-## Building
+## Building and releasing
 
-1. Commit the changes and push to remote repository.
+1. Commit the changes and push to remote repository to create a pull request.
 
 	```
 	git commit -a -s -m "Prepare <version> release"
     git commit --amend --signoff
-	git push origin master
+	git push <FORK> <FEATURE-BRANCH>
 	```
 
-1. Tag repository with release version and push tags to remote repository.
+1. Once the PR is merged to master, tag master with release version and push tags to remote repository.
 
 	```
 	git tag -a <NEWVERSION> -m '<NEWVERSION>'
 	git push origin <NEWVERSION>
 	```
 
-1. Pushing the release tag will trigger the Travis-CI pipeline to run `make travis-dev-release`. 
+1. Pushing the release tag will trigger the Travis-CI pipeline to run `make travis-release-deploy`. 
 This will build the `quay.io/open-policy-agent/gatekeeper` image automatically, Then publish the new release image tag and the `latest` image tag 
-to the `quay.io/open-policy-agent/gatekeeper` repository.
+to the `quay.io/open-policy-agent/gatekeeper` repository. 
+Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` deploy step will run e2e tests to verify the new released tag.
 
 ## Publishing
 
@@ -63,3 +64,23 @@ to the `quay.io/open-policy-agent/gatekeeper` repository.
 	- Release title: <NEWVERSION>
     - Update release message with Features, Bug Fixes, Breaking Changes, etc.
 	- Click `Publish release` will automatically include the binaries from the tag.
+
+## Update deployment versioning
+
+1. Execute the release-manifest target to update deployment yamls. Give the semantic version of the release:
+
+	```
+	make release-manifest NEWVERSION=v3.0.4-beta.x
+	```
+1. Preview the changes:
+
+	```
+	git diff
+	```
+1. Commit the changes and push to remote repository to create a pull request.
+
+	```
+	git commit -a -s -m "Bump deployment <version>"
+    git commit --amend --signoff
+	git push <FORK> <FEATURE-BRANCH>
+	```

@@ -1,0 +1,49 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8spspforbiddensysctls
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sPSPForbiddenSysctls
+        listKind: K8sPSPForbiddenSysctlsList
+        plural: k8spspforbiddensysctls
+        singular: k8spspforbiddensysctls
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            forbiddenSysctls:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8spspforbiddensysctls
+
+        violation[{"msg": msg, "details": {}}] {
+            sysctls := {x | x = input.review.object.spec.securityContext.sysctls[_][name]}
+            input_sysctls(sysctls)
+            msg := sprintf("One of the sysctls %v is not allowed, pod: %v. Forbidden sysctls: %v", [sysctls, input.review.object.metadata.name, input.parameters.forbiddenSysctls])
+        }
+
+        # * may be used to forbid all sysctls
+        input_sysctls(sysctls) {
+            input.parameters.forbiddenSysctls[_] == "*"
+        }
+
+        input_sysctls(sysctls) {
+            forbidden_sysctls := {x | x = input.parameters.forbiddenSysctls[_]}
+            test := sysctls & forbidden_sysctls
+            count(test) > 0
+        }
+
+        input_sysctls(sysctls) {
+            prefix_matches(input.parameters.forbiddenSysctls[_], sysctls[_])
+        }
+
+        prefix_matches(prefix, sysctl) {
+            contains(sysctl, trim(prefix, "*"))
+        }

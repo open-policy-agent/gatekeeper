@@ -7,8 +7,7 @@ package ast
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/open-policy-agent/opa/util"
+	"math/big"
 )
 
 // Compare returns an integer indicating whether two AST values are less than,
@@ -21,7 +20,8 @@ import (
 // are sorted as follows:
 //
 // nil < Null < Boolean < Number < String < Var < Ref < Array < Object < Set <
-// ArrayComprehension < Expr < Body < Rule < Import < Package < Module.
+// ArrayComprehension < ObjectComprehension < SetComprehension < Expr < SomeDecl
+// < With < Body < Rule < Import < Package < Module.
 //
 // Arrays and Refs are equal iff both a and b have the same length and all
 // corresponding elements are equal. If one element is not equal, the return
@@ -39,16 +39,18 @@ func Compare(a, b interface{}) int {
 
 	if t, ok := a.(*Term); ok {
 		if t == nil {
-			return Compare(nil, b)
+			a = nil
+		} else {
+			a = t.Value
 		}
-		return Compare(t.Value, b)
 	}
 
 	if t, ok := b.(*Term); ok {
 		if t == nil {
-			return Compare(a, nil)
+			b = nil
+		} else {
+			b = t.Value
 		}
-		return Compare(a, t.Value)
 	}
 
 	if a == nil {
@@ -83,7 +85,27 @@ func Compare(a, b interface{}) int {
 		}
 		return 1
 	case Number:
-		return util.Compare(json.Number(a), json.Number(b.(Number)))
+		if ai, err := json.Number(a).Int64(); err == nil {
+			if bi, err := json.Number(b.(Number)).Int64(); err == nil {
+				if ai == bi {
+					return 0
+				}
+				if ai < bi {
+					return -1
+				}
+				return 1
+			}
+		}
+
+		bigA, ok := new(big.Float).SetString(string(a))
+		if !ok {
+			panic("illegal value")
+		}
+		bigB, ok := new(big.Float).SetString(string(b.(Number)))
+		if !ok {
+			panic("illegal value")
+		}
+		return bigA.Cmp(bigB)
 	case String:
 		b := b.(String)
 		if a.Equal(b) {
@@ -140,6 +162,9 @@ func Compare(a, b interface{}) int {
 		return termSliceCompare(a, b)
 	case *Expr:
 		b := b.(*Expr)
+		return a.Compare(b)
+	case *SomeDecl:
+		b := b.(*SomeDecl)
 		return a.Compare(b)
 	case *With:
 		b := b.(*With)
@@ -207,6 +232,8 @@ func sortOrder(x interface{}) int {
 		return 13
 	case *Expr:
 		return 100
+	case *SomeDecl:
+		return 101
 	case *With:
 		return 110
 	case *Head:

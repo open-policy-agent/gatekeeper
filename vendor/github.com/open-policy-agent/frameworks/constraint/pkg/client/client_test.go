@@ -310,6 +310,8 @@ some_rule[r] {
  r = 5
 }
 `
+	emptyRegoTempl := createTemplate(name("fake"), crdNames("Fake"), targets("h1"))
+	emptyRegoTempl.Spec.Targets[0].Rego = ""
 
 	tc := []struct {
 		Name          string
@@ -345,6 +347,12 @@ some_rule[r] {
 			Name:          "Bad Rego",
 			Handler:       &badHandler{Name: "h1", HasLib: true},
 			Template:      badRegoTempl,
+			ErrorExpected: true,
+		},
+		{
+			Name:          "No Rego",
+			Handler:       &badHandler{Name: "h1", HasLib: true},
+			Template:      emptyRegoTempl,
 			ErrorExpected: true,
 		},
 		{
@@ -715,13 +723,12 @@ func TestAllowedDataFieldsIntersection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c2 := c.(*client)
 			expected := make(map[string]bool)
 			for _, v := range tt.Expected {
 				expected[v] = true
 			}
-			if !reflect.DeepEqual(c2.rConformer.allowedDataFields, expected) {
-				t.Errorf("c2.rConformer.allowedDataFields = %v; want %v", c2.rConformer.allowedDataFields, expected)
+			if !reflect.DeepEqual(c.rConformer.allowedDataFields, expected) {
+				t.Errorf("c.rConformer.allowedDataFields = %v; want %v", c.rConformer.allowedDataFields, expected)
 			}
 		})
 	}
@@ -738,9 +745,8 @@ func TestAllowedDataFieldsNotSpecified(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c2 := c.(*client)
-		if !reflect.DeepEqual(c2.rConformer.allowedDataFields, validDataFields) {
-			t.Errorf("c2.rConformer.allowedDataFields = %v; want %v", c2.rConformer.allowedDataFields, validDataFields)
+		if !reflect.DeepEqual(c.rConformer.allowedDataFields, validDataFields) {
+			t.Errorf("c.rConformer.allowedDataFields = %v; want %v", c.rConformer.allowedDataFields, validDataFields)
 		}
 	})
 }

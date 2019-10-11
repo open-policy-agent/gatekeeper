@@ -20,10 +20,10 @@ An adminstrator can control the following by setting the field in PSP or by depl
 | The user and group IDs of the container           | `runAsUser`, `runAsGroup`, `supplementalGroups`                             |
 | Restricting escalation to root privileges         | `allowPrivilegeEscalation`, `defaultAllowPrivilegeEscalation`               | [allow-privilege-escalation](allow-privilege-escalation) |
 | Linux capabilities                                | `defaultAddCapabilities`, `requiredDropCapabilities`, `allowedCapabilities` |
-| The SELinux context of the container              | `seLinux`                                                                   |
+| The SELinux context of the container              | `seLinux`                                                                   | [seLinux](selinux)                                       |
 | The Allowed Proc Mount types for the container    | `allowedProcMountTypes`                                                     | [proc-mount](proc-mount)                                 |
 | The AppArmor profile used by containers           | annotations                                                                 | [apparmor](apparmor)                                     |
 | The seccomp profile used by containers            | annotations                                                                 | [seccomp](seccomp)                                       |
-| The sysctl profile used by containers             | `forbiddenSysctls`,`allowedUnsafeSysctls`                                   |                                                          |
+| The sysctl profile used by containers             | `forbiddenSysctls`,`allowedUnsafeSysctls`                                   | [forbidden-sysctls](forbidden-sysctls)                   |
 
 <sup>\*</sup> For PSP rules that apply default value or mutations, Gatekeeper v3 currently cannot apply mutation.

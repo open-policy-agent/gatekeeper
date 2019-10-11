@@ -9,6 +9,9 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/open-policy-agent/opa/internal/version"
+	"io"
+	"io/ioutil"
 	"strconv"
 
 	"net/http"
@@ -27,6 +30,7 @@ var allowedKeyNames = [...]string{
 	"url",
 	"body",
 	"enable_redirect",
+	"force_json_decode",
 	"headers",
 	"tls_use_system_certs",
 	"tls_ca_cert_file",
@@ -127,6 +131,7 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 	var tlsClientKeyFile string
 	var body *bytes.Buffer
 	var enableRedirect bool
+	var forceJSONDecode bool
 	var tlsUseSystemCerts bool
 	var tlsConfig tls.Config
 	var clientCerts []tls.Certificate
@@ -147,6 +152,11 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 			url = strings.Trim(url, "\"")
 		case "enable_redirect":
 			enableRedirect, err = strconv.ParseBool(obj.Get(val).String())
+			if err != nil {
+				return nil, err
+			}
+		case "force_json_decode":
+			forceJSONDecode, err = strconv.ParseBool(obj.Get(val).String())
 			if err != nil {
 				return nil, err
 			}
@@ -260,6 +270,10 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		if ok, err := addHeaders(req, customHeaders); !ok {
 			return nil, err
 		}
+		// Don't overwrite or append to one that was set in the custom headers
+		if _, hasUA := customHeaders["User-Agent"]; !hasUA {
+			req.Header.Add("User-Agent", version.UserAgent)
+		}
 	}
 
 	// execute the http request
@@ -272,12 +286,27 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 
 	// format the http result
 	var resultBody interface{}
-	json.NewDecoder(resp.Body).Decode(&resultBody)
+	var resultRawBody []byte
+
+	var buf bytes.Buffer
+	tee := io.TeeReader(resp.Body, &buf)
+	resultRawBody, err = ioutil.ReadAll(tee)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the response body cannot be JSON decoded,
+	// an error will not be returned. Instead the "body" field
+	// in the result will be null.
+	if isContentTypeJSON(resp.Header) || forceJSONDecode {
+		json.NewDecoder(&buf).Decode(&resultBody)
+	}
 
 	result := make(map[string]interface{})
 	result["status"] = resp.Status
 	result["status_code"] = resp.StatusCode
 	result["body"] = resultBody
+	result["raw_body"] = string(resultRawBody)
 
 	resultObj, err := ast.InterfaceToValue(result)
 	if err != nil {
@@ -289,6 +318,10 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 	bctx.Cache.Put(key, resultObj)
 
 	return resultObj, nil
+}
+
+func isContentTypeJSON(header http.Header) bool {
+	return strings.Contains(header.Get("Content-Type"), "application/json")
 }
 
 // getCtxKey returns the cache key.

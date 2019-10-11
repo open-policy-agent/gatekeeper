@@ -21,7 +21,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/markbates/inflect"
+	"github.com/gobuffalo/flect"
+
 	"k8s.io/gengo/types"
 	"sigs.k8s.io/controller-tools/pkg/internal/codegen"
 	"sigs.k8s.io/controller-tools/pkg/internal/general"
@@ -71,7 +72,7 @@ func (b *APIs) parseIndex() {
 
 		// TODO: revisit the part...
 		if r.Resource == "" {
-			r.Resource = strings.ToLower(inflect.Pluralize(r.Kind))
+			r.Resource = flect.Pluralize(strings.ToLower(r.Kind))
 		}
 		rt, err := parseResourceAnnotation(c)
 		if err != nil {
