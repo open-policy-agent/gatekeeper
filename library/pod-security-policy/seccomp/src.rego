@@ -15,12 +15,10 @@ input_seccomp_allowed(metadata) {
 }
 
 input_seccomp_allowed(metadata) {
-    metadata.annotations[key]
-    [prefix, name] = split_annotation(key)
-    prefix == "container.seccomp.security.alpha.kubernetes.io"
-    annotation := sprintf("container.seccomp.security.alpha.kubernetes.io/%v", [name])
+    metadata.annotations[key] == input.parameters.allowedProfiles[_]
+    startswith(key, "container.seccomp.security.alpha.kubernetes.io")
+    [prefix, name] := split(key, "/")
     name == input_containers[_].name
-    metadata.annotations[annotation] == input.parameters.allowedProfiles[_]
 }
 
 input_containers[c] {
@@ -28,8 +26,4 @@ input_containers[c] {
 }
 input_containers[c] {
     c := input.review.object.spec.initContainers[_]
-}
-
-split_annotation(annotation) = [prefix, name] {
-    [prefix, name] = split(annotation, "/")
 }
