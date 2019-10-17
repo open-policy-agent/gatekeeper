@@ -60,7 +60,6 @@ make_review(obj, api_version, kind, name) = review {
   review := {
     "kind": {"group": group, "version": version, "kind": kind},
     "name": name,
-    "operation": "CREATE",
     "object": obj
   }
 }
