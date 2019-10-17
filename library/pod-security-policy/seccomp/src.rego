@@ -16,7 +16,7 @@ input_seccomp_allowed(metadata) {
 
 input_seccomp_allowed(metadata) {
     metadata.annotations[key] == input.parameters.allowedProfiles[_]
-    startswith(key, "container.seccomp.security.alpha.kubernetes.io")
+    startswith(key, "container.seccomp.security.alpha.kubernetes.io/")
     [prefix, name] := split(key, "/")
     name == input_containers[_].name
 }

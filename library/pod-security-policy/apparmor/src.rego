@@ -8,7 +8,7 @@ violation[{"msg": msg, "details": {}}] {
 
 input_apparmor_allowed(metadata) {
     metadata.annotations[key] == input.parameters.allowedProfiles[_]
-    startswith(key, "container.apparmor.security.beta.kubernetes.io")
+    startswith(key, "container.apparmor.security.beta.kubernetes.io/")
     [prefix, name] := split(key, "/")
     name == input_containers[_].name
 }
