@@ -11,6 +11,7 @@ import (
 	"time"
 
 	errp "github.com/pkg/errors"
+	apiErr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -314,6 +315,12 @@ func (wm *WatchManager) filterPendingResources(kinds map[schema.GroupVersionKind
 	for gv, _ := range gvs {
 		rsrs, err := discovery.ServerResourcesForGroupVersion(gv.String())
 		if err != nil {
+			if e, ok := err.(*apiErr.StatusError); ok {
+				if e.ErrStatus.Reason == metav1.StatusReasonNotFound {
+					log.Info("skipping non-existent groupVersion", "groupVersion", gv.String())
+					continue
+				}
+			}
 			return nil, err
 		}
 		for _, r := range rsrs.APIResources {
