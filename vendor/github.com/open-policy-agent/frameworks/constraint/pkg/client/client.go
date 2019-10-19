@@ -3,18 +3,19 @@ package client
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"path"
 	"regexp"
 	"strings"
 	"sync"
-	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/opa/format"
+	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -80,45 +81,6 @@ func AllowedDataFields(fields ...string) ClientOpt {
 	}
 }
 
-type MatchSchemaProvider interface {
-	// MatchSchema returns the JSON Schema for the `match` field of a constraint
-	MatchSchema() apiextensions.JSONSchemaProps
-}
-
-type TargetHandler interface {
-	MatchSchemaProvider
-
-	GetName() string
-
-	// Library returns the pieces of Rego code required to stitch together constraint evaluation
-	// for the target. Current required libraries are `matching_constraints` and
-	// `matching_reviews_and_constraints`
-	//
-	// Libraries are currently templates that have the following parameters:
-	//   ConstraintsRoot: The root path under which all constraints for the target are stored
-	//   DataRoot: The root path under which all data for the target is stored
-	Library() *template.Template
-
-	// ProcessData takes a potential data object and returns:
-	//   true if the target handles the data type
-	//   the path under which the data should be stored in OPA
-	//   the data in an object that can be cast into JSON, suitable for storage in OPA
-	ProcessData(interface{}) (bool, string, interface{}, error)
-
-	// HandleReview takes a potential review request and builds the `review` field of the input
-	// object. it returns:
-	//		true if the target handles the data type
-	//		the data for the `review` field
-	HandleReview(interface{}) (bool, interface{}, error)
-
-	// HandleViolation allows for post-processing of the result object, which can be mutated directly
-	HandleViolation(result *types.Result) error
-
-	// ValidateConstraint returns if the constraint is misconfigured in any way. This allows for
-	// non-trivial validation of things like match schema
-	ValidateConstraint(*unstructured.Unstructured) error
-}
-
 type constraintEntry struct {
 	CRD     *apiextensions.CustomResourceDefinition
 	Targets []string
@@ -130,7 +92,6 @@ type Client struct {
 	constraintsMux    sync.RWMutex
 	constraints       map[string]*constraintEntry
 	allowedDataFields []string
-	rConformer        *regoConformer
 }
 
 // createDataPath compiles the data destination: data.external.<target>.<path>
@@ -197,11 +158,58 @@ func createTemplatePath(target, name string) string {
 	return fmt.Sprintf(`templates["%s"]["%s"]`, target, name)
 }
 
-// CreateCRD creates a CRD from template
-func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+// templateLibPrefix returns the new lib prefix for the libs that are specified in the CT.
+func templateLibPrefix(target, name string) string {
+	return fmt.Sprintf("libs.%s.%s", target, name)
+}
+
+// validateTargets handles validating the targets section of the CT.
+func (c *Client) validateTargets(templ *templates.ConstraintTemplate) (*templates.Target, TargetHandler, error) {
 	if err := validateTargets(templ); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	if len(templ.Spec.Targets) != 1 {
+		return nil, nil, errors.Errorf("expected exactly 1 item in targets, got %v", templ.Spec.Targets)
+	}
+
+	targetSpec := &templ.Spec.Targets[0]
+	targetHandler, found := c.targets[targetSpec.Target]
+	if !found {
+		return nil, nil, fmt.Errorf("target %s not recognized", targetSpec.Target)
+	}
+
+	return targetSpec, targetHandler, nil
+}
+
+// constraintTemplateArtifacts are the artifacts generated during validation / crd creation / rewrite
+// for the constraint template.
+type constraintTemplateArtifacts struct {
+	// crd is the CustomResourceDefinition created from the CT.
+	crd *apiextensions.CustomResourceDefinition
+
+	// modules is the rewritten set of modules that the constraint template declares in Rego and Libs
+	modules []string
+
+	// namePrefix is the name prefix by which the modules will be identified during create / delete
+	// calls to the drivers.Driver interface.
+	namePrefix string
+
+	// targetHandler is the target handler indicated by the CT.  This isn't generated, but is used by
+	// consumers of createTemplateArtifacts
+	targetHandler TargetHandler
+}
+
+// constraintTemplateModule is a rego source module from the CT.  This can refer to a lib or entry
+// point.
+type constraintTemplateModule struct {
+	path string
+	rego string
+}
+
+// createTemplateArtifacts will validate the CT, create the CRD for the CT's constraints, then
+// validate and rewrite the rego sources specified in the CT.
+func (c *Client) createTemplateArtifacts(templ *templates.ConstraintTemplate) (*constraintTemplateArtifacts, error) {
 	if templ.ObjectMeta.Name == "" {
 		return nil, errors.New("Template has no name")
 	}
@@ -209,22 +217,12 @@ func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 		return nil, fmt.Errorf("Template's name %s is not equal to the lowercase of CRD's Kind: %s", templ.ObjectMeta.Name, strings.ToLower(templ.Spec.CRD.Spec.Names.Kind))
 	}
 
-	var src string
-	var target TargetHandler
-	for _, v := range templ.Spec.Targets {
-		k := v.Target
-		t, ok := c.targets[k]
-		if !ok {
-			return nil, fmt.Errorf("Target %s not recognized", k)
-		}
-		target = t
-		src = v.Rego
-		if src == "" {
-			return nil, fmt.Errorf("Target %s has an empty Rego source string", k)
-		}
+	targetSpec, targetHandler, err := c.validateTargets(templ)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to validate targets for template %s", templ.Name)
 	}
 
-	schema, err := c.backend.crd.createSchema(templ, target)
+	schema, err := c.backend.crd.createSchema(templ, targetHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -236,21 +234,81 @@ func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 		return nil, err
 	}
 
-	path := createTemplatePath(target.GetName(), crd.Spec.Names.Kind)
-
-	req := ruleArities{
-		"violation": 1,
-	}
-	if err := requireRules(path, src, req); err != nil {
-		return nil, fmt.Errorf("Invalid rego: %s", err)
+	var externs []string
+	for _, field := range c.allowedDataFields {
+		externs = append(externs, fmt.Sprintf("data.%s", field))
 	}
 
-	_, err = c.rConformer.ensureRegoConformance(crd.Spec.Names.Kind, path, src)
+	libPrefix := templateLibPrefix(targetHandler.GetName(), crd.Spec.Names.Kind)
+	rr, err := regorewriter.New(
+		regorewriter.NewPackagePrefixer(libPrefix),
+		[]string{"data.lib"},
+		externs)
 	if err != nil {
 		return nil, err
 	}
 
-	return crd, nil
+	entryPointPath := createTemplatePath(targetHandler.GetName(), crd.Spec.Names.Kind)
+
+	entryPoint, err := parseModule(entryPointPath, targetSpec.Rego)
+	if err != nil {
+		return nil, err
+	}
+	if entryPoint == nil {
+		return nil, errors.Errorf("Failed to parse module for unknown reason")
+	}
+
+	if err := rewriteModulePackage(entryPointPath, entryPoint); err != nil {
+		return nil, err
+	}
+
+	req := ruleArities{
+		"violation": 1,
+	}
+	if err := requireRulesModule(entryPoint, req); err != nil {
+		return nil, fmt.Errorf("Invalid rego: %s", err)
+	}
+
+	rr.AddEntryPointModule(entryPointPath, entryPoint)
+	for idx, libSrc := range targetSpec.Libs {
+		libPath := fmt.Sprintf(`%s["lib_%d"]`, libPrefix, idx)
+		if err := rr.AddLib(libPath, libSrc); err != nil {
+			return nil, err
+		}
+	}
+
+	sources, err := rr.Rewrite()
+	if err != nil {
+		return nil, err
+	}
+
+	var mods []string
+	if err := sources.ForEachModule(func(m *regorewriter.Module) error {
+		content, err := m.Content()
+		if err != nil {
+			return err
+		}
+		mods = append(mods, string(content))
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &constraintTemplateArtifacts{
+		crd:           crd,
+		targetHandler: targetHandler,
+		namePrefix:    entryPointPath,
+		modules:       mods,
+	}, nil
+}
+
+// CreateCRD creates a CRD from template
+func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+	artifacts, err := c.createTemplateArtifacts(templ)
+	if err != nil {
+		return nil, err
+	}
+	return artifacts.crd, nil
 }
 
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
@@ -258,38 +316,24 @@ func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTempl
 // the constraint.
 func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
-	crd, err := c.CreateCRD(ctx, templ)
-	if err != nil {
-		return resp, err
-	}
 
-	var src string
-	var target TargetHandler
-	for _, v := range templ.Spec.Targets {
-		k := v.Target
-		t, ok := c.targets[k]
-		if !ok {
-			return resp, fmt.Errorf("Target %s not recognized", k)
-		}
-		target = t
-		src = v.Rego
-	}
-
-	path := createTemplatePath(target.GetName(), crd.Spec.Names.Kind)
-	conformingSrc, err := c.rConformer.ensureRegoConformance(crd.Spec.Names.Kind, path, src)
+	artifacts, err := c.createTemplateArtifacts(templ)
 	if err != nil {
 		return resp, err
 	}
 
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
-	if err := c.backend.driver.PutModule(ctx, path, conformingSrc); err != nil {
+
+	if err := c.backend.driver.PutModules(ctx, artifacts.namePrefix, artifacts.modules); err != nil {
 		return resp, err
 	}
 
-	c.constraints[crd.Spec.Names.Kind] = &constraintEntry{CRD: crd, Targets: []string{target.GetName()}}
-	resp.Handled[target.GetName()] = true
-
+	c.constraints[c.constraintsMapKey(artifacts)] = &constraintEntry{
+		CRD:     artifacts.crd,
+		Targets: []string{artifacts.targetHandler.GetName()},
+	}
+	resp.Handled[artifacts.targetHandler.GetName()] = true
 	return resp, nil
 }
 
@@ -297,43 +341,28 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 // registry.
 func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
-	if err := validateTargets(templ); err != nil {
-		return resp, err
-	}
 
-	var target TargetHandler
-	for _, v := range templ.Spec.Targets {
-		k := v.Target
-		t, ok := c.targets[k]
-		if !ok {
-			return resp, fmt.Errorf("Target %s not recognized", k)
-		}
-		target = t
-	}
-
-	schema, err := c.backend.crd.createSchema(templ, target)
+	artifacts, err := c.createTemplateArtifacts(templ)
 	if err != nil {
 		return resp, err
 	}
-	crd, err := c.backend.crd.createCRD(templ, schema)
-	if err != nil {
-		return resp, err
-	}
-	if err := c.backend.crd.validateCRD(crd); err != nil {
-		return resp, err
-	}
-
-	path := createTemplatePath(target.GetName(), templ.Spec.CRD.Spec.Names.Kind)
 
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
-	_, err = c.backend.driver.DeleteModule(ctx, path)
-	if err != nil {
+
+	if _, err := c.backend.driver.DeleteModules(ctx, artifacts.namePrefix); err != nil {
 		return resp, err
 	}
-	delete(c.constraints, crd.Spec.Names.Kind)
-	resp.Handled[target.GetName()] = true
+
+	delete(c.constraints, c.constraintsMapKey(artifacts))
+	resp.Handled[artifacts.targetHandler.GetName()] = true
 	return resp, nil
+}
+
+// constraintsMapKey returns the key for where we will track the constraint template in
+// the constraints map.
+func (c *Client) constraintsMapKey(artifacts *constraintTemplateArtifacts) string {
+	return artifacts.crd.Spec.Names.Kind
 }
 
 // createConstraintPath returns the storage path for a given constraint: constraints.<target>.cluster.<group>.<version>.<kind>.<name>
@@ -489,15 +518,20 @@ func (c *Client) init() error {
 			"matching_reviews_and_constraints": 2,
 			"matching_constraints":             1,
 		}
-		if err := requireRules(fmt.Sprintf("%s_libraries", t.GetName()), lib, req); err != nil {
+		path := fmt.Sprintf("%s.library", hooks)
+		libModule, err := parseModule(path, lib)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse module")
+		}
+		if err := requireRulesModule(libModule, req); err != nil {
 			return fmt.Errorf("Problem with the below Rego for %s target:\n\n====%s\n====\n%s", t.GetName(), lib, err)
 		}
-		path := fmt.Sprintf("%s.library", hooks)
-		src, err := rewritePackage(path, lib)
+		err = rewriteModulePackage(path, libModule)
 		if err != nil {
 			return err
 		}
-		if err := c.backend.driver.PutModule(context.Background(), path, src); err != nil {
+		src, err := format.Ast(libModule)
+		if err := c.backend.driver.PutModule(context.Background(), path, string(src)); err != nil {
 			return fmt.Errorf("Error %s from compiled source:\n%s", err, src)
 		}
 	}
