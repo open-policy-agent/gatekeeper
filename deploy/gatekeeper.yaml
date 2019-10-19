@@ -336,7 +336,7 @@ spec:
               fieldPath: metadata.name
         - name: SECRET_NAME
           value: gatekeeper-webhook-server-secret
-        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.1
+        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
         imagePullPolicy: Always
         name: manager
         ports:
