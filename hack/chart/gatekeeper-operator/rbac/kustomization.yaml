@@ -1,0 +1,5 @@
+resources:
+  - _rbac.yaml
+patchesStrategicMerge:
+  - _chart-metadata.yaml
+  - chart-rbac-metadata.yaml

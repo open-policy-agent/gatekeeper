@@ -1,4 +1,7 @@
+apiVersion: API_VERSION_PLACEHOLDER
+kind: KIND_PLACEHOLDER
 metadata:
+  name: METADATA_NAME_PLACEHOLDER
   labels:
     app: '{{ include "gatekeeper-operator.name" . }}'
     chart: '{{ include "gatekeeper-operator.chart" . }}'
