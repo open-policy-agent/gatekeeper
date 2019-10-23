@@ -405,6 +405,7 @@ func Convert_templates_Names_To_v1beta1_Names(in *templates.Names, out *Names, s
 func autoConvert_v1beta1_Target_To_templates_Target(in *Target, out *templates.Target, s conversion.Scope) error {
 	out.Target = in.Target
 	out.Rego = in.Rego
+	out.Libs = *(*[]string)(unsafe.Pointer(&in.Libs))
 	return nil
 }
 
@@ -416,6 +417,7 @@ func Convert_v1beta1_Target_To_templates_Target(in *Target, out *templates.Targe
 func autoConvert_templates_Target_To_v1beta1_Target(in *templates.Target, out *Target, s conversion.Scope) error {
 	out.Target = in.Target
 	out.Rego = in.Rego
+	out.Libs = *(*[]string)(unsafe.Pointer(&in.Libs))
 	return nil
 }
 
