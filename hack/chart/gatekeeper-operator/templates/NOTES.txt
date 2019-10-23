@@ -1,1 +1,1 @@
-GateKeeper Operator installed in gatekeeper-system
+Gatekeeper Operator installed in gatekeeper-system
