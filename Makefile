@@ -5,7 +5,7 @@ REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
 
-VERSION := v3.0.4-beta.1
+VERSION := v3.0.4-beta.2
 CHARTDIR ?= $(PWD)/chart/gatekeeper-operator
 
 USE_LOCAL_IMG ?= false
@@ -114,7 +114,7 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate:
+generate: target-template-source
 	go generate ./pkg/... ./cmd/...
 
 # Docker Login
@@ -151,6 +151,12 @@ ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
+
+# Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
+target-template-source:
+	@printf "package target\n\n// This file is generated from pkg/target/regolib/src.rego via \"make target-template-source\"\n// Do not modify this file directly!\n\nconst templSrc = \`" > pkg/target/target_template_source.go
+	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/; s/data\[\"{{.ConstraintsRoot}}\"\]/{{.ConstraintsRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
+	@printf "\`\n" >> pkg/target/target_template_source.go
 
 docker-build-ci:
 	docker build --pull . -t $(IMG) -f Dockerfile_ci

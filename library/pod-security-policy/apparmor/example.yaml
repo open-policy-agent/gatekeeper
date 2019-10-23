@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-apparmor
+  annotations:
+    # apparmor.security.beta.kubernetes.io/pod: unconfined # runtime/default
+    container.apparmor.security.beta.kubernetes.io/nginx: unconfined # runtime/default
+  labels:
+    app: nginx-apparmor
+spec:
+  containers:
+  - name: nginx
+    image: nginx
