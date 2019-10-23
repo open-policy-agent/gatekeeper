@@ -1,0 +1,7 @@
+namespace: gatekeeper-system
+namePrefix: gatekeeper-
+resources:
+  - _ns.yaml
+#  - chart-ns-metadata.yaml
+patchesStrategicMerge:
+  - chart-ns-metadata.yaml

@@ -1,5 +1,5 @@
 resources:
-  - _rbac.yaml
+  - _clusterrole.yaml
 patchesStrategicMerge:
   - _chart-metadata.yaml
-  - chart-rbac-metadata.yaml
+  - chart-clusterrole-metadata.yaml

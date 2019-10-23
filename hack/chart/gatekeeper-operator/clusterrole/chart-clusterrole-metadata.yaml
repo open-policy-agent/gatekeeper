@@ -3,4 +3,3 @@ kind: ClusterRole
 metadata:
   creationTimestamp: null
   name: '{{ template "gatekeeper-operator.fullname" . }}'
-
