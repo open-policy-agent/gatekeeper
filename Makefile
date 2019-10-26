@@ -87,7 +87,6 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	kubectl get node
 	touch -a ./overlays/dev/manager_image_patch.yaml
 	kubectl apply -f config/crds
 	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/deploy

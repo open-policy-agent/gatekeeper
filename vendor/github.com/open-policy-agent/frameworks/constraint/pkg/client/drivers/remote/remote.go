@@ -76,6 +76,11 @@ func (d *driver) PutModule(ctx context.Context, name string, src string) error {
 	return d.opa.InsertPolicy(name, []byte(src))
 }
 
+// PutModules implements drivers.Driver
+func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []string) error {
+	panic("not implemented")
+}
+
 // DeleteModule deletes a rule from OPA and returns true if a rule was found and deleted, false
 // if a rule was not found, and any errors
 func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
@@ -88,6 +93,11 @@ func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
 		}
 	}
 	return err == nil, err
+}
+
+// DeleteModules implements drivers.Driver
+func (d *driver) DeleteModules(ctx context.Context, namePrefix string) (int, error) {
+	panic("not implemented")
 }
 
 func (d *driver) PutData(ctx context.Context, path string, data interface{}) error {
