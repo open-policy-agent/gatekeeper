@@ -115,8 +115,8 @@ SLEEP_TIME=1
   cmd="kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
   wait_for_process $WAIT_TIME $SLEEP_TIME "$cmd"
 
-  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[] | length' | head -1)
-  [[ "$violations" -eq 4 ]]
+  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
+  [[ "$violations" -eq 5 ]]
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
   [[ "$totalViolations" -eq 5 ]]
