@@ -41,8 +41,15 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
+  replicas: '{{ .Values.replicas }}'
   selector:
     matchLabels:
       app: gatekeeper-operator
       release: RELEASE_NAME
   resources: STATEFUL_SET_RESOURCES
+  template:
+    spec:
+      containers:
+      -  name: manager
+         imagePullPolicy: '{{ .Values.imagePullPolicy }}'
+         image: '{{ .Values.image }}'

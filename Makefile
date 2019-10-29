@@ -8,7 +8,6 @@ REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 IMG := $(REPOSITORY):latest
 
 VERSION := v3.0.4-beta.2
-CHARTDIR ?= $(PWD)/chart/gatekeeper-operator
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.4.0
@@ -100,10 +99,10 @@ deploy: manifests
 manifests:
 	@go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 	@kustomize build config  -o deploy/gatekeeper.yaml
-	@kustomize build config -o ${CHART_PATH}/chart-kustomize/_temp.yaml
+	@kustomize build config -o ${CHART_PATH}/helm-modifications/_temp.yaml
 	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
-	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> ${CHART_PATH}/chart-kustomize/_temp.yaml ; cat $${x} >> ${CHART_PATH}/chart-kustomize/_temp.yaml ; done'
-	@kustomize build ${CHART_PATH}/chart-kustomize -o ${CHART_PATH}/templates/gatekeeper.yaml
+	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> ${CHART_PATH}/helm-modifications/_temp.yaml ; cat $${x} >> ${CHART_PATH}/helm-modifications/_temp.yaml ; done'
+	@kustomize build ${CHART_PATH}/helm-modifications -o ${CHART_PATH}/templates/gatekeeper.yaml
 	@sed -i -E "s/STATEFUL_SET_RESOURCES/\
 \n{{ toYaml .Values.resources | indent 12 }}\
 \n    {{- with .Values.nodeSelector }}\
@@ -118,16 +117,8 @@ manifests:
 \n      tolerations:\
 \n{{ toYaml . | indent 8 }}\
 \n    {{- end }}/" ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i "s/GATEKEEPER_APP_LABEL/{{ template \"gatekeeper-operator.name\" . }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i "s/GATEKEEPER_CHART_LABEL/{{ template \"gatekeeper-operator.name\" . }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i "s/RELEASE_NAME/{{ .Release.Name }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i "s/RELEASE_SERVICE/{{ .Release.Service }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
-	@rm ${CHART_PATH}/chart-kustomize/_temp.yaml
+	@rm ${CHART_PATH}/helm-modifications/_temp.yaml
 	@echo "Helm template created under '${CHART_PATH}/templates'"
-
-.PHONY: chart
-chart: generate manifests
-	cd hack && ./generate_chart.sh $(VERSION)
 
 # Run go fmt against code
 fmt:
