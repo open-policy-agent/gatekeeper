@@ -177,7 +177,7 @@ func (tc *RegoRewriterTestcase) Run(t *testing.T) {
 
 	// TODO: factor out code for filesystem testing
 	for path, content := range tc.baseSrcs {
-		if err := rr.AddBase(path, content); err != nil {
+		if err := rr.AddEntryPoint(path, content); err != nil {
 			// TODO: add testcase for failed parse
 			t.Fatalf("failed to add base %s %v", path, err)
 		}

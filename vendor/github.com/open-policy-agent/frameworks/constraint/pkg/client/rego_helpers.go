@@ -1,11 +1,10 @@
 package client
 
 import (
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -15,151 +14,35 @@ var (
 	}
 )
 
-func newRegoConformer(allowedDataFields []string) *regoConformer {
-	allowed := make(map[string]bool)
-	for _, v := range allowedDataFields {
-		if !validDataFields[v] {
-			continue
-		}
-		allowed[v] = true
-	}
-	return &regoConformer{allowedDataFields: allowed}
-}
-
-type regoConformer struct {
-	allowedDataFields map[string]bool
-}
-
-// ensureRegoConformance rewrites the package path and ensures there is no access of `data`
-// beyond the whitelisted bits. Note that this rewriting will currently modify the Rego to look
-// potentially very different from the input, but it will still be functionally equivalent.
-func (rc *regoConformer) ensureRegoConformance(kind, path, rego string) (string, error) {
-	if rego == "" {
-		return "", errors.New("Rego source code is empty")
-	}
-	module, err := ast.ParseModule(kind, rego)
-	if err != nil {
-		return "", err
-	}
-	if module == nil {
-		return "", errors.New("Module could not be parsed")
-	}
-	if len(module.Imports) != 0 {
-		return "", errors.New("Use of the `import` keyword is not allowed")
-	}
-	// Temporarily unset Package.Path to avoid triggering a "prohibited data field" error
-	module.Package.Path = nil
-	if err := rc.checkDataAccess(module); err != nil {
-		return "", err
-	}
-	module.Package.Path, err = packageRef(path)
-	if err != nil {
-		return "", err
-	}
-	return module.String(), nil
-}
-
-// rewritePackage rewrites the package in a rego module
-func rewritePackage(path, rego string) (string, error) {
-	if rego == "" {
-		return "", errors.New("Rego source code is empty")
-	}
+// parseModule parses the module and also fails empty modules.
+func parseModule(path, rego string) (*ast.Module, error) {
 	module, err := ast.ParseModule(path, rego)
-	if err != nil {
-		return "", err
-	}
-	if module == nil {
-		return "", errors.New("Module could not be parsed")
-	}
-	module.Package.Path, err = packageRef(path)
-	if err != nil {
-		return "", err
-	}
-	return module.String(), nil
-}
-
-// packageRef constructs a Ref to the provided package path string
-func packageRef(path string) (ast.Ref, error) {
-	pathParts, err := ast.ParseRef(path)
 	if err != nil {
 		return nil, err
 	}
+	if module == nil {
+		return nil, errors.New("Empty module")
+	}
+	return module, nil
+}
+
+// rewriteModulePackage rewrites the module's package path to path.
+func rewriteModulePackage(path string, module *ast.Module) error {
+	pathParts, err := ast.ParseRef(path)
+	if err != nil {
+		return err
+	}
 	packageRef := ast.Ref([]*ast.Term{ast.VarTerm("data")})
-	return packageRef.Extend(pathParts), nil
-}
-
-func makeInvalidRootFieldErr(val ast.Value, allowed map[string]bool) error {
-	if len(allowed) == 0 {
-		return fmt.Errorf("Template is attempting to access `data.%s`. Access to the data document is disabled", val.String())
-	}
-	var validFields []string
-	for field := range allowed {
-		validFields = append(validFields, field)
-	}
-	return fmt.Errorf("Invalid `data` field: %s. Valid fields are: %s", val.String(), strings.Join(validFields, ", "))
-}
-
-var _ error = Errors{}
-
-type Errors []error
-
-func (errs Errors) Error() string {
-	s := make([]string, len(errs))
-	for _, e := range errs {
-		s = append(s, e.Error())
-	}
-	return strings.Join(s, "\n")
-}
-
-// checkDataAccess makes sure that data is only referenced in terms of valid subfields
-func (rc *regoConformer) checkDataAccess(module *ast.Module) Errors {
-	var errs Errors
-	ast.WalkRefs(module, func(r ast.Ref) bool {
-		if r.HasPrefix(ast.DefaultRootRef) {
-			if len(r) < 2 {
-				errs = append(errs, fmt.Errorf("All references to `data` must access a field of `data`: %s", r))
-				return false
-			}
-			if !r[1].IsGround() {
-				errs = append(errs, fmt.Errorf("Fields of `data` must be accessed with a literal value (e.g. `data.inventory`, not `data[var]`): %s", r))
-				return false
-			}
-			v := r[1].Value
-			if val, ok := v.(ast.String); !ok {
-				errs = append(errs, makeInvalidRootFieldErr(v, rc.allowedDataFields))
-				return false
-			} else {
-				if !rc.allowedDataFields[string(val)] {
-					errs = append(errs, makeInvalidRootFieldErr(v, rc.allowedDataFields))
-					return false
-				}
-			}
-		}
-		return false
-	})
-
-	if len(errs) > 0 {
-		return errs
-	}
+	newPath := packageRef.Extend(pathParts)
+	module.Package.Path = newPath
 	return nil
 }
 
 // rule name -> arity
 type ruleArities map[string]int
 
-// requireRules makes sure the listed rules are specified with the required arity
-func requireRules(name, rego string, reqs ruleArities) error {
-	if rego == "" {
-		return errors.New("Rego source code is empty")
-	}
-	module, err := ast.ParseModule(name, rego)
-	if err != nil {
-		return err
-	}
-	if module == nil {
-		return errors.New("Module could not be parsed")
-	}
-
+// requireRulesModule makes sure the listed rules are specified with the required arity
+func requireRulesModule(module *ast.Module, reqs ruleArities) error {
 	arities := make(ruleArities, len(module.Rules))
 	for _, rule := range module.Rules {
 		name := string(rule.Head.Name)
@@ -184,7 +67,6 @@ func requireRules(name, rego string, reqs ruleArities) error {
 	if len(errs) != 0 {
 		return errs
 	}
-
 	return nil
 }
 
