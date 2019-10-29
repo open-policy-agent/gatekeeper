@@ -1,1 +1,0 @@
-Gatekeeper Operator installed in gatekeeper-system

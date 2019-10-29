@@ -1,4 +1,3 @@
-{{/* vim: set filetype=mustache: */}}
 {{/*
 Expand the name of the chart.
 */}}
@@ -29,17 +28,6 @@ Create chart name and version as used by the chart label.
 */}}
 {{- define "gatekeeper-operator.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Create the name of the service account to use
-*/}}
-{{- define "gatekeeper-operator.serviceAccountName" -}}
-{{- if .Values.rbac.create -}}
-    {{ include "gatekeeper-operator.fullname" . }}
-{{- else -}}
-    {{ default "default" .Values.rbac.serviceAccountName }}
-{{- end -}}
 {{- end -}}
 
 {{/*

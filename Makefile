@@ -117,6 +117,7 @@ manifests:
 \n      tolerations:\
 \n{{ toYaml . | indent 8 }}\
 \n    {{- end }}/" ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i "s/VALUES_REPLICAS_PLACEHOLDER/{{ .Values.Replicas }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
 	@rm ${CHART_PATH}/helm-modifications/_temp.yaml
 	@echo "Helm template created under '${CHART_PATH}/templates'"
 

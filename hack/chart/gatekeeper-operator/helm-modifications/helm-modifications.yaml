@@ -16,7 +16,6 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
 status: null
 spec:
-#  validation: SPEC_VALIDATION_REMOVE_PLACEHOLDER
   names:
     shortNames:
       - config # add shortName to CRD until https://github.com/kubernetes-sigs/kubebuilder/issues/404 is solved
@@ -30,7 +29,6 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
 status: null
 spec:
-#  validation: SPEC_VALIDATION_REMOVE_PLACEHOLDER
   names:
     shortNames:
       - constraints # add shortName to CRD until https://github.com/kubernetes-sigs/kubebuilder/issues/404 is solved
@@ -41,7 +39,7 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: '{{ .Values.replicas }}'
+  replicas: VALUES_REPLICAS_PLACEHOLDER
   selector:
     matchLabels:
       app: gatekeeper-operator
