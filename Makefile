@@ -184,8 +184,18 @@ docker-push:
 release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
-release-manifest:
+release-manifest: generate-helm-chart
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+
+generate-helm-chart:
+	@echo "Updating chart version to: ${NEWVERSION}"
+	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml
+	@sed -i "s/version: .*/version: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml
+
+	@echo "Updating chart images tag to: ${NEWVERSION}"
+	@sed -i -E "s/image: (.*):.*/image: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
+	@sed -i -E "s/sidecarImage: (.*):.*/sidecarImage: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
+	@sed -i -E "s/	image: (.*): (.*):.*/	image: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
@@ -198,20 +208,3 @@ uninstall:
 	-kubectl delete -n gatekeeper-system Config config
 	sleep 5
 	kubectl delete ns gatekeeper-system
-
-generate-helm-chart:
-	@if test "$(GATEKEEPER_TAG)" = "" ; then \
-			echo "Usage: make generate-chart GATEKEEPER_TAG=<image tag>"; \
-			exit 1; \
-	fi
-
-	$(eval GATEKEEPER_VERSION="${GATEKEEPER_TAG}")
-
-	@echo "Updating chart version to: ${GATEKEEPER_VERSION}"
-	@sed -i "s/appVersion: .*/appVersion: ${GATEKEEPER_TAG}/" ${CHART_PATH}/Chart.yaml
-	@sed -i "s/version: .*/version: ${GATEKEEPER_VERSION}/" ${CHART_PATH}/Chart.yaml
-
-	@echo "Updating chart images tag to: ${GATEKEEPER_VERSION}"
-	@sed -i -E "s/image: (.*):.*/image: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml
-	@sed -i -E "s/sidecarImage: (.*):.*/sidecarImage: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml
-	@sed -i -E "s/	image: (.*): (.*):.*/	image: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml
