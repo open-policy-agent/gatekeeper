@@ -62,13 +62,21 @@ func (r *RegoRewriter) add(path, src string, slice *[]*Module) error {
 		return err
 	}
 
-	*slice = append(*slice, &Module{FilePath: FilePath{path}, Module: m})
+	r.addModule(path, m, slice)
 	return nil
 }
 
-// AddBase adds a base source which will not have it's package path rewritten.  These correspond
+func (r *RegoRewriter) addModule(path string, m *ast.Module, slice *[]*Module) {
+	*slice = append(*slice, &Module{FilePath: FilePath{path}, Module: m})
+}
+
+func (r *RegoRewriter) AddEntryPointModule(path string, m *ast.Module) {
+	r.addModule(path, m, &r.entryPoints)
+}
+
+// AddEntryPoint adds a base source which will not have it's package path rewritten.  These correspond
 // to the rego that will be populated into a ConstraintTemplate with the 'violation' rule.
-func (r *RegoRewriter) AddBase(path, src string) error {
+func (r *RegoRewriter) AddEntryPoint(path, src string) error {
 	return r.add(path, src, &r.entryPoints)
 }
 

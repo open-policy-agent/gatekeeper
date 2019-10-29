@@ -47,6 +47,21 @@ func (s *Sources) allSources() []sourceFile {
 	return m
 }
 
+// ForEachModule applys fn to each EntryPoint and Lib
+func (s *Sources) ForEachModule(fn func(m *Module) error) error {
+	for _, module := range s.EntryPoints {
+		if err := fn(module); err != nil {
+			return err
+		}
+	}
+	for _, module := range s.Libs {
+		if err := fn(module); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // forAll runs the provided function on all sources.
 func (s *Sources) forAll(fn func(s sourceFile) error) error {
 	for _, module := range s.EntryPoints {

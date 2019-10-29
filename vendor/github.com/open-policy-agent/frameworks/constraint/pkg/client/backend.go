@@ -2,9 +2,9 @@ package client
 
 import (
 	"context"
-	"errors"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/pkg/errors"
 )
 
 type Backend struct {
@@ -56,10 +56,14 @@ func (b *Backend) NewClient(opts ...ClientOpt) (*Client, error) {
 			errs = append(errs, err)
 		}
 	}
+	for _, field := range c.allowedDataFields {
+		if !validDataFields[field] {
+			return nil, errors.Errorf("Invalid data field %s", field)
+		}
+	}
 	if len(errs) > 0 {
 		return nil, errs
 	}
-	c.rConformer = newRegoConformer(c.allowedDataFields)
 	if len(c.targets) == 0 {
 		return nil, errors.New("No targets registered. Please register a target via client.Targets()")
 	}

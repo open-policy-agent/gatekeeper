@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 )
@@ -25,7 +26,12 @@ func NewProbe(d drivers.Driver) (*Probe, error) {
 
 func (p *Probe) TestFuncs() map[string]func() error {
 	ret := make(map[string]func() error)
-	for name := range tests {
+	var names []string
+	for n := range e2eTests {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		ret[name] = p.runTest(name)
 	}
 	return ret
@@ -37,7 +43,7 @@ func (p *Probe) runTest(name string) func() error {
 		if err := p.client.Reset(context.Background()); err != nil {
 			return err
 		}
-		err := tests[name](p.client)
+		err := e2eTests[name](p.client)
 		if err != nil {
 			dump, err2 := p.client.Dump(context.Background())
 			if err2 != nil {
