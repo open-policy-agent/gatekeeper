@@ -1,5 +1,0 @@
-resources:
-  - _crds.yaml
-patchesStrategicMerge:
-  - _chart-metadata.yaml
-  - chart-configs-metadata.yaml

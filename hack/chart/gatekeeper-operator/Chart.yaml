@@ -3,8 +3,8 @@ description: A Helm chart for GateKeeper operator
 name: gatekeeper-operator
 keywords:
   - open policy agent
-version: v3.0.4-beta.1
+version: v3.0.4-beta.2
 home: https://github.com/open-policy-agent/gatekeeper
 sources:
   - https://github.com/open-policy-agent/gatekeeper.git
-appVersion: v3.0.4-beta.1
+appVersion: v3.0.4-beta.2

@@ -1,0 +1,9 @@
+commonLabels:
+  app: GATEKEEPER_APP_LABEL
+  chart: GATEKEEPER_CHART_LABEL
+  release: RELEASE_NAME
+  heritage: RELEASE_SERVICE
+resources:
+  - _temp.yaml
+patchesStrategicMerge:
+  - chart-kustomize.yaml

@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 replicas: 1
-image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.1
+image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
 imagePullPolicy: IfNotPresent
 
 # whether or not to install CRDs

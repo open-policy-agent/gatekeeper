@@ -1,3 +1,5 @@
+CHART_PATH := $(PWD)/hack/chart/gatekeeper-operator
+CONFIG_PATH := $(PWD)/config
 
 # Image URL to use all building/pushing image targets
 REGISTRY ?= quay.io
@@ -96,10 +98,32 @@ deploy: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
-	kustomize build config  -o deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
-	cd hack && ./generate_chart_manifests.sh
+	@go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+	@kustomize build config  -o deploy/gatekeeper.yaml
+	@kustomize build config -o ${CHART_PATH}/chart-kustomize/_temp.yaml
+	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> ${CHART_PATH}/chart-kustomize/_temp.yaml ; cat $${x} >> ${CHART_PATH}/chart-kustomize/_temp.yaml ; done'
+	@kustomize build ${CHART_PATH}/chart-kustomize -o ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i -E "s/STATEFUL_SET_RESOURCES/\
+\n{{ toYaml .Values.resources | indent 12 }}\
+\n    {{- with .Values.nodeSelector }}\
+\n      nodeSelector:\
+\n{{ toYaml . | indent 8 }}\
+\n    {{- end }}\
+\n    {{- with .Values.affinity }}\
+\n      affinity:\
+\n{{ toYaml . | indent 8 }}\
+\n    {{- end }}\
+\n    {{- with .Values.tolerations }}\
+\n      tolerations:\
+\n{{ toYaml . | indent 8 }}\
+\n    {{- end }}/" ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i "s/GATEKEEPER_APP_LABEL/{{ template \"gatekeeper-operator.name\" . }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i "s/GATEKEEPER_CHART_LABEL/{{ template \"gatekeeper-operator.name\" . }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i "s/RELEASE_NAME/{{ .Release.Name }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
+	@sed -i "s/RELEASE_SERVICE/{{ .Release.Service }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
+	@rm ${CHART_PATH}/chart-kustomize/_temp.yaml
+	@echo "Helm template created under '${CHART_PATH}/templates'"
 
 .PHONY: chart
 chart: generate manifests
@@ -182,3 +206,20 @@ uninstall:
 	-kubectl delete -n gatekeeper-system Config config
 	sleep 5
 	kubectl delete ns gatekeeper-system
+
+generate-helm-chart:
+	@if test "$(GATEKEEPER_TAG)" = "" ; then \
+			echo "Usage: make generate-chart GATEKEEPER_TAG=<image tag>"; \
+			exit 1; \
+	fi
+
+	$(eval GATEKEEPER_VERSION="${GATEKEEPER_TAG}")
+
+	@echo "Updating chart version to: ${GATEKEEPER_VERSION}"
+	@sed -i "s/appVersion: .*/appVersion: ${GATEKEEPER_TAG}/" ${CHART_PATH}/Chart.yaml
+	@sed -i "s/version: .*/version: ${GATEKEEPER_VERSION}/" ${CHART_PATH}/Chart.yaml
+
+	@echo "Updating chart images tag to: ${GATEKEEPER_VERSION}"
+	@sed -i -E "s/image: (.*):.*/image: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml
+	@sed -i -E "s/sidecarImage: (.*):.*/sidecarImage: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml
+	@sed -i -E "s/	image: (.*): (.*):.*/	image: \1:${GATEKEEPER_VERSION}/" ${CHART_PATH}/values.yaml

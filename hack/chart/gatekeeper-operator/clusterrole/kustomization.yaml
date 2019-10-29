@@ -1,5 +1,0 @@
-resources:
-  - _clusterrole.yaml
-patchesStrategicMerge:
-  - _chart-metadata.yaml
-  - chart-clusterrole-metadata.yaml
