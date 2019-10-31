@@ -492,8 +492,8 @@ spec:
               fieldPath: metadata.name
         - name: SECRET_NAME
           value: gatekeeper-webhook-server-secret
-        image: '{{ .Values.image }}'
-        imagePullPolicy: '{{ .Values.imagePullPolicy }}'
+        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         name: manager
         ports:
         - containerPort: 8443
