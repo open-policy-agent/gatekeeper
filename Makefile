@@ -171,7 +171,7 @@ update-helm-chart:
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
 
 	@echo "Updating chart images tag to: ${NEWVERSION}"
-	@sed -i -E "s/image: (.*):.*/image: \1:${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
+	@sed -i -E "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev

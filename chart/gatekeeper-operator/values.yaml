@@ -4,7 +4,9 @@
 replicas: 1
 auditInterval: 60
 constraintViolationsLimit: 20
-image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
-imagePullPolicy: IfNotPresent
+image:
+  repository: quay.io/open-policy-agent/gatekeeper
+  release: v3.0.4-beta.2
+  pullPolicy: IfNotPresent
 nodeSelector: {}
 tolerations: []

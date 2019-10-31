@@ -53,5 +53,5 @@ spec:
          - --auditInterval=HELMSUBST_VALUES_AUDITINTERVAL_PLACEHOLDER
          - --port=8443
          - --constraintViolationsLimit=HELMSUBST_VALUES_CONSTRAINTVIOLATIONSLIMIT_PLACEHOLDER
-         imagePullPolicy: '{{ .Values.imagePullPolicy }}'
-         image: '{{ .Values.image }}'
+         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+         image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
