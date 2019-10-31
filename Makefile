@@ -1,6 +1,3 @@
-CHART_PATH := $(PWD)/hack/chart/gatekeeper-operator
-CONFIG_PATH := $(PWD)/config
-
 # Image URL to use all building/pushing image targets
 REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
@@ -98,27 +95,9 @@ deploy: manifests
 manifests:
 	@go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 	@kustomize build config  -o deploy/gatekeeper.yaml
-	@kustomize build config -o ${CHART_PATH}/helm-modifications/_temp.yaml
+	@kustomize build config -o chart/gatekeeper-operator/helm-modifications/_temp.yaml
 	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
-	@bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> ${CHART_PATH}/helm-modifications/_temp.yaml ; cat $${x} >> ${CHART_PATH}/helm-modifications/_temp.yaml ; done'
-	@kustomize build ${CHART_PATH}/helm-modifications -o ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i -E "s/STATEFUL_SET_RESOURCES/\
-\n{{ toYaml .Values.resources | indent 12 }}\
-\n    {{- with .Values.nodeSelector }}\
-\n      nodeSelector:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}\
-\n    {{- with .Values.affinity }}\
-\n      affinity:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}\
-\n    {{- with .Values.tolerations }}\
-\n      tolerations:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}/" ${CHART_PATH}/templates/gatekeeper.yaml
-	@sed -i "s/VALUES_REPLICAS_PLACEHOLDER/{{ .Values.Replicas }}/g" ${CHART_PATH}/templates/gatekeeper.yaml
-	@rm ${CHART_PATH}/helm-modifications/_temp.yaml
-	@echo "Helm template created under '${CHART_PATH}/templates'"
+	@sh chart/gatekeeper-operator/generate_helm_template.sh
 
 # Run go fmt against code
 fmt:
@@ -183,10 +162,10 @@ docker-push:
 release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
-release-manifest: generate-helm-chart
+release-manifest: update-helm-chart
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
 
-generate-helm-chart:
+update-helm-chart:
 	@echo "Updating chart version to: ${NEWVERSION}"
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml

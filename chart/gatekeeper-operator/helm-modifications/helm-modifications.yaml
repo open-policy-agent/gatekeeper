@@ -39,12 +39,12 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: VALUES_REPLICAS_PLACEHOLDER
+  replicas: HELMSUBST_VALUES_REPLICAS_PLACEHOLDER
   selector:
     matchLabels:
       app: gatekeeper-operator
       release: RELEASE_NAME
-  resources: STATEFUL_SET_RESOURCES
+  resources: HELMSUBST_STATEFUL_SET_RESOURCES
   template:
     spec:
       containers:

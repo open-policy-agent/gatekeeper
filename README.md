@@ -70,7 +70,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 #### Deploying via Helm ####
 
-A basic Helm template exists in `hack/chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via `helm install hack/chart/gatekeeper-operator/`
+A basic Helm template exists in `chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via `helm install chart/gatekeeper-operator/`
 
 ### Uninstallation
 
