@@ -162,16 +162,12 @@ docker-push:
 release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
-release-manifest: update-helm-chart
+release-manifest:
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
-
-update-helm-chart:
-	@echo "Updating chart version to: ${NEWVERSION}"
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
-
-	@echo "Updating chart images tag to: ${NEWVERSION}"
-	@sed -i -E "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
+	@sed -i "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
+	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" chart/gatekeeper-operator/values.yaml
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
