@@ -50,8 +50,8 @@ spec:
       containers:
       -  name: manager
          args:
-         - --auditInterval=HELMSUBST_VALUES_AUDITINTERVAL_PLACEHOLDER
+         - --auditInterval={{ .Values.auditInterval }}
          - --port=8443
-         - --constraintViolationsLimit=HELMSUBST_VALUES_CONSTRAINTVIOLATIONSLIMIT_PLACEHOLDER
+         - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
          imagePullPolicy: '{{ .Values.image.pullPolicy }}'
          image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
