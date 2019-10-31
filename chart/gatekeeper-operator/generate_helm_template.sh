@@ -18,5 +18,7 @@ sed -i -E "s/HELMSUBST_STATEFUL_SET_RESOURCES/\
 \n{{ toYaml . | indent 8 }}\
 \n    {{- end }}/" templates/gatekeeper.yaml
 sed -i "s/HELMSUBST_VALUES_REPLICAS_PLACEHOLDER/{{ .Values.Replicas }}/g" templates/gatekeeper.yaml
+sed -i "s/HELMSUBST_VALUES_AUDITINTERVAL_PLACEHOLDER/{{ .Values.auditInterval }}/g" templates/gatekeeper.yaml
+sed -i "s/HELMSUBST_VALUES_CONSTRAINTVIOLATIONSLIMIT_PLACEHOLDER/{{ .Values.constraintViolationsLimit }}/g" templates/gatekeeper.yaml
 rm ./helm-modifications/_temp.yaml
 echo "Helm template created under 'chart/gatekeeper-operator/templates'"

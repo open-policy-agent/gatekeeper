@@ -2,6 +2,8 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 replicas: 1
+auditInterval: 60
+constraintViolationsLimit: 20
 image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
 imagePullPolicy: IfNotPresent
 nodeSelector: {}

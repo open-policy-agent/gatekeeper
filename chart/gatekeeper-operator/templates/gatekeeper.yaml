@@ -477,8 +477,9 @@ spec:
     spec:
       containers:
       - args:
-        - --auditInterval=30
+        - --auditInterval={{ .Values.auditInterval }}
         - --port=8443
+        - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
         env:
         - name: POD_NAMESPACE
           valueFrom:
