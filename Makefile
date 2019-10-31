@@ -167,13 +167,11 @@ release-manifest: update-helm-chart
 
 update-helm-chart:
 	@echo "Updating chart version to: ${NEWVERSION}"
-	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml
-	@sed -i "s/version: .*/version: ${NEWVERSION}/" ${CHART_PATH}/Chart.yaml
+	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
+	@sed -i "s/version: .*/version: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
 
 	@echo "Updating chart images tag to: ${NEWVERSION}"
-	@sed -i -E "s/image: (.*):.*/image: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
-	@sed -i -E "s/sidecarImage: (.*):.*/sidecarImage: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
-	@sed -i -E "s/	image: (.*): (.*):.*/	image: \1:${NEWVERSION}/" ${CHART_PATH}/values.yaml
+	@sed -i -E "s/image: (.*):.*/image: \1:${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
