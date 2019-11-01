@@ -7,7 +7,6 @@ spec:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-        namespace: ["default"]
   parameters:
     runAsUser:
       rule: MustRunAs

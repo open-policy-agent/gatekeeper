@@ -5,6 +5,9 @@ test_one_container_run_as_any {
   results := data.k8spspallowedusers.violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -31,6 +34,9 @@ test_one_container_run_as_any_root_user {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -55,6 +61,9 @@ test_one_container_run_as_non_root_user_is_not_root {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -80,6 +89,9 @@ test_one_container_run_as_non_root_user_is_root {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -104,6 +116,9 @@ test_one_container_run_in_range_user_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -132,6 +147,9 @@ test_one_container_run_in_range_user_out_of_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -160,6 +178,9 @@ test_one_container_run_in_range_user_lower_edge_of_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -188,6 +209,9 @@ test_one_container_run_in_range_user_upper_edge_of_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -216,6 +240,9 @@ test_one_container_run_in_range_user_between_ranges {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -247,6 +274,9 @@ test_two_containers_run_as_any {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -278,6 +308,9 @@ test_two_containers_run_as_non_root_users_are_not_root {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -309,6 +342,9 @@ test_two_containers_run_as_non_root_one_is_root {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -340,6 +376,9 @@ test_two_containers_run_in_range_both_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -379,6 +418,9 @@ test_two_containers_run_in_range_one_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -414,6 +456,9 @@ test_two_containers_run_in_range_neither_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -452,6 +497,9 @@ test_one_container_one_initcontainer_run_in_range_user_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -486,6 +534,9 @@ test_one_container_one_initcontainer_run_in_range_user_not_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -520,6 +571,9 @@ test_one_container_empty_security_context {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
   			"spec": {
   				"containers": [{
@@ -546,8 +600,10 @@ test_one_container_empty_security_context_empty_pod_security_context {
   results := violation with input as
   {
   	"review": {
+      "kind": {
+        "kind": "Pod"
+      },
   		"object": {
-        "kind": "Pod",
   			"spec": {
     			"securityContext": {},
   				"containers": [{
@@ -574,8 +630,10 @@ test_one_container_pod_defined_run_in_range_user_in_range {
   results := violation with input as
   {
   	"review": {
+      "kind": {
+        "kind": "Pod"
+      },
   		"object": {
-        "kind": "Pod",
   			"spec": {
   			  "securityContext": {
   			    "runAsUser": 150
@@ -604,8 +662,10 @@ test_one_container_pod_defined_run_in_range_user_not_in_range {
   results := violation with input as
   {
   	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
   		"object": {
-        "kind": "Pod",
   			"spec": {
   			  "securityContext": {
   			    "runAsUser": 250
