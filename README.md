@@ -70,7 +70,10 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 #### Deploying via Helm ####
 
-A basic Helm template exists in `chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via `helm install chart/gatekeeper-operator/`
+A basic Helm v2 template exists in `chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via 
+```sh
+helm install chart/gatekeeper-operator/
+```
 
 ### Uninstallation
 
@@ -103,6 +106,14 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
    * cd to the repository directory
    * run `make uninstall`
+
+##### Using Helm
+
+If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
+```sh
+helm delete <release name>
+kubectl delete 
+```
 
 ##### Manually Removing Constraints
 
