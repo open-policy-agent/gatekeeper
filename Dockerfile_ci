@@ -1,11 +1,11 @@
 FROM ubuntu:latest
 
-RUN apt update && apt upgrade -y \
-    && useradd -rm -u 1000 -U manager
+RUN apt update &&\
+    apt upgrade -y &&\
+    useradd -rm -u 1000 -U manager
 
 WORKDIR /home/manager/
-COPY bin/manager .
-RUN chown manager:manager manager
+COPY --chown=manager:manager bin/manager .
 
 USER 1000
 

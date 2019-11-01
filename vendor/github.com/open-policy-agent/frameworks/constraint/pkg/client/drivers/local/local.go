@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
@@ -15,7 +15,27 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/pkg/errors"
 )
+
+const moduleSetPrefix = "__modset_"
+const moduleSetSep = "_idx_"
+
+type module struct {
+	text   string
+	parsed *ast.Module
+}
+
+type insertParam map[string]*module
+
+func (i insertParam) add(name string, src string) error {
+	m, err := ast.ParseModule(name, src)
+	if err != nil {
+		return err
+	}
+	i[name] = &module{text: src, parsed: m}
+	return nil
+}
 
 type arg func(*driver)
 
@@ -62,64 +82,152 @@ func copyModules(modules map[string]*ast.Module, filter string) map[string]*ast.
 	return m
 }
 
+func (d *driver) checkModuleName(name string) error {
+	if name == "" {
+		return errors.Errorf("Module name cannot be empty")
+	}
+	if strings.HasPrefix(name, moduleSetPrefix) {
+		return errors.Errorf("Single modules not allowed to use name prefix %s", moduleSetPrefix)
+	}
+	return nil
+}
+
+func (d *driver) checkModuleSetName(name string) error {
+	if name == "" {
+		return errors.Errorf("Modules name prefix cannot be empty")
+	}
+	if strings.Index(name, moduleSetSep) != -1 {
+		return errors.Errorf("Modules name prefix not allowed to contain the sequence n%s", moduleSetSep)
+	}
+	return nil
+}
+
+func (d *driver) moduleSetPrefix(namePrefix string) string {
+	return fmt.Sprintf("%s%s%s", moduleSetPrefix, namePrefix, moduleSetSep)
+}
+
 func (d *driver) PutModule(ctx context.Context, name string, src string) error {
+	if err := d.checkModuleName(name); err != nil {
+		return err
+	}
+	insert := insertParam{}
+	if err := insert.add(name, src); err != nil {
+		return err
+	}
 	d.modulesMux.Lock()
 	defer d.modulesMux.Unlock()
-	module, err := ast.ParseModule(name, src)
-	if err != nil {
+	_, err := d.alterModules(ctx, insert, nil)
+	return err
+}
+
+// PutModules implements drivers.Driver
+func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []string) error {
+	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return err
 	}
-	modules := copyModules(d.modules, "")
-	modules[name] = module
-	txn, err := d.storage.NewTransaction(ctx, storage.WriteParams)
-	if err != nil {
-		return err
+
+	prefix := d.moduleSetPrefix(namePrefix)
+	insert := insertParam{}
+	for idx, src := range srcs {
+		name := fmt.Sprintf("%s%d", prefix, idx)
+		if err := insert.add(name, src); err != nil {
+			return err
+		}
 	}
-	c := ast.NewCompiler().WithPathConflictsCheck(storage.NonEmpty(ctx, d.storage, txn))
-	if c.Compile(modules); c.Failed() {
-		d.storage.Abort(ctx, txn)
-		return c.Errors
+
+	d.modulesMux.Lock()
+	defer d.modulesMux.Unlock()
+	var remove []string
+	for _, name := range d.listModuleSet(namePrefix) {
+		if _, found := insert[name]; !found {
+			remove = append(remove, name)
+		}
 	}
-	if err := d.storage.UpsertPolicy(ctx, txn, name, []byte(src)); err != nil {
-		d.storage.Abort(ctx, txn)
-		return err
-	}
-	if err := d.storage.Commit(ctx, txn); err != nil {
-		return err
-	}
-	d.modules[name] = module
-	d.compiler = c
-	return nil
+	_, err := d.alterModules(ctx, insert, remove)
+	return err
 }
 
 // DeleteModule deletes a rule from OPA and returns true if a rule was found and deleted, false
 // if a rule was not found, and any errors
 func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
+	if err := d.checkModuleName(name); err != nil {
+		return false, err
+	}
 	d.modulesMux.Lock()
 	defer d.modulesMux.Unlock()
-	if _, ok := d.modules[name]; !ok {
+	if _, found := d.modules[name]; !found {
 		return false, nil
 	}
-	modules := copyModules(d.modules, name)
+	count, err := d.alterModules(ctx, nil, []string{name})
+	return count == 1, err
+}
+
+// alterModules alters the modules in the driver by inserting and removing
+// the provided modules then returns the count of modules removed.
+// alterModules expects that the caller is holding the modulesMux lock.
+func (d *driver) alterModules(ctx context.Context, insert insertParam, remove []string) (int, error) {
+	updatedModules := copyModules(d.modules, "")
+	for _, name := range remove {
+		delete(updatedModules, name)
+	}
+	for name, mod := range insert {
+		updatedModules[name] = mod.parsed
+	}
+
 	txn, err := d.storage.NewTransaction(ctx, storage.WriteParams)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	if err := d.storage.DeletePolicy(ctx, txn, name); err != nil {
-		d.storage.Abort(ctx, txn)
-		return false, err
+
+	for _, name := range remove {
+		if err := d.storage.DeletePolicy(ctx, txn, name); err != nil {
+			d.storage.Abort(ctx, txn)
+			return 0, err
+		}
 	}
-	c := ast.NewCompiler()
-	if c.Compile(modules); c.Failed() {
+
+	c := ast.NewCompiler().WithPathConflictsCheck(storage.NonEmpty(ctx, d.storage, txn))
+	if c.Compile(updatedModules); c.Failed() {
 		d.storage.Abort(ctx, txn)
-		return false, err
+		return 0, c.Errors
+	}
+
+	for name, mod := range insert {
+		if err := d.storage.UpsertPolicy(ctx, txn, name, []byte(mod.text)); err != nil {
+			d.storage.Abort(ctx, txn)
+			return 0, err
+		}
 	}
 	if err := d.storage.Commit(ctx, txn); err != nil {
-		return false, err
+		return 0, err
 	}
 	d.compiler = c
-	delete(d.modules, name)
-	return true, nil
+	d.modules = updatedModules
+	return len(remove), nil
+}
+
+// DeleteModules implements drivers.Driver
+func (d *driver) DeleteModules(ctx context.Context, namePrefix string) (int, error) {
+	if err := d.checkModuleSetName(namePrefix); err != nil {
+		return 0, err
+	}
+
+	d.modulesMux.Lock()
+	defer d.modulesMux.Unlock()
+	return d.alterModules(ctx, nil, d.listModuleSet(namePrefix))
+}
+
+// listModuleSet returns the list of names corresponding to a given module
+// prefix.
+func (d *driver) listModuleSet(namePrefix string) []string {
+	prefix := d.moduleSetPrefix(namePrefix)
+	var names []string
+	for name := range d.modules {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func parsePath(path string) ([]string, error) {

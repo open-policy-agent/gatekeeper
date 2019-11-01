@@ -18,8 +18,7 @@ RUN apt update && apt upgrade -y \
     && useradd -rm -u 1000 -U manager
 
 WORKDIR /home/manager/
-COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
-RUN chown manager:manager manager
+COPY --chown=manager:manager --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
 
 USER 1000
 

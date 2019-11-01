@@ -229,6 +229,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
+  name = "github.com/golang/glog"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
+
+[[projects]]
+  branch = "master"
   digest = "1:b7cb6054d3dff43b38ad2e92492f220f57ae6087ee797dca298139776749ace8"
   name = "github.com/golang/groupcache"
   packages = ["lru"]
@@ -455,7 +463,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5442b2e7588d6283abd1d3ce6f8f93ca843093a6fdf42afbf1de314eef63a9b8"
+  digest = "1:5aa28cdd646408a84df7098393bcdc409ee553c841a48b92da3b30ef17b32fe2"
   name = "github.com/open-policy-agent/frameworks"
   packages = [
     "constraint/pkg/apis/templates/v1alpha1",
@@ -465,17 +473,19 @@
     "constraint/pkg/client/drivers/local",
     "constraint/pkg/client/regolib",
     "constraint/pkg/core/templates",
+    "constraint/pkg/regorewriter",
     "constraint/pkg/types",
   ]
   pruneopts = ""
-  revision = "9531ee2b302e605605163def27be75226d73a8fd"
+  revision = "9668cd0b86762d124901327445360ac93d796cc6"
 
 [[projects]]
-  digest = "1:bc1deacab378d7835fd8aad5eea751f5ee96ba3b377f1a113a8c87b7b3a11f01"
+  digest = "1:b32ff6cc12417b00012330d1297aa89ec391f9d54279de666400ed123d78c5e4"
   name = "github.com/open-policy-agent/opa"
   packages = [
     "ast",
     "bundle",
+    "format",
     "internal/compiler/wasm",
     "internal/compiler/wasm/opa",
     "internal/file",

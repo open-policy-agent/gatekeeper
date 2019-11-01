@@ -692,24 +692,30 @@ violation[{"msg": "msg"}] {
 
 func TestAllowedDataFieldsIntersection(t *testing.T) {
 	tc := []struct {
-		Name     string
-		Allowed  []string
-		Expected []string
+		Name      string
+		Allowed   ClientOpt
+		Expected  []string
+		wantError bool
 	}{
 		{
-			Name:     "Nothing Used",
-			Allowed:  []string{},
-			Expected: []string{},
-		},
-		{
-			Name:     "Inventory Used",
-			Allowed:  []string{"inventory"},
+			Name:     "No AllowedDataFields specified",
 			Expected: []string{"inventory"},
 		},
 		{
-			Name:     "No Overlap",
-			Allowed:  []string{"no_overlap"},
-			Expected: []string{},
+			Name:     "Empty AllowedDataFields Used",
+			Allowed:  AllowedDataFields(),
+			Expected: nil,
+		},
+		{
+			Name:     "Inventory Used",
+			Allowed:  AllowedDataFields("inventory"),
+			Expected: []string{"inventory"},
+		},
+		{
+			Name:      "Invalid Data Field",
+			Allowed:   AllowedDataFields("no_overlap"),
+			Expected:  []string{},
+			wantError: true,
 		},
 	}
 	for _, tt := range tc {
@@ -719,34 +725,23 @@ func TestAllowedDataFieldsIntersection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not create backend: %s", err)
 			}
-			c, err := b.NewClient(Targets(&badHandler{Name: "h1", HasLib: true}), AllowedDataFields(tt.Allowed...))
+			opts := []ClientOpt{Targets(&badHandler{Name: "h1", HasLib: true})}
+			if tt.Allowed != nil {
+				opts = append(opts, tt.Allowed)
+			}
+			c, err := b.NewClient(opts...)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("Expectd error, got nil")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			expected := make(map[string]bool)
-			for _, v := range tt.Expected {
-				expected[v] = true
-			}
-			if !reflect.DeepEqual(c.rConformer.allowedDataFields, expected) {
-				t.Errorf("c.rConformer.allowedDataFields = %v; want %v", c.rConformer.allowedDataFields, expected)
+			if !reflect.DeepEqual(c.allowedDataFields, tt.Expected) {
+				t.Errorf("c.allowedDataFields = %v; want %v", c.allowedDataFields, tt.Expected)
 			}
 		})
 	}
-}
-
-func TestAllowedDataFieldsNotSpecified(t *testing.T) {
-	t.Run("No Restrictions", func(t *testing.T) {
-		d := local.New()
-		b, err := NewBackend(Driver(d))
-		if err != nil {
-			t.Fatalf("Could not create backend: %s", err)
-		}
-		c, err := b.NewClient(Targets(&badHandler{Name: "h1", HasLib: true}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(c.rConformer.allowedDataFields, validDataFields) {
-			t.Errorf("c.rConformer.allowedDataFields = %v; want %v", c.rConformer.allowedDataFields, validDataFields)
-		}
-	})
 }
