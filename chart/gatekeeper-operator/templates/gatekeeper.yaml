@@ -441,7 +441,7 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: '{{ .Values.Replicas }}'
+  replicas: {{ .Values.Replicas }}
   resources: 
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}
