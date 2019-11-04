@@ -10,6 +10,14 @@
   version = "v0.46.3"
 
 [[projects]]
+  digest = "1:a0f79124a2fba5112d3d1466b917daf508e548c6c2da106399df92a79e06628b"
+  name = "contrib.go.opencensus.io/exporter/prometheus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f4a2c1e53ec45636355d35fb9022b64e4bdd4a91"
+  version = "v0.1.0"
+
+[[projects]]
   digest = "1:f2aa950b9738feb15ce4a6958f899969fc0908c9c6f9fad97fb4fb6bdd0f98ff"
   name = "github.com/OneOfOne/xxhash"
   packages = ["."]
@@ -658,6 +666,29 @@
   version = "v1.1.1"
 
 [[projects]]
+  digest = "1:6d09d314deafad6ab058602e4b535bb5bcc48421058fbf8445a4a8ff47f1300f"
+  name = "go.opencensus.io"
+  packages = [
+    ".",
+    "internal",
+    "internal/tagencoding",
+    "metric/metricdata",
+    "metric/metricexport",
+    "metric/metricproducer",
+    "resource",
+    "stats",
+    "stats/internal",
+    "stats/view",
+    "tag",
+    "trace",
+    "trace/internal",
+    "trace/tracestate",
+  ]
+  pruneopts = "UT"
+  revision = "59d1ce35d30f3c25ba762169da2a37eab6ffa041"
+  version = "v0.22.1"
+
+[[projects]]
   digest = "1:a5158647b553c61877aa9ae74f4015000294e47981e6b8b07525edcbb0747c81"
   name = "go.uber.org/atomic"
   packages = ["."]
@@ -1201,6 +1232,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "contrib.go.opencensus.io/exporter/prometheus",
     "github.com/davecgh/go-spew/spew",
     "github.com/emicklei/go-restful",
     "github.com/ghodss/yaml",
@@ -1217,6 +1249,9 @@
     "github.com/open-policy-agent/frameworks/constraint/pkg/types",
     "github.com/open-policy-agent/opa/ast",
     "github.com/pkg/errors",
+    "go.opencensus.io/stats",
+    "go.opencensus.io/stats/view",
+    "go.opencensus.io/tag",
     "go.uber.org/zap",
     "go.uber.org/zap/zapcore",
     "golang.org/x/net/context",

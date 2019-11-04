@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -119,8 +120,9 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
-	opa    *opa.Client
-	client client.Client
+	opa      *opa.Client
+	client   client.Client
+	reporter StatsReporter
 
 	// for testing
 	injectedConfig *v1alpha1.Config
@@ -129,6 +131,14 @@ type validationHandler struct {
 // Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atypes.Response {
 	log := log.WithValues("hookType", "validation")
+
+	var timeStart = time.Now()
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+	}
+	h.reporter = reporter
+
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
 	}
@@ -171,9 +181,15 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		if vResp.Response.Result == nil {
 			vResp.Response.Result = &metav1.Status{}
 		}
+
+		if h.reporter != nil {
+			h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
+		}
+
 		vResp.Response.Result.Code = http.StatusInternalServerError
 		return vResp
 	}
+
 	res := resp.Results()
 	if len(res) != 0 {
 		var msgs []string
@@ -187,11 +203,23 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 			if vResp.Response.Result == nil {
 				vResp.Response.Result = &metav1.Status{}
 			}
+
+			if h.reporter != nil {
+				h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
+			}
+
 			vResp.Response.Result.Code = http.StatusForbidden
 			return vResp
 		}
 	}
-	return admission.ValidationResponse(true, "")
+
+	vResp := admission.ValidationResponse(true, "")
+
+	if h.reporter != nil {
+		h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
+	}
+
+	return vResp
 }
 
 func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error) {

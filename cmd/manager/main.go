@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -48,7 +49,6 @@ var (
 )
 
 func main() {
-
 	flag.Parse()
 	switch *logLevel {
 	case "DEBUG":
@@ -62,6 +62,12 @@ func main() {
 	}
 
 	log := logf.Log.WithName("entrypoint")
+
+	e, err := metrics.NewMetricsExporter()
+	if err != nil {
+		log.Error(err, "error initializing metrics exporter")
+	}
+	metrics.SetCurMetricsExporter(e)
 
 	// Get a config to talk to the apiserver
 	log.Info("setting up client for manager")
@@ -183,4 +189,8 @@ func setLoggerForProduction() {
 	zlog = zlog.WithOptions(opts...)
 	newlogger := zapr.NewLogger(zlog)
 	logf.SetLogger(newlogger)
+}
+
+func sinceInMilliseconds(startTime time.Time) float64 {
+	return float64(time.Since(startTime).Nanoseconds()) / 1e6
 }
