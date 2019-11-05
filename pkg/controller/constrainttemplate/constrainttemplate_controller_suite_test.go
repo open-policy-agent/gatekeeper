@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis"
+	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
 	}
-	apis.AddToScheme(scheme.Scheme)
+	v1alpha1.AddToScheme(scheme.Scheme)
 
 	var err error
 	if cfg, err = t.Start(); err != nil {

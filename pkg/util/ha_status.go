@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	v1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 )
 
 func getID() string {
@@ -42,17 +42,17 @@ func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodSt
 	template.Status.ByPod = append(template.Status.ByPod, status)
 }
 
-func GetCfgHAStatus(cfg *configv1alpha1.Config) *configv1alpha1.ByPod {
+func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
 	id := getID()
 	for _, status := range cfg.Status.ByPod {
 		if status.ID == id {
 			return status
 		}
 	}
-	return &configv1alpha1.ByPod{ID: id}
+	return &v1alpha1.ByPod{ID: id}
 }
 
-func SetCfgHAStatus(cfg *configv1alpha1.Config, status *configv1alpha1.ByPod) {
+func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
 	id := getID()
 	status.ID = id
 	for i, status := range cfg.Status.ByPod {

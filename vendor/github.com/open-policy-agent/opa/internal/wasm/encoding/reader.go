@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/pkg/errors"
+
 	"github.com/open-policy-agent/opa/internal/leb128"
 	"github.com/open-policy-agent/opa/internal/wasm/constant"
 	"github.com/open-policy-agent/opa/internal/wasm/instruction"
 	"github.com/open-policy-agent/opa/internal/wasm/module"
 	"github.com/open-policy-agent/opa/internal/wasm/opcode"
 	"github.com/open-policy-agent/opa/internal/wasm/types"
-	"github.com/pkg/errors"
 )
 
 // ReadModule reads a binary-encoded WASM module from r.
@@ -141,7 +142,7 @@ func readSections(r io.Reader, m *module.Module) error {
 		bufr := bytes.NewReader(buf)
 
 		switch id {
-		case constant.CustomSectionID, constant.ElementSectionID, constant.StartSectionID, constant.MemorySectionID:
+		case constant.CustomSectionID, constant.StartSectionID, constant.MemorySectionID:
 			continue
 		case constant.TypeSectionID:
 			if err := readTypeSection(bufr, &m.Type); err != nil {
@@ -166,6 +167,10 @@ func readSections(r io.Reader, m *module.Module) error {
 		case constant.ExportSectionID:
 			if err := readExportSection(bufr, &m.Export); err != nil {
 				return errors.Wrap(err, "export section")
+			}
+		case constant.ElementSectionID:
+			if err := readElementSection(bufr, &m.Element); err != nil {
+				return errors.Wrap(err, "element section")
 			}
 		case constant.DataSectionID:
 			if err := readDataSection(bufr, &m.Data); err != nil {
@@ -292,6 +297,27 @@ func readExportSection(r io.Reader, s *module.ExportSection) error {
 		}
 
 		s.Exports = append(s.Exports, exp)
+	}
+
+	return nil
+}
+
+func readElementSection(r io.Reader, s *module.ElementSection) error {
+
+	n, err := leb128.ReadVarUint32(r)
+	if err != nil {
+		return err
+	}
+
+	for i := uint32(0); i < n; i++ {
+
+		var seg module.ElementSegment
+
+		if err := readElementSegment(r, &seg); err != nil {
+			return err
+		}
+
+		s.Segments = append(s.Segments, seg)
 	}
 
 	return nil
@@ -475,6 +501,23 @@ func readExport(r io.Reader, exp *module.Export) error {
 
 	exp.Descriptor.Index, err = leb128.ReadVarUint32(r)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func readElementSegment(r io.Reader, seg *module.ElementSegment) error {
+
+	if err := readVarUint32(r, &seg.Index); err != nil {
+		return err
+	}
+
+	if err := readConstantExpr(r, &seg.Offset); err != nil {
+		return err
+	}
+
+	if err := readVarUint32Vector(r, &seg.Indices); err != nil {
 		return err
 	}
 

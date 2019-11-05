@@ -1,8 +1,0 @@
-# Adds namespace to all resources.
-namespace: gatekeeper-system
-
-resources:
-  - ../../config
-
-patchesStrategicMerge:
-- manager_image_patch.yaml

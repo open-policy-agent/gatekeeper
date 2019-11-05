@@ -64,10 +64,8 @@ func NewRegistry() Registry {
 
 // Call the given function for each registered metric.
 func (r *StandardRegistry) Each(f func(string, interface{})) {
-	metrics := r.registered()
-	for i := range metrics {
-		kv := &metrics[i]
-		f(kv.name, kv.value)
+	for name, i := range r.registered() {
+		f(name, i)
 	}
 }
 
@@ -213,20 +211,12 @@ func (r *StandardRegistry) register(name string, i interface{}) error {
 	return nil
 }
 
-type metricKV struct {
-	name  string
-	value interface{}
-}
-
-func (r *StandardRegistry) registered() []metricKV {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-	metrics := make([]metricKV, 0, len(r.metrics))
+func (r *StandardRegistry) registered() map[string]interface{} {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	metrics := make(map[string]interface{}, len(r.metrics))
 	for name, i := range r.metrics {
-		metrics = append(metrics, metricKV{
-			name:  name,
-			value: i,
-		})
+		metrics[name] = i
 	}
 	return metrics
 }

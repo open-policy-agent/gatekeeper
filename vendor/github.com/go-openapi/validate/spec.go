@@ -336,14 +336,14 @@ func (s *SpecValidator) validateItems() *Result {
 		for path, op := range pi {
 			for _, param := range paramHelp.safeExpandedParamsFor(path, method, op.ID, res, s) {
 
-				if param.TypeName() == "array" && param.ItemsTypeName() == "" {
+				if param.TypeName() == arrayType && param.ItemsTypeName() == "" {
 					res.AddErrors(arrayInParamRequiresItemsMsg(param.Name, op.ID))
 					continue
 				}
 				if param.In != "body" {
 					if param.Items != nil {
 						items := param.Items
-						for items.TypeName() == "array" {
+						for items.TypeName() == arrayType {
 							if items.ItemsTypeName() == "" {
 								res.AddErrors(arrayInParamRequiresItemsMsg(param.Name, op.ID))
 								break
@@ -374,7 +374,7 @@ func (s *SpecValidator) validateItems() *Result {
 			for _, resp := range responses {
 				// Response headers with array
 				for hn, hv := range resp.Headers {
-					if hv.TypeName() == "array" && hv.ItemsTypeName() == "" {
+					if hv.TypeName() == arrayType && hv.ItemsTypeName() == "" {
 						res.AddErrors(arrayInHeaderRequiresItemsMsg(hn, op.ID))
 					}
 				}
@@ -390,7 +390,7 @@ func (s *SpecValidator) validateItems() *Result {
 // Verifies constraints on array type
 func (s *SpecValidator) validateSchemaItems(schema spec.Schema, prefix, opID string) *Result {
 	res := new(Result)
-	if !schema.Type.Contains("array") {
+	if !schema.Type.Contains(arrayType) {
 		return res
 	}
 
@@ -680,6 +680,24 @@ func (s *SpecValidator) validateParameters() *Result {
 
 					if pr.In == "formData" {
 						hasForm = true
+					}
+
+					if !(pr.Type == numberType || pr.Type == integerType) &&
+						(pr.Maximum != nil || pr.Minimum != nil || pr.MultipleOf != nil) {
+						// A non-numeric parameter has validation keywords for numeric instances (number and integer)
+						res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
+					}
+
+					if !(pr.Type == stringType) &&
+						// A non-string parameter has validation keywords for strings
+						(pr.MaxLength != nil || pr.MinLength != nil || pr.Pattern != "") {
+						res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
+					}
+
+					if !(pr.Type == arrayType) &&
+						// A non-array parameter has validation keywords for arrays
+						(pr.MaxItems != nil || pr.MinItems != nil || pr.UniqueItems) {
+						res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
 					}
 				}
 

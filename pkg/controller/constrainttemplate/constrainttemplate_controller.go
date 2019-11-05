@@ -402,7 +402,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 
 	templates := &v1beta1.ConstraintTemplateList{}
 	names := make(map[types.NamespacedName]string)
-	if err := c.List(context.Background(), nil, templates); err != nil {
+	if err := c.List(context.Background(), templates); err != nil {
 		log.Error(err, "could not clean all contraint/template finalizers")
 		return
 	}
@@ -418,7 +418,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			gvk := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: listKind}
 			objs := &unstructured.UnstructuredList{}
 			objs.SetGroupVersionKind(gvk)
-			if err := c.List(context.Background(), nil, objs); err != nil {
+			if err := c.List(context.Background(), objs); err != nil {
 				// If the kind is not recognized, there is nothing to clean
 				if !meta.IsNoMatchError(err) {
 					log.Error(err, "while listing constraints for cleanup", "kind", listKind)

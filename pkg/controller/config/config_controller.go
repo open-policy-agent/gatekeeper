@@ -24,7 +24,7 @@ import (
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -330,7 +330,7 @@ func (fc *finalizerCleanup) Clean() {
 				listGvk := gvk
 				listGvk.Kind = listGvk.Kind + "List"
 				l.SetGroupVersionKind(listGvk)
-				if err := fc.c.List(context.TODO(), nil, l); err != nil {
+				if err := fc.c.List(context.TODO(), l); err != nil {
 					// If the kind is not recognized, there is nothing to clean
 					if !meta.IsNoMatchError(err) {
 						log.Error(err, "while listing synced resources for cleanup", "kind", listGvk.Kind)
