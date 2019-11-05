@@ -34,6 +34,12 @@ func newPrometheusExporter() (view.Exporter, error) {
 	return e, nil
 }
 
+func getCurPromSrv() *http.Server {
+	curPromSrvMux.Lock()
+	defer curPromSrvMux.Unlock()
+	return curPromSrv
+}
+
 func resetCurPromSrv() {
 	curPromSrvMux.Lock()
 	defer curPromSrvMux.Unlock()

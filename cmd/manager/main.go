@@ -190,7 +190,3 @@ func setLoggerForProduction() {
 	newlogger := zapr.NewLogger(zlog)
 	logf.SetLogger(newlogger)
 }
-
-func sinceInMilliseconds(startTime time.Time) float64 {
-	return float64(time.Since(startTime).Nanoseconds()) / 1e6
-}
