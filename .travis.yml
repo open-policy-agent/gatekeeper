@@ -13,12 +13,35 @@ jobs:
       script: 
       - make
       - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")" 
+      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
       - make e2e-build-load-image IMG=gatekeeper-e2e:latest
       - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
       - make deploy 
       - make test-e2e
       - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
+      deploy:
+        - provider: script
+          skip_cleanup: true
+          script: make travis-dev-deploy
+          on:
+            repo: open-policy-agent/gatekeeper
+            branch: master # only push dev image tag for master commits
+            tags: false
+        - provider: script
+          skip_cleanup: true
+          script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
+          on:
+            repo: open-policy-agent/gatekeeper
+            tags: true # only push release image tag for tags
+    - stage: "helm build, test"
+      script:
+        - make manager
+        - make e2e-bootstrap
+        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+        - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+        - make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_RELEASE=latest
+        - make test-e2e
+        - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
       deploy:
         - provider: script
           skip_cleanup: true

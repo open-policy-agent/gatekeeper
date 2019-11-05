@@ -68,6 +68,19 @@ e2e-build-load-image: docker-build
 e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
 
+e2e-helm-deploy:
+	# tiller needs enough permissions to create CRDs
+	kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
+	# Download and install helm
+	curl https://raw.githubusercontent.com/helm/helm/master/scripts/get > get_helm.sh
+	chmod 700 get_helm.sh
+	./get_helm.sh
+	helm init --wait --history-max=5
+	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
+	kubectl -n kube-system describe pod -l name=tiller
+	helm install chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	kubectl -n kube-system describe pod -l name=tiller
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
