@@ -7,7 +7,7 @@ WAIT_TIME=60
 SLEEP_TIME=1
 
 @test "gatekeeper-controller-manager is running" {
-  cmd="kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod/gatekeeper-controller-manager-0"
+  cmd="kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
   wait_for_process $WAIT_TIME $SLEEP_TIME "$cmd"
 
   run kubectl -n gatekeeper-system get pod/gatekeeper-controller-manager-0
@@ -23,7 +23,7 @@ SLEEP_TIME=1
 }
 
 @test "waiting for validating webhook" {
-  cmd="kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io validation.gatekeeper.sh"
+  cmd="kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
 	wait_for_process $WAIT_TIME $SLEEP_TIME "$cmd"
 
   run kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io validation.gatekeeper.sh
