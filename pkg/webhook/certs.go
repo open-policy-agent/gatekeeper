@@ -13,21 +13,22 @@ import (
 	"k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"fmt"
+	"math/big"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"math/big"
 	"time"
 )
 
 const (
-	DNSName = "gatekeeper-controller-manager-service.gatekeeper-system.svc"
-	CAName = "gatekeeper-ca"
-	namespace = "gatekeeper-system"
-	certName = "tls.crt"
-	keyName = "tls.key"
+	caName     = "gatekeeper-ca"
+	namespace  = "gatekeeper-system"
+	service    = "gatekeeper-webhook-service"
+	certName   = "tls.crt"
+	keyName    = "tls.key"
 	caCertName = "ca.crt"
-	caKeyName = "ca.key"
+	caKeyName  = "ca.key"
 )
 
 var crLog = logf.Log.WithName("cert-rotation")
@@ -35,83 +36,116 @@ var crLog = logf.Log.WithName("cert-rotation")
 var (
 	secretKey = types.NamespacedName{
 		Namespace: namespace,
-		Name: "gatekeeper-webhook-server-secret",
+		Name:      "gatekeeper-webhook-server-cert",
 	}
+	// DNS name is <service name>.<namespace>.svc
+	DNSName    = fmt.Sprintf("%s.%s.svc", service, namespace)
 )
 
 var _ manager.Runnable = &certRotator{}
+
+func NewRotator(mgr manager.Manager) (*certRotator, error) {
+	// Use a new client so we are unaffected by the cache sync kill signal
+	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
+	if err != nil {
+		return nil, err
+	}
+	return &certRotator{client: cli}, nil
+}
 
 type certRotator struct {
 	client client.Client
 }
 
-func (cr *certRotator) Start(stop <-chan(struct{})) error {
-	ticker := time.NewTicker(10 * time.Second)
+func (cr *certRotator) Start(stop <-chan (struct{})) error {
+	// explicitly rotate on the first round so that the certificate
+	// can be bootstrapped, otherwise manager exits before a cert can be written
+	crLog.Info("starting cert rotator controller")
+	defer crLog.Info("stopping cert rotator controller")
+	if restart, err := cr.refreshCertIfNeeded(); err != nil {
+		crLog.Error(err, "could not refresh cert on startup")
+		return errors.Wrap(err, "could not refresh cert on startup")
+	} else if restart {
+		crLog.Info("certs refreshed, restarting server")
+		return nil
+	}
+	ticker := time.NewTicker(12 * time.Hour)
 	done := make(chan struct{})
 	go func() {
 		for {
 			select {
-				case <-ticker.C:
-					if err := cr.refreshCertIfNeeded(); err != nil {
-						crLog.Error(err, "error rotating certs")
-					}
-				case <-stop:
+			case <-ticker.C:
+				if restart, err := cr.refreshCertIfNeeded(); err != nil {
+					crLog.Error(err, "error rotating certs")
+				} else if restart {
+					crLog.Info("certs refreshed, restarting server")
 					close(done)
 					return
+				}
+			case <-stop:
+				close(done)
+				return
 			}
 		}
 	}()
-	
+
 	<-done
 	ticker.Stop()
 	return nil
 }
 
-func (cr *certRotator) refreshCertIfNeeded() error {
+// refreshCertIfNeeded returns whether the cert was refreshed and any errors
+func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
 	secret := &corev1.Secret{}
 	if err := cr.client.Get(context.Background(), secretKey, secret); err != nil {
-		return errors.New("Unable to acquire secret to update certificates")
+		return false, errors.Wrap(err,"acquiring secret to update certificates")
 	}
 	if secret.Data == nil || !validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
+		crLog.Info("refreshing CA and server certs")
 		return cr.refreshCerts(true, secret)
 	}
 	if !validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
+		crLog.Info("refreshing server certs")
 		return cr.refreshCerts(false, secret)
 	}
-	return nil
+	crLog.Info("no cert refresh needed")
+	return false, nil
 }
 
-func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error {
+func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool, error) {
 	var caArtifacts *KeyPairArtifacts
 	if refreshCA {
 		var err error
 		caArtifacts, err = createCACert()
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		var err error
 		caArtifacts, err = buildArtifactsFromSecret(secret)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 	cert, key, err := createCertPEM(caArtifacts)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// execute writeWebhookConfig first because update is triggered when the
 	// secret is invalid. Therefore writing the secret last means that this
 	// process will be re-triggered if any update fails.
 	if err := cr.writeWebhookConfig(caArtifacts.CertPEM); err != nil {
-		return err
+		return false, err
 	}
-	return cr.writeSecret(cert, key, caArtifacts, secret)
+	if err := cr.writeSecret(cert, key, caArtifacts, secret); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
 	vwh := &v1beta1.ValidatingWebhookConfiguration{}
-	vwhKey := types.NamespacedName{Name: *webhookName}
+	vwhKey := types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
 	if err := cr.client.Get(context.Background(), vwhKey, vwh); err != nil {
 		return err
 	}
@@ -127,10 +161,10 @@ func (cr *certRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifac
 }
 
 type KeyPairArtifacts struct {
-	Cert *x509.Certificate
-	Key *rsa.PrivateKey
+	Cert    *x509.Certificate
+	Key     *rsa.PrivateKey
 	CertPEM []byte
-	KeyPEM []byte
+	KeyPEM  []byte
 }
 
 func populateSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) {
@@ -163,10 +197,10 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 		return nil, errors.Wrap(err, "while parsing CA key")
 	}
 	return &KeyPairArtifacts{
-		Cert: caCert,
+		Cert:    caCert,
 		CertPEM: caPem,
-		KeyPEM: keyPem,
-		Key: key,
+		KeyPEM:  keyPem,
+		Key:     key,
 	}, nil
 }
 
@@ -179,14 +213,14 @@ func createCACert() (*KeyPairArtifacts, error) {
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
-			CommonName: CAName,
+			CommonName:   caName,
 			Organization: []string{"gatekeeper"},
 		},
-		NotBefore: begin,
-		NotAfter: end,
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		NotBefore:             begin,
+		NotAfter:              end,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -212,17 +246,17 @@ func createCACert() (*KeyPairArtifacts, error) {
 // PEM-encoded public certificate and private key, respectively
 func createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
 	now := time.Now()
-	begin := now.Add(-1* time.Hour)
-	end := now.Add(10* 365 * 24 * time.Hour)
+	begin := now.Add(-1 * time.Hour)
+	end := now.Add(10 * 365 * 24 * time.Hour)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
 			CommonName: DNSName,
 		},
-		NotBefore: begin,
-		NotAfter: end,
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		NotBefore:             begin,
+		NotAfter:              end,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -266,7 +300,7 @@ func validServerCert(caCert, cert, key []byte) bool {
 }
 
 func validCACert(cert, key []byte) bool {
-	valid, err := validCert(cert, cert, key, CAName, lookaheadTime())
+	valid, err := validCert(cert, cert, key, caName, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -281,7 +315,7 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 	pool := x509.NewCertPool()
 	caDer, _ := pem.Decode(caCert)
 	if caDer == nil {
-		return false, errors.New( "bad CA cert")
+		return false, errors.New("bad CA cert")
 	}
 	cac, err := x509.ParseCertificate(caDer.Bytes)
 	if err != nil {
@@ -304,8 +338,8 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 		return false, errors.Wrap(err, "parsing cert")
 	}
 	_, err = crt.Verify(x509.VerifyOptions{
-		DNSName: dnsName,
-		Roots: pool,
+		DNSName:     dnsName,
+		Roots:       pool,
 		CurrentTime: at,
 	})
 	if err != nil {

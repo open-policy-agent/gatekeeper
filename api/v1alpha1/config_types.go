@@ -85,6 +85,7 @@ type GVK struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
+// +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:object:root=true
 
 // Config is the Schema for the configs API

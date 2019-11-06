@@ -14,7 +14,7 @@ spec:
     listKind: ConfigList
     plural: configs
     singular: config
-  scope: ""
+  scope: Namespaced
   validation:
     openAPIV3Schema:
       description: Config is the Schema for the configs API

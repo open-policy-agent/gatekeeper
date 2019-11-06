@@ -1,9 +1,9 @@
 package webhook
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"testing"
 	"time"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func TestCertSigning(t *testing.T) {
@@ -37,7 +37,7 @@ func TestCertExpiry(t *testing.T) {
 		t.Error("Generated cert is not valid")
 	}
 
-	valid, err := validCert(caArtifacts.CertPEM, cert, key, DNSName, time.Now().Add(11 * 365 * 24 * time.Hour))
+	valid, err := validCert(caArtifacts.CertPEM, cert, key, DNSName, time.Now().Add(11*365*24*time.Hour))
 	if err == nil {
 		t.Error("Generated cert has not expired when it should have")
 	}
@@ -88,7 +88,7 @@ func TestCAExpiry(t *testing.T) {
 		t.Error("Generated cert is not valid")
 	}
 
-	valid, err := validCert(caArtifacts.CertPEM, caArtifacts.CertPEM, caArtifacts.KeyPEM, DNSName, time.Now().Add(11 * 365 * 24 * time.Hour))
+	valid, err := validCert(caArtifacts.CertPEM, caArtifacts.CertPEM, caArtifacts.KeyPEM, DNSName, time.Now().Add(11*365*24*time.Hour))
 	if err == nil {
 		t.Error("Generated cert has not expired when it should have")
 	}
@@ -130,5 +130,15 @@ func TestSecretRoundTrip(t *testing.T) {
 
 	if !validServerCert(caArtifacts.CertPEM, cert2, key2) {
 		t.Fatal("Second generated cert is not valid")
+	}
+}
+
+
+func TestEmptyIsInvalid(t *testing.T) {
+	if validServerCert([]byte{}, []byte{}, []byte{}) {
+		t.Fatal("empty cert is valid")
+	}
+	if validCACert([]byte{}, []byte{}) {
+		t.Fatal("empty CA cert is valid")
 	}
 }

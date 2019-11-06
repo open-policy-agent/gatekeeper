@@ -93,9 +93,10 @@ type ReconcileSync struct {
 	log    logr.Logger
 }
 
+// +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
+
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
-// +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(r.gvk)

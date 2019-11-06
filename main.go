@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/go-logr/zapr"
+	"github.com/open-policy-agent/gatekeeper/api"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,6 +60,8 @@ var (
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
+
+	_ = api.AddToScheme(scheme)
 
 	_ = configv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -149,7 +152,7 @@ func main() {
 
 	// Create a fresh client to be sure RESTmapper is up-to-date
 	setupLog.Info("removing finalizers...")
-	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: nil, Mapper: nil})
+	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: mgr.GetScheme(), Mapper: nil})
 	if err != nil {
 		setupLog.Error(err, "unable to create cleanup client")
 		os.Exit(1)

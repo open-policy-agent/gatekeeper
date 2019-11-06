@@ -1,0 +1,4 @@
+[submodule "third_party/frameworks"]
+	path = third_party/frameworks
+	url = git@github.com:open-policy-agent/frameworks.git
+	branch = master

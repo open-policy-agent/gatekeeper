@@ -121,12 +121,12 @@ type ReconcileConstraintTemplate struct {
 	opa     *opa.Client
 }
 
-// Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
-// and what is in the ConstraintTemplate.Spec
-// Automatically generate RBAC rules to allow the Controller to read and write CRDs
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
+
+// Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
+// and what is in the ConstraintTemplate.Spec
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the ConstraintTemplate instance
 	instance := &v1beta1.ConstraintTemplate{}

@@ -20,7 +20,7 @@ import (
 
 // AddToManager adds upgrade manager to the Manager
 func AddToManager(m manager.Manager) error {
-	am, err := New(context.Background(), m.GetConfig())
+	am, err := New(context.Background(), m)
 	if err != nil {
 		return err
 	}

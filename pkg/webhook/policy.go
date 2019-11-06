@@ -11,6 +11,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/api"
 	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -28,7 +29,7 @@ import (
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
-	v1alpha1.AddToScheme(runtimeScheme)
+	api.AddToScheme(runtimeScheme)
 }
 
 var log = logf.Log.WithName("webhook")
@@ -39,7 +40,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
-	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
+	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 )
 
 var supportedEnforcementActions = []string{
@@ -47,18 +48,24 @@ var supportedEnforcementActions = []string{
 	"dryrun",
 }
 
-// AddPolicyWebhook registers the policy webhook server with the manager
-// below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
 // +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
-// +kubebuilder:rbac:groups=,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+
+// AddPolicyWebhook registers the policy webhook server with the manager
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient()}}
-	mgr.GetWebhookServer().Register("v1/admit", wh)
+	mgr.GetWebhookServer().Register("/v1/admit", wh)
 
 	if !*disableCertRotation {
-		cr := &certRotator{client: mgr.GetClient()}
+		log.Info("cert rotation is enabled")
+		cr, err := NewRotator(mgr)
+		if err != nil {
+			return err
+		}
 		mgr.Add(cr)
+	} else {
+		log.Info("cert rotation is disabled")
 	}
 	return nil
 }
