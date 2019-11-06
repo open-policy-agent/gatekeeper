@@ -77,7 +77,7 @@ e2e-build-load-image: docker-build
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
-	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
+	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
 # Build manager binary
 manager: generate fmt vet

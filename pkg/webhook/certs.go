@@ -9,11 +9,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"github.com/pkg/errors"
 	"k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"fmt"
 	"math/big"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -39,7 +39,7 @@ var (
 		Name:      "gatekeeper-webhook-server-cert",
 	}
 	// DNS name is <service name>.<namespace>.svc
-	DNSName    = fmt.Sprintf("%s.%s.svc", service, namespace)
+	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
 )
 
 var _ manager.Runnable = &certRotator{}
@@ -98,7 +98,7 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
 	secret := &corev1.Secret{}
 	if err := cr.client.Get(context.Background(), secretKey, secret); err != nil {
-		return false, errors.Wrap(err,"acquiring secret to update certificates")
+		return false, errors.Wrap(err, "acquiring secret to update certificates")
 	}
 	if secret.Data == nil || !validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
 		crLog.Info("refreshing CA and server certs")

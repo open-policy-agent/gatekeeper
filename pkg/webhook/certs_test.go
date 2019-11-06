@@ -133,7 +133,6 @@ func TestSecretRoundTrip(t *testing.T) {
 	}
 }
 
-
 func TestEmptyIsInvalid(t *testing.T) {
 	if validServerCert([]byte{}, []byte{}, []byte{}) {
 		t.Fatal("empty cert is valid")

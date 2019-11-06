@@ -22,16 +22,15 @@ import (
 	"time"
 
 	"github.com/go-logr/zapr"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/api"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
+	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
@@ -41,6 +40,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
 )
@@ -51,11 +51,10 @@ var (
 )
 
 var (
-	logLevel = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
+	logLevel    = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
 	metricsAddr = flag.String("metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	port = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	certDir = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
-
+	port        = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	certDir     = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 )
 
 func init() {
