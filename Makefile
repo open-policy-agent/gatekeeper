@@ -147,7 +147,7 @@ docker-push-release:  docker-tag-release
 
 # Build the docker image
 docker-build: test
-	docker build . -t ${IMG}
+	docker build --pull . -t ${IMG}
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
