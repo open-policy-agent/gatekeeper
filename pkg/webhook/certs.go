@@ -11,8 +11,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/pkg/errors"
-	"k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"math/big"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -144,13 +145,31 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 }
 
 func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
-	vwh := &v1beta1.ValidatingWebhookConfiguration{}
+	vwh := &unstructured.Unstructured{}
+	vwh.SetGroupVersionKind(schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"})
 	vwhKey := types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
 	if err := cr.client.Get(context.Background(), vwhKey, vwh); err != nil {
 		return err
 	}
-	for i := range vwh.Webhooks {
-		vwh.Webhooks[i].ClientConfig.CABundle = certPem
+	webhooks, found, err := unstructured.NestedSlice(vwh.Object, "webhooks")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("`webhooks` field not found in ValidatingWebhookConfiguration")
+	}
+	for i, h := range webhooks {
+		hook, ok := h.(map[string]interface{})
+		if !ok {
+			return errors.Errorf("webhook %d is not well-formed", i)
+		}
+		if err := unstructured.SetNestedField(hook, certPem, "clientConfig", "caBundle"); err != nil {
+			return err
+		}
+		webhooks[i] = hook
+	}
+	if err := unstructured.SetNestedSlice(vwh.Object, webhooks, "webhooks"); err != nil {
+		return err
 	}
 	return cr.client.Update(context.Background(), vwh)
 }
