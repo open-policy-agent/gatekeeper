@@ -46,7 +46,7 @@ all: test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	go test ./pkg/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test

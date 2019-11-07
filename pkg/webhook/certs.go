@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"github.com/pkg/errors"
@@ -163,7 +164,7 @@ func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
 		if !ok {
 			return errors.Errorf("webhook %d is not well-formed", i)
 		}
-		if err := unstructured.SetNestedField(hook, certPem, "clientConfig", "caBundle"); err != nil {
+		if err := unstructured.SetNestedField(hook, base64.StdEncoding.EncodeToString(certPem), "clientConfig", "caBundle"); err != nil {
 			return err
 		}
 		webhooks[i] = hook
