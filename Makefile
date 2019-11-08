@@ -48,7 +48,7 @@ all: test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	go test -mod vendor ./pkg/... -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -83,15 +83,15 @@ e2e-verify-release: patch-image deploy test-e2e
 
 # Build manager binary
 manager: generate fmt vet
-	go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
+	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
 
 # Build manager binary
 manager-osx: generate fmt vet
-	go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
+	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run -mod vendor ./main.go
+	GO111MODULE=on go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
 install: manifests
@@ -113,13 +113,13 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt ./api/... ./pkg/...
-	go fmt main.go
+	GO111MODULE=on go fmt ./api/... ./pkg/...
+	GO111MODULE=on go fmt main.go
 
 # Run go vet against code
 vet:
-	go vet -mod vendor ./api/... ./pkg/...
-	go vet -mod vendor main.go
+	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
+	GO111MODULE=on go vet -mod vendor main.go
 
 # Generate code
 generate: controller-gen target-template-source
@@ -195,8 +195,7 @@ uninstall:
 # download controller-gen if necessary
 controller-gen:
 ifeq (, $(shell which controller-gen))
-# CD outside the directory so we don't download all modules
-	cd $(shell mktemp -d) && GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.2
+	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.2
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
@@ -209,6 +208,6 @@ vendor:
 	GO111MODULE=on go mod download
 	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
 	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
-	$(eval $@_PACKAGE := $(shell go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
+	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
 	mkdir -p vendor/${FRAMEWORK_PACKAGE}/constraint/deploy
 	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/constraint/deploy/* vendor/${FRAMEWORK_PACKAGE}/constraint/deploy/.
