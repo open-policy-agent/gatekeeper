@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "..", "config", "crds"),
-			filepath.Join("..", "..", "..", "third_party", "frameworks", "constraint", "deploy"),
+			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
 	}
 	api.AddToScheme(scheme.Scheme)
