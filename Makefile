@@ -83,11 +83,11 @@ e2e-verify-release: patch-image deploy test-e2e
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager -ldflags $(LDFLAGS) main.go
+	go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
 
 # Build manager binary
 manager-osx: generate fmt vet
-	go build -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
+	go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
