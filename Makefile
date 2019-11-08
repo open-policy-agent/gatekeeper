@@ -113,8 +113,8 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt -mod vendor ./api/... ./pkg/...
-	go fmt -mod vendor  main.go
+	go fmt ./api/... ./pkg/...
+	go fmt main.go
 
 # Run go vet against code
 vet:
