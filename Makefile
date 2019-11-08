@@ -48,7 +48,7 @@ all: test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	go test ./pkg/... -coverprofile cover.out
+	go test -mod vendor ./pkg/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -91,7 +91,7 @@ manager-osx: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run ./main.go
+	go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
 install: manifests
@@ -113,13 +113,13 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt ./api/... ./pkg/...
-	go fmt  main.go
+	go fmt -mod vendor ./api/... ./pkg/...
+	go fmt -mod vendor  main.go
 
 # Run go vet against code
 vet:
-	go vet ./api/... ./pkg/...
-	go vet main.go
+	go vet -mod vendor ./api/... ./pkg/...
+	go vet -mod vendor main.go
 
 # Generate code
 generate: controller-gen target-template-source
