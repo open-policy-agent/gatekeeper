@@ -196,7 +196,7 @@ uninstall:
 controller-gen:
 ifeq (, $(shell which controller-gen))
 # CD outside the directory so we don't download all modules
-	cd $(shell mktemp -d)) && GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.2
+	cd $(shell mktemp -d) && GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.2
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
