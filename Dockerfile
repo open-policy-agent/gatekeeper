@@ -7,7 +7,7 @@ COPY pkg/    pkg/
 COPY vendor/ vendor/
 COPY main.go main.go
 COPY api/ api/
-COPY go.mod
+COPY go.mod .
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -mod vendor -a -o manager main.go
