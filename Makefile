@@ -21,7 +21,7 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION
 	-X github.com/open-policy-agent/gatekeeper/version.Hostname=$(BUILD_HOSTNAME)"
 
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
-\nkind: StatefulSet\
+\nkind: Deployment\
 \nmetadata:\
 \n  name: controller-manager\
 \n  namespace: system\
