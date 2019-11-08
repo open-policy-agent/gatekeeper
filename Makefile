@@ -32,6 +32,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      - image: <your image file>\
 \n        name: manager"
 
+FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= crd:trivialVersions=true
 
@@ -100,14 +102,14 @@ deploy: manifests
 	touch -a ./config/overlays/dev/manager_image_patch.yaml
 # TODO use kustomize for CRDs
 	kubectl apply -f config/crd/bases
-	kubectl apply -f third_party/frameworks/constraint/deploy
+	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/constraint/deploy
 	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	kustomize build config/default  -o deploy/gatekeeper.yaml
-	bash -c 'for x in third_party/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
 
 # Run go fmt against code
 fmt:
@@ -198,3 +200,14 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+.PHONY: vendor
+vendor:
+	$(eval $@_TMP := $(shell mktemp -d))
+	$(eval $@_CACHE := ${$@_TMP}/pkg/mod/cache/download)
+	GO111MODULE=on go mod download
+	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
+	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
+	$(eval $@_PACKAGE := $(shell go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
+	mkdir -p vendor/${FRAMEWORK_PACKAGE}/constraint/deploy
+	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/constraint/deploy/* vendor/${FRAMEWORK_PACKAGE}/constraint/deploy/.
