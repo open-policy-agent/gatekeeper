@@ -242,11 +242,11 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		for _, item := range instanceList.Items {
 			updateConstraints[item.GetSelfLink()] = item
 
-			// report total violations and constraint counts
-			am.reporter.ReportTotalViolations(item.GetKind(), item.GetName(), totalViolations[item.GetSelfLink()])
-			am.reporter.ReportConstraints(item.GetKind(), int64(len(instanceList.Items)))
+			// report constraint counts and total violations
+			enforcementAction := updateLists[item.GetSelfLink()][0].enforcementAction
+			am.reporter.ReportConstraints(enforcementAction, int64(len(instanceList.Items)))
+			am.reporter.ReportTotalViolations(enforcementAction, totalViolations[item.GetSelfLink()])
 		}
-
 		if len(updateConstraints) > 0 {
 			if am.ucloop != nil {
 				close(am.ucloop.stop)

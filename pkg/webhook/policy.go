@@ -174,6 +174,8 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		return vResp
 	}
 
+	var requestResponse string
+
 	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {
 		log.Error(err, "error executing query")
@@ -181,12 +183,8 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 		if vResp.Response.Result == nil {
 			vResp.Response.Result = &metav1.Status{}
 		}
-
-		if h.reporter != nil {
-			h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
-		}
-
 		vResp.Response.Result.Code = http.StatusInternalServerError
+		requestResponse = "error"
 		return vResp
 	}
 
@@ -204,22 +202,19 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 				vResp.Response.Result = &metav1.Status{}
 			}
 
-			if h.reporter != nil {
-				h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
-			}
-
+			requestResponse = "deny"
 			vResp.Response.Result.Code = http.StatusForbidden
 			return vResp
 		}
 	}
 
-	vResp := admission.ValidationResponse(true, "")
-
-	if h.reporter != nil {
-		h.reporter.ReportRequest(req.AdmissionRequest, vResp.Response, time.Since(timeStart))
-	}
-
-	return vResp
+	requestResponse = "allow"
+	defer func() {
+		if h.reporter != nil {
+			h.reporter.ReportRequest(requestResponse, time.Since(timeStart))
+		}
+	}()
+	return admission.ValidationResponse(true, "")
 }
 
 func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error) {

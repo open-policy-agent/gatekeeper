@@ -63,11 +63,10 @@ func main() {
 
 	log := logf.Log.WithName("entrypoint")
 
-	e, err := metrics.NewMetricsExporter()
+	err := metrics.NewMetricsExporter()
 	if err != nil {
 		log.Error(err, "error initializing metrics exporter")
 	}
-	metrics.SetCurMetricsExporter(e)
 
 	// Get a config to talk to the apiserver
 	log.Info("setting up client for manager")

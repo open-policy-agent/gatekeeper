@@ -10,7 +10,7 @@ import (
 
 func TestRecord(t *testing.T) {
 	const measureName = "test_total"
-	testM := stats.Int64(measureName, measureName, stats.UnitNone)
+	testM := stats.Int64(measureName, measureName, stats.UnitDimensionless)
 	var expectedValue int64 = 10
 
 	ctx := context.Background()

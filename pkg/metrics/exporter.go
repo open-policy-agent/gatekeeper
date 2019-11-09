@@ -15,13 +15,13 @@ var (
 )
 
 var (
-	metricsBackend = flag.String("metricsBackend", "Prometheus", "Backend used for metrics")
-	prometheusPort = flag.Int("prometheusPort", 9090, "Prometheus port")
+	metricsBackend = flag.String("metrics-backend", "Prometheus", "Backend used for metrics")
+	prometheusPort = flag.Int("prometheus-port", 9090, "Prometheus port for metrics backend")
 )
 
 const prometheusExporter = "prometheus"
 
-func NewMetricsExporter() (view.Exporter, error) {
+func NewMetricsExporter() error {
 	ce := getCurMetricsExporter()
 	// If there is a Prometheus Exporter server running, stop it.
 	resetCurPromSrv()
@@ -42,20 +42,19 @@ func NewMetricsExporter() (view.Exporter, error) {
 		err = fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return e, nil
+
+	metricsMux.Lock()
+	defer metricsMux.Unlock()
+	view.RegisterExporter(e)
+	curMetricsExporter = e
+
+	return nil
 }
 
 func getCurMetricsExporter() view.Exporter {
 	metricsMux.RLock()
 	defer metricsMux.RUnlock()
 	return curMetricsExporter
-}
-
-func SetCurMetricsExporter(e view.Exporter) {
-	metricsMux.Lock()
-	defer metricsMux.Unlock()
-	view.RegisterExporter(e)
-	curMetricsExporter = e
 }

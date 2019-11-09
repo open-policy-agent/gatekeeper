@@ -11,20 +11,17 @@ import (
 )
 
 const (
-	totalViolationsName  = "violations_total"
-	constraintsTotalName = "constraints_total"
-	auditLatency         = "audit_latency"
-	methodType           = "audit"
+	totalViolationsName  = "total_violations"
+	totalConstraintsName = "total_constraints"
+	auditDuration        = "audit_duration"
 )
 
 var (
-	violationsTotalM  = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitNone)
-	constraintsTotalM = stats.Int64(constraintsTotalName, "Total number of enforced constraints", stats.UnitNone)
-	auditLatencyM     = stats.Float64(auditLatency, "Latency of audit operation", stats.UnitMilliseconds)
+	violationsTotalM  = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitDimensionless)
+	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of enforced constraints", stats.UnitDimensionless)
+	auditDurationM    = stats.Float64(auditDuration, "Latency of audit operation in seconds", "s")
 
-	methodTypeKey     = tag.MustNewKey("method_type")
-	constraintKindKey = tag.MustNewKey("constraint_kind")
-	constraintNameKey = tag.MustNewKey("constraint_name")
+	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )
 
 func init() {
@@ -37,19 +34,18 @@ func register() {
 			Name:        totalViolationsName,
 			Measure:     violationsTotalM,
 			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{methodTypeKey, constraintKindKey, constraintNameKey},
+			TagKeys:     []tag.Key{enforcementActionKey},
 		},
 		{
-			Name:        constraintsTotalName,
+			Name:        totalConstraintsName,
 			Measure:     constraintsTotalM,
 			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{methodTypeKey, constraintKindKey},
+			TagKeys:     []tag.Key{enforcementActionKey},
 		},
 		{
-			Name:        auditLatency,
-			Measure:     auditLatencyM,
+			Name:        auditDuration,
+			Measure:     auditDurationM,
 			Aggregation: view.Distribution(1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000),
-			TagKeys:     []tag.Key{methodTypeKey},
 		},
 	}
 
@@ -58,12 +54,10 @@ func register() {
 	}
 }
 
-func (r *reporter) ReportTotalViolations(constraintKind, constraintName string, v int64) error {
+func (r *reporter) ReportTotalViolations(enforcementAction string, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(methodTypeKey, methodType),
-		tag.Insert(constraintKindKey, constraintKind),
-		tag.Insert(constraintNameKey, constraintName))
+		tag.Insert(enforcementActionKey, enforcementAction))
 	if err != nil {
 		return err
 	}
@@ -71,11 +65,10 @@ func (r *reporter) ReportTotalViolations(constraintKind, constraintName string, 
 	return r.report(ctx, violationsTotalM.M(v))
 }
 
-func (r *reporter) ReportConstraints(constraintKind string, v int64) error {
+func (r *reporter) ReportConstraints(enforcementAction string, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(methodTypeKey, methodType),
-		tag.Insert(constraintKindKey, constraintKind))
+		tag.Insert(enforcementActionKey, enforcementAction))
 	if err != nil {
 		return err
 	}
@@ -84,21 +77,19 @@ func (r *reporter) ReportConstraints(constraintKind string, v int64) error {
 }
 
 func (r *reporter) ReportLatency(d time.Duration) error {
-	ctx, err := tag.New(
-		r.ctx,
-		tag.Insert(methodTypeKey, methodType))
+	ctx, err := tag.New(r.ctx)
 	if err != nil {
 		return err
 	}
 
-	// Convert time.Duration in nanoseconds to milliseconds
-	return r.report(ctx, auditLatencyM.M(float64(d/time.Millisecond)))
+	// Convert time.Duration in nanoseconds to seconds
+	return r.report(ctx, auditDurationM.M(float64(d/time.Second)))
 }
 
 // StatsReporter reports audit metrics
 type StatsReporter interface {
-	ReportTotalViolations(constraintKind, constraintName string, v int64) error
-	ReportConstraints(constraintKind string, v int64) error
+	ReportTotalViolations(enforcementAction string, v int64) error
+	ReportConstraints(enforcementAction string, v int64) error
 	ReportLatency(d time.Duration) error
 }
 
