@@ -19,7 +19,7 @@ var (
 	responseTimeInSecM = stats.Float64(
 		requestLatenciesName,
 		"The response time in seconds",
-		"s")
+		stats.UnitSeconds)
 
 	admissionStatusKey = tag.MustNewKey("admission_status")
 )

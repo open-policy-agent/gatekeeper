@@ -19,7 +19,7 @@ const (
 var (
 	violationsTotalM  = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitDimensionless)
 	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of enforced constraints", stats.UnitDimensionless)
-	auditDurationM    = stats.Float64(auditDuration, "Latency of audit operation in seconds", "s")
+	auditDurationM    = stats.Float64(auditDuration, "Latency of audit operation in seconds", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )

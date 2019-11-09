@@ -667,7 +667,7 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:6d09d314deafad6ab058602e4b535bb5bcc48421058fbf8445a4a8ff47f1300f"
+  digest = "1:280c8137f4a9e95fafc48ef6cb0d5873e19dc2566a667b652c6d70a767267621"
   name = "go.opencensus.io"
   packages = [
     ".",
@@ -686,8 +686,8 @@
     "trace/tracestate",
   ]
   pruneopts = "UT"
-  revision = "59d1ce35d30f3c25ba762169da2a37eab6ffa041"
-  version = "v0.22.1"
+  revision = "aad2c527c5defcf89b5afab7f37274304195a6b2"
+  version = "v0.22.2"
 
 [[projects]]
   digest = "1:a5158647b553c61877aa9ae74f4015000294e47981e6b8b07525edcbb0747c81"
