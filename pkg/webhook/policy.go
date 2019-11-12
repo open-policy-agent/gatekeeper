@@ -39,7 +39,7 @@ var (
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
-	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
+	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "DEPRECATED: set this on the manifest YAML if needed")
 	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 )
 

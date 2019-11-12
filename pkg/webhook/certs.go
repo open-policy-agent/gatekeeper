@@ -31,6 +31,8 @@ const (
 	keyName    = "tls.key"
 	caCertName = "ca.crt"
 	caKeyName  = "ca.key"
+	rotationCheckFrequency = 12 * time.Hour
+	certValidityDuration = 10 * 365 * 24 * time.Hour
 )
 
 var crLog = logf.Log.WithName("cert-rotation")
@@ -71,7 +73,7 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 		crLog.Info("certs refreshed, restarting server")
 		return nil
 	}
-	ticker := time.NewTicker(12 * time.Hour)
+	ticker := time.NewTicker(rotationCheckFrequency)
 	done := make(chan struct{})
 	go func() {
 		for {
@@ -229,7 +231,7 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 func createCACert() (*KeyPairArtifacts, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
-	end := now.Add(10 * 365 * 24 * time.Hour)
+	end := now.Add(certValidityDuration)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
@@ -267,7 +269,7 @@ func createCACert() (*KeyPairArtifacts, error) {
 func createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
-	end := now.Add(10 * 365 * 24 * time.Hour)
+	end := now.Add(certValidityDuration)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
