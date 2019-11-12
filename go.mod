@@ -10,19 +10,17 @@ require (
 	github.com/go-openapi/spec v0.19.4 // indirect
 	github.com/go-openapi/strfmt v0.19.3 // indirect
 	github.com/go-openapi/validate v0.19.4 // indirect
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0
-	github.com/open-policy-agent/frameworks v0.0.0-20191030211803-15991b8e33a6
+	github.com/open-policy-agent/frameworks v0.0.0-20191112030435-1307ba72bce3 // indirect
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20191112030435-1307ba72bce3
 	github.com/open-policy-agent/opa v0.15.0
 	github.com/pkg/errors v0.8.1
-	github.com/spf13/cobra v0.0.5
-	github.com/spf13/pflag v1.0.3
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297
 	k8s.io/api v0.0.0-20191025225708-5524a3672fbb
-	k8s.io/apiextensions-apiserver v0.0.0-20190918161926-8f644eb6e783
+	k8s.io/apiextensions-apiserver v0.0.0-20191016113550-5357c4baaf65
 	k8s.io/apimachinery v0.0.0-20191030190112-bb31b70367b7
 	k8s.io/apiserver v0.0.0-20191030230423-71f1f5686ac3 // indirect
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
@@ -31,8 +29,6 @@ require (
 )
 
 replace (
-	// Remove the below line once the framework gomod conversion is committed
-	github.com/open-policy-agent/frameworks/constraint => github.com/maxsmythe/frameworks/constraint v0.0.0-20191106045041-e6de551bda0b
 	k8s.io/api => k8s.io/api v0.0.0-20191016110246-af539daaa43a
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191016113439-b64f2075a530
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20191004115701-31ade1b30762

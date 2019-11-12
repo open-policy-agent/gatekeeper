@@ -32,7 +32,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      - image: <your image file>\
 \n        name: manager"
 
-FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks
+FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= crd:trivialVersions=true
@@ -102,14 +102,14 @@ deploy: manifests
 	touch -a ./config/overlays/dev/manager_image_patch.yaml
 # TODO use kustomize for CRDs
 	kubectl apply -f config/crd/bases
-	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/constraint/deploy
+	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
 	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default  -o deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
 
 # Run go fmt against code
 fmt:
@@ -177,7 +177,8 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper_kubebuilder_v2.yaml
+
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
@@ -209,5 +210,5 @@ vendor:
 	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
 	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
 	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
-	mkdir -p vendor/${FRAMEWORK_PACKAGE}/constraint/deploy
-	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/constraint/deploy/* vendor/${FRAMEWORK_PACKAGE}/constraint/deploy/.
+	mkdir -p vendor/${FRAMEWORK_PACKAGE}/deploy
+	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/deploy/* vendor/${FRAMEWORK_PACKAGE}/deploy/.
