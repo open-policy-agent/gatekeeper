@@ -410,7 +410,7 @@ func addController(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to the provided constraint
+	// Watch for changes to the provided ValidatingWebhookConfiguration
 	instance := unstructured.Unstructured{}
 	instance.SetGroupVersionKind(vwhGVK)
 	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
@@ -443,8 +443,8 @@ func (r *ReconcileVWH) certPem() []byte {
 	return r._certPem
 }
 
-// Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
-// and what is in the constraint.Spec
+// Reconcile reads that state of the cluster for a validatingwebhookconfiguration
+// object and makes sure the most recent CA cert is included
 func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	if request.NamespacedName != vwhKey {
 		return reconcile.Result{}, nil
