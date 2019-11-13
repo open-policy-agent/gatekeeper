@@ -16,7 +16,7 @@ var (
 
 var (
 	metricsBackend = flag.String("metrics-backend", "Prometheus", "Backend used for metrics")
-	prometheusPort = flag.Int("prometheus-port", 9090, "Prometheus port for metrics backend")
+	prometheusPort = flag.Int("prometheus-port", 8888, "Prometheus port for metrics backend")
 )
 
 const prometheusExporter = "prometheus"
