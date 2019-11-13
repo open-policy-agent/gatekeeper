@@ -36,7 +36,7 @@ func TestReportTotalViolations(t *testing.T) {
 		}
 	}
 	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", totalViolationsName, value.Value, expectedValue)
+		t.Errorf("Metric: %v - Expected %v, got %v", totalViolationsName, value.Value, expectedValue)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestReportConstraints(t *testing.T) {
 		}
 	}
 	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", totalConstraintsName, value.Value, expectedValue)
+		t.Errorf("Metric: %v - Expected %v, got %v", totalConstraintsName, value.Value, expectedValue)
 	}
 }
 
@@ -93,21 +93,21 @@ func TestReportLatency(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
-	row, err := view.RetrieveData(auditDuration)
+	row, err := view.RetrieveData(auditDurationName)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, auditDuration)
+		t.Errorf("Error when retrieving data: %v from %v", err, auditDurationName)
 	}
 	latencyValue, ok := row[0].Data.(*view.DistributionData)
 	if !ok {
 		t.Error("ReportLatency should have aggregation type Distribution")
 	}
 	if latencyValue.Count != expectedLatencyCount {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", auditDuration, latencyValue.Count, expectedLatencyCount)
+		t.Errorf("Metric: %v - Expected %v, got %v", auditDurationName, latencyValue.Count, expectedLatencyCount)
 	}
 	if latencyValue.Min != expectedLatencyMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", auditDuration, latencyValue.Min, expectedLatencyMin)
+		t.Errorf("Metric: %v - Expected %v, got %v", auditDurationName, latencyValue.Min, expectedLatencyMin)
 	}
 	if latencyValue.Max != expectedLatencyMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", auditDuration, latencyValue.Max, expectedLatencyMax)
+		t.Errorf("Metric: %v - Expected %v, got %v", auditDurationName, latencyValue.Max, expectedLatencyMax)
 	}
 }
