@@ -42,20 +42,6 @@ jobs:
         - make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_RELEASE=latest
         - make test-e2e
         - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
-      deploy:
-        - provider: script
-          skip_cleanup: true
-          script: make travis-dev-deploy
-          on:
-            repo: open-policy-agent/gatekeeper
-            branch: master # only push dev image tag for master commits
-            tags: false
-        - provider: script
-          skip_cleanup: true
-          script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
-          on:
-            repo: open-policy-agent/gatekeeper
-            tags: true # only push release image tag for tags
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
       script:
