@@ -95,6 +95,7 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 	}
 	ticker := time.NewTicker(rotationCheckFrequency)
 
+	tickerLoop:
 	for {
 		select {
 		case <-ticker.C:
@@ -102,10 +103,10 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 				crLog.Error(err, "error rotating certs")
 			} else if restart {
 				crLog.Info("certs refreshed, restarting server")
-				break
+				break tickerLoop
 			}
 		case <-stop:
-			break
+			break tickerLoop
 		}
 	}
 
@@ -474,7 +475,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		}
 		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
 		injectCertToWebhook(vwh, artifacts.CertPEM)
-		if err := r.client.Update(context.Background(), vwh); err != nil {
+		if err := r.client.Update(r.ctx, vwh); err != nil {
 			return reconcile.Result{Requeue: true}, err
 		}
 	}
