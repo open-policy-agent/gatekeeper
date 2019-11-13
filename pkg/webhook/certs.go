@@ -67,8 +67,9 @@ func AddRotator(mgr manager.Manager) (error) {
 	mgr.Add(rotator)
 
 	reconciler := &ReconcileVWH{
-		Client: mgr.GetClient(),
+		client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
+		ctx:    context.Background(),
 	}
 	if err := addController(mgr, reconciler); err != nil {
 		return err
@@ -93,26 +94,21 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 		return nil
 	}
 	ticker := time.NewTicker(rotationCheckFrequency)
-	done := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				if restart, err := cr.refreshCertIfNeeded(); err != nil {
-					crLog.Error(err, "error rotating certs")
-				} else if restart {
-					crLog.Info("certs refreshed, restarting server")
-					close(done)
-					return
-				}
-			case <-stop:
-				close(done)
-				return
-			}
-		}
-	}()
 
-	<-done
+	for {
+		select {
+		case <-ticker.C:
+			if restart, err := cr.refreshCertIfNeeded(); err != nil {
+				crLog.Error(err, "error rotating certs")
+			} else if restart {
+				crLog.Info("certs refreshed, restarting server")
+				break
+			}
+		case <-stop:
+			break
+		}
+	}
+
 	ticker.Stop()
 	return nil
 }
@@ -436,8 +432,9 @@ var _ reconcile.Reconciler = &ReconcileVWH{}
 // ReconcileVWH reconciles a validatingwebhookconfiguration, making sure it
 // has the appropriate CA cert
 type ReconcileVWH struct {
-	client.Client
+	client client.Client
 	scheme *runtime.Scheme
+	ctx context.Context
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
@@ -447,7 +444,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		return reconcile.Result{}, nil
 	}
 	secret := &corev1.Secret{}
-	if err := r.Get(context.TODO(), request.NamespacedName, secret); err != nil {
+	if err := r.client.Get(r.ctx, request.NamespacedName, secret); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
@@ -459,7 +456,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.Get(context.TODO(), vwhKey, vwh); err != nil {
+	if err := r.client.Get(r.ctx, vwhKey, vwh); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
@@ -477,8 +474,8 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		}
 		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
 		injectCertToWebhook(vwh, artifacts.CertPEM)
-		if err := r.Update(context.Background(), vwh); err != nil {
-			return reconcile.Result{Requeue: true}, nil
+		if err := r.client.Update(context.Background(), vwh); err != nil {
+			return reconcile.Result{Requeue: true}, err
 		}
 	}
 
