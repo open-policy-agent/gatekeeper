@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	requestCountName     = "request_count"
-	requestLatenciesName = "request_latencies"
+	requestCountName    = "request_count"
+	requestDurationName = "request_duration_seconds"
 )
 
 var (
 	responseTimeInSecM = stats.Float64(
-		requestLatenciesName,
+		requestDurationName,
 		"The response time in seconds",
 		stats.UnitSeconds)
 
@@ -60,9 +60,7 @@ func (r *reporter) ReportRequest(response string, d time.Duration) error {
 		return err
 	}
 
-	r.report(ctx, responseTimeInSecM.M(1))
-	// Convert time.Duration in nanoseconds to seconds
-	r.report(ctx, responseTimeInSecM.M(float64(d/time.Second)))
+	r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 	return nil
 }
 
@@ -81,10 +79,10 @@ func register() {
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
 		&view.View{
-			Name:        requestLatenciesName,
+			Name:        requestDurationName,
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
-			Aggregation: view.Distribution(1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000),
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
 	); err != nil {

@@ -39,7 +39,6 @@ var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 
 const (
 	finalizerName = "finalizers.gatekeeper.sh/constraint"
-	project       = "gatekeeper.sh"
 )
 
 type Adder struct {

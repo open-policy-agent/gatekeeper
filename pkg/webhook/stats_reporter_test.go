@@ -17,7 +17,7 @@ func TestReportRequest(t *testing.T) {
 	expectedDurationValueMax := time.Duration(5 * time.Second)
 	var expectedDurationMin float64 = 1
 	var expectedDurationMax float64 = 5
-	var expectedCount int64 = 4
+	var expectedCount int64 = 2
 
 	r, err := NewStatsReporter()
 	if err != nil {
@@ -52,9 +52,9 @@ func TestReportRequest(t *testing.T) {
 	}
 
 	// Duration test
-	row, err = view.RetrieveData(requestLatenciesName)
+	row, err = view.RetrieveData(requestDurationName)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, requestLatenciesName)
+		t.Errorf("Error when retrieving data: %v from %v", err, requestDurationName)
 	}
 	DurationValue, ok := row[0].Data.(*view.DistributionData)
 	if !ok {
@@ -66,9 +66,9 @@ func TestReportRequest(t *testing.T) {
 		}
 	}
 	if DurationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestLatenciesName, DurationValue.Min, expectedDurationMin)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, DurationValue.Min, expectedDurationMin)
 	}
 	if DurationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestLatenciesName, DurationValue.Max, expectedDurationMax)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, DurationValue.Max, expectedDurationMax)
 	}
 }

@@ -13,13 +13,13 @@ import (
 const (
 	totalViolationsName  = "total_violations"
 	totalConstraintsName = "total_constraints"
-	auditDuration        = "audit_duration"
+	auditDurationName    = "audit_duration_seconds"
 )
 
 var (
 	violationsTotalM  = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitDimensionless)
 	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of enforced constraints", stats.UnitDimensionless)
-	auditDurationM    = stats.Float64(auditDuration, "Latency of audit operation in seconds", stats.UnitSeconds)
+	auditDurationM    = stats.Float64(auditDurationName, "Latency of audit operation in seconds", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )
@@ -43,9 +43,9 @@ func register() {
 			TagKeys:     []tag.Key{enforcementActionKey},
 		},
 		{
-			Name:        auditDuration,
+			Name:        auditDurationName,
 			Measure:     auditDurationM,
-			Aggregation: view.Distribution(1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000),
+			Aggregation: view.Distribution(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30),
 		},
 	}
 
@@ -82,8 +82,7 @@ func (r *reporter) ReportLatency(d time.Duration) error {
 		return err
 	}
 
-	// Convert time.Duration in nanoseconds to seconds
-	return r.report(ctx, auditDurationM.M(float64(d/time.Second)))
+	return r.report(ctx, auditDurationM.M(d.Seconds()))
 }
 
 // StatsReporter reports audit metrics

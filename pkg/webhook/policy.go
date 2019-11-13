@@ -50,11 +50,6 @@ var (
 	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "domain name of the webhook, with at least three segments separated by dots. defaulted to validation.gatekeeper.sh if unspecified ")
 )
 
-var supportedEnforcementActions = []string{
-	"deny",
-	"dryrun",
-}
-
 // AddPolicyWebhook registers the policy webhook server with the manager
 // below: notations add permissions kube-mgmt needs. Access cannot yet be restricted on a namespace-level granularity
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -280,7 +275,7 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 	}
 	if found && enforcementActionString != "" {
 		if *disableEnforcementActionValidation == false {
-			err = validateEnforcementAction(enforcementActionString)
+			err = util.ValidateEnforcementAction(enforcementActionString)
 			if err != nil {
 				return false, err
 			}
@@ -289,15 +284,6 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req atypes.R
 		return true, nil
 	}
 	return false, nil
-}
-
-func validateEnforcementAction(input string) error {
-	for _, n := range supportedEnforcementActions {
-		if input == n {
-			return nil
-		}
-	}
-	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }
 
 // traceSwitch returns true if a request should be traced

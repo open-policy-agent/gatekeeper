@@ -9,6 +9,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -221,6 +222,20 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 	group := resourceGV[0]
 	version := resourceGV[1]
 
+	// resetting total violations per enforcement action
+	totalViolationsPerEnforcementAction := map[string]int64{
+		"deny":         0,
+		"dryrun":       0,
+		"unrecognized": 0,
+	}
+
+	// resetting total constraints per enforcement action
+	totalConstraintsPerEnforcementAction := map[string]int64{
+		"deny":         0,
+		"dryrun":       0,
+		"unrecognized": 0,
+	}
+
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
 		log.Info("constraint", "resource kind", r.Kind)
@@ -242,10 +257,21 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		for _, item := range instanceList.Items {
 			updateConstraints[item.GetSelfLink()] = item
 
-			// report constraint counts and total violations
-			enforcementAction := updateLists[item.GetSelfLink()][0].enforcementAction
-			am.reporter.ReportConstraints(enforcementAction, int64(len(instanceList.Items)))
-			am.reporter.ReportTotalViolations(enforcementAction, totalViolations[item.GetSelfLink()])
+			enforcementAction, _, err := unstructured.NestedString(item.Object, "spec", "enforcementAction")
+			if err != nil {
+				return err
+			}
+			// default enforcementAction is deny
+			if enforcementAction == "" {
+				enforcementAction = "deny"
+			}
+			// validating enforcement action - if it is not deny or dryrun, we are classifying as unrecognized
+			if err := util.ValidateEnforcementAction(enforcementAction); err != nil {
+				enforcementAction = "unrecognized"
+			}
+
+			totalViolationsPerEnforcementAction[enforcementAction] = totalViolationsPerEnforcementAction[enforcementAction] + totalViolations[item.GetSelfLink()]
+			totalConstraintsPerEnforcementAction[enforcementAction] = totalConstraintsPerEnforcementAction[enforcementAction] + 1
 		}
 		if len(updateConstraints) > 0 {
 			if am.ucloop != nil {
@@ -267,6 +293,14 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
 		}
+	}
+
+	for k, v := range totalViolationsPerEnforcementAction {
+		am.reporter.ReportTotalViolations(k, v)
+	}
+
+	for k, v := range totalConstraintsPerEnforcementAction {
+		am.reporter.ReportConstraints(k, v)
 	}
 	return nil
 }
