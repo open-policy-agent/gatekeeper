@@ -59,11 +59,9 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 
 	if !*disableCertRotation {
 		log.Info("cert rotation is enabled")
-		cr, err := NewRotator(mgr)
-		if err != nil {
+		if err := AddRotator(mgr); err != nil {
 			return err
 		}
-		mgr.Add(cr)
 	} else {
 		log.Info("cert rotation is disabled")
 	}

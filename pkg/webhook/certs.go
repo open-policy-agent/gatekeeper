@@ -11,15 +11,23 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"math/big"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+	"reflect"
+	"sync"
 	"time"
 )
 
@@ -44,21 +52,34 @@ var (
 	}
 	// DNS name is <service name>.<namespace>.svc
 	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
+	vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
+	vwhKey = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
+	certLock = sync.RWMutex{}
 )
 
 var _ manager.Runnable = &certRotator{}
 
-func NewRotator(mgr manager.Manager) (*certRotator, error) {
+func AddRotator(mgr manager.Manager) (error) {
 	// Use a new client so we are unaffected by the cache sync kill signal
 	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &certRotator{client: cli}, nil
+	reconciler := &ReconcileVWH{
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
+	rotator := &certRotator{client: cli, reconciler: reconciler}
+	mgr.Add(rotator)
+	if err := addController(mgr, reconciler); err != nil {
+		return err
+	}
+	return nil
 }
 
 type certRotator struct {
 	client client.Client
+	reconciler *ReconcileVWH
 }
 
 func (cr *certRotator) Start(stop <-chan (struct{})) error {
@@ -108,6 +129,8 @@ func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
 		crLog.Info("refreshing CA and server certs")
 		return cr.refreshCerts(true, secret)
 	}
+	// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)
+	cr.reconciler.setCertPem(secret.Data[caCertName])
 	if !validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
 		crLog.Info("refreshing server certs")
 		return cr.refreshCerts(false, secret)
@@ -135,6 +158,7 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 	if err != nil {
 		return false, err
 	}
+	cr.reconciler.setCertPem(caArtifacts.CertPEM)
 	// execute writeWebhookConfig first because update is triggered when the
 	// secret is invalid. Therefore writing the secret last means that this
 	// process will be re-triggered if any update fails.
@@ -149,11 +173,16 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 
 func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
 	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"})
+	vwh.SetGroupVersionKind(vwhGVK)
 	vwhKey := types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
 	if err := cr.client.Get(context.Background(), vwhKey, vwh); err != nil {
 		return err
 	}
+	injectCertToWebhook(vwh, certPem)
+	return cr.client.Update(context.Background(), vwh)
+}
+
+func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
 	webhooks, found, err := unstructured.NestedSlice(vwh.Object, "webhooks")
 	if err != nil {
 		return err
@@ -174,7 +203,7 @@ func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
 	if err := unstructured.SetNestedSlice(vwh.Object, webhooks, "webhooks"); err != nil {
 		return err
 	}
-	return cr.client.Update(context.Background(), vwh)
+	return nil
 }
 
 func (cr *certRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
@@ -368,4 +397,85 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 		return false, errors.Wrap(err, "verifying cert")
 	}
 	return true, nil
+}
+
+// controller code for making sure the CA cert doesn't get clobbered on the
+// validatingwebhookconfiguration
+
+// add adds a new Controller to mgr with r as the reconcile.Reconciler
+func addController(mgr manager.Manager, r reconcile.Reconciler) error {
+	// Create a new controller
+	c, err := controller.New(("validating-webhook-controller"), mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to the provided constraint
+	instance := unstructured.Unstructured{}
+	instance.SetGroupVersionKind(vwhGVK)
+	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var _ reconcile.Reconciler = &ReconcileVWH{}
+
+// ReconcileVWH reconciles a validatingwebhookconfiguration, making sure it
+// has the appropriate CA cert
+type ReconcileVWH struct {
+	client.Client
+	scheme *runtime.Scheme
+	_certPem []byte
+}
+
+func (r *ReconcileVWH) setCertPem(certPem []byte) {
+	certLock.Lock()
+	defer certLock.Unlock()
+	r._certPem = certPem
+}
+
+func (r *ReconcileVWH) certPem() []byte {
+	certLock.RLock()
+	defer certLock.RUnlock()
+	return r._certPem
+}
+
+// Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
+// and what is in the constraint.Spec
+func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	if request.NamespacedName != vwhKey {
+		return reconcile.Result{}, nil
+	}
+	if r.certPem() == nil {
+		log.Info("certPem not yet set, skipping reconcile")
+	}
+	instance := &unstructured.Unstructured{}
+	instance.SetGroupVersionKind(vwhGVK)
+	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			// Object not found, return.  Created objects are automatically garbage collected.
+			// For additional cleanup logic use finalizers.
+			return reconcile.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		return reconcile.Result{}, err
+	}
+
+	if instance.GetDeletionTimestamp().IsZero() {
+		log.Info("webhook modified, ensuring cert")
+		oldInstance := instance.DeepCopy()
+		injectCertToWebhook(instance, r.certPem())
+		if reflect.DeepEqual(instance, oldInstance) {
+			return reconcile.Result{}, nil
+		}
+		if err := r.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+
+	return reconcile.Result{}, nil
 }
