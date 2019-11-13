@@ -170,6 +170,11 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	}
 
 	var requestResponse string
+	defer func() {
+		if h.reporter != nil {
+			h.reporter.ReportRequest(requestResponse, time.Since(timeStart))
+		}
+	}()
 
 	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {
@@ -204,11 +209,6 @@ func (h *validationHandler) Handle(ctx context.Context, req atypes.Request) atyp
 	}
 
 	requestResponse = "allow"
-	defer func() {
-		if h.reporter != nil {
-			h.reporter.ReportRequest(requestResponse, time.Since(timeStart))
-		}
-	}()
 	return admission.ValidationResponse(true, "")
 }
 
