@@ -399,8 +399,8 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 	return true, nil
 }
 
-// controller code for making sure the CA cert doesn't get clobbered on the
-// validatingwebhookconfiguration
+// controller code for making sure the CA cert on the
+// validatingwebhookconfiguration doesn't get clobbered
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func addController(mgr manager.Manager, r reconcile.Reconciler) error {
