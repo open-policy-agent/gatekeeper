@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"math/big"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -26,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"reflect"
-	"sync"
 	"time"
 )
 
@@ -54,7 +53,6 @@ var (
 	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
 	vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 	vwhKey = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
-	certLock = sync.RWMutex{}
 )
 
 var _ manager.Runnable = &certRotator{}
@@ -65,12 +63,13 @@ func AddRotator(mgr manager.Manager) (error) {
 	if err != nil {
 		return err
 	}
+	rotator := &certRotator{client: cli}
+	mgr.Add(rotator)
+
 	reconciler := &ReconcileVWH{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 	}
-	rotator := &certRotator{client: cli, reconciler: reconciler}
-	mgr.Add(rotator)
 	if err := addController(mgr, reconciler); err != nil {
 		return err
 	}
@@ -79,7 +78,6 @@ func AddRotator(mgr manager.Manager) (error) {
 
 type certRotator struct {
 	client client.Client
-	reconciler *ReconcileVWH
 }
 
 func (cr *certRotator) Start(stop <-chan (struct{})) error {
@@ -130,7 +128,6 @@ func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
 		return cr.refreshCerts(true, secret)
 	}
 	// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)
-	cr.reconciler.setCertPem(secret.Data[caCertName])
 	if !validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
 		crLog.Info("refreshing server certs")
 		return cr.refreshCerts(false, secret)
@@ -158,28 +155,22 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 	if err != nil {
 		return false, err
 	}
-	cr.reconciler.setCertPem(caArtifacts.CertPEM)
-	// execute writeWebhookConfig first because update is triggered when the
-	// secret is invalid. Therefore writing the secret last means that this
-	// process will be re-triggered if any update fails.
-	if err := cr.writeWebhookConfig(caArtifacts.CertPEM); err != nil {
-		return false, err
+	writeFn := func() (bool, error) {
+		if err := cr.writeSecret(cert, key, caArtifacts, secret); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	if err := cr.writeSecret(cert, key, caArtifacts, secret); err != nil {
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 10 * time.Millisecond,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, writeFn); err != nil {
+		log.Error(err, "max retries for writing of secret reached")
 		return false, err
 	}
 	return true, nil
-}
-
-func (cr *certRotator) writeWebhookConfig(certPem []byte) error {
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
-	vwhKey := types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
-	if err := cr.client.Get(context.Background(), vwhKey, vwh); err != nil {
-		return err
-	}
-	injectCertToWebhook(vwh, certPem)
-	return cr.client.Update(context.Background(), vwh)
 }
 
 func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
@@ -402,6 +393,20 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 // controller code for making sure the CA cert on the
 // validatingwebhookconfiguration doesn't get clobbered
 
+var _ handler.Mapper = &mapper{}
+
+type mapper struct {}
+
+func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
+	if object.Meta.GetNamespace() != vwhKey.Namespace {
+		return nil
+	}
+	if object.Meta.GetName() != vwhKey.Name {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: secretKey}}
+}
+
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func addController(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
@@ -411,10 +416,15 @@ func addController(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to the provided ValidatingWebhookConfiguration
-	instance := unstructured.Unstructured{}
-	instance.SetGroupVersionKind(vwhGVK)
-	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	s := &corev1.Secret{}
+	if err := c.Watch(&source.Kind{Type: s}, &handler.EnqueueRequestForObject{}); err != nil {
+		return err
+	}
+
+	vwh := &unstructured.Unstructured{}
+	vwh.SetGroupVersionKind(vwhGVK)
+	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{}}
+	if err := c.Watch(&source.Kind{Type: vwh}, mapper); err != nil {
 		return err
 	}
 
@@ -428,34 +438,16 @@ var _ reconcile.Reconciler = &ReconcileVWH{}
 type ReconcileVWH struct {
 	client.Client
 	scheme *runtime.Scheme
-	_certPem []byte
-}
-
-func (r *ReconcileVWH) setCertPem(certPem []byte) {
-	certLock.Lock()
-	defer certLock.Unlock()
-	r._certPem = certPem
-}
-
-func (r *ReconcileVWH) certPem() []byte {
-	certLock.RLock()
-	defer certLock.RUnlock()
-	return r._certPem
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
 // object and makes sure the most recent CA cert is included
 func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if request.NamespacedName != vwhKey {
+	if request.NamespacedName != secretKey {
 		return reconcile.Result{}, nil
 	}
-	if r.certPem() == nil {
-		log.Info("certPem not yet set, skipping reconcile")
-	}
-	instance := &unstructured.Unstructured{}
-	instance.SetGroupVersionKind(vwhGVK)
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
+	secret := &corev1.Secret{}
+	if err := r.Get(context.TODO(), request.NamespacedName, secret); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
@@ -465,14 +457,27 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		return reconcile.Result{}, err
 	}
 
-	if instance.GetDeletionTimestamp().IsZero() {
-		log.Info("webhook modified, ensuring cert")
-		oldInstance := instance.DeepCopy()
-		injectCertToWebhook(instance, r.certPem())
-		if reflect.DeepEqual(instance, oldInstance) {
+	vwh := &unstructured.Unstructured{}
+	vwh.SetGroupVersionKind(vwhGVK)
+	if err := r.Get(context.TODO(), vwhKey, vwh); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			// Object not found, return.  Created objects are automatically garbage collected.
+			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
 		}
-		if err := r.Update(context.Background(), instance); err != nil {
+		// Error reading the object - requeue the request.
+		return reconcile.Result{}, err
+	}
+
+	if secret.GetDeletionTimestamp().IsZero() {
+		artifacts, err := buildArtifactsFromSecret(secret)
+		if err != nil {
+			log.Error(err, "secret is not well-formed, cannot update ValidatingWebhookConfiguration")
+			return reconcile.Result{}, nil
+		}
+		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
+		injectCertToWebhook(vwh, artifacts.CertPEM)
+		if err := r.Update(context.Background(), vwh); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
