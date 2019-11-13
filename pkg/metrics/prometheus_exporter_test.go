@@ -6,7 +6,7 @@ import (
 )
 
 func TestPrometheusExporter(t *testing.T) {
-	expectedAddr := ":9090"
+	expectedAddr := ":8888"
 
 	_, err := newPrometheusExporter()
 	if err != nil {
