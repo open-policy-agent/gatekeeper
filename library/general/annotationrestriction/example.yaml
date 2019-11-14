@@ -1,0 +1,24 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress-bad
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/inbound-cidrs: 10.0.0.0/8
+    alb.ingress.kubernetes.io/target-type: ip
+  labels:
+    app: test-ingress
+spec:
+  rules:
+    - host: foo-bar.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: nginx
+              servicePort: 80
+          - path: /echo/
+            backend:
+              serviceName: echo-server
+              servicePort: 80
