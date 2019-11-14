@@ -84,6 +84,7 @@ type EvalContext struct {
 	unknowns         []string
 	disableInlining  []ast.Ref
 	parsedUnknowns   []*ast.Term
+	indexing         bool
 }
 
 // EvalOption defines a function to set an option on an EvalConfig
@@ -168,6 +169,14 @@ func EvalParsedUnknowns(unknowns []*ast.Term) EvalOption {
 	}
 }
 
+// EvalRuleIndexing will disable indexing optimizations for the
+// evaluation. This should only be used when tracing in debug mode.
+func EvalRuleIndexing(enabled bool) EvalOption {
+	return func(e *EvalContext) {
+		e.indexing = enabled
+	}
+}
+
 func (pq preparedQuery) Modules() map[string]*ast.Module {
 	mods := make(map[string]*ast.Module)
 
@@ -193,19 +202,24 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 		hasInput:         false,
 		rawInput:         nil,
 		parsedInput:      nil,
-		metrics:          pq.r.metrics,
+		metrics:          nil,
 		txn:              nil,
-		instrument:       pq.r.instrument,
-		instrumentation:  pq.r.instrumentation,
+		instrument:       false,
+		instrumentation:  nil,
 		partialNamespace: pq.r.partialNamespace,
-		tracers:          pq.r.tracers,
+		tracers:          nil,
 		unknowns:         pq.r.unknowns,
 		parsedUnknowns:   pq.r.parsedUnknowns,
 		compiledQuery:    compiledQuery{},
+		indexing:         true,
 	}
 
 	for _, o := range options {
 		o(ectx)
+	}
+
+	if ectx.metrics == nil {
+		ectx.metrics = metrics.New()
 	}
 
 	if ectx.instrument {
@@ -858,7 +872,17 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		return nil, err
 	}
 
-	rs, err := pq.Eval(ctx, EvalTransaction(r.txn))
+	evalArgs := []EvalOption{
+		EvalTransaction(r.txn),
+		EvalMetrics(r.metrics),
+		EvalInstrument(r.instrument),
+	}
+
+	for _, t := range r.tracers {
+		evalArgs = append(evalArgs, EvalTracer(t))
+	}
+
+	rs, err := pq.Eval(ctx, evalArgs...)
 	txnErr := txnClose(ctx, err) // Always call closer
 	if err == nil {
 		err = txnErr
@@ -913,7 +937,17 @@ func (r *Rego) Partial(ctx context.Context) (*PartialQueries, error) {
 		return nil, err
 	}
 
-	pqs, err := pq.Partial(ctx, EvalTransaction(r.txn))
+	evalArgs := []EvalOption{
+		EvalTransaction(r.txn),
+		EvalMetrics(r.metrics),
+		EvalInstrument(r.instrument),
+	}
+
+	for _, t := range r.tracers {
+		evalArgs = append(evalArgs, EvalTracer(t))
+	}
+
+	pqs, err := pq.Partial(ctx, evalArgs...)
 	txnErr := txnClose(ctx, err) // Always call closer
 	if err == nil {
 		err = txnErr
@@ -1011,7 +1045,11 @@ func (r *Rego) Compile(ctx context.Context, opts ...CompileOption) (*CompileResu
 		queries = []ast.Body{r.compiledQueries[compileQueryType].query}
 	}
 
-	policy, err := planner.New().WithQueries(queries).WithModules(modules).Plan()
+	policy, err := planner.New().
+		WithQueries(queries).
+		WithModules(modules).
+		WithRewrittenVars(r.compiledQueries[compileQueryType].compiler.RewrittenVars()).
+		Plan()
 	if err != nil {
 		return nil, err
 	}
@@ -1254,7 +1292,7 @@ func (r *Rego) parseModules(ctx context.Context, txn storage.Transaction, m metr
 	}
 
 	if len(errs) > 0 {
-		return errors.New(errs.Error())
+		return errs
 	}
 
 	return nil
@@ -1266,7 +1304,7 @@ func (r *Rego) loadFiles(ctx context.Context, txn storage.Transaction, m metrics
 
 	result, err := loader.Filtered(r.loadPaths.paths, r.loadPaths.filter)
 	if err != nil {
-		return fmt.Errorf("error loading paths: %s", err)
+		return err
 	}
 	for name, mod := range result.Modules {
 		r.parsedModules[name] = mod.Parsed
@@ -1275,7 +1313,7 @@ func (r *Rego) loadFiles(ctx context.Context, txn storage.Transaction, m metrics
 	if len(result.Documents) > 0 {
 		err = r.store.Write(ctx, txn, storage.AddOp, storage.Path{}, result.Documents)
 		if err != nil {
-			return fmt.Errorf("error writing loaded documents to store: %s", err)
+			return err
 		}
 	}
 	return nil
@@ -1288,7 +1326,7 @@ func (r *Rego) loadBundles(ctx context.Context, txn storage.Transaction, m metri
 	for _, path := range r.bundlePaths {
 		bndl, err := loader.AsBundle(path)
 		if err != nil {
-			return fmt.Errorf("error loading bundle path %s: %s", path, err)
+			return fmt.Errorf("loading error: %s", err)
 		}
 		r.bundles[path] = bndl
 	}
@@ -1437,18 +1475,6 @@ func (r *Rego) compileQuery(query ast.Body, m metrics.Metrics, extras []extraSta
 
 }
 
-func (r *Rego) evalContext(input ast.Value, txn storage.Transaction) EvalContext {
-	return EvalContext{
-		rawInput:        r.rawInput,
-		parsedInput:     input,
-		metrics:         r.metrics,
-		txn:             txn,
-		instrument:      r.instrument,
-		instrumentation: r.instrumentation,
-		tracers:         r.tracers,
-	}
-}
-
 func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
 	q := topdown.NewQuery(ectx.compiledQuery.query).
@@ -1458,7 +1484,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithBuiltins(r.builtinFuncs).
 		WithMetrics(ectx.metrics).
 		WithInstrumentation(ectx.instrumentation).
-		WithRuntime(r.runtime)
+		WithRuntime(r.runtime).
+		WithIndexing(ectx.indexing)
 
 	for i := range ectx.tracers {
 		q = q.WithTracer(ectx.tracers[i])
@@ -1547,6 +1574,7 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 		tracers:          r.tracers,
 		compiledQuery:    r.compiledQueries[partialResultQueryType],
 		instrumentation:  r.instrumentation,
+		indexing:         true,
 	}
 
 	disableInlining := r.disableInlining
@@ -1635,7 +1663,8 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithInstrumentation(ectx.instrumentation).
 		WithUnknowns(unknowns).
 		WithDisableInlining(ectx.disableInlining).
-		WithRuntime(r.runtime)
+		WithRuntime(r.runtime).
+		WithIndexing(ectx.indexing)
 
 	for i := range ectx.tracers {
 		q = q.WithTracer(r.tracers[i])

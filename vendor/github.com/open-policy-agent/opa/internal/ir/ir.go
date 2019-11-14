@@ -33,7 +33,8 @@ type (
 
 	// Func represents a named plan (function) that can be invoked. Functions
 	// accept one or more parameters and return a value. By convention, the
-	// input document is always passed as the first argument.
+	// input document and data documents are always passed as the first and
+	// second arguments (respectively).
 	Func struct {
 		Name   string
 		Params []Local
@@ -41,9 +42,8 @@ type (
 		Blocks []*Block // TODO(tsandall): should this be a plan?
 	}
 
-	// Plan represents an ordered series of blocks to execute. All plans contain a
-	// final block that returns indicating the plan result was undefined. Plan
-	// execution stops when a block returns a value. Blocks are executed in-order.
+	// Plan represents an ordered series of blocks to execute. Plan execution
+	// stops when a return statement is reached. Blocks are executed in-order.
 	Plan struct {
 		Blocks []*Block
 	}
@@ -107,16 +107,14 @@ const (
 )
 
 const (
-	// InputRaw refers to the local variable containing the address of the raw
-	// (serialized) input data.
-	InputRaw Local = 0
+	// Input is the local variable that refers to the global input document.
+	Input Local = iota
 
-	// InputLen refers to the local variable containing the length of the raw input.
-	InputLen Local = 1
+	// Data is the local variable that refers to the global data document.
+	Data
 
-	// Input refers to the local variable containing the address of the deserialized
-	// input value.
-	Input Local = 2
+	// Unused is the free local variable that can be allocated in a plan.
+	Unused
 )
 
 func (a *Policy) String() string {
@@ -148,12 +146,6 @@ func (a *NullConst) typeMarker()    {}
 func (a *IntConst) typeMarker()     {}
 func (a *FloatConst) typeMarker()   {}
 func (a *StringConst) typeMarker()  {}
-
-// ReturnStmt represents a return statement. Return statements halt execution of
-// a plan with the given code.
-type ReturnStmt struct {
-	Code int32 // 32-bit integer for compatibility with languages like JavaScript.
-}
 
 // ReturnLocalStmt represents a return statement that yields a local value.
 type ReturnLocalStmt struct {
@@ -210,10 +202,8 @@ type ScanStmt struct {
 	Block  *Block
 }
 
-// NotStmt represents a negated statement. The last statement in the negation
-// block will set the condition to false.
+// NotStmt represents a negated statement.
 type NotStmt struct {
-	Cond  Local
 	Block *Block
 }
 
@@ -259,6 +249,13 @@ type MakeNullStmt struct {
 // MakeBooleanStmt constructs a local variable that refers to a boolean value.
 type MakeBooleanStmt struct {
 	Value  bool
+	Target Local
+}
+
+// MakeNumberFloatStmt constructs a local variable that refers to a
+// floating-point number value.
+type MakeNumberFloatStmt struct {
+	Value  float64
 	Target Local
 }
 
@@ -362,6 +359,15 @@ type ObjectInsertOnceStmt struct {
 	Key    Local
 	Value  Local
 	Object Local
+}
+
+// ObjectMergeStmt performs a recursive merge of two object values. If either of
+// the locals refer to non-object values this operation will abort with a
+// conflict error. Overlapping object keys are merged recursively.
+type ObjectMergeStmt struct {
+	A      Local
+	B      Local
+	Target Local
 }
 
 // SetAddStmt represents a dynamic add operation of an element into a set.

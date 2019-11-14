@@ -58,7 +58,7 @@ func (o *objectValidator) isPropertyName() bool {
 
 func (o *objectValidator) checkArrayMustHaveItems(res *Result, val map[string]interface{}) {
 	if t, typeFound := val["type"]; typeFound {
-		if tpe, ok := t.(string); ok && tpe == "array" {
+		if tpe, ok := t.(string); ok && tpe == arrayType {
 			if _, itemsKeyFound := val["items"]; !itemsKeyFound {
 				res.AddErrors(errors.Required("items", o.Path))
 			}
@@ -71,8 +71,8 @@ func (o *objectValidator) checkItemsMustBeTypeArray(res *Result, val map[string]
 		if _, itemsKeyFound := val["items"]; itemsKeyFound {
 			t, typeFound := val["type"]
 			if typeFound {
-				if tpe, ok := t.(string); !ok || tpe != "array" {
-					res.AddErrors(errors.InvalidType(o.Path, o.In, "array", nil))
+				if tpe, ok := t.(string); !ok || tpe != arrayType {
+					res.AddErrors(errors.InvalidType(o.Path, o.In, arrayType, nil))
 				}
 			} else {
 				// there is no type

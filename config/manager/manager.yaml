@@ -3,52 +3,31 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
   name: system
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: controller-manager-service
-  namespace: system
-  labels:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-spec:
-  selector:
-    control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
-  ports:
-  - port: 443
-    targetPort: 8443
----
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: controller-manager
   namespace: system
   labels:
     control-plane: controller-manager
-    controller-tools.k8s.io: "1.0"
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      controller-tools.k8s.io: "1.0"
-  serviceName: controller-manager-service
+  replicas: 1
   template:
     metadata:
       labels:
         control-plane: controller-manager
-        controller-tools.k8s.io: "1.0"
     spec:
       containers:
-      - args:
+      - command:
+        - /manager
+        args:
           - "--auditInterval=30"
           - "--port=8443"
-          # - "--alsologtostderr"
-          # - "--stderrthreshold=INFO"
-          # - "-v=100"
         image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
         imagePullPolicy: Always
         name: manager
@@ -62,8 +41,6 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
-          - name: SECRET_NAME
-            value: $(WEBHOOK_SECRET_NAME)
         resources:
           limits:
             cpu: 100m
@@ -71,23 +48,4 @@ spec:
           requests:
             cpu: 100m
             memory: 256Mi
-        ports:
-        - containerPort: 8443
-          name: webhook-server
-          protocol: TCP
-        volumeMounts:
-        - mountPath: /certs
-          name: cert
-          readOnly: true
       terminationGracePeriodSeconds: 60
-      volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: webhook-server-secret
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: webhook-server-secret
-  namespace: system

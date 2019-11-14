@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
@@ -60,10 +60,6 @@ func (m *fakeMgr) GetScheme() *runtime.Scheme {
 	return nil
 }
 
-func (m *fakeMgr) GetAdmissionDecoder() types.Decoder {
-	return nil
-}
-
 func (m *fakeMgr) GetClient() client.Client {
 	return nil
 }
@@ -76,11 +72,19 @@ func (m *fakeMgr) GetCache() cache.Cache {
 	return nil
 }
 
-func (m *fakeMgr) GetRecorder(name string) record.EventRecorder {
+func (m *fakeMgr) GetEventRecorderFor(name string) record.EventRecorder {
 	return nil
 }
 
 func (m *fakeMgr) GetRESTMapper() meta.RESTMapper {
+	return nil
+}
+
+func (m *fakeMgr) GetAPIReader() client.Reader {
+	return nil
+}
+
+func (m *fakeMgr) GetWebhookServer() *webhook.Server {
 	return nil
 }
 
