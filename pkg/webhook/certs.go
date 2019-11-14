@@ -217,8 +217,14 @@ func populateSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *cor
 }
 
 func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) {
-	caPem := secret.Data[caCertName]
-	keyPem := secret.Data[caKeyName]
+	caPem, ok := secret.Data[caCertName]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("Cert secret is not well-formed, missing %s", caCertName))
+	}
+	keyPem, ok := secret.Data[caKeyName]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("Cert secret is not well-formed, missing %s", caKeyName))
+	}
 	caDer, _ := pem.Decode(caPem)
 	if caDer == nil {
 		return nil, errors.New("bad CA cert")
