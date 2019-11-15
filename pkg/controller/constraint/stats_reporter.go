@@ -1,8 +1,7 @@
-package audit
+package constraint
 
 import (
 	"context"
-	"time"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"go.opencensus.io/stats"
@@ -11,13 +10,11 @@ import (
 )
 
 const (
-	totalViolationsName = "total_violations"
-	auditDurationName   = "audit_duration_seconds"
+	totalConstraintsName = "total_constraints"
 )
 
 var (
-	violationsTotalM = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitDimensionless)
-	auditDurationM   = stats.Float64(auditDurationName, "Latency of audit operation in seconds", stats.UnitSeconds)
+	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of enforced constraints", stats.UnitDimensionless)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )
@@ -29,15 +26,10 @@ func init() {
 func register() {
 	views := []*view.View{
 		{
-			Name:        totalViolationsName,
-			Measure:     violationsTotalM,
+			Name:        totalConstraintsName,
+			Measure:     constraintsTotalM,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{enforcementActionKey},
-		},
-		{
-			Name:        auditDurationName,
-			Measure:     auditDurationM,
-			Aggregation: view.Distribution(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5),
 		},
 	}
 
@@ -46,7 +38,7 @@ func register() {
 	}
 }
 
-func (r *reporter) ReportTotalViolations(enforcementAction string, v int64) error {
+func (r *reporter) ReportConstraints(enforcementAction string, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(enforcementActionKey, enforcementAction))
@@ -54,22 +46,12 @@ func (r *reporter) ReportTotalViolations(enforcementAction string, v int64) erro
 		return err
 	}
 
-	return r.report(ctx, violationsTotalM.M(v))
-}
-
-func (r *reporter) ReportLatency(d time.Duration) error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, auditDurationM.M(d.Seconds()))
+	return r.report(ctx, constraintsTotalM.M(v))
 }
 
 // StatsReporter reports audit metrics
 type StatsReporter interface {
-	ReportTotalViolations(enforcementAction string, v int64) error
-	ReportLatency(d time.Duration) error
+	ReportConstraints(enforcementAction string, v int64) error
 }
 
 // NewStatsReporter creaters a reporter for audit metrics

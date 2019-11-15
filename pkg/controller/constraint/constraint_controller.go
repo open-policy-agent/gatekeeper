@@ -42,24 +42,33 @@ const (
 )
 
 type Adder struct {
-	Opa *opa.Client
+	Opa              *opa.Client
+	ConstraintsCache map[string]map[string]bool
 }
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
-	r := newReconciler(mgr, gvk, a.Opa)
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+		return err
+	}
+
+	r := newReconciler(mgr, gvk, a.Opa, reporter, a.ConstraintsCache)
 	return add(mgr, r, gvk)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, reporter StatsReporter, constraintsCache map[string]map[string]bool) reconcile.Reconciler {
 	return &ReconcileConstraint{
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		opa:    opa,
-		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
-		gvk:    gvk,
+		Client:           mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		opa:              opa,
+		log:              log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
+		gvk:              gvk,
+		reporter:         reporter,
+		constraintsCache: constraintsCache,
 	}
 }
 
@@ -87,10 +96,12 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	client.Client
-	scheme *runtime.Scheme
-	opa    *opa.Client
-	gvk    schema.GroupVersionKind
-	log    logr.Logger
+	scheme           *runtime.Scheme
+	opa              *opa.Client
+	gvk              schema.GroupVersionKind
+	log              logr.Logger
+	reporter         StatsReporter
+	constraintsCache map[string]map[string]bool
 }
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
@@ -107,6 +118,12 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		return reconcile.Result{}, err
+	}
+
+	constraintNameKind := instance.GetKind() + "/" + instance.GetName()
+	enforcementAction, err := util.GetEnforcementAction(instance.Object)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -137,6 +154,8 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
+
+		r.constraintsCache[enforcementAction][constraintNameKind] = true
 	} else {
 		// Handle deletion
 		if HasFinalizer(instance) {
@@ -149,8 +168,13 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
 			}
+			// removing constraint entry from cache
+			delete(r.constraintsCache[enforcementAction], constraintNameKind)
 		}
 	}
+
+	// report total number of constraints per enforcement action
+	r.reporter.ReportConstraints(enforcementAction, int64(len(r.constraintsCache[enforcementAction])))
 
 	return reconcile.Result{}, nil
 }

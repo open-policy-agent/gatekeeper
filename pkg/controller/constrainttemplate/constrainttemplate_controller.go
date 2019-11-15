@@ -79,7 +79,14 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
-	constraintAdder := constraint.Adder{Opa: opa}
+	// constraintsCache stores total number of constraints per enforcement action
+	constraintsCache := map[string]map[string]bool{
+		"deny":         make(map[string]bool),
+		"dryrun":       make(map[string]bool),
+		"unrecognized": make(map[string]bool),
+	}
+
+	constraintAdder := constraint.Adder{Opa: opa, ConstraintsCache: constraintsCache}
 	w, err := wm.NewRegistrar(
 		ctrlName,
 		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})

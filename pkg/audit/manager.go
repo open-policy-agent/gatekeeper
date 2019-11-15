@@ -182,7 +182,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 
 	for _, r := range resp.Results() {
 		selfLink := r.Constraint.GetSelfLink()
-		totalViolationsPerConstraint[selfLink] = totalViolationsPerConstraint[selfLink] + 1
+		totalViolationsPerConstraint[selfLink] += 1
 		// skip if this constraint has reached the constraintViolationsLimit
 		if len(updateLists[selfLink]) < *constraintViolationsLimit {
 			name := r.Constraint.GetName()
@@ -229,13 +229,6 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		"unrecognized": 0,
 	}
 
-	// resetting total constraints per enforcement action
-	totalConstraintsPerEnforcementAction := map[string]int64{
-		"deny":         0,
-		"dryrun":       0,
-		"unrecognized": 0,
-	}
-
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
 		log.Info("constraint", "resource kind", r.Kind)
@@ -257,21 +250,12 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		for _, item := range instanceList.Items {
 			updateConstraints[item.GetSelfLink()] = item
 
-			enforcementAction, _, err := unstructured.NestedString(item.Object, "spec", "enforcementAction")
+			enforcementAction, err := util.GetEnforcementAction(item.Object)
 			if err != nil {
 				return err
 			}
-			// default enforcementAction is deny
-			if enforcementAction == "" {
-				enforcementAction = "deny"
-			}
-			// validating enforcement action - if it is not deny or dryrun, we are classifying as unrecognized
-			if err := util.ValidateEnforcementAction(enforcementAction); err != nil {
-				enforcementAction = "unrecognized"
-			}
 
-			totalViolationsPerEnforcementAction[enforcementAction] = totalViolationsPerEnforcementAction[enforcementAction] + totalViolations[item.GetSelfLink()]
-			totalConstraintsPerEnforcementAction[enforcementAction] = totalConstraintsPerEnforcementAction[enforcementAction] + 1
+			totalViolationsPerEnforcementAction[enforcementAction] += totalViolations[item.GetSelfLink()]
 		}
 		if len(updateConstraints) > 0 {
 			if am.ucloop != nil {
@@ -297,10 +281,6 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 
 	for k, v := range totalViolationsPerEnforcementAction {
 		am.reporter.ReportTotalViolations(k, v)
-	}
-
-	for k, v := range totalConstraintsPerEnforcementAction {
-		am.reporter.ReportConstraints(k, v)
 	}
 	return nil
 }
