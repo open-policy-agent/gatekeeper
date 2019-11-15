@@ -17,7 +17,7 @@ An adminstrator can control the following by setting the field in PSP or by depl
 | White list of Flexvolume drivers                  | `allowedFlexVolumes`                                                        | [flexvolume-drivers](flexvolume-drivers)                 |
 | Allocating an FSGroup that owns the pod's volumes | `fsGroup`                                                                   | [fsgroup](fsgroup)<sup>\*</sup>                          |
 | Requiring the use of a read only root file system | `readOnlyRootFilesystem`                                                    | [read-only-root-filesystem](read-only-root-filesystem)   |
-| The user and group IDs of the container           | `runAsUser`, `runAsGroup`, `supplementalGroups`                             |
+| The user and group IDs of the container           | `runAsUser`, `runAsGroup`, `supplementalGroups`                             | [users](users)
 | Restricting escalation to root privileges         | `allowPrivilegeEscalation`, `defaultAllowPrivilegeEscalation`               | [allow-privilege-escalation](allow-privilege-escalation) |
 | Linux capabilities                                | `defaultAddCapabilities`, `requiredDropCapabilities`, `allowedCapabilities` |
 | The SELinux context of the container              | `seLinux`                                                                   | [seLinux](selinux)                                       |

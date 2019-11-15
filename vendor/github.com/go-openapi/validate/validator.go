@@ -611,7 +611,7 @@ func (s *stringValidator) Applies(source interface{}, kind reflect.Kind) bool {
 func (s *stringValidator) Validate(val interface{}) *Result {
 	data, ok := val.(string)
 	if !ok {
-		return errorHelp.sErr(errors.InvalidType(s.Path, s.In, "string", val))
+		return errorHelp.sErr(errors.InvalidType(s.Path, s.In, stringType, val))
 	}
 
 	if s.Required && !s.AllowEmptyValue && (s.Default == nil || s.Default == "") {

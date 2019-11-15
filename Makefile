@@ -21,7 +21,7 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/version.Version=$(VERSION
 	-X github.com/open-policy-agent/gatekeeper/version.Hostname=$(BUILD_HOSTNAME)"
 
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
-\nkind: StatefulSet\
+\nkind: Deployment\
 \nmetadata:\
 \n  name: controller-manager\
 \n  namespace: system\
@@ -32,11 +32,23 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      - image: <your image file>\
 \n        name: manager"
 
+FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
+
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= crd:trivialVersions=true
+
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
 all: test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -67,48 +79,51 @@ e2e-build-load-image: docker-build
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
-	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system gatekeeper-controller-manager-0 manager
+	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
+	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
 
 # Build manager binary
 manager-osx: generate fmt vet
-	go build -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) github.com/open-policy-agent/gatekeeper/cmd/manager
+	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet
-	go run ./cmd/manager/main.go
+run: generate fmt vet manifests
+	GO111MODULE=on go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
 install: manifests
-	kubectl apply -f config/crds
+	kustomize build config/crd | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	touch -a ./overlays/dev/manager_image_patch.yaml
-	kubectl apply -f config/crds
-	kubectl apply -f vendor/github.com/open-policy-agent/frameworks/constraint/deploy
-	kustomize build overlays/dev | kubectl apply -f -
+	touch -a ./config/overlays/dev/manager_image_patch.yaml
+# TODO use kustomize for CRDs
+	kubectl apply -f config/crd/bases
+	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
+	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
-	kustomize build config  -o deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/github.com/open-policy-agent/frameworks/constraint/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+manifests: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
 
 # Run go fmt against code
 fmt:
-	go fmt ./pkg/... ./cmd/...
+	GO111MODULE=on go fmt ./api/... ./pkg/...
+	GO111MODULE=on go fmt main.go
 
 # Run go vet against code
 vet:
-	go vet ./pkg/... ./cmd/...
+	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
+	GO111MODULE=on go vet -mod vendor main.go
 
 # Generate code
-generate: target-template-source
-	go generate ./pkg/... ./cmd/...
+generate: controller-gen target-template-source
+	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./api/..." paths="./pkg/..."
 
 # Docker Login
 docker-login:
@@ -133,17 +148,17 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):latest
 
 # Build the docker image
-docker-build:
+docker-build: test
 	docker build --pull . -t ${IMG}
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
-	@test -s ./overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./overlays/dev/manager_image_patch.yaml'
+	@test -s ./config/overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
 ifeq ($(USE_LOCAL_IMG),true)
-	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./overlays/dev/manager_image_patch.yaml
+	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
-	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./overlays/dev/manager_image_patch.yaml
+	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
 
 # Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
 target-template-source:
@@ -162,7 +177,8 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper_kubebuilder_v2.yaml
+
 
 # Travis Dev Deployment
 travis-dev-deploy: docker-login docker-build-ci docker-push-dev
@@ -175,3 +191,24 @@ uninstall:
 	-kubectl delete -n gatekeeper-system Config config
 	sleep 5
 	kubectl delete ns gatekeeper-system
+
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.2
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+.PHONY: vendor
+vendor:
+	$(eval $@_TMP := $(shell mktemp -d))
+	$(eval $@_CACHE := ${$@_TMP}/pkg/mod/cache/download)
+	GO111MODULE=on go mod download
+	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
+	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
+	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
+	mkdir -p vendor/${FRAMEWORK_PACKAGE}/deploy
+	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/deploy/* vendor/${FRAMEWORK_PACKAGE}/deploy/.

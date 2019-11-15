@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -43,7 +43,7 @@ type AuditManager struct {
 	opa      *opa.Client
 	stopper  chan struct{}
 	stopped  chan struct{}
-	cfg      *rest.Config
+	mgr      manager.Manager
 	ctx      context.Context
 	ucloop   *updateConstraintLoop
 	reporter StatsReporter
@@ -71,7 +71,7 @@ type StatusViolation struct {
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, cfg *rest.Config, opa *opa.Client) (*AuditManager, error) {
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*AuditManager, error) {
 	reporter, err := NewStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -82,7 +82,7 @@ func New(ctx context.Context, cfg *rest.Config, opa *opa.Client) (*AuditManager,
 		opa:      opa,
 		stopper:  make(chan struct{}),
 		stopped:  make(chan struct{}),
-		cfg:      cfg,
+		mgr:      mgr,
 		ctx:      ctx,
 		reporter: reporter,
 	}
@@ -100,7 +100,7 @@ func (am *AuditManager) audit(ctx context.Context) error {
 
 	timestamp := timeStart.UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
-	c, err := client.New(am.cfg, client.Options{Scheme: nil, Mapper: nil})
+	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (am *AuditManager) ensureCRDExists(ctx context.Context) error {
 }
 
 func (am *AuditManager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 		}
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
-		err := am.client.List(ctx, &client.ListOptions{}, instanceList)
+		err := am.client.List(ctx, instanceList)
 		if err != nil {
 			return err
 		}

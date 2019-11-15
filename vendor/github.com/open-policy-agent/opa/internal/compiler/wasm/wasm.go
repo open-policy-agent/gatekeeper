@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/open-policy-agent/opa/internal/compiler/wasm/opa"
 	"github.com/open-policy-agent/opa/internal/ir"
 	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/internal/wasm/instruction"
 	"github.com/open-policy-agent/opa/internal/wasm/module"
 	"github.com/open-policy-agent/opa/internal/wasm/types"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -30,10 +31,12 @@ const (
 
 const (
 	opaFuncPrefix        = "opa_"
+	opaAbort             = "opa_abort"
 	opaJSONParse         = "opa_json_parse"
 	opaNull              = "opa_null"
 	opaBoolean           = "opa_boolean"
 	opaNumberInt         = "opa_number_int"
+	opaNumberFloat       = "opa_number_float"
 	opaNumberSize        = "opa_number_size"
 	opaArrayWithCap      = "opa_array_with_cap"
 	opaArrayAppend       = "opa_array_append"
@@ -48,6 +51,7 @@ const (
 	opaValueGet          = "opa_value_get"
 	opaValueIter         = "opa_value_iter"
 	opaValueLength       = "opa_value_length"
+	opaValueMerge        = "opa_value_merge"
 	opaValueType         = "opa_value_type"
 )
 
@@ -60,12 +64,28 @@ type Compiler struct {
 	module *module.Module    // output WASM module
 	code   *module.CodeEntry // output WASM code
 
-	stringOffset int32             // null-terminated string data base offset
-	stringAddrs  []uint32          // null-terminated string constant addresses
-	funcs        map[string]uint32 // maps exported function names to function indices
+	builtinStringAddrs map[int]uint32    // addresses of built-in string constants
+	stringOffset       int32             // null-terminated string data base offset
+	stringAddrs        []uint32          // null-terminated string constant addresses
+	funcs              map[string]uint32 // maps exported function names to function indices
 
 	nextLocal uint32
 	locals    map[ir.Local]uint32
+}
+
+const (
+	errVarAssignConflict int = iota
+	errObjectInsertConflict
+	errObjectMergeConflict
+)
+
+var errorMessages = [...]struct {
+	id      int
+	message string
+}{
+	{errVarAssignConflict, "var assignment conflict"},
+	{errObjectInsertConflict, "object insert conflict"},
+	{errObjectMergeConflict, "object merge conflict"},
 }
 
 // New returns a new compiler object.
@@ -116,6 +136,14 @@ func (c *Compiler) initModule() error {
 	}
 
 	c.funcs = make(map[string]uint32)
+	var funcidx uint32
+
+	for _, imp := range c.module.Import.Imports {
+		if imp.Descriptor.Kind() == module.FunctionImportType && strings.HasPrefix(imp.Name, opaFuncPrefix) {
+			c.funcs[imp.Name] = funcidx
+			funcidx++
+		}
+	}
 
 	for _, exp := range c.module.Export.Exports {
 		if exp.Descriptor.Type == module.FunctionExportType && strings.HasPrefix(exp.Name, opaFuncPrefix) {
@@ -161,6 +189,15 @@ func (c *Compiler) compileStrings() error {
 		c.stringAddrs[i] = addr
 	}
 
+	c.builtinStringAddrs = make(map[int]uint32, len(errorMessages))
+
+	for i := range errorMessages {
+		addr := uint32(buf.Len()) + uint32(c.stringOffset)
+		buf.WriteString(errorMessages[i].message)
+		buf.WriteByte(0)
+		c.builtinStringAddrs[errorMessages[i].id] = addr
+	}
+
 	c.module.Data.Segments = append(c.module.Data.Segments, module.DataSegment{
 		Index: 0,
 		Offset: module.Expr{
@@ -195,16 +232,10 @@ func (c *Compiler) compilePlan() error {
 	// reset local variables and declare raw ptr, len, and input ptr.
 	c.nextLocal = 0
 	c.locals = map[ir.Local]uint32{}
-	_ = c.local(ir.InputRaw)
-	_ = c.local(ir.InputLen)
 	_ = c.local(ir.Input)
+	_ = c.local(ir.Data)
 
 	c.code = &module.CodeEntry{}
-
-	c.appendInstr(instruction.GetLocal{Index: c.local(ir.InputRaw)})
-	c.appendInstr(instruction.GetLocal{Index: c.local(ir.InputLen)})
-	c.appendInstr(instruction.Call{Index: c.function(opaJSONParse)})
-	c.appendInstr(instruction.SetLocal{Index: c.local(ir.Input)})
 
 	for i := range c.policy.Plan.Blocks {
 
@@ -281,22 +312,17 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 
 	for _, stmt := range block.Stmts {
 		switch stmt := stmt.(type) {
-		case *ir.ReturnStmt:
-			instrs = append(instrs, instruction.I32Const{Value: int32(stmt.Code)})
-			instrs = append(instrs, instruction.Return{})
 		case *ir.ReturnLocalStmt:
 			instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.Source)})
 			instrs = append(instrs, instruction.Return{})
 		case *ir.BlockStmt:
-			nested := make([]instruction.Instruction, len(stmt.Blocks))
 			for i := range stmt.Blocks {
 				block, err := c.compileBlock(stmt.Blocks[i])
 				if err != nil {
 					return nil, err
 				}
-				nested[i] = instruction.Block{Instrs: block}
+				instrs = append(instrs, instruction.Block{Instrs: block})
 			}
-			instrs = append(instrs, instruction.Block{Instrs: nested})
 		case *ir.BreakStmt:
 			instrs = append(instrs, instruction.Br{Index: stmt.Index})
 		case *ir.CallStmt:
@@ -324,7 +350,9 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 							instruction.Call{Index: c.function(opaValueCompare)},
 							instruction.I32Eqz{},
 							instruction.BrIf{Index: 1},
-							instruction.Unreachable{}, // TODO(tsandall): replace with conflict error
+							instruction.I32Const{Value: c.builtinStringAddr(errVarAssignConflict)},
+							instruction.Call{Index: c.function(opaAbort)},
+							instruction.Unreachable{},
 						},
 					},
 					instruction.GetLocal{Index: c.local(stmt.Source)},
@@ -416,6 +444,10 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 			instrs = append(instrs, instr)
 			instrs = append(instrs, instruction.Call{Index: c.function(opaBoolean)})
 			instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Target)})
+		case *ir.MakeNumberFloatStmt:
+			instrs = append(instrs, instruction.F64Const{Value: stmt.Value})
+			instrs = append(instrs, instruction.Call{Index: c.function(opaNumberFloat)})
+			instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Target)})
 		case *ir.MakeNumberIntStmt:
 			instrs = append(instrs, instruction.I64Const{Value: stmt.Value})
 			instrs = append(instrs, instruction.Call{Index: c.function(opaNumberInt)})
@@ -482,13 +514,29 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 							instruction.Call{Index: c.function(opaValueCompare)},
 							instruction.I32Eqz{},
 							instruction.BrIf{Index: 1},
-							instruction.Unreachable{}, // TODO(tsandall): replace with conflict error
+							instruction.I32Const{Value: c.builtinStringAddr(errObjectInsertConflict)},
+							instruction.Call{Index: c.function(opaAbort)},
+							instruction.Unreachable{},
 						},
 					},
 					instruction.GetLocal{Index: c.local(stmt.Object)},
 					instruction.GetLocal{Index: c.local(stmt.Key)},
 					instruction.GetLocal{Index: c.local(stmt.Value)},
 					instruction.Call{Index: c.function(opaObjectInsert)},
+				},
+			})
+		case *ir.ObjectMergeStmt:
+			instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.A)})
+			instrs = append(instrs, instruction.GetLocal{Index: c.local(stmt.B)})
+			instrs = append(instrs, instruction.Call{Index: c.function(opaValueMerge)})
+			instrs = append(instrs, instruction.SetLocal{Index: c.local(stmt.Target)})
+			instrs = append(instrs, instruction.Block{
+				Instrs: []instruction.Instruction{
+					instruction.GetLocal{Index: c.local(stmt.Target)},
+					instruction.BrIf{Index: 0},
+					instruction.I32Const{Value: c.builtinStringAddr(errObjectMergeConflict)},
+					instruction.Call{Index: c.function(opaAbort)},
+					instruction.Unreachable{},
 				},
 			})
 		case *ir.SetAddStmt:
@@ -513,7 +561,11 @@ func (c *Compiler) compileScan(scan *ir.ScanStmt, result *[]instruction.Instruct
 	if err != nil {
 		return err
 	}
-	instrs = append(instrs, instruction.Loop{Instrs: body})
+	instrs = append(instrs, instruction.Block{
+		Instrs: []instruction.Instruction{
+			instruction.Loop{Instrs: body},
+		},
+	})
 	*result = instrs
 	return nil
 }
@@ -544,6 +596,7 @@ func (c *Compiler) compileScanBlock(scan *ir.ScanStmt) ([]instruction.Instructio
 		return nil, err
 	}
 
+	// Continue.
 	instrs = append(instrs, nested...)
 	instrs = append(instrs, instruction.Br{Index: 0})
 
@@ -553,12 +606,26 @@ func (c *Compiler) compileScanBlock(scan *ir.ScanStmt) ([]instruction.Instructio
 func (c *Compiler) compileNot(not *ir.NotStmt, result *[]instruction.Instruction) error {
 	var instrs = *result
 
+	// generate and initialize condition variable
+	cond := c.genLocal()
+	instrs = append(instrs, instruction.I32Const{Value: 1})
+	instrs = append(instrs, instruction.SetLocal{Index: cond})
+
 	nested, err := c.compileBlock(not.Block)
 	if err != nil {
 		return err
 	}
 
+	// unset condition variable if end of block is reached
+	nested = append(nested, instruction.I32Const{Value: 0})
+	nested = append(nested, instruction.SetLocal{Index: cond})
 	instrs = append(instrs, instruction.Block{Instrs: nested})
+
+	// break out of block if condition variable was unset
+	instrs = append(instrs, instruction.GetLocal{Index: cond})
+	instrs = append(instrs, instruction.I32Eqz{})
+	instrs = append(instrs, instruction.BrIf{Index: 0})
+
 	*result = instrs
 	return nil
 }
@@ -604,6 +671,10 @@ func (c *Compiler) emitFunction(name string, entry *module.CodeEntry) error {
 
 func (c *Compiler) stringAddr(index int) int32 {
 	return int32(c.stringAddrs[index])
+}
+
+func (c *Compiler) builtinStringAddr(code int) int32 {
+	return int32(c.builtinStringAddrs[code])
 }
 
 func (c *Compiler) local(l ir.Local) uint32 {

@@ -27,7 +27,54 @@ import (
 )
 
 const swaggerBody = "body"
-const objectType = "object"
+
+const (
+	objectType  = "object"
+	arrayType   = "array"
+	stringType  = "string"
+	integerType = "integer"
+	numberType  = "number"
+	booleanType = "boolean"
+	fileType    = "file"
+	nullType    = "null"
+)
+
+const (
+	stringFormatDate     = "date"
+	stringFormatDateTime = "date-time"
+	stringFormatPassword = "password"
+	stringFormatByte     = "byte"
+	//stringFormatBinary       = "binary"
+	stringFormatCreditCard   = "creditcard"
+	stringFormatDuration     = "duration"
+	stringFormatEmail        = "email"
+	stringFormatHexColor     = "hexcolor"
+	stringFormatHostname     = "hostname"
+	stringFormatIPv4         = "ipv4"
+	stringFormatIPv6         = "ipv6"
+	stringFormatISBN         = "isbn"
+	stringFormatISBN10       = "isbn10"
+	stringFormatISBN13       = "isbn13"
+	stringFormatMAC          = "mac"
+	stringFormatBSONObjectID = "bsonobjectid"
+	stringFormatRGBColor     = "rgbcolor"
+	stringFormatSSN          = "ssn"
+	stringFormatURI          = "uri"
+	stringFormatUUID         = "uuid"
+	stringFormatUUID3        = "uuid3"
+	stringFormatUUID4        = "uuid4"
+	stringFormatUUID5        = "uuid5"
+
+	integerFormatInt32  = "int32"
+	integerFormatInt64  = "int64"
+	integerFormatUInt32 = "uint32"
+	integerFormatUInt64 = "uint64"
+
+	numberFormatFloat32 = "float32"
+	numberFormatFloat64 = "float64"
+	numberFormatFloat   = "float"
+	numberFormatDouble  = "double"
+)
 
 // Helpers available at the package level
 var (

@@ -1,12 +1,8 @@
-FROM ubuntu:latest
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY bin/manager .
+USER nonroot:nonroot
 
-RUN apt update &&\
-    apt upgrade -y &&\
-    useradd -rm -u 1000 -U manager
-
-WORKDIR /home/manager/
-COPY --chown=manager:manager bin/manager .
-
-USER 1000
-
-ENTRYPOINT ["./manager"]
+ENTRYPOINT ["/manager"]
