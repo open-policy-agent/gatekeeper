@@ -23,10 +23,11 @@ import (
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager, *client.Client) error
 
-// AddToManager adds all Controllers to the Manager
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations;validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+
+// AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager, opa *client.Client) error {
 	for _, f := range AddToManagerFuncs {
 		if err := f(m, opa); err != nil {

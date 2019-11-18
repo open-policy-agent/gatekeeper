@@ -16,8 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -30,14 +30,14 @@ const (
 // UpgradeManager allows us to upgrade resources on startup
 type UpgradeManager struct {
 	client client.Client
-	cfg    *rest.Config
+	mgr    manager.Manager
 	ctx    context.Context
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, cfg *rest.Config) (*UpgradeManager, error) {
+func New(ctx context.Context, mgr manager.Manager) (*UpgradeManager, error) {
 	am := &UpgradeManager{
-		cfg: cfg,
+		mgr: mgr,
 		ctx: ctx,
 	}
 	return am, nil
@@ -70,7 +70,7 @@ func (um *UpgradeManager) ensureCRDExists(ctx context.Context) error {
 }
 
 func (um *UpgradeManager) getAllKinds(groupVersion string) (*metav1.APIResourceList, error) {
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(um.cfg)
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(um.mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (um *UpgradeManager) upgrade(ctx context.Context) error {
 // upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version
 func (um *UpgradeManager) upgradeGroupVersion(ctx context.Context, groupVersion string) error {
 	// new client to get updated restmapper
-	c, err := client.New(um.cfg, client.Options{Scheme: nil, Mapper: nil})
+	c, err := client.New(um.mgr.GetConfig(), client.Options{Scheme: um.mgr.GetScheme(), Mapper: nil})
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (um *UpgradeManager) upgradeGroupVersion(ctx context.Context, groupVersion 
 		}
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(resourceGvk)
-		err := um.client.List(ctx, &client.ListOptions{}, instanceList)
+		err := um.client.List(ctx, instanceList)
 		if err != nil {
 			return err
 		}

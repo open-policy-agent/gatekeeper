@@ -14,14 +14,16 @@ import (
 	"strings"
 
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
+
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
 	"github.com/open-policy-agent/opa/internal/file"
 	fileurl "github.com/open-policy-agent/opa/internal/file/url"
+	"github.com/open-policy-agent/opa/internal/merge"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/util"
-	"github.com/pkg/errors"
 )
 
 // Result represents the result of successfully loading zero or more files.
@@ -159,6 +161,9 @@ func AsBundle(path string) (*bundle.Bundle, error) {
 
 	br := bundle.NewCustomReader(bundleLoader)
 	b, err := br.Read()
+	if err != nil {
+		err = errors.Wrap(err, fmt.Sprintf("bundle %s", path))
+	}
 	return &b, err
 }
 
@@ -226,7 +231,7 @@ func (l *Result) mergeDocument(path string, doc interface{}) error {
 	if !ok {
 		return unsupportedDocumentType(path)
 	}
-	merged, ok := mergeInterfaces(l.Documents, obj)
+	merged, ok := merge.InterfaceMaps(l.Documents, obj)
 	if !ok {
 		return mergeError(path)
 	}
@@ -246,7 +251,7 @@ func (l *Result) withParent(p string) *Result {
 }
 
 func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Result, error) {
-	errors := loaderErrors{}
+	errors := Errors{}
 	root := newResult()
 
 	for _, path := range paths {
@@ -272,17 +277,17 @@ func all(paths []string, filter Filter, f func(*Result, string, int) error) (*Re
 	return root, nil
 }
 
-func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, depth int, f func(*Result, string, int) error) {
+func allRec(path string, filter Filter, errors *Errors, loaded *Result, depth int, f func(*Result, string, int) error) {
 
 	path, err := fileurl.Clean(path)
 	if err != nil {
-		errors.Add(err)
+		errors.add(err)
 		return
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
-		errors.Add(err)
+		errors.add(err)
 		return
 	}
 
@@ -292,7 +297,7 @@ func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, de
 
 	if !info.IsDir() {
 		if err := f(loaded, path, depth); err != nil {
-			errors.Add(err)
+			errors.add(err)
 		}
 		return
 	}
@@ -305,7 +310,7 @@ func allRec(path string, filter Filter, errors *loaderErrors, loaded *Result, de
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
-		errors.Add(err)
+		errors.add(err)
 		return
 	}
 
@@ -333,7 +338,11 @@ func loadKnownTypes(path string, bs []byte) (interface{}, error) {
 		return loadYAML(path, bs)
 	default:
 		if strings.HasSuffix(path, ".tar.gz") {
-			return loadBundleFile(bs)
+			r, err := loadBundleFile(bs)
+			if err != nil {
+				err = errors.Wrap(err, fmt.Sprintf("bundle %s", path))
+			}
+			return r, err
 		}
 	}
 	return nil, unrecognizedFile(path)

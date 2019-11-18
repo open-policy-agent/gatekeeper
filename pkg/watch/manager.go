@@ -68,7 +68,7 @@ func (wm *WatchManager) NewRegistrar(parent string, addFns []func(manager.Manage
 
 func newMgr(wm *WatchManager) (manager.Manager, error) {
 	log.Info("setting up watch manager")
-	mgr, err := manager.New(wm.cfg, manager.Options{})
+	mgr, err := manager.New(wm.cfg, manager.Options{MetricsBindAddress: "0"})
 	if err != nil {
 		log.Error(err, "unable to set up watch manager")
 		os.Exit(1)

@@ -34,11 +34,11 @@ func (pp *prettyPrinter) After(x interface{}) {
 }
 
 func (pp *prettyPrinter) Visit(x interface{}) (Visitor, error) {
-	pp.writeIndent("%T %v", x, x)
+	pp.writeIndent("%T %+v", x, x)
 	return pp, nil
 }
 
 func (pp *prettyPrinter) writeIndent(f string, a ...interface{}) {
-	pad := strings.Repeat(" ", pp.depth)
+	pad := strings.Repeat("| ", pp.depth)
 	fmt.Fprintf(pp.w, pad+f+"\n", a...)
 }

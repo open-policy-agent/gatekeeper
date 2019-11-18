@@ -134,9 +134,9 @@ func (s *SchemaValidator) Validate(data interface{}) *Result {
 
 	// TODO: this part should be handed over to type validator
 	// Handle special case of json.Number data (number marshalled as string)
-	isnumber := s.Schema.Type.Contains("number") || s.Schema.Type.Contains("integer")
+	isnumber := s.Schema.Type.Contains(numberType) || s.Schema.Type.Contains(integerType)
 	if num, ok := data.(json.Number); ok && isnumber {
-		if s.Schema.Type.Contains("integer") { // avoid lossy conversion
+		if s.Schema.Type.Contains(integerType) { // avoid lossy conversion
 			in, erri := num.Int64()
 			if erri != nil {
 				result.AddErrors(invalidTypeConversionMsg(s.Path, erri))

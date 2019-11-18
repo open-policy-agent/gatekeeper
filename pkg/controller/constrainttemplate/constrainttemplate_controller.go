@@ -121,12 +121,12 @@ type ReconcileConstraintTemplate struct {
 	opa     *opa.Client
 }
 
-// Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
-// and what is in the ConstraintTemplate.Spec
-// Automatically generate RBAC rules to allow the Controller to read and write CRDs
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
+
+// Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
+// and what is in the ConstraintTemplate.Spec
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the ConstraintTemplate instance
 	instance := &v1beta1.ConstraintTemplate{}
@@ -402,7 +402,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 
 	templates := &v1beta1.ConstraintTemplateList{}
 	names := make(map[types.NamespacedName]string)
-	if err := c.List(context.Background(), nil, templates); err != nil {
+	if err := c.List(context.Background(), templates); err != nil {
 		log.Error(err, "could not clean all contraint/template finalizers")
 		return
 	}
@@ -418,7 +418,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			gvk := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: listKind}
 			objs := &unstructured.UnstructuredList{}
 			objs.SetGroupVersionKind(gvk)
-			if err := c.List(context.Background(), nil, objs); err != nil {
+			if err := c.List(context.Background(), objs); err != nil {
 				// If the kind is not recognized, there is nothing to clean
 				if !meta.IsNoMatchError(err) {
 					log.Error(err, "while listing constraints for cleanup", "kind", listKind)

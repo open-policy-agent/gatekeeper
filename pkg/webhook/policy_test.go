@@ -9,13 +9,13 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/gatekeeper/pkg/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
+	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
@@ -200,7 +200,7 @@ func TestTemplateValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "templates.gatekeeper.sh",
 						Version: "v1beta1",
@@ -289,7 +289,7 @@ func TestConstraintValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "constraints.gatekeeper.sh",
 						Version: "v1beta1",
@@ -408,7 +408,7 @@ func TestTracing(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: &admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
