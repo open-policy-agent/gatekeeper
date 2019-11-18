@@ -121,7 +121,7 @@ deploy: manifests
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
-	kustomize build config -o chart/gatekeeper-operator/helm-modifications/_temp.yaml
+	#kustomize build config/default -o chart/gatekeeper-operator/helm-modifications/_temp.yaml
 	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
 	sh chart/gatekeeper-operator/generate_helm_template.sh
 

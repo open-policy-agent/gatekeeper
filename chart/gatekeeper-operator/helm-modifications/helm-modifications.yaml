@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: gatekeeper-controller-manager-service
+  name: gatekeeper-webhook-service
   namespace: gatekeeper-system
 spec:
   selector:
@@ -34,7 +34,7 @@ spec:
       - constraints # add shortName to CRD until https://github.com/kubernetes-sigs/kubebuilder/issues/404 is solved
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
@@ -44,7 +44,7 @@ spec:
     matchLabels:
       app: gatekeeper-operator
       release: RELEASE_NAME
-  resources: HELMSUBST_STATEFUL_SET_RESOURCES
+  resources: HELMSUBST_DEPLOYMENT_RESOURCES
   template:
     spec:
       containers:

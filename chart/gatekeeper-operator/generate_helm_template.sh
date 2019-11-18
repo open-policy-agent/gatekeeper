@@ -1,9 +1,9 @@
 #!/bin/bash
 scriptdir="$(dirname "$0")"
 cd "$scriptdir"
-cp ./../../deploy/gatekeeper.yaml ${PWD}/helm-modifications/_temp.yaml
+cp ./../../deploy/gatekeeper_kubebuilder_v2.yaml ${PWD}/helm-modifications/_temp.yaml
 kustomize build helm-modifications -o templates/gatekeeper.yaml
-sed -i -E "s/HELMSUBST_STATEFUL_SET_RESOURCES/\
+sed -i -E "s/HELMSUBST_DEPLOYMENT_RESOURCES/\
 \n{{ toYaml .Values.resources | indent 12 }}\
 \n    {{- with .Values.nodeSelector }}\
 \n      nodeSelector:\
