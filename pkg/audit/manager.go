@@ -34,6 +34,7 @@ const (
 var (
 	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
 	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditFromCache						= flag.Bool("auditFromCache", false, "pull resources from cache when auditing")
 	emptyAuditResults         []auditResult
 )
 
@@ -112,9 +113,26 @@ func (am *Manager) audit(ctx context.Context) error {
 		log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
 		return nil
 	}
-	resp, err := am.opa.Audit(ctx)
-	if err != nil {
-		return err
+	if *auditFromCache {
+		resp, err := am.opa.Audit(ctx)
+		log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
+		if err != nil {
+			return err
+		}
+	} else {
+		discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
+		if err != nil {
+			return err
+		}
+
+		serverResources,  err := discoveryClient.ServerResources()
+		if err != nil {
+			return err
+		}
+
+		//serverResources.APIResources
+
+		//resp, err := am.auditResources()
 	}
 
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
@@ -137,6 +155,10 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 	// update constraints for each kind
 	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
+}
+
+func (am *Manager) auditResources(ctx context.Context) (*types.Resources, error) {
+
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
