@@ -75,6 +75,8 @@ A basic Helm v2 template exists in `chart/gatekeeper-operator`. If you have Helm
 helm install chart/gatekeeper-operator/
 ```
 
+You can alter the variables in `chart/gatekeeper-operator/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
+
 ### Uninstallation
 
 Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
