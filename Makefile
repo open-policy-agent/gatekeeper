@@ -89,9 +89,7 @@ e2e-helm-deploy:
 	./get_helm.sh
 	helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	kubectl -n kube-system describe pod -l name=tiller
 	helm install chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
-	kubectl -n kube-system describe pod -l name=tiller
 
 # Build manager binary
 manager: generate fmt vet
@@ -121,7 +119,6 @@ deploy: manifests
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
-	#kustomize build config/default -o chart/gatekeeper-operator/helm-modifications/_temp.yaml
 	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
 	sh chart/gatekeeper-operator/generate_helm_template.sh
 

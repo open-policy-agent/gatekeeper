@@ -114,7 +114,6 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
 ```sh
 helm delete <release name>
-kubectl delete 
 ```
 
 ##### Manually Removing Constraints
