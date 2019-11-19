@@ -73,7 +73,7 @@ e2e-bootstrap:
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
-	kind create cluster
+	TERM=dumb kind create cluster
 
 e2e-build-load-image: docker-build
 	kind load docker-image --name kind ${IMG}
