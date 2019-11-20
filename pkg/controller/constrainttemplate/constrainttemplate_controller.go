@@ -79,7 +79,7 @@ func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
-	// constraintsCache stores total number of constraints per enforcement action
+	// constraintsCache stores total number of constraints
 	constraintsCache := make(map[string]constraint.Tags)
 
 	constraintAdder := constraint.Adder{Opa: opa, ConstraintsCache: constraintsCache}

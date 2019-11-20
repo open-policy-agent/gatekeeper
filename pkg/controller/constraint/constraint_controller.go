@@ -56,8 +56,8 @@ type Tags struct {
 type ConstraintStatus string
 
 const (
-	Active ConstraintStatus = "active"
-	Error  ConstraintStatus = "error"
+	activeStatus ConstraintStatus = "active"
+	errorStatus  ConstraintStatus = "error"
 )
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -144,7 +144,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 	r.constraintsCache[constraintKindName] = Tags{
 		enforcementAction: enforcementAction,
-		status:            Active,
+		status:            activeStatus,
 	}
 
 	if instance.GetDeletionTimestamp().IsZero() {
@@ -165,7 +165,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
 			r.constraintsCache[constraintKindName] = Tags{
 				enforcementAction: enforcementAction,
-				status:            Error,
+				status:            errorStatus,
 			}
 			r.updateConstraintsCache()
 			return reconcile.Result{}, err
@@ -208,8 +208,19 @@ func (r *ReconcileConstraint) updateConstraintsCache() {
 	// report total number of constraints
 	for _, v := range r.constraintsCache {
 		totals[v] += 1
-		r.reporter.ReportConstraints(v, int64(totals[v]))
 	}
+	r.reporter.ReportConstraints(
+		Tags{enforcementAction: util.Deny, status: activeStatus},
+		int64(totals[Tags{enforcementAction: util.Deny, status: activeStatus}]))
+	r.reporter.ReportConstraints(
+		Tags{enforcementAction: util.Deny, status: errorStatus},
+		int64(totals[Tags{enforcementAction: util.Deny, status: errorStatus}]))
+	r.reporter.ReportConstraints(
+		Tags{enforcementAction: util.Dryrun, status: activeStatus},
+		int64(totals[Tags{enforcementAction: util.Dryrun, status: activeStatus}]))
+	r.reporter.ReportConstraints(
+		Tags{enforcementAction: util.Dryrun, status: errorStatus},
+		int64(totals[Tags{enforcementAction: util.Dryrun, status: errorStatus}]))
 }
 
 func RemoveFinalizer(instance *unstructured.Unstructured) {
