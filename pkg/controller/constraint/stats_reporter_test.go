@@ -3,13 +3,14 @@ package constraint
 import (
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"go.opencensus.io/stats/view"
 )
 
 func TestReportConstraints(t *testing.T) {
 	var expectedValue int64 = 10
-	expectedTags := map[string]string{
-		"enforcement_action": "deny",
+	expectedTags := Tags{
+		enforcementAction: util.Deny,
 	}
 
 	r, err := NewStatsReporter()
@@ -17,7 +18,7 @@ func TestReportConstraints(t *testing.T) {
 		t.Errorf("NewStatsReporter() error %v", err)
 	}
 
-	err = r.ReportConstraints("deny", expectedValue)
+	err = r.ReportConstraints(expectedTags, expectedValue)
 	if err != nil {
 		t.Errorf("ReportConstraints error %v", err)
 	}
@@ -30,7 +31,7 @@ func TestReportConstraints(t *testing.T) {
 		t.Error("ReportConstraints should have aggregation LastValue()")
 	}
 	for _, tag := range row[0].Tags {
-		if tag.Value != expectedTags[tag.Key.Name()] {
+		if tag.Value != string(expectedTags.enforcementAction) {
 			t.Errorf("ReportConstraints tags does not match for %v", tag.Key.Name())
 		}
 	}

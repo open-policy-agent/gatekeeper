@@ -18,6 +18,8 @@ package constraint
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -43,8 +45,20 @@ const (
 
 type Adder struct {
 	Opa              *opa.Client
-	ConstraintsCache map[string]map[string]bool
+	ConstraintsCache map[string]Tags
 }
+
+type Tags struct {
+	enforcementAction util.EnforcementAction // deny, dryrun, unrecognized
+	status            ConstraintStatus       // active, error
+}
+
+type ConstraintStatus string
+
+const (
+	Active ConstraintStatus = "active"
+	Error  ConstraintStatus = "error"
+)
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -60,7 +74,7 @@ func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, reporter StatsReporter, constraintsCache map[string]map[string]bool) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, reporter StatsReporter, constraintsCache map[string]Tags) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client:           mgr.GetClient(),
 		scheme:           mgr.GetScheme(),
@@ -96,12 +110,13 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	client.Client
-	scheme           *runtime.Scheme
-	opa              *opa.Client
-	gvk              schema.GroupVersionKind
-	log              logr.Logger
-	reporter         StatsReporter
-	constraintsCache map[string]map[string]bool
+	scheme              *runtime.Scheme
+	opa                 *opa.Client
+	gvk                 schema.GroupVersionKind
+	log                 logr.Logger
+	reporter            StatsReporter
+	constraintsCache    map[string]Tags
+	constraintsCacheMux sync.RWMutex
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -122,10 +137,14 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	constraintNameKind := instance.GetKind() + "/" + instance.GetName()
+	constraintKindName := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+	r.constraintsCache[constraintKindName] = Tags{
+		enforcementAction: enforcementAction,
+		status:            Active,
 	}
 
 	if instance.GetDeletionTimestamp().IsZero() {
@@ -144,6 +163,11 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		util.SetHAStatus(instance, status)
 
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
+			r.constraintsCache[constraintKindName] = Tags{
+				enforcementAction: enforcementAction,
+				status:            Error,
+			}
+			r.updateConstraintsCache()
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -155,8 +179,6 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
-
-		r.constraintsCache[enforcementAction][constraintNameKind] = true
 	} else {
 		// Handle deletion
 		if HasFinalizer(instance) {
@@ -170,14 +192,24 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 			// removing constraint entry from cache
-			delete(r.constraintsCache[enforcementAction], constraintNameKind)
+			delete(r.constraintsCache, constraintKindName)
 		}
 	}
-
-	// report total number of constraints per enforcement action
-	r.reporter.ReportConstraints(enforcementAction, int64(len(r.constraintsCache[enforcementAction])))
+	r.updateConstraintsCache()
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConstraint) updateConstraintsCache() {
+	r.constraintsCacheMux.RLock()
+	defer r.constraintsCacheMux.RUnlock()
+
+	totals := make(map[Tags]int)
+	// report total number of constraints
+	for _, v := range r.constraintsCache {
+		totals[v] += 1
+		r.reporter.ReportConstraints(v, int64(totals[v]))
+	}
 }
 
 func RemoveFinalizer(instance *unstructured.Unstructured) {

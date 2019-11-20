@@ -6,12 +6,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-var supportedEnforcementActions = []string{
-	"deny",
-	"dryrun",
-}
+type EnforcementAction string
 
-func ValidateEnforcementAction(input string) error {
+const (
+	Deny         EnforcementAction = "deny"
+	Dryrun       EnforcementAction = "dryrun"
+	Unrecognized EnforcementAction = "unrecognized"
+)
+
+var supportedEnforcementActions = []EnforcementAction{Deny, Dryrun}
+
+func ValidateEnforcementAction(input EnforcementAction) error {
 	for _, n := range supportedEnforcementActions {
 		if input == n {
 			return nil
@@ -20,18 +25,19 @@ func ValidateEnforcementAction(input string) error {
 	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }
 
-func GetEnforcementAction(item map[string]interface{}) (string, error) {
-	enforcementAction, _, err := unstructured.NestedString(item, "spec", "enforcementAction")
+func GetEnforcementAction(item map[string]interface{}) (EnforcementAction, error) {
+	enforcementActionSpec, _, err := unstructured.NestedString(item, "spec", "enforcementAction")
 	if err != nil {
 		return "", err
 	}
+	enforcementAction := EnforcementAction(enforcementActionSpec)
 	// default enforcementAction is deny
 	if enforcementAction == "" {
-		enforcementAction = "deny"
+		enforcementAction = Deny
 	}
 	// validating enforcement action - if it is not deny or dryrun, we are classifying as unrecognized
 	if err := ValidateEnforcementAction(enforcementAction); err != nil {
-		enforcementAction = "unrecognized"
+		enforcementAction = Unrecognized
 	}
 
 	return enforcementAction, nil

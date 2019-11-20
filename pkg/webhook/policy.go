@@ -224,9 +224,10 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 	if err != nil {
 		return false, err
 	}
-	if found && enforcementActionString != "" {
+	enforcementAction := util.EnforcementAction(enforcementActionString)
+	if found && enforcementAction != "" {
 		if *disableEnforcementActionValidation == false {
-			err = util.ValidateEnforcementAction(enforcementActionString)
+			err = util.ValidateEnforcementAction(enforcementAction)
 			if err != nil {
 				return false, err
 			}

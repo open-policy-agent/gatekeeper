@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -46,10 +47,10 @@ func register() {
 	}
 }
 
-func (r *reporter) ReportTotalViolations(enforcementAction string, v int64) error {
+func (r *reporter) ReportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(enforcementActionKey, enforcementAction))
+		tag.Insert(enforcementActionKey, string(enforcementAction)))
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func (r *reporter) ReportLatency(d time.Duration) error {
 
 // StatsReporter reports audit metrics
 type StatsReporter interface {
-	ReportTotalViolations(enforcementAction string, v int64) error
+	ReportTotalViolations(enforcementAction util.EnforcementAction, v int64) error
 	ReportLatency(d time.Duration) error
 }
 

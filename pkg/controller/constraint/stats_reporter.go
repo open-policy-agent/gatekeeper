@@ -14,9 +14,10 @@ const (
 )
 
 var (
-	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of enforced constraints", stats.UnitDimensionless)
+	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of constraints", stats.UnitDimensionless)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
+	statusKey            = tag.MustNewKey("status")
 )
 
 func init() {
@@ -29,7 +30,7 @@ func register() {
 			Name:        totalConstraintsName,
 			Measure:     constraintsTotalM,
 			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{enforcementActionKey},
+			TagKeys:     []tag.Key{enforcementActionKey, statusKey},
 		},
 	}
 
@@ -38,10 +39,11 @@ func register() {
 	}
 }
 
-func (r *reporter) ReportConstraints(enforcementAction string, v int64) error {
+func (r *reporter) ReportConstraints(t Tags, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(enforcementActionKey, enforcementAction))
+		tag.Insert(enforcementActionKey, string(t.enforcementAction)),
+		tag.Insert(statusKey, string(t.status)))
 	if err != nil {
 		return err
 	}
@@ -51,7 +53,7 @@ func (r *reporter) ReportConstraints(enforcementAction string, v int64) error {
 
 // StatsReporter reports audit metrics
 type StatsReporter interface {
-	ReportConstraints(enforcementAction string, v int64) error
+	ReportConstraints(t Tags, v int64) error
 }
 
 // NewStatsReporter creaters a reporter for audit metrics
