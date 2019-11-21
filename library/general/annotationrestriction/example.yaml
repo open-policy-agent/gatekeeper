@@ -22,3 +22,4 @@ spec:
             backend:
               serviceName: echo-server
               servicePort: 80
+              
