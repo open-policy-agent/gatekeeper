@@ -16,8 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var log = logf.Log.WithName("watchManager")
@@ -111,17 +111,17 @@ func (wm *WatchManager) updateManager() (bool, error) {
 	if err != nil {
 		return false, errp.Wrap(err, "error gathering watch changes, not restarting watch manager")
 	}
-	if wm.started == true && len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
+	if wm.started && len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
 		return false, nil
 	}
 	var a, r, c []string
-	for k, _ := range added {
+	for k := range added {
 		a = append(a, k.String())
 	}
-	for k, _ := range removed {
+	for k := range removed {
 		r = append(r, k.String())
 	}
-	for k, _ := range changed {
+	for k := range changed {
 		a = append(c, k.String())
 	}
 	log.Info("Watcher registry found changes and/or needs restarting", "started", wm.started, "add", a, "remove", r, "change", c)
@@ -131,7 +131,7 @@ func (wm *WatchManager) updateManager() (bool, error) {
 		return false, errp.Wrap(err, "could not filter pending resources, not restarting watch manager")
 	}
 
-	if wm.started == true && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
+	if wm.started && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
 		log.Info("Only changes are pending additions; not restarting watch manager")
 		return false, nil
 	}
@@ -295,7 +295,7 @@ func (wm *WatchManager) gatherChanges(managedKindsRaw map[string]map[schema.Grou
 		if !reflect.DeepEqual(wm.watchedKinds[gvk].registrars, managedKinds[gvk].registrars) {
 			changed[gvk] = managedKinds[gvk]
 			// Do not clobber the newly added registrar
-			vitals = managedKinds[gvk]
+			_ = managedKinds[gvk]
 		}
 	}
 	return added, removed, changed, nil
@@ -303,7 +303,7 @@ func (wm *WatchManager) gatherChanges(managedKindsRaw map[string]map[schema.Grou
 
 func (wm *WatchManager) filterPendingResources(kinds map[schema.GroupVersionKind]watchVitals) (map[schema.GroupVersionKind]watchVitals, error) {
 	gvs := make(map[schema.GroupVersion]bool)
-	for gvk, _ := range kinds {
+	for gvk := range kinds {
 		gvs[gvk.GroupVersion()] = true
 	}
 
@@ -312,7 +312,7 @@ func (wm *WatchManager) filterPendingResources(kinds map[schema.GroupVersionKind
 		return nil, err
 	}
 	liveResources := make(map[schema.GroupVersionKind]watchVitals)
-	for gv, _ := range gvs {
+	for gv := range gvs {
 		rsrs, err := discovery.ServerResourcesForGroupVersion(gv.String())
 		if err != nil {
 			if e, ok := err.(*apiErr.StatusError); ok {
@@ -388,9 +388,7 @@ func (r *recordKeeper) NewRegistrar(parentName string, addFns []func(manager.Man
 		return nil, fmt.Errorf("registrar for %s already exists", parentName)
 	}
 	addFnsCpy := make([]func(manager.Manager, schema.GroupVersionKind) error, len(addFns))
-	for i, v := range addFns {
-		addFnsCpy[i] = v
-	}
+	copy(addFnsCpy, addFns)
 	r.registrars[parentName] = &Registrar{
 		parentName: parentName,
 		addFns:     addFnsCpy,

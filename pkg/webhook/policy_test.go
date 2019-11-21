@@ -427,6 +427,9 @@ func TestTracing(t *testing.T) {
 				t.Errorf("Unexpected error: %s", err)
 			}
 			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			if err != nil {
+				t.Errorf("unable to validate gatekeeper resources: %s", err)
+			}
 			for _, r := range resp.ByTarget {
 				if r.Trace == nil && tt.TraceExpected {
 					t.Error("No trace when a trace is expected")

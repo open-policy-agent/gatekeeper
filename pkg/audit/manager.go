@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
@@ -275,9 +275,9 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		return err
 	}
 	// update constraint status auditTimestamp
-	unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
+	_ = unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
 	// update constraint status totalViolations
-	unstructured.SetNestedField(instance.Object, totalViolations, "status", "totalViolations")
+	_ = unstructured.SetNestedField(instance.Object, totalViolations, "status", "totalViolations")
 	// update constraint status violations
 	if len(violations) == 0 {
 		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violations")
@@ -293,7 +293,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 	} else {
-		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
+		_ = unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
 		log.Info("update constraint", "object", instance)
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {

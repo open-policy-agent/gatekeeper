@@ -41,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -180,7 +180,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	if !r.watched.Equals(newSyncOnly) {
 		// Wipe all data to avoid stale state
 		err := r.watcher.Pause()
-		defer r.watcher.Unpause()
+		defer func() {
+			_ = r.watcher.Unpause()
+		}()
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -320,7 +322,7 @@ func newFinalizerCleanup(cleanSet *watchSet, c client.Client) (*finalizerCleanup
 func (fc *finalizerCleanup) Clean() {
 	defer close(fc.stopped)
 	cleanLoop := func() (bool, error) {
-		for gvk, _ := range fc.ws.Dump() {
+		for gvk := range fc.ws.Dump() {
 			select {
 			case <-fc.stop:
 				return true, nil
@@ -406,7 +408,7 @@ func (w *watchSet) Items() []schema.GroupVersionKind {
 	w.mux.RLock()
 	defer w.mux.RUnlock()
 	var r []schema.GroupVersionKind
-	for k, _ := range w.set {
+	for k := range w.set {
 		r = append(r, k)
 	}
 	return r
@@ -451,7 +453,7 @@ func (w *watchSet) AddSet(other *watchSet) {
 	s := other.Dump()
 	w.mux.Lock()
 	defer w.mux.Unlock()
-	for k, _ := range s {
+	for k := range s {
 		w.set[k] = true
 	}
 }
@@ -460,7 +462,7 @@ func (w *watchSet) RemoveSet(other *watchSet) {
 	s := other.Dump()
 	w.mux.Lock()
 	defer w.mux.Unlock()
-	for k, _ := range s {
+	for k := range s {
 		delete(w.set, k)
 	}
 }

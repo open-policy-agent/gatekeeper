@@ -44,7 +44,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: test manager
+all: lint test manager
 
 # Run tests
 native-test: generate fmt vet manifests
@@ -120,6 +120,9 @@ fmt:
 vet:
 	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
 	GO111MODULE=on go vet -mod vendor main.go
+
+lint:
+	golangci-lint -v run ./... --timeout 5m
 
 # Generate code
 generate: controller-gen target-template-source

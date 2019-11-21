@@ -43,7 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -437,7 +437,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
 				}
 			}
-			if success == true {
+			if success {
 				templ := &v1beta1.ConstraintTemplate{}
 				if err := c.Get(context.Background(), nn, templ); err != nil {
 					if errors.IsNotFound(err) {

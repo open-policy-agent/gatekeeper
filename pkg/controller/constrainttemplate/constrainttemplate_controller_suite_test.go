@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
 	}
-	api.AddToScheme(scheme.Scheme)
+	_ = api.AddToScheme(scheme.Scheme)
 
 	var err error
 	if cfg, err = t.Start(); err != nil {
@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 	stdlog.Print("STARTED")
 
 	code := m.Run()
-	t.Stop()
+	_ = t.Stop()
 	os.Exit(code)
 }
 

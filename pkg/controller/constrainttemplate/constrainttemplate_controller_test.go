@@ -114,7 +114,10 @@ violation[{"msg": "denied!"}] {
 	// Create the ConstraintTemplate object and expect the CRD to be created
 	err = c.Create(context.TODO(), instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), instance)
+	defer func() {
+		err := c.Delete(context.TODO(), instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 	clientset := kubernetes.NewForConfigOrDie(cfg)
@@ -153,7 +156,9 @@ violation[{"msg": "denied!"}] {
 	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: "denyall"})
 	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), cstr)
+	defer func() {
+		_ = c.Delete(context.TODO(), cstr)
+	}()
 
 	g.Eventually(func() error {
 
@@ -229,7 +234,9 @@ anyrule[}}}//invalid//rego
 
 	err = c.Create(context.TODO(), instanceInvalidRego)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), instanceInvalidRego)
+	defer func() {
+		_ = c.Delete(context.TODO(), instanceInvalidRego)
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 
 	g.Eventually(func() error {
@@ -243,7 +250,7 @@ anyrule[}}}//invalid//rego
 				return errors.New("InvalidRego template should contain 1 parse error")
 			} else {
 				if status.Errors[0].Code != "rego_parse_error" {
-					return errors.New(fmt.Sprintf("InvalidRego template returning unexpected error %s", status.Errors[0].Code))
+					return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
 				}
 				return nil
 			}

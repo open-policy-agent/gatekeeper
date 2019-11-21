@@ -100,14 +100,17 @@ func TestReconcile(t *testing.T) {
 	err = c.Create(context.TODO(), instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	defer c.Delete(context.TODO(), instance)
+	defer func() {
+		err = c.Delete(context.TODO(), instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 	g.Eventually(len(watcher.GetManaged()), timeout).ShouldNot(gomega.Equal(0))
 	managed := watcher.GetManaged()
 	var gvks []schema.GroupVersionKind
 	for _, gvkMap := range managed {
-		for gvk, _ := range gvkMap {
+		for gvk := range gvkMap {
 			gvks = append(gvks, gvk)
 		}
 	}
