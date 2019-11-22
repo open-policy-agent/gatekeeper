@@ -215,18 +215,26 @@ func (r *ReconcileConstraint) reportTotalConstraints(constraintKey string, t Tag
 	for _, v := range r.constraintsCache {
 		totals[v] += 1
 	}
-	r.reporter.ReportConstraints(
+	if err := r.reporter.ReportConstraints(
 		Tags{enforcementAction: util.Deny, status: activeStatus},
-		int64(totals[Tags{enforcementAction: util.Deny, status: activeStatus}]))
-	r.reporter.ReportConstraints(
+		int64(totals[Tags{enforcementAction: util.Deny, status: activeStatus}])); err != nil {
+		log.Error(err, "failed to report constraint")
+	}
+	if err := r.reporter.ReportConstraints(
 		Tags{enforcementAction: util.Deny, status: errorStatus},
-		int64(totals[Tags{enforcementAction: util.Deny, status: errorStatus}]))
-	r.reporter.ReportConstraints(
+		int64(totals[Tags{enforcementAction: util.Deny, status: errorStatus}])); err != nil {
+		log.Error(err, "failed to report constraint")
+	}
+	if err := r.reporter.ReportConstraints(
 		Tags{enforcementAction: util.Dryrun, status: activeStatus},
-		int64(totals[Tags{enforcementAction: util.Dryrun, status: activeStatus}]))
-	r.reporter.ReportConstraints(
+		int64(totals[Tags{enforcementAction: util.Dryrun, status: activeStatus}])); err != nil {
+		log.Error(err, "failed to report constraint")
+	}
+	if err := r.reporter.ReportConstraints(
 		Tags{enforcementAction: util.Dryrun, status: errorStatus},
-		int64(totals[Tags{enforcementAction: util.Dryrun, status: errorStatus}]))
+		int64(totals[Tags{enforcementAction: util.Dryrun, status: errorStatus}])); err != nil {
+		log.Error(err, "failed to report constraint")
+	}
 }
 
 func RemoveFinalizer(instance *unstructured.Unstructured) {

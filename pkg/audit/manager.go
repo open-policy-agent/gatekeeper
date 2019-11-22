@@ -95,7 +95,9 @@ func (am *AuditManager) audit(ctx context.Context) error {
 	// record audit latency
 	defer func() {
 		latency := time.Since(timeStart)
-		am.reporter.ReportLatency(latency)
+		if err := am.reporter.ReportLatency(latency); err != nil {
+			log.Error(err, "failed to report latency")
+		}
 	}()
 
 	timestamp := timeStart.UTC().Format(time.RFC3339)
@@ -280,7 +282,9 @@ func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *met
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
-		am.reporter.ReportTotalViolations(k, v)
+		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
+			log.Error(err, "failed to report total violations")
+		}
 	}
 	return nil
 }
