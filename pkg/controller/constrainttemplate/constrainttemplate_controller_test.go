@@ -157,12 +157,11 @@ violation[{"msg": "denied!"}] {
 	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		err = c.Delete(context.TODO(), cstr)
+		err = cstrClient.Delete(cstr.GetName(), &metav1.DeleteOptions{})
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
 	g.Eventually(func() error {
-
 		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
 		if err != nil {
 			return err
@@ -259,7 +258,6 @@ anyrule[}}}//invalid//rego
 		}
 		return errors.New("InvalidRego not found")
 	}, timeout).Should(gomega.BeNil())
-	g.Expect(c.Delete(context.TODO(), instanceInvalidRego)).NotTo(gomega.HaveOccurred())
 
 	// Test finalizer removal
 	orig := &v1beta1.ConstraintTemplate{}
