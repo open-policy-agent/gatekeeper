@@ -96,14 +96,13 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			vResp := admission.ValidationResponse(false, "For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
 			vResp.Result.Code = http.StatusInternalServerError
 			return vResp
-		} else {
-			// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
-			// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
-			// object is the new object being admitted.
-			// It is null for DELETE operations.
-			// https://github.com/kubernetes/kubernetes/pull/76346
-			req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 		}
+		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
+		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
+		// object is the new object being admitted.
+		// It is null for DELETE operations.
+		// https://github.com/kubernetes/kubernetes/pull/76346
+		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
 	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {

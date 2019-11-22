@@ -249,12 +249,11 @@ anyrule[}}}//invalid//rego
 			status := util.GetCTHAStatus(ct)
 			if len(status.Errors) != 1 {
 				return errors.New("InvalidRego template should contain 1 parse error")
-			} else {
-				if status.Errors[0].Code != "rego_parse_error" {
-					return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
-				}
-				return nil
 			}
+			if status.Errors[0].Code != "rego_parse_error" {
+				return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
+			}
+			return nil
 		}
 		return errors.New("InvalidRego not found")
 	}, timeout).Should(gomega.BeNil())

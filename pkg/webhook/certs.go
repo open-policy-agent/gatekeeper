@@ -11,6 +11,9 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"math/big"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -27,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"time"
 )
 
 const (
@@ -49,7 +50,7 @@ var (
 		Namespace: namespace,
 		Name:      "gatekeeper-webhook-server-cert",
 	}
-	// DNS name is <service name>.<namespace>.svc
+	// DNSName is <service name>.<namespace>.svc
 	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
 	vwhGVK  = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 	vwhKey  = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}

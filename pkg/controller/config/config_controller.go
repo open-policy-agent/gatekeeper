@@ -58,7 +58,7 @@ var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 
 type Adder struct {
 	Opa          *opa.Client
-	WatchManager *watch.WatchManager
+	WatchManager *watch.Manager
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -75,12 +75,12 @@ func (a *Adder) InjectOpa(o *opa.Client) {
 	a.Opa = o
 }
 
-func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
+func (a *Adder) InjectWatchManager(wm *watch.Manager) {
 	a.WatchManager = wm
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (reconcile.Reconciler, error) {
 	syncAdder := syncc.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
