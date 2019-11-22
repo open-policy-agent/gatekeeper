@@ -484,7 +484,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
 		if err = injectCertToWebhook(vwh, artifacts.CertPEM); err != nil {
 			log.Error(err, "unable to inject cert to webhook")
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, err
 		}
 		if err := r.client.Update(r.ctx, vwh); err != nil {
 			return reconcile.Result{Requeue: true}, err
