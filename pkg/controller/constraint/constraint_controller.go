@@ -137,14 +137,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	constraintKindName := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
+	constraintKey := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
 	if err != nil {
 		return reconcile.Result{}, err
-	}
-	r.constraintsCache[constraintKindName] = Tags{
-		enforcementAction: enforcementAction,
-		status:            activeStatus,
 	}
 
 	if instance.GetDeletionTimestamp().IsZero() {
@@ -163,11 +159,12 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		util.SetHAStatus(instance, status)
 
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
-			r.constraintsCache[constraintKindName] = Tags{
-				enforcementAction: enforcementAction,
-				status:            errorStatus,
-			}
-			r.updateConstraintsCache()
+			r.reportTotalConstraints(
+				constraintKey,
+				Tags{
+					enforcementAction: enforcementAction,
+					status:            errorStatus,
+				})
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -192,17 +189,26 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 			// removing constraint entry from cache
-			delete(r.constraintsCache, constraintKindName)
+			delete(r.constraintsCache, constraintKey)
 		}
 	}
-	r.updateConstraintsCache()
-
+	r.reportTotalConstraints(
+		constraintKey,
+		Tags{
+			enforcementAction: enforcementAction,
+			status:            activeStatus,
+		})
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileConstraint) updateConstraintsCache() {
-	r.constraintsCacheMux.RLock()
-	defer r.constraintsCacheMux.RUnlock()
+func (r *ReconcileConstraint) reportTotalConstraints(constraintKey string, t Tags) {
+	r.constraintsCacheMux.Lock()
+	defer r.constraintsCacheMux.Unlock()
+
+	r.constraintsCache[constraintKey] = Tags{
+		enforcementAction: t.enforcementAction,
+		status:            t.status,
+	}
 
 	totals := make(map[Tags]int)
 	// report total number of constraints
