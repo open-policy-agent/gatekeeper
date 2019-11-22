@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	if err = t.Stop(); err != nil {
-		log.Error(err, "while trying to stop server")
+		stdlog.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
 }
