@@ -294,8 +294,6 @@ func (wm *WatchManager) gatherChanges(managedKindsRaw map[string]map[schema.Grou
 		}
 		if !reflect.DeepEqual(wm.watchedKinds[gvk].registrars, managedKinds[gvk].registrars) {
 			changed[gvk] = managedKinds[gvk]
-			// Do not clobber the newly added registrar
-			_ = managedKinds[gvk]
 		}
 	}
 	return added, removed, changed, nil

@@ -22,14 +22,17 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
-	_ = api.AddToScheme(runtimeScheme)
+	if err := api.AddToScheme(runtimeScheme); err != nil {
+		log.Error(err, "unable to add to scheme")
+		panic(err)
+	}
 }
 
 var log = logf.Log.WithName("webhook")

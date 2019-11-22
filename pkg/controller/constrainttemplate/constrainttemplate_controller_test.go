@@ -157,7 +157,8 @@ violation[{"msg": "denied!"}] {
 	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		_ = c.Delete(context.TODO(), cstr)
+		err = c.Delete(context.TODO(), cstr)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
 	g.Eventually(func() error {
@@ -235,7 +236,8 @@ anyrule[}}}//invalid//rego
 	err = c.Create(context.TODO(), instanceInvalidRego)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		_ = c.Delete(context.TODO(), instanceInvalidRego)
+		err = c.Delete(context.TODO(), instanceInvalidRego)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 

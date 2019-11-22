@@ -64,8 +64,7 @@ func AddRotator(mgr manager.Manager) error {
 		return err
 	}
 	rotator := &certRotator{client: cli}
-	err = mgr.Add(rotator)
-	if err != nil {
+	if err = mgr.Add(rotator); err != nil {
 		return err
 	}
 
@@ -483,8 +482,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 			return reconcile.Result{}, nil
 		}
 		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
-		err = injectCertToWebhook(vwh, artifacts.CertPEM)
-		if err != nil {
+		if err = injectCertToWebhook(vwh, artifacts.CertPEM); err != nil {
 			log.Error(err, "unable to inject cert to webhook")
 			return reconcile.Result{}, nil
 		}

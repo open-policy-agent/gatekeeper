@@ -39,9 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -181,7 +181,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		// Wipe all data to avoid stale state
 		err := r.watcher.Pause()
 		defer func() {
-			_ = r.watcher.Unpause()
+			if err = r.watcher.Unpause(); err != nil {
+				log.Error(err, "while unpausing watcher")
+			}
 		}()
 		if err != nil {
 			return reconcile.Result{}, err

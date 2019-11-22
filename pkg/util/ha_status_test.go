@@ -41,7 +41,9 @@ func TestUnstructuredHAStatus(t *testing.T) {
 				}
 				st, _ := GetHAStatus(obj)
 				st["someField"] = s
-				_ = SetHAStatus(obj, st)
+				if err := SetHAStatus(obj, st); err != nil {
+					t.Fatal(err)
+				}
 				st2, _ := GetHAStatus(obj)
 				id_, ok := st2["id"]
 				if !ok {
