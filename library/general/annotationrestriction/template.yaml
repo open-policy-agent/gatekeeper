@@ -14,21 +14,32 @@ spec:
         # Schema for the `parameters` field in the constraint
         openAPIV3Schema:
           properties:
-          #Name of the annotation you want to force the constraint on
-            annotationKey:
-              type: string
-          #Value of annotation you want to enforce
-            annotationValue:
-              type: string
+            annotations:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  desiredValue:
+                    type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package requiredannotations
 
         violation[{"msg": msg, "details": {}}] {
-          #Retrieve the reference to the annotation you are looking for,
-          #compare it to the value you specified, denies if they do not match.
-          not input.review.object.metadata.annotations[input.parameters.annotationKey] == input.parameters.annotationValue
-          msg := sprintf("Create / update of <%v> blocked - Annotation key <%v> must have value '%v'.", [input.review.object.kind, input.parameters.annotationKey, input.parameters.annotationValue])
+          provided := {annotation | input.review.object.metadata.annotations[annotation]}
+          required := {annotation | annotation := input.parameters.annotations[_].key}
+          missing := required - provided
+          count(missing) > 0          
+          msg := sprintf("you must provide annotations: '%v'.", [missing])
         }
-        
+
+        violation[{"msg": msg, "details": {}}] {
+          value := input.review.object.metadata.annotations[key]
+          expected := input.parameters.annotations[_]
+          expected.key == key
+          expected.desiredValue != value
+          def_msg := sprintf("Annotation <%v: %v> does not equal allowed value: %v", [key, value, expected.desiredValue])
+        }

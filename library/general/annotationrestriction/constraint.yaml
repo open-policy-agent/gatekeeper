@@ -8,6 +8,6 @@ spec:
       - apiGroups: ["extensions", "networking.k8s.io"]
         kinds: ["Ingress"]
   parameters:
-    annotationKey: alb.ingress.kubernetes.io/ssl-policy
-    annotationValue: ELBSecurityPolicy-TLS-1-2-2017-01
-    
+    annotations:
+      - key: alb.ingress.kubernetes.io/ssl-policy
+        desiredValue: ELBSecurityPolicy-TLS-1-2-2017-01
