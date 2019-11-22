@@ -16,7 +16,6 @@ jobs:
       script:
         - make
         - make e2e-bootstrap
-        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
         - make deploy
