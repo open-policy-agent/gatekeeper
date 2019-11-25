@@ -185,15 +185,15 @@ func DeleteHAStatus(obj *unstructured.Unstructured) error {
 		if !ok {
 			return fmt.Errorf("element %d in byPod status is malformed", i)
 		}
-		curId_, ok := curStatus["id"]
+		curID2, ok := curStatus["id"]
 		if !ok {
 			return fmt.Errorf("element %d in byPod status is missing an `id` field", i)
 		}
-		curId, ok := curId_.(string)
+		curID, ok := curID2.(string)
 		if !ok {
-			return fmt.Errorf("element %d in byPod status' `id` field is not a string: %v", i, curId_)
+			return fmt.Errorf("element %d in byPod status' `id` field is not a string: %v", i, curID2)
 		}
-		if id == curId {
+		if id == curID {
 			continue
 		}
 		newStatus = append(newStatus, s)
