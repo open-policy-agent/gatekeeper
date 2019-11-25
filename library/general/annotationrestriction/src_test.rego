@@ -24,7 +24,7 @@ test_input_has_extra_annotation {
     count(results) == 0
 }
 
-test_input_has_extra_annotation_req2 {
+test_2_required_annotations {
     input := { "review": review_ingress({"anno1": "annoval1", "anno2": "annoval2"}), "parameters": {"annotations": [annotation("anno1", "annoval1"), annotation("anno2", "annoval2")]}}
     results := violation with input as input
     count(results) == 0
