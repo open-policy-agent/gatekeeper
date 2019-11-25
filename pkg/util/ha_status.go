@@ -178,7 +178,7 @@ func DeleteHAStatus(obj *unstructured.Unstructured) error {
 		return nil
 	}
 
-	var newStatus []interface{}
+	newStatus := make([]interface{}, 0)
 
 	for i, s := range statuses {
 		curStatus, ok := s.(map[string]interface{})
