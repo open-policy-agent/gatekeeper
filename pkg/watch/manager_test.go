@@ -18,12 +18,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
-	wm := &WatchManager{
+func newForTest(fn func(*rest.Config) (Discovery, error)) *Manager {
+	wm := &Manager{
 		newMgrFn:     newFakeMgr,
 		stopper:      make(chan struct{}),
 		managedKinds: newRecordKeeper(),
-		watchedKinds: make(map[schema.GroupVersionKind]watchVitals),
+		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          nil,
 		newDiscovery: fn,
 	}
@@ -31,7 +31,7 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *WatchManager {
 	return wm
 }
 
-func newFakeMgr(wm *WatchManager) (manager.Manager, error) {
+func newFakeMgr(wm *Manager) (manager.Manager, error) {
 	return &fakeMgr{}, nil
 }
 
@@ -112,20 +112,20 @@ func (c *fakeClient) ServerResourcesForGroupVersion(s string) (*metav1.APIResour
 	return &metav1.APIResourceList{GroupVersion: s, APIResources: rsrs}, nil
 }
 
-func newChange(kind string, r ...*Registrar) map[schema.GroupVersionKind]watchVitals {
+func newChange(kind string, r ...*Registrar) map[schema.GroupVersionKind]vitals {
 	rs := make(map[*Registrar]bool)
 	for _, v := range r {
 		rs[v] = true
 	}
 	gvk := makeGvk(kind)
-	return map[schema.GroupVersionKind]watchVitals{gvk: {gvk: gvk, registrars: rs}}
+	return map[schema.GroupVersionKind]vitals{gvk: {gvk: gvk, registrars: rs}}
 }
 
 func makeGvk(k string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{Kind: k}
 }
 
-func waitForWatchManagerStart(wm *WatchManager) bool {
+func waitForWatchManagerStart(wm *Manager) bool {
 	for i := 0; i < 10; i++ {
 		if wm.started == true {
 			return true
@@ -148,8 +148,12 @@ func TestRegistrar(t *testing.T) {
 
 	t.Run("Single Add Watch", func(t *testing.T) {
 		expectedAdded := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
+		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(removed) != 0 {
@@ -178,7 +182,11 @@ func TestRegistrar(t *testing.T) {
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error adding second watch: %s", err)
 		}
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
@@ -213,14 +221,18 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error adding watch: %s", err)
 		}
 		expectedChanged := newChange("FooCRD", reg, reg2)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
 		if len(removed) != 0 {
 			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if err != nil {
@@ -244,14 +256,18 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error removing watch: %s", err)
 		}
 		expectedChanged := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
 		if len(removed) != 0 {
 			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if err != nil {
@@ -275,11 +291,15 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error removing watch: %s", err)
 		}
 		expectedRemoved := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(changed) != 0 {
@@ -308,8 +328,12 @@ func TestRegistrar(t *testing.T) {
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
+		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(removed) != 0 {
@@ -348,11 +372,15 @@ func TestRegistrar(t *testing.T) {
 	}
 	t.Run("Replace works", func(t *testing.T) {
 		expectedRemoved := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(watchVitals{})); diff != "" {
+		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(changed) != 0 {

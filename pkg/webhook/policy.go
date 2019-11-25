@@ -22,14 +22,17 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
-	api.AddToScheme(runtimeScheme)
+	if err := api.AddToScheme(runtimeScheme); err != nil {
+		log.Error(err, "unable to add to scheme")
+		panic(err)
+	}
 }
 
 var log = logf.Log.WithName("webhook")
@@ -39,8 +42,8 @@ var (
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
-	webhookName                        = flag.String("webhook-name", "validation.gatekeeper.sh", "DEPRECATED: set this on the manifest YAML if needed")
 	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
+	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
 
 var supportedEnforcementActions = []string{
@@ -93,14 +96,13 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			vResp := admission.ValidationResponse(false, "For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
 			vResp.Result.Code = http.StatusInternalServerError
 			return vResp
-		} else {
-			// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
-			// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
-			// object is the new object being admitted.
-			// It is null for DELETE operations.
-			// https://github.com/kubernetes/kubernetes/pull/76346
-			req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 		}
+		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
+		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
+		// object is the new object being admitted.
+		// It is null for DELETE operations.
+		// https://github.com/kubernetes/kubernetes/pull/76346
+		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
 	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {
@@ -208,7 +210,7 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 		return false, err
 	}
 	if found && enforcementActionString != "" {
-		if *disableEnforcementActionValidation == false {
+		if !*disableEnforcementActionValidation {
 			err = validateEnforcementAction(enforcementActionString)
 			if err != nil {
 				return false, err

@@ -17,8 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "upgrade")
@@ -27,16 +27,16 @@ const (
 	crdName = "constrainttemplates.templates.gatekeeper.sh"
 )
 
-// UpgradeManager allows us to upgrade resources on startup
-type UpgradeManager struct {
+// Manager allows us to upgrade resources on startup
+type Manager struct {
 	client client.Client
 	mgr    manager.Manager
 	ctx    context.Context
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager) (*UpgradeManager, error) {
-	am := &UpgradeManager{
+func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
+	am := &Manager{
 		mgr: mgr,
 		ctx: ctx,
 	}
@@ -44,7 +44,7 @@ func New(ctx context.Context, mgr manager.Manager) (*UpgradeManager, error) {
 }
 
 // Start implements the Runnable interface
-func (um *UpgradeManager) Start(stop <-chan struct{}) error {
+func (um *Manager) Start(stop <-chan struct{}) error {
 	log.Info("Starting Upgrade Manager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -64,12 +64,12 @@ func (um *UpgradeManager) Start(stop <-chan struct{}) error {
 	return nil
 }
 
-func (um *UpgradeManager) ensureCRDExists(ctx context.Context) error {
+func (um *Manager) ensureCRDExists(ctx context.Context) error {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
 	return um.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
-func (um *UpgradeManager) getAllKinds(groupVersion string) (*metav1.APIResourceList, error) {
+func (um *Manager) getAllKinds(groupVersion string) (*metav1.APIResourceList, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(um.mgr.GetConfig())
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (um *UpgradeManager) getAllKinds(groupVersion string) (*metav1.APIResourceL
 	return discoveryClient.ServerResourcesForGroupVersion(groupVersion)
 }
 
-func (um *UpgradeManager) upgrade(ctx context.Context) error {
+func (um *Manager) upgrade(ctx context.Context) error {
 	gvs := []string{
 		"constraints.gatekeeper.sh/v1alpha1",
 		"templates.gatekeeper.sh/v1alpha1",
@@ -91,7 +91,7 @@ func (um *UpgradeManager) upgrade(ctx context.Context) error {
 }
 
 // upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version
-func (um *UpgradeManager) upgradeGroupVersion(ctx context.Context, groupVersion string) error {
+func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string) error {
 	// new client to get updated restmapper
 	c, err := client.New(um.mgr.GetConfig(), client.Options{Scheme: um.mgr.GetScheme(), Mapper: nil})
 	if err != nil {

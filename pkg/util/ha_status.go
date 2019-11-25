@@ -80,15 +80,15 @@ func GetHAStatus(obj *unstructured.Unstructured) (map[string]interface{}, error)
 		if !ok {
 			continue
 		}
-		curId_, ok := status["id"]
+		curID2, ok := status["id"]
 		if !ok {
 			continue
 		}
-		curId, ok := curId_.(string)
+		curID, ok := curID2.(string)
 		if !ok {
 			continue
 		}
-		if id == curId {
+		if id == curID {
 			return status, nil
 		}
 	}
@@ -116,15 +116,15 @@ func SetHAStatus(obj *unstructured.Unstructured, status map[string]interface{}) 
 		if !ok {
 			continue
 		}
-		curId_, ok := curStatus["id"]
+		curID2, ok := curStatus["id"]
 		if !ok {
 			continue
 		}
-		curId, ok := curId_.(string)
+		curID, ok := curID2.(string)
 		if !ok {
 			continue
 		}
-		if id == curId {
+		if id == curID {
 			statuses[i] = status
 			if err := unstructured.SetNestedSlice(
 				obj.Object, statuses, "status", "byPod"); err != nil {

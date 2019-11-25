@@ -11,35 +11,36 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	"math/big"
+	"time"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"math/big"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"time"
 )
 
 const (
-	caName     = "gatekeeper-ca"
-	namespace  = "gatekeeper-system"
-	service    = "gatekeeper-webhook-service"
-	certName   = "tls.crt"
-	keyName    = "tls.key"
-	caCertName = "ca.crt"
-	caKeyName  = "ca.key"
+	caName                 = "gatekeeper-ca"
+	namespace              = "gatekeeper-system"
+	service                = "gatekeeper-webhook-service"
+	certName               = "tls.crt"
+	keyName                = "tls.key"
+	caCertName             = "ca.crt"
+	caKeyName              = "ca.key"
 	rotationCheckFrequency = 12 * time.Hour
-	certValidityDuration = 10 * 365 * 24 * time.Hour
+	certValidityDuration   = 10 * 365 * 24 * time.Hour
 )
 
 var crLog = logf.Log.WithName("cert-rotation")
@@ -49,22 +50,24 @@ var (
 		Namespace: namespace,
 		Name:      "gatekeeper-webhook-server-cert",
 	}
-	// DNS name is <service name>.<namespace>.svc
+	// DNSName is <service name>.<namespace>.svc
 	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
-	vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
-	vwhKey = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
+	vwhGVK  = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
+	vwhKey  = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
 )
 
 var _ manager.Runnable = &certRotator{}
 
-func AddRotator(mgr manager.Manager) (error) {
+func AddRotator(mgr manager.Manager) error {
 	// Use a new client so we are unaffected by the cache sync kill signal
 	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
 	if err != nil {
 		return err
 	}
 	rotator := &certRotator{client: cli}
-	mgr.Add(rotator)
+	if err = mgr.Add(rotator); err != nil {
+		return err
+	}
 
 	reconciler := &ReconcileVWH{
 		client: mgr.GetClient(),
@@ -95,7 +98,7 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 	}
 	ticker := time.NewTicker(rotationCheckFrequency)
 
-	tickerLoop:
+tickerLoop:
 	for {
 		select {
 		case <-ticker.C:
@@ -398,7 +401,7 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 
 var _ handler.Mapper = &mapper{}
 
-type mapper struct {}
+type mapper struct{}
 
 func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
 	if object.Meta.GetNamespace() != vwhKey.Namespace {
@@ -441,7 +444,7 @@ var _ reconcile.Reconciler = &ReconcileVWH{}
 type ReconcileVWH struct {
 	client client.Client
 	scheme *runtime.Scheme
-	ctx context.Context
+	ctx    context.Context
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
@@ -480,7 +483,10 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 			return reconcile.Result{}, nil
 		}
 		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
-		injectCertToWebhook(vwh, artifacts.CertPEM)
+		if err = injectCertToWebhook(vwh, artifacts.CertPEM); err != nil {
+			log.Error(err, "unable to inject cert to webhook")
+			return reconcile.Result{}, err
+		}
 		if err := r.client.Update(r.ctx, vwh); err != nil {
 			return reconcile.Result{Requeue: true}, err
 		}

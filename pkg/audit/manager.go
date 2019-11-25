@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
@@ -36,8 +36,8 @@ var (
 	emptyAuditResults         []auditResult
 )
 
-// AuditManager allows us to audit resources periodically
-type AuditManager struct {
+// Manager allows us to audit resources periodically
+type Manager struct {
 	client  client.Client
 	opa     *opa.Client
 	stopper chan struct{}
@@ -69,8 +69,8 @@ type StatusViolation struct {
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*AuditManager, error) {
-	am := &AuditManager{
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
+	am := &Manager{
 		opa:     opa,
 		stopper: make(chan struct{}),
 		stopped: make(chan struct{}),
@@ -81,7 +81,7 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*AuditManag
 }
 
 // audit performs an audit then updates the status of all constraint resources with the results
-func (am *AuditManager) audit(ctx context.Context) error {
+func (am *Manager) audit(ctx context.Context) error {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
@@ -119,7 +119,7 @@ func (am *AuditManager) audit(ctx context.Context) error {
 	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
-func (am *AuditManager) auditManagerLoop(ctx context.Context) {
+func (am *Manager) auditManagerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,7 +136,7 @@ func (am *AuditManager) auditManagerLoop(ctx context.Context) {
 }
 
 // Start implements controller.Controller
-func (am *AuditManager) Start(stop <-chan struct{}) error {
+func (am *Manager) Start(stop <-chan struct{}) error {
 	log.Info("Starting Audit Manager")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -146,12 +146,12 @@ func (am *AuditManager) Start(stop <-chan struct{}) error {
 	return nil
 }
 
-func (am *AuditManager) ensureCRDExists(ctx context.Context) error {
+func (am *Manager) ensureCRDExists(ctx context.Context) error {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
 	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
-func (am *AuditManager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
+func (am *Manager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 	return updateLists, totalViolationsPerConstraint, nil
 }
 
-func (am *AuditManager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
+func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
 	resourceGV := strings.Split(resourceList.GroupVersion, "/")
 	group := resourceGV[0]
 	version := resourceGV[1]
@@ -275,9 +275,13 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		return err
 	}
 	// update constraint status auditTimestamp
-	unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp")
+	if err = unstructured.SetNestedField(instance.Object, timestamp, "status", "auditTimestamp"); err != nil {
+		return err
+	}
 	// update constraint status totalViolations
-	unstructured.SetNestedField(instance.Object, totalViolations, "status", "totalViolations")
+	if err = unstructured.SetNestedField(instance.Object, totalViolations, "status", "totalViolations"); err != nil {
+		return err
+	}
 	// update constraint status violations
 	if len(violations) == 0 {
 		_, found, err := unstructured.NestedSlice(instance.Object, "status", "violations")
@@ -293,7 +297,9 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 	} else {
-		unstructured.SetNestedSlice(instance.Object, violations, "status", "violations")
+		if err := unstructured.SetNestedSlice(instance.Object, violations, "status", "violations"); err != nil {
+			return err
+		}
 		log.Info("update constraint", "object", instance)
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {

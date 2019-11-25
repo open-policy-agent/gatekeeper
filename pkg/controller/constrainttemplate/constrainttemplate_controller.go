@@ -41,9 +41,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -56,7 +56,7 @@ var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate
 
 type Adder struct {
 	Opa          *opa.Client
-	WatchManager *watch.WatchManager
+	WatchManager *watch.Manager
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -73,12 +73,12 @@ func (a *Adder) InjectOpa(o *opa.Client) {
 	a.Opa = o
 }
 
-func (a *Adder) InjectWatchManager(wm *watch.WatchManager) {
+func (a *Adder) InjectWatchManager(wm *watch.Manager) {
 	a.WatchManager = wm
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.WatchManager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (reconcile.Reconciler, error) {
 	constraintAdder := constraint.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
@@ -437,7 +437,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
 				}
 			}
-			if success == true {
+			if success {
 				templ := &v1beta1.ConstraintTemplate{}
 				if err := c.Get(context.Background(), nn, templ); err != nil {
 					if errors.IsNotFound(err) {

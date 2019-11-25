@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	bad_rego_template = `
+	badRegoTemplate = `
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -41,7 +41,7 @@ spec:
         msg := "I'm sure this will work"
 `
 
-	good_rego_template = `
+	goodRegoTemplate = `
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -64,7 +64,7 @@ spec:
         }
 `
 
-	bad_labelselector = `
+	badLabelSelector = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -80,7 +80,7 @@ spec:
           key: "something"
 `
 
-	good_labelselector = `
+	goodLabelSelector = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -97,7 +97,7 @@ spec:
           values: ["anything"]
 `
 
-	bad_namespaceselector = `
+	badNamespaceSelector = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -113,7 +113,7 @@ spec:
           key: "something"
 `
 
-	good_namespaceselector = `
+	goodNamespaceSelector = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -130,7 +130,7 @@ spec:
           values: ["anything"]
 `
 
-	good_enforcementaction = `
+	goodEnforcementAction = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -143,7 +143,7 @@ spec:
         kinds: ["Pod"]
 `
 
-	bad_enforcementaction = `
+	badEnforcementAction = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
 metadata:
@@ -179,12 +179,12 @@ func TestTemplateValidation(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Template",
-			Template:      good_rego_template,
+			Template:      goodRegoTemplate,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Template",
-			Template:      bad_rego_template,
+			Template:      badRegoTemplate,
 			ErrorExpected: true,
 		},
 	}
@@ -231,38 +231,38 @@ func TestConstraintValidation(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Constraint labelselector",
-			Template:      good_rego_template,
-			Constraint:    good_labelselector,
+			Template:      goodRegoTemplate,
+			Constraint:    goodLabelSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint labelselector",
-			Template:      good_rego_template,
-			Constraint:    bad_labelselector,
+			Template:      goodRegoTemplate,
+			Constraint:    badLabelSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint namespaceselector",
-			Template:      good_rego_template,
-			Constraint:    good_namespaceselector,
+			Template:      goodRegoTemplate,
+			Constraint:    goodNamespaceSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint namespaceselector",
-			Template:      good_rego_template,
-			Constraint:    bad_namespaceselector,
+			Template:      goodRegoTemplate,
+			Constraint:    badNamespaceSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint enforcementaction",
-			Template:      good_rego_template,
-			Constraint:    good_enforcementaction,
+			Template:      goodRegoTemplate,
+			Constraint:    goodEnforcementAction,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint enforcementaction",
-			Template:      good_rego_template,
-			Constraint:    bad_enforcementaction,
+			Template:      goodRegoTemplate,
+			Constraint:    badEnforcementAction,
 			ErrorExpected: true,
 		},
 	}
@@ -321,7 +321,7 @@ func TestTracing(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Trace",
-			Template:      good_rego_template,
+			Template:      goodRegoTemplate,
 			TraceExpected: true,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -343,7 +343,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong Kind",
-			Template:      good_rego_template,
+			Template:      goodRegoTemplate,
 			TraceExpected: false,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -365,7 +365,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong User",
-			Template:      good_rego_template,
+			Template:      goodRegoTemplate,
 			TraceExpected: false,
 			User:          "other@test.com",
 			Cfg: &v1alpha1.Config{
@@ -427,6 +427,9 @@ func TestTracing(t *testing.T) {
 				t.Errorf("Unexpected error: %s", err)
 			}
 			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			if err != nil {
+				t.Errorf("unable to validate gatekeeper resources: %s", err)
+			}
 			for _, r := range resp.ByTarget {
 				if r.Trace == nil && tt.TraceExpected {
 					t.Error("No trace when a trace is expected")
