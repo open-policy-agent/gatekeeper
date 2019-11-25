@@ -106,14 +106,9 @@ func TestReconcile(t *testing.T) {
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	g.Eventually(len(watcher.GetManaged()), timeout).ShouldNot(gomega.Equal(0))
-	managed := watcher.GetManaged()
-	var gvks []schema.GroupVersionKind
-	for _, gvkMap := range managed {
-		for gvk := range gvkMap {
-			gvks = append(gvks, gvk)
-		}
-	}
+	g.Eventually(len(watcher.GetManagedGVK()), timeout).ShouldNot(gomega.Equal(0))
+	gvks := watcher.GetManagedGVK()
+
 	sort.Slice(gvks, func(i, j int) bool { return gvks[i].Kind < gvks[j].Kind })
 
 	g.Expect(gvks).Should(gomega.Equal([]schema.GroupVersionKind{

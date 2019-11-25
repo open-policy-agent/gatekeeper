@@ -23,7 +23,7 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *Manager {
 		newMgrFn:     newFakeMgr,
 		stopper:      make(chan struct{}),
 		managedKinds: newRecordKeeper(),
-		watchedKinds: make(map[schema.GroupVersionKind]Vitals),
+		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          nil,
 		newDiscovery: fn,
 	}
@@ -112,13 +112,13 @@ func (c *fakeClient) ServerResourcesForGroupVersion(s string) (*metav1.APIResour
 	return &metav1.APIResourceList{GroupVersion: s, APIResources: rsrs}, nil
 }
 
-func newChange(kind string, r ...*Registrar) map[schema.GroupVersionKind]Vitals {
+func newChange(kind string, r ...*Registrar) map[schema.GroupVersionKind]vitals {
 	rs := make(map[*Registrar]bool)
 	for _, v := range r {
 		rs[v] = true
 	}
 	gvk := makeGvk(kind)
-	return map[schema.GroupVersionKind]Vitals{gvk: {gvk: gvk, registrars: rs}}
+	return map[schema.GroupVersionKind]vitals{gvk: {gvk: gvk, registrars: rs}}
 }
 
 func makeGvk(k string) schema.GroupVersionKind {
@@ -149,7 +149,7 @@ func TestRegistrar(t *testing.T) {
 	t.Run("Single Add Watch", func(t *testing.T) {
 		expectedAdded := newChange("FooCRD", reg)
 		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(removed) != 0 {
@@ -220,7 +220,7 @@ func TestRegistrar(t *testing.T) {
 		if len(removed) != 0 {
 			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if err != nil {
@@ -251,7 +251,7 @@ func TestRegistrar(t *testing.T) {
 		if len(removed) != 0 {
 			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if err != nil {
@@ -279,7 +279,7 @@ func TestRegistrar(t *testing.T) {
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(changed) != 0 {
@@ -309,7 +309,7 @@ func TestRegistrar(t *testing.T) {
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
 		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(removed) != 0 {
@@ -352,7 +352,7 @@ func TestRegistrar(t *testing.T) {
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(removed))
 		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(Vitals{})); diff != "" {
+		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
 		if len(changed) != 0 {
