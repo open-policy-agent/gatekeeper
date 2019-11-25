@@ -189,7 +189,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 			// removing constraint entry from cache
-			delete(r.constraintsCache, constraintKey)
+			r.deleteConstraintKey(constraintKey)
 		}
 	}
 	r.reportTotalConstraints(
@@ -199,6 +199,13 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			status:            activeStatus,
 		})
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConstraint) deleteConstraintKey(constraintKey string) {
+	r.constraintsCacheMux.Lock()
+	defer r.constraintsCacheMux.Unlock()
+
+	delete(r.constraintsCache, constraintKey)
 }
 
 func (r *ReconcileConstraint) reportTotalConstraints(constraintKey string, t Tags) {
