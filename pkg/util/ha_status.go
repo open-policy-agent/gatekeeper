@@ -45,7 +45,7 @@ func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodSt
 
 func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
 	id := getID()
-	newStatus := make([]*v1beta1.ByPodStatus, len(template.Status.ByPod)-1)
+	var newStatus []*v1beta1.ByPodStatus
 	for _, status := range template.Status.ByPod {
 		if status.ID == id {
 			continue
@@ -79,7 +79,7 @@ func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
 
 func DeleteCfgHAStatus(cfg *v1alpha1.Config) {
 	id := getID()
-	newStatus := make([]*v1alpha1.ByPod, len(cfg.Status.ByPod)-1)
+	var newStatus []*v1alpha1.ByPod
 	for _, status := range cfg.Status.ByPod {
 		if status.ID == id {
 			continue
@@ -178,7 +178,7 @@ func DeleteHAStatus(obj *unstructured.Unstructured) error {
 		return nil
 	}
 
-	newStatus := make([]interface{}, len(statuses)-1)
+	var newStatus []interface{}
 
 	for i, s := range statuses {
 		curStatus, ok := s.(map[string]interface{})
