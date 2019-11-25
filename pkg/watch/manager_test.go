@@ -148,7 +148,11 @@ func TestRegistrar(t *testing.T) {
 
 	t.Run("Single Add Watch", func(t *testing.T) {
 		expectedAdded := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
@@ -178,7 +182,11 @@ func TestRegistrar(t *testing.T) {
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
 			t.Fatalf("Error adding second watch: %s", err)
 		}
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
@@ -213,7 +221,11 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error adding watch: %s", err)
 		}
 		expectedChanged := newChange("FooCRD", reg, reg2)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
@@ -244,7 +256,11 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error removing watch: %s", err)
 		}
 		expectedChanged := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
@@ -275,7 +291,11 @@ func TestRegistrar(t *testing.T) {
 			t.Fatalf("Error removing watch: %s", err)
 		}
 		expectedRemoved := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
 		}
@@ -308,7 +328,11 @@ func TestRegistrar(t *testing.T) {
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
 			t.Error(diff)
 		}
@@ -348,7 +372,11 @@ func TestRegistrar(t *testing.T) {
 	}
 	t.Run("Replace works", func(t *testing.T) {
 		expectedRemoved := newChange("FooCRD", reg)
-		added, removed, changed, err := wm.gatherChanges(wm.managedKinds.Get())
+		managedKinds, err := wm.managedKinds.Get()
+		if err != nil {
+			t.Errorf("Could not get managedKinds: %s", err)
+		}
+		added, removed, changed, err := wm.gatherChanges(managedKinds)
 		if len(added) != 0 {
 			t.Errorf("added = %s, wanted empty map", spew.Sdump(removed))
 		}

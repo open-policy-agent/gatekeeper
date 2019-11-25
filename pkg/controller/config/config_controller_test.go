@@ -106,8 +106,9 @@ func TestReconcile(t *testing.T) {
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	g.Eventually(len(watcher.GetManagedGVK()), timeout).ShouldNot(gomega.Equal(0))
-	gvks := watcher.GetManagedGVK()
+	gvks, err := watcher.GetManagedGVK()
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Eventually(len(gvks), timeout).ShouldNot(gomega.Equal(0))
 
 	sort.Slice(gvks, func(i, j int) bool { return gvks[i].Kind < gvks[j].Kind })
 

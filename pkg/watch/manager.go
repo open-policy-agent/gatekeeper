@@ -106,7 +106,10 @@ func (wm *Manager) removeWatch(gvk schema.GroupVersionKind, registrar *Registrar
 
 // updateManager scans for changes to the watch list and restarts the manager if any are detected
 func (wm *Manager) updateManager() (bool, error) {
-	intent := wm.managedKinds.Get()
+	intent, err := wm.managedKinds.Get()
+	if err != nil {
+		return false, errp.Wrap(err, "error while retrieving managedKinds, not restarting watch manager")
+	}
 	added, removed, changed, err := wm.gatherChanges(intent)
 	if err != nil {
 		return false, errp.Wrap(err, "error gathering watch changes, not restarting watch manager")
@@ -139,8 +142,8 @@ func (wm *Manager) updateManager() (bool, error) {
 	newWatchedKinds := make(map[schema.GroupVersionKind]vitals)
 	for gvk, vitals := range wm.watchedKinds {
 		if _, ok := removed[gvk]; !ok {
-			if newvitals, ok := changed[gvk]; ok {
-				newWatchedKinds[gvk] = newvitals
+			if newVitals, ok := changed[gvk]; ok {
+				newWatchedKinds[gvk] = newVitals
 			} else {
 				newWatchedKinds[gvk] = vitals
 			}
@@ -263,22 +266,7 @@ func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped 
 
 // gatherChanges returns anything added, removed or changed since the last time the manager
 // was successfully started. It also returns any errors gathering the changes.
-func (wm *Manager) gatherChanges(managedKindsRaw map[string]map[schema.GroupVersionKind]vitals) (map[schema.GroupVersionKind]vitals, map[schema.GroupVersionKind]vitals, map[schema.GroupVersionKind]vitals, error) {
-	managedKinds := make(map[schema.GroupVersionKind]vitals)
-	for _, registrar := range managedKindsRaw {
-		for gvk, v := range registrar {
-			if mk, ok := managedKinds[gvk]; ok {
-				merged, err := mk.merge(v)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				managedKinds[gvk] = merged
-			} else {
-				managedKinds[gvk] = v
-			}
-		}
-	}
-
+func (wm *Manager) gatherChanges(managedKinds map[schema.GroupVersionKind]vitals) (map[schema.GroupVersionKind]vitals, map[schema.GroupVersionKind]vitals, map[schema.GroupVersionKind]vitals, error) {
 	added := make(map[schema.GroupVersionKind]vitals)
 	removed := make(map[schema.GroupVersionKind]vitals)
 	changed := make(map[schema.GroupVersionKind]vitals)
@@ -338,7 +326,7 @@ func (wm *Manager) close() {
 	log.Info("watch manager finished shutting down")
 }
 
-func (wm *Manager) GetManagedGVK() []schema.GroupVersionKind {
+func (wm *Manager) GetManagedGVK() ([]schema.GroupVersionKind, error) {
 	return wm.managedKinds.GetGVK()
 }
 
@@ -424,7 +412,7 @@ func (r *recordKeeper) Remove(rm map[string][]schema.GroupVersionKind) {
 	}
 }
 
-func (r *recordKeeper) Get() map[string]map[schema.GroupVersionKind]vitals {
+func (r *recordKeeper) Get() (map[schema.GroupVersionKind]vitals, error) {
 	r.intentMux.RLock()
 	defer r.intentMux.RUnlock()
 	cpy := make(map[string]map[schema.GroupVersionKind]vitals)
@@ -434,19 +422,34 @@ func (r *recordKeeper) Get() map[string]map[schema.GroupVersionKind]vitals {
 			cpy[k][k2] = v
 		}
 	}
-	return cpy
-}
-
-func (r *recordKeeper) GetGVK() []schema.GroupVersionKind {
-	r.intentMux.RLock()
-	defer r.intentMux.RUnlock()
-	var gvks []schema.GroupVersionKind
-	for k := range r.intent {
-		for k2 := range r.intent[k] {
-			gvks = append(gvks, k2)
+	managedKinds := make(map[schema.GroupVersionKind]vitals)
+	for _, registrar := range cpy {
+		for gvk, v := range registrar {
+			if mk, ok := managedKinds[gvk]; ok {
+				merged, err := mk.merge(v)
+				if err != nil {
+					return nil, err
+				}
+				managedKinds[gvk] = merged
+			} else {
+				managedKinds[gvk] = v
+			}
 		}
 	}
-	return gvks
+	return managedKinds, nil
+}
+
+func (r *recordKeeper) GetGVK() ([]schema.GroupVersionKind, error) {
+	var gvks []schema.GroupVersionKind
+
+	g, err := r.Get()
+	if err != nil {
+		return nil, err
+	}
+	for gvk := range g {
+		gvks = append(gvks, gvk)
+	}
+	return gvks, nil
 }
 
 func newRecordKeeper() *recordKeeper {
