@@ -41,7 +41,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -82,6 +84,7 @@ violation[{"msg": "denied!"}] {
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
+	ctrl.SetLogger(zap.Logger(true))
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
@@ -272,7 +275,7 @@ anyrule[}}}//invalid//rego
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	RemoveAllFinalizers(newCli, finished)
+	TearDownState(newCli, finished)
 	<-finished
 
 	g.Eventually(func() error {
@@ -282,6 +285,9 @@ anyrule[}}}//invalid//rego
 		}
 		if containsString(finalizerName, obj.GetFinalizers()) {
 			return errors.New("denyall constraint template still has finalizer")
+		}
+		if len(obj.Status.ByPod) != 0 {
+			return errors.New("denyall constraint template still has pod-specific status")
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
@@ -293,6 +299,16 @@ anyrule[}}}//invalid//rego
 		}
 		if constraint.HasFinalizer(cleanCstr) {
 			return errors.New("denyall constraint still has finalizer")
+		}
+		s, exists, err := unstructured.NestedSlice(cleanCstr.Object, "status", "byPod")
+		if err != nil {
+			return fmt.Errorf("unstructured access error: %v", err)
+		}
+		if !exists {
+			return nil
+		}
+		if len(s) != 0 {
+			return fmt.Errorf("byPod status is not empty: %v", s)
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())

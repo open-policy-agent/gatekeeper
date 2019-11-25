@@ -27,13 +27,16 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -66,6 +69,7 @@ func TestReconcile(t *testing.T) {
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
+	ctrl.SetLogger(zap.Logger(true))
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
@@ -124,9 +128,6 @@ func TestReconcile(t *testing.T) {
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
 	// Test finalizer removal
-	orig := &configv1alpha1.Config{}
-	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
-	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
 
 	g.Eventually(func() error {
 		ns := &unstructured.Unstructured{}
@@ -140,12 +141,17 @@ func TestReconcile(t *testing.T) {
 		return nil
 	}, timeout).Should(gomega.BeNil())
 
+	orig := &configv1alpha1.Config{}
+	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
+	g.Expect(len(util.GetCfgHAStatus(orig).AllFinalizers)).NotTo(gomega.Equal(0))
+
 	cancel()
 	time.Sleep(1 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	RemoveAllConfigFinalizers(newCli, finished)
+	TearDownState(newCli, finished)
 	<-finished
 	time.Sleep(1 * time.Second)
 
@@ -156,6 +162,9 @@ func TestReconcile(t *testing.T) {
 		}
 		if hasFinalizer(obj) {
 			return errors.New("config resource still has sync finalizer")
+		}
+		if len(obj.Status.ByPod) != 0 {
+			return errors.New("config resource still has pod-specific status")
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -42,6 +43,18 @@ func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodSt
 	template.Status.ByPod = append(template.Status.ByPod, status)
 }
 
+func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
+	id := getID()
+	newStatus := make([]*v1beta1.ByPodStatus, len(template.Status.ByPod)-1)
+	for _, status := range template.Status.ByPod {
+		if status.ID == id {
+			continue
+		}
+		newStatus = append(newStatus, status)
+	}
+	template.Status.ByPod = newStatus
+}
+
 func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
 	id := getID()
 	for _, status := range cfg.Status.ByPod {
@@ -62,6 +75,18 @@ func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
 		}
 	}
 	cfg.Status.ByPod = append(cfg.Status.ByPod, status)
+}
+
+func DeleteCfgHAStatus(cfg *v1alpha1.Config) {
+	id := getID()
+	newStatus := make([]*v1alpha1.ByPod, len(cfg.Status.ByPod)-1)
+	for _, status := range cfg.Status.ByPod {
+		if status.ID == id {
+			continue
+		}
+		newStatus = append(newStatus, status)
+	}
+	cfg.Status.ByPod = newStatus
 }
 
 // GetHAStatus gets the value of a pod-specific subfield of status
@@ -138,6 +163,43 @@ func SetHAStatus(obj *unstructured.Unstructured, status map[string]interface{}) 
 	if err := unstructured.SetNestedSlice(
 		obj.Object, statuses, "status", "byPod"); err != nil {
 		return errors.Wrap(err, "while setting HA status")
+	}
+	return nil
+}
+
+func DeleteHAStatus(obj *unstructured.Unstructured) error {
+	id := getID()
+
+	statuses, exists, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
+	if err != nil {
+		return errors.Wrap(err, "while deleting HA status")
+	}
+	if !exists {
+		return nil
+	}
+
+	newStatus := make([]interface{}, len(statuses)-1)
+
+	for i, s := range statuses {
+		curStatus, ok := s.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("element %d in byPod status is malformed", i)
+		}
+		curId_, ok := curStatus["id"]
+		if !ok {
+			return fmt.Errorf("element %d in byPod status is missing an `id` field", i)
+		}
+		curId, ok := curId_.(string)
+		if !ok {
+			return fmt.Errorf("element %d in byPod status' `id` field is not a string: %v", i, curId_)
+		}
+		if id == curId {
+			continue
+		}
+		newStatus = append(newStatus, s)
+	}
+	if err := unstructured.SetNestedSlice(obj.Object, newStatus, "status", "byPod"); err != nil {
+		return errors.Wrap(err, "while writing deleted byPod status")
 	}
 	return nil
 }

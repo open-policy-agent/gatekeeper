@@ -247,9 +247,11 @@ func removeString(s string, items []string) []string {
 	return rval
 }
 
-// RemoveAllSyncFinalizers removes all finalizers
+// TearDownState removes all finalizers
 // written by the config and sync controllers
-func RemoveAllConfigFinalizers(c client.Client, finished chan struct{}) {
+// and deletes this pod's pod-specific status
+// for the config
+func TearDownState(c client.Client, finished chan struct{}) {
 	defer close(finished)
 	syncCfg := &configv1alpha1.Config{}
 	if err := c.Get(context.Background(), CfgKey, syncCfg); err != nil {
@@ -275,6 +277,7 @@ func RemoveAllConfigFinalizers(c client.Client, finished chan struct{}) {
 				return false, nil
 			}
 			removeFinalizer(syncCfg)
+			util.DeleteCfgHAStatus(syncCfg)
 			if err := c.Update(context.Background(), syncCfg); err != nil {
 				if errors.IsNotFound(err) {
 					return true, nil
