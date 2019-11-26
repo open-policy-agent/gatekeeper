@@ -18,10 +18,9 @@ package config
 import (
 	"errors"
 	"sort"
+	gosync "sync"
 	"testing"
 	"time"
-
-	gosync "sync"
 
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
