@@ -13,7 +13,6 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0
-	github.com/open-policy-agent/frameworks v0.0.0-20191112030435-1307ba72bce3 // indirect
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20191112030435-1307ba72bce3
 	github.com/open-policy-agent/opa v0.15.0
 	github.com/pkg/errors v0.8.1
@@ -25,7 +24,6 @@ require (
 	k8s.io/apiserver v0.0.0-20191030230423-71f1f5686ac3 // indirect
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	sigs.k8s.io/controller-runtime v0.2.2
-	sigs.k8s.io/controller-tools v0.2.2 // indirect
 )
 
 replace (

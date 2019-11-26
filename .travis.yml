@@ -2,23 +2,25 @@ sudo: required
 language: go
 go_import_path: github.com/open-policy-agent/gatekeeper
 go:
-- "1.13.x"
+  - "1.13.x"
 
 services:
-- docker
+  - docker
 
 jobs:
   include:
-    - stage: "build, unit test, e2e, dev deploy on master, release deploy"
-      script: 
-      - make
-      - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-      - make e2e-build-load-image IMG=gatekeeper-e2e:latest
-      - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-      - make deploy 
-      - make test-e2e
-      - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
+    - stage: "lint, build, unit test, e2e, dev deploy on master, release deploy"
+      before_script:
+        - GOLANGCILINT_VERSION=1.21.0
+        - GO111MODULE=on go get -u github.com/golangci/golangci-lint/cmd/golangci-lint@v${GOLANGCILINT_VERSION}
+      script:
+        - make
+        - make e2e-bootstrap
+        - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+        - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+        - make deploy
+        - make test-e2e
+        - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
       deploy:
         - provider: script
           skip_cleanup: true
@@ -37,7 +39,6 @@ jobs:
       script:
         - make manager
         - make e2e-bootstrap
-        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_RELEASE=latest
         - make test-e2e
@@ -45,8 +46,8 @@ jobs:
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
       script:
-      - make e2e-bootstrap
-      - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
+        - make e2e-bootstrap
+        - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
       deploy:
         - provider: script
           skip_cleanup: true

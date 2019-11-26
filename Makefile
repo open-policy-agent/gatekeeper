@@ -7,7 +7,7 @@ IMG := $(REPOSITORY):latest
 VERSION := v3.0.4-beta.2
 
 USE_LOCAL_IMG ?= false
-KIND_VERSION=0.4.0
+KIND_VERSION=0.6.0
 KUSTOMIZE_VERSION=3.0.2
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
@@ -43,7 +43,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: test manager
+all: lint test manager
 
 # Run tests
 native-test: generate fmt vet manifests
@@ -72,7 +72,7 @@ e2e-bootstrap:
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
-	kind create cluster
+	TERM=dumb kind create cluster
 
 e2e-build-load-image: docker-build
 	kind load docker-image --name kind ${IMG}
@@ -131,6 +131,9 @@ fmt:
 vet:
 	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
 	GO111MODULE=on go vet -mod vendor main.go
+
+lint:
+	golangci-lint -v run ./... --timeout 5m
 
 # Generate code
 generate: controller-gen target-template-source
