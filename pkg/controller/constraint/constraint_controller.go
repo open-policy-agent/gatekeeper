@@ -53,6 +53,8 @@ type Tags struct {
 	status            Status                 // active, error
 }
 
+var knownConstraintStatus = []Status{activeStatus, errorStatus}
+
 type Status string
 
 const (
@@ -142,6 +144,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	r.addConstraintKey(constraintKey, Tags{
+		enforcementAction: enforcementAction,
+		status:            activeStatus,
+	})
 
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !HasFinalizer(instance) {
@@ -160,12 +166,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
-			r.reportTotalConstraints(
-				constraintKey,
-				Tags{
-					enforcementAction: enforcementAction,
-					status:            errorStatus,
-				})
+			r.addConstraintKey(constraintKey, Tags{
+				enforcementAction: enforcementAction,
+				status:            errorStatus,
+			})
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -195,13 +199,18 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			r.deleteConstraintKey(constraintKey)
 		}
 	}
-	r.reportTotalConstraints(
-		constraintKey,
-		Tags{
-			enforcementAction: enforcementAction,
-			status:            activeStatus,
-		})
+	r.reportTotalConstraints()
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConstraint) addConstraintKey(constraintKey string, t Tags) {
+	r.constraintsCacheMux.Lock()
+	defer r.constraintsCacheMux.Unlock()
+
+	r.constraintsCache[constraintKey] = Tags{
+		enforcementAction: t.enforcementAction,
+		status:            t.status,
+	}
 }
 
 func (r *ReconcileConstraint) deleteConstraintKey(constraintKey string) {
@@ -211,39 +220,30 @@ func (r *ReconcileConstraint) deleteConstraintKey(constraintKey string) {
 	delete(r.constraintsCache, constraintKey)
 }
 
-func (r *ReconcileConstraint) reportTotalConstraints(constraintKey string, t Tags) {
+func (r *ReconcileConstraint) reportTotalConstraints() {
 	r.constraintsCacheMux.Lock()
 	defer r.constraintsCacheMux.Unlock()
-
-	r.constraintsCache[constraintKey] = Tags{
-		enforcementAction: t.enforcementAction,
-		status:            t.status,
-	}
 
 	totals := make(map[Tags]int)
 	// report total number of constraints
 	for _, v := range r.constraintsCache {
 		totals[v]++
 	}
-	if err := r.reporter.ReportConstraints(
-		Tags{enforcementAction: util.Deny, status: activeStatus},
-		int64(totals[Tags{enforcementAction: util.Deny, status: activeStatus}])); err != nil {
-		log.Error(err, "failed to report constraint")
-	}
-	if err := r.reporter.ReportConstraints(
-		Tags{enforcementAction: util.Deny, status: errorStatus},
-		int64(totals[Tags{enforcementAction: util.Deny, status: errorStatus}])); err != nil {
-		log.Error(err, "failed to report constraint")
-	}
-	if err := r.reporter.ReportConstraints(
-		Tags{enforcementAction: util.Dryrun, status: activeStatus},
-		int64(totals[Tags{enforcementAction: util.Dryrun, status: activeStatus}])); err != nil {
-		log.Error(err, "failed to report constraint")
-	}
-	if err := r.reporter.ReportConstraints(
-		Tags{enforcementAction: util.Dryrun, status: errorStatus},
-		int64(totals[Tags{enforcementAction: util.Dryrun, status: errorStatus}])); err != nil {
-		log.Error(err, "failed to report constraint")
+
+	for _, enforcementAction := range util.KnownEnforcementActions {
+		for _, status := range knownConstraintStatus {
+			if err := r.reporter.ReportConstraints(
+				Tags{
+					enforcementAction: enforcementAction,
+					status:            status,
+				},
+				int64(totals[Tags{
+					enforcementAction: enforcementAction,
+					status:            status,
+				}])); err != nil {
+				log.Error(err, "failed to report total constraints")
+			}
+		}
 	}
 }
 

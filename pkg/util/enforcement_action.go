@@ -15,6 +15,7 @@ const (
 )
 
 var supportedEnforcementActions = []EnforcementAction{Deny, Dryrun}
+var KnownEnforcementActions = []EnforcementAction{Deny, Dryrun, Unrecognized}
 
 func ValidateEnforcementAction(input EnforcementAction) error {
 	for _, n := range supportedEnforcementActions {
