@@ -9,5 +9,7 @@ import (
 func Record(ctx context.Context, ms stats.Measurement, ros ...stats.Options) {
 	ros = append(ros, stats.WithMeasurements(ms))
 
-	stats.RecordWithOptions(ctx, ros...)
+	if err := stats.RecordWithOptions(ctx, ros...); err != nil {
+		log.Error(err, "failed to record metric")
+	}
 }

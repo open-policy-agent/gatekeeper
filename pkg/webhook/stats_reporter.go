@@ -60,7 +60,9 @@ func (r *reporter) ReportRequest(response string, d time.Duration) error {
 		return err
 	}
 
-	r.report(ctx, responseTimeInSecM.M(d.Seconds()))
+	if err := r.report(ctx, responseTimeInSecM.M(d.Seconds())); err != nil {
+		log.Error(err, "failed to report request")
+	}
 	return nil
 }
 

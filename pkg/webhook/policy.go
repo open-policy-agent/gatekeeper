@@ -126,7 +126,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	var requestResponse string
 	defer func() {
 		if h.reporter != nil {
-			h.reporter.ReportRequest(requestResponse, time.Since(timeStart))
+			if err := h.reporter.ReportRequest(requestResponse, time.Since(timeStart)); err != nil {
+				log.Error(err, "failed to report request")
+			}
 		}
 	}()
 

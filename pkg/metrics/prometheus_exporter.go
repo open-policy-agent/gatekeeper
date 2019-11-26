@@ -7,7 +7,7 @@ import (
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats/view"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -29,7 +29,9 @@ func newPrometheusExporter() (view.Exporter, error) {
 	// Start the server for Prometheus scraping
 	go func() {
 		srv := startNewPromSrv(e, *prometheusPort)
-		srv.ListenAndServe()
+		if err := srv.ListenAndServe(); err != nil {
+			log.Error(err, "Failed to ListenAndServe")
+		}
 	}()
 	return e, nil
 }

@@ -79,11 +79,11 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, e
 	}
 
 	am := &Manager{
-		opa:     opa,
-		stopper: make(chan struct{}),
-		stopped: make(chan struct{}),
-		mgr:     mgr,
-		ctx:     ctx,
+		opa:      opa,
+		stopper:  make(chan struct{}),
+		stopped:  make(chan struct{}),
+		mgr:      mgr,
+		ctx:      ctx,
 		reporter: reporter,
 	}
 	return am, nil
@@ -184,7 +184,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 
 	for _, r := range resp.Results() {
 		selfLink := r.Constraint.GetSelfLink()
-		totalViolationsPerConstraint[selfLink] += 1
+		totalViolationsPerConstraint[selfLink]++
 		// skip if this constraint has reached the constraintViolationsLimit
 		if len(updateLists[selfLink]) < *constraintViolationsLimit {
 			name := r.Constraint.GetName()

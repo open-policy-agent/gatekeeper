@@ -50,14 +50,14 @@ type Adder struct {
 
 type Tags struct {
 	enforcementAction util.EnforcementAction // deny, dryrun, unrecognized
-	status            ConstraintStatus       // active, error
+	status            Status                 // active, error
 }
 
-type ConstraintStatus string
+type Status string
 
 const (
-	activeStatus ConstraintStatus = "active"
-	errorStatus  ConstraintStatus = "error"
+	activeStatus Status = "active"
+	errorStatus  Status = "error"
 )
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -223,7 +223,7 @@ func (r *ReconcileConstraint) reportTotalConstraints(constraintKey string, t Tag
 	totals := make(map[Tags]int)
 	// report total number of constraints
 	for _, v := range r.constraintsCache {
-		totals[v] += 1
+		totals[v]++
 	}
 	if err := r.reporter.ReportConstraints(
 		Tags{enforcementAction: util.Deny, status: activeStatus},

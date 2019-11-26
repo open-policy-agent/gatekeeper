@@ -19,7 +19,9 @@ func TestRecord(t *testing.T) {
 		Aggregation: view.LastValue(),
 	}
 
-	view.Register(testView)
+	if err := view.Register(testView); err != nil {
+		t.Errorf("failed to register views: %v", err)
+	}
 	defer view.Unregister(testView)
 
 	Record(ctx, testM.M(expectedValue))
