@@ -16,7 +16,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
 	"time"
@@ -105,8 +104,8 @@ func main() {
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	wmCtx, wmCancel := context.WithCancel(context.Background())
-	wm := watch.New(wmCtx, mgr.GetConfig())
+	wm := watch.New(mgr.GetConfig())
+	mgr.Add(wm)
 
 	// Setup all Controllers
 	setupLog.Info("Setting up controller")
@@ -141,7 +140,10 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		hadError = true
 	}
-	wmCancel()
+
+	// wm.Pause() blocks until the watch manager has stopped and ensures it does
+	// not restart
+	wm.Pause()
 
 	// Unfortunately there is no way to block until all child
 	// goroutines of the manager have finished, so sleep long
