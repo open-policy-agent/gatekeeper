@@ -31,9 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -156,8 +156,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		delete(status, "errors")
-		util.SetHAStatus(instance, status)
-
+		if err = util.SetHAStatus(instance, status); err != nil {
+			return reconcile.Result{}, err
+		}
 		if _, err := r.opa.AddConstraint(context.Background(), instance); err != nil {
 			r.reportTotalConstraints(
 				constraintKey,
@@ -172,7 +173,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		status["enforced"] = true
-		util.SetHAStatus(instance, status)
+		if err := util.SetHAStatus(instance, status); err != nil {
+			return reconcile.Result{}, err
+		}
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}

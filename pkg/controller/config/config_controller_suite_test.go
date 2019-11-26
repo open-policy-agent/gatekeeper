@@ -37,7 +37,9 @@ func TestMain(m *testing.M) {
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 	}
-	api.AddToScheme(scheme.Scheme)
+	if err := api.AddToScheme(scheme.Scheme); err != nil {
+		stdlog.Fatal(err)
+	}
 
 	var err error
 	if cfg, err = t.Start(); err != nil {
@@ -45,7 +47,9 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
-	t.Stop()
+	if err = t.Stop(); err != nil {
+		stdlog.Printf("error while trying to stop server: %v", err)
+	}
 	os.Exit(code)
 }
 

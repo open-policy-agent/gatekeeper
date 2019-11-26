@@ -41,26 +41,28 @@ func TestUnstructuredHAStatus(t *testing.T) {
 				}
 				st, _ := GetHAStatus(obj)
 				st["someField"] = s
-				SetHAStatus(obj, st)
+				if err := SetHAStatus(obj, st); err != nil {
+					t.Fatal(err)
+				}
 				st2, _ := GetHAStatus(obj)
-				id_, ok := st2["id"]
+				id2, ok := st2["id"]
 				if !ok {
 					t.Errorf("id not set for host %d", i)
 				}
-				id, ok := id_.(string)
+				id, ok := id2.(string)
 				if !ok {
-					t.Errorf("id (%v) is not a string for host %d", id_, i)
+					t.Errorf("id (%v) is not a string for host %d", id2, i)
 				}
 				if id != pod {
 					t.Errorf("id = %v; want %v", id, pod)
 				}
-				f_, ok := st2["someField"]
+				f2, ok := st2["someField"]
 				if !ok {
 					t.Errorf("field not set for host %d", i)
 				}
-				f, ok := f_.(string)
+				f, ok := f2.(string)
 				if !ok {
-					t.Errorf("f (%v) is not a string for host %d", f_, i)
+					t.Errorf("f (%v) is not a string for host %d", f2, i)
 				}
 				if f != s {
 					t.Errorf("f = %v; wanted %v", f, s)
@@ -83,24 +85,24 @@ func TestUnstructuredHAStatus(t *testing.T) {
 					t.Fatal(err)
 				}
 				st2, _ := GetHAStatus(obj)
-				id_, ok := st2["id"]
+				id2, ok := st2["id"]
 				if !ok {
 					t.Errorf("t2: id not set for host %d", i)
 				}
-				id, ok := id_.(string)
+				id, ok := id2.(string)
 				if !ok {
-					t.Errorf("t2: id (%v) is not a string for host %d", id_, i)
+					t.Errorf("t2: id (%v) is not a string for host %d", id2, i)
 				}
 				if id != pod {
 					t.Errorf("t2: id = %v; want %v", id, pod)
 				}
-				f_, ok := st2["someField"]
+				f2, ok := st2["someField"]
 				if !ok {
 					t.Errorf("t2: field not set for host %d", i)
 				}
-				f, ok := f_.(string)
+				f, ok := f2.(string)
 				if !ok {
-					t.Errorf("t2: f (%v) is not a string for host %d", f_, i)
+					t.Errorf("t2: f (%v) is not a string for host %d", f2, i)
 				}
 				if f != s {
 					t.Errorf("t2: f = %v; wanted %v", f, s)

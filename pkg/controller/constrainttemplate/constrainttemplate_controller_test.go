@@ -114,7 +114,10 @@ violation[{"msg": "denied!"}] {
 	// Create the ConstraintTemplate object and expect the CRD to be created
 	err = c.Create(context.TODO(), instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), instance)
+	defer func() {
+		err := c.Delete(context.TODO(), instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 	clientset := kubernetes.NewForConfigOrDie(cfg)
@@ -153,10 +156,12 @@ violation[{"msg": "denied!"}] {
 	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: "denyall"})
 	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), cstr)
+	defer func() {
+		err = cstrClient.Delete(cstr.GetName(), &metav1.DeleteOptions{})
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 
 	g.Eventually(func() error {
-
 		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
 		if err != nil {
 			return err
@@ -229,7 +234,10 @@ anyrule[}}}//invalid//rego
 
 	err = c.Create(context.TODO(), instanceInvalidRego)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), instanceInvalidRego)
+	defer func() {
+		err = c.Delete(context.TODO(), instanceInvalidRego)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 
 	g.Eventually(func() error {
@@ -241,16 +249,14 @@ anyrule[}}}//invalid//rego
 			status := util.GetCTHAStatus(ct)
 			if len(status.Errors) != 1 {
 				return errors.New("InvalidRego template should contain 1 parse error")
-			} else {
-				if status.Errors[0].Code != "rego_parse_error" {
-					return errors.New(fmt.Sprintf("InvalidRego template returning unexpected error %s", status.Errors[0].Code))
-				}
-				return nil
 			}
+			if status.Errors[0].Code != "rego_parse_error" {
+				return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
+			}
+			return nil
 		}
 		return errors.New("InvalidRego not found")
 	}, timeout).Should(gomega.BeNil())
-	g.Expect(c.Delete(context.TODO(), instanceInvalidRego)).NotTo(gomega.HaveOccurred())
 
 	// Test finalizer removal
 	orig := &v1beta1.ConstraintTemplate{}
