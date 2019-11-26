@@ -105,7 +105,10 @@ func main() {
 	}
 
 	wm := watch.New(mgr.GetConfig())
-	mgr.Add(wm)
+	if err := mgr.Add(wm); err != nil {
+		setupLog.Error(err, "unable to register watch manager to the manager")
+		os.Exit(1)
+	}
 
 	// Setup all Controllers
 	setupLog.Info("Setting up controller")
@@ -143,7 +146,9 @@ func main() {
 
 	// wm.Pause() blocks until the watch manager has stopped and ensures it does
 	// not restart
-	wm.Pause()
+	if err := wm.Pause(); err != nil {
+		setupLog.Error(err, "could not pause watch manager, attempting cleanup anyway")
+	}
 
 	// Unfortunately there is no way to block until all child
 	// goroutines of the manager have finished, so sleep long

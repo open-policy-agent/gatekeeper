@@ -89,7 +89,9 @@ violation[{"msg": "denied!"}] {
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	wm := watch.New(mgr.GetConfig())
-	mgr.Add(wm)
+	if err := mgr.Add(wm); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
 	c = mgr.GetClient()
 
 	// initialize OPA
@@ -276,7 +278,9 @@ anyrule[}}}//invalid//rego
 	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
 
 	testMgrStopped()
-	wm.Pause()
+	if err := wm.Pause(); err != nil {
+		t.Fatalf("unable to pause watch manager: %s", err)
+	}
 	time.Sleep(5 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})

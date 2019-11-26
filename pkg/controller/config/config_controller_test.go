@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	gosync "sync"
+
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -39,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gosync "sync"
 )
 
 var c client.Client
@@ -76,7 +77,9 @@ func TestReconcile(t *testing.T) {
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	watcher := watch.New(mgr.GetConfig())
-	mgr.Add(watcher)
+	if err := mgr.Add(watcher); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
 	c = mgr.GetClient()
 
 	// initialize OPA
@@ -153,7 +156,9 @@ func TestReconcile(t *testing.T) {
 	g.Expect(len(util.GetCfgHAStatus(orig).AllFinalizers)).NotTo(gomega.Equal(0))
 
 	testMgrStopped()
-	watcher.Pause()
+	if err := watcher.Pause(); err != nil {
+		t.Fatalf("unable to pause watch manager: %s", err)
+	}
 	time.Sleep(1 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
