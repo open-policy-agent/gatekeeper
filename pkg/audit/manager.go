@@ -39,13 +39,14 @@ var (
 
 // Manager allows us to audit resources periodically
 type Manager struct {
-	client  client.Client
-	opa     *opa.Client
-	stopper chan struct{}
-	stopped chan struct{}
-	mgr     manager.Manager
-	ctx     context.Context
-	ucloop  *updateConstraintLoop
+	client   client.Client
+	opa      *opa.Client
+	stopper  chan struct{}
+	stopped  chan struct{}
+	mgr      manager.Manager
+	ctx      context.Context
+	ucloop   *updateConstraintLoop
+	reporter StatsReporter
 }
 
 type auditResult struct {
@@ -83,6 +84,7 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, e
 		stopped: make(chan struct{}),
 		mgr:     mgr,
 		ctx:     ctx,
+		reporter: reporter,
 	}
 	return am, nil
 }

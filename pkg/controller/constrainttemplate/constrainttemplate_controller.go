@@ -82,7 +82,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (rec
 	// constraintsCache stores total number of constraints
 	constraintsCache := make(map[string]constraint.Tags)
 
-	constraintAdder := constraint.Adder{Opa: opa}
+	constraintAdder := constraint.Adder{Opa: opa, ConstraintsCache: constraintsCache}
 	w, err := wm.NewRegistrar(
 		ctrlName,
 		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})
