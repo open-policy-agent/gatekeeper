@@ -34,7 +34,7 @@ const (
 var (
 	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
 	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	auditFromCache						= flag.Bool("auditFromCache", false, "pull resources from cache when auditing")
+	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from cache when auditing")
 	emptyAuditResults         []auditResult
 )
 
@@ -113,26 +113,19 @@ func (am *Manager) audit(ctx context.Context) error {
 		log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
 		return nil
 	}
+
 	if *auditFromCache {
 		resp, err := am.opa.Audit(ctx)
-		log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
+		log.Info("Audit opa.Audit() results", "violations", len(resp.Results()))
 		if err != nil {
 			return err
 		}
 	} else {
-		discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.cfg)
+		resp, err := am.auditResources(ctx)
+		log.Info("Audit results", "violations", len(resp.Results()))
 		if err != nil {
 			return err
 		}
-
-		serverResources,  err := discoveryClient.ServerResources()
-		if err != nil {
-			return err
-		}
-
-		//serverResources.APIResources
-
-		//resp, err := am.auditResources()
 	}
 
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
@@ -157,8 +150,57 @@ func (am *Manager) audit(ctx context.Context) error {
 	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
-func (am *Manager) auditResources(ctx context.Context) (*types.Resources, error) {
+func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Responses, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
+	if err != nil {
+		return nil, err
+	}
 
+	//c := am.client
+
+	responses := constraintTypes.NewResponses()
+	errMap := make(opa.ErrorMap)
+
+	serverResources, err := discoveryClient.ServerResources()
+	if err != nil {
+		return responses, err
+	}
+
+	for i := 0; i < len(serverResources); i++ {
+
+	}
+	//serverResources.APIResources
+
+	/*
+	   	cfg := &queryCfg{}
+	   	for _, opt := range opts {
+	   		opt(cfg)
+	   	}
+	   TargetLoop:
+	   	for name, target := range c.targets {
+	   		// Short-circuiting question applies here as well
+	   		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil, drivers.Tracing(cfg.enableTracing))
+	   		if err != nil {
+	   			errMap[name] = err
+	   			continue
+	   		}
+	   		for _, r := range resp.Results {
+	   			if err := target.HandleViolation(r); err != nil {
+	   				errMap[name] = err
+	   				continue TargetLoop
+	   			}
+	   		}
+	   		resp.Target = name
+	   		responses.ByTarget[name] = resp
+	   	}
+	   	if len(errMap) == 0 {
+	   		return responses, nil
+	   	}
+	*/
+	if len(errMap) == 0 {
+		return responses, nil
+	}
+	return responses, errMap
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
