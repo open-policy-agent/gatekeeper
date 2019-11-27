@@ -139,6 +139,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	var reportMetrics bool
 	constraintKey := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
 	if err != nil {
@@ -148,6 +149,12 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		enforcementAction: enforcementAction,
 		status:            activeStatus,
 	})
+
+	defer func() {
+		if reportMetrics {
+			r.reportTotalConstraints()
+		}
+	}()
 
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !HasFinalizer(instance) {
@@ -170,6 +177,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				enforcementAction: enforcementAction,
 				status:            errorStatus,
 			})
+			reportMetrics = true
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -199,7 +207,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			r.deleteConstraintKey(constraintKey)
 		}
 	}
-	r.reportTotalConstraints()
+	reportMetrics = true
 	return reconcile.Result{}, nil
 }
 
