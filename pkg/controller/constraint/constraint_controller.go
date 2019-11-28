@@ -162,7 +162,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructured) error {
 	obj := instance.DeepCopy()
 	// Remove the status field since we do not need it for OPA
-	unstructured.RemoveNestedField(obj.Object, "status", "byPod")
+	unstructured.RemoveNestedField(obj.Object, "status")
 	_, err := r.opa.AddConstraint(context.Background(), instance)
 	return err
 }
