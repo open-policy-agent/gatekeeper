@@ -225,10 +225,9 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 	version := resourceGV[1]
 
 	// resetting total violations per enforcement action
-	totalViolationsPerEnforcementAction := map[util.EnforcementAction]int64{
-		util.Deny:         0,
-		util.Dryrun:       0,
-		util.Unrecognized: 0,
+	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+	for _, action := range util.KnownEnforcementActions {
+		totalViolationsPerEnforcementAction[action] = 0
 	}
 
 	// get constraints for each Kind

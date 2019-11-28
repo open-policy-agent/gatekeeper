@@ -229,8 +229,8 @@ func (r *ReconcileConstraint) deleteConstraintKey(constraintKey string) {
 }
 
 func (r *ReconcileConstraint) reportTotalConstraints() {
-	r.constraintsCacheMux.Lock()
-	defer r.constraintsCacheMux.Unlock()
+	r.constraintsCacheMux.RLock()
+	defer r.constraintsCacheMux.RUnlock()
 
 	totals := make(map[Tags]int)
 	// report total number of constraints
