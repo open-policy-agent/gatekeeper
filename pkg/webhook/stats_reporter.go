@@ -30,7 +30,7 @@ func init() {
 
 // StatsReporter reports webhook metrics
 type StatsReporter interface {
-	ReportRequest(response string, d time.Duration) error
+	ReportRequest(response requestResponse, d time.Duration) error
 }
 
 // reporter implements StatsReporter interface
@@ -51,10 +51,10 @@ func NewStatsReporter() (StatsReporter, error) {
 }
 
 // Captures req count metric, recording the count and the duration
-func (r *reporter) ReportRequest(response string, d time.Duration) error {
+func (r *reporter) ReportRequest(response requestResponse, d time.Duration) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(admissionStatusKey, response),
+		tag.Insert(admissionStatusKey, string(response)),
 	)
 	if err != nil {
 		return err

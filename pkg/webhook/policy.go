@@ -78,6 +78,14 @@ type validationHandler struct {
 	injectedConfig *v1alpha1.Config
 }
 
+type requestResponse string
+
+const (
+	errorResponse requestResponse = "error"
+	denyResponse  requestResponse = "deny"
+	allowResponse requestResponse = "allow"
+)
+
 // Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
@@ -123,7 +131,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return vResp
 	}
 
-	var requestResponse string
+	var requestResponse requestResponse
 	defer func() {
 		if h.reporter != nil {
 			if err := h.reporter.ReportRequest(requestResponse, time.Since(timeStart)); err != nil {
@@ -140,7 +148,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			vResp.Result = &metav1.Status{}
 		}
 		vResp.Result.Code = http.StatusInternalServerError
-		requestResponse = "error"
+		requestResponse = errorResponse
 		return vResp
 	}
 
@@ -158,12 +166,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 				vResp.Result = &metav1.Status{}
 			}
 			vResp.Result.Code = http.StatusForbidden
-			requestResponse = "deny"
+			requestResponse = denyResponse
 			return vResp
 		}
 	}
 
-	requestResponse = "allow"
+	requestResponse = allowResponse
 	return admission.ValidationResponse(true, "")
 }
 
