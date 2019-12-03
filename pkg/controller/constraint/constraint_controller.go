@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -45,22 +44,8 @@ const (
 
 type Adder struct {
 	Opa              *opa.Client
-	ConstraintsCache map[string]Tags
+	ConstraintsCache *util.ConstraintsCache
 }
-
-type Tags struct {
-	enforcementAction util.EnforcementAction // deny, dryrun, unrecognized
-	status            Status                 // active, error
-}
-
-var knownConstraintStatus = []Status{activeStatus, errorStatus}
-
-type Status string
-
-const (
-	activeStatus Status = "active"
-	errorStatus  Status = "error"
-)
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -76,7 +61,7 @@ func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, reporter StatsReporter, constraintsCache map[string]Tags) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, reporter StatsReporter, constraintsCache *util.ConstraintsCache) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client:           mgr.GetClient(),
 		scheme:           mgr.GetScheme(),
@@ -112,13 +97,12 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	client.Client
-	scheme              *runtime.Scheme
-	opa                 *opa.Client
-	gvk                 schema.GroupVersionKind
-	log                 logr.Logger
-	reporter            StatsReporter
-	constraintsCache    map[string]Tags
-	constraintsCacheMux sync.RWMutex
+	scheme           *runtime.Scheme
+	opa              *opa.Client
+	gvk              schema.GroupVersionKind
+	log              logr.Logger
+	reporter         StatsReporter
+	constraintsCache *util.ConstraintsCache
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -145,9 +129,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	r.addConstraintKey(constraintKey, Tags{
-		enforcementAction: enforcementAction,
-		status:            activeStatus,
+	r.addConstraintKey(constraintKey, util.Tags{
+		EnforcementAction: enforcementAction,
+		Status:            util.ActiveStatus,
 	})
 
 	defer func() {
@@ -173,9 +157,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		if err := r.cacheConstraint(instance); err != nil {
-			r.addConstraintKey(constraintKey, Tags{
-				enforcementAction: enforcementAction,
-				status:            errorStatus,
+			r.addConstraintKey(constraintKey, util.Tags{
+				EnforcementAction: enforcementAction,
+				Status:            util.ErrorStatus,
 			})
 			reportMetrics = true
 			return reconcile.Result{}, err
@@ -211,43 +195,43 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileConstraint) addConstraintKey(constraintKey string, t Tags) {
-	r.constraintsCacheMux.Lock()
-	defer r.constraintsCacheMux.Unlock()
+func (r *ReconcileConstraint) addConstraintKey(constraintKey string, t util.Tags) {
+	r.constraintsCache.CacheMux.Lock()
+	defer r.constraintsCache.CacheMux.Unlock()
 
-	r.constraintsCache[constraintKey] = Tags{
-		enforcementAction: t.enforcementAction,
-		status:            t.status,
+	r.constraintsCache.Cache[constraintKey] = util.Tags{
+		EnforcementAction: t.EnforcementAction,
+		Status:            t.Status,
 	}
 }
 
 func (r *ReconcileConstraint) deleteConstraintKey(constraintKey string) {
-	r.constraintsCacheMux.Lock()
-	defer r.constraintsCacheMux.Unlock()
+	r.constraintsCache.CacheMux.Lock()
+	defer r.constraintsCache.CacheMux.Unlock()
 
-	delete(r.constraintsCache, constraintKey)
+	delete(r.constraintsCache.Cache, constraintKey)
 }
 
 func (r *ReconcileConstraint) reportTotalConstraints() {
-	r.constraintsCacheMux.RLock()
-	defer r.constraintsCacheMux.RUnlock()
+	r.constraintsCache.CacheMux.RLock()
+	defer r.constraintsCache.CacheMux.RUnlock()
 
-	totals := make(map[Tags]int)
+	totals := make(map[util.Tags]int)
 	// report total number of constraints
-	for _, v := range r.constraintsCache {
+	for _, v := range r.constraintsCache.Cache {
 		totals[v]++
 	}
 
 	for _, enforcementAction := range util.KnownEnforcementActions {
-		for _, status := range knownConstraintStatus {
+		for _, status := range util.KnownConstraintStatus {
 			if err := r.reporter.ReportConstraints(
-				Tags{
-					enforcementAction: enforcementAction,
-					status:            status,
+				util.Tags{
+					EnforcementAction: enforcementAction,
+					Status:            status,
 				},
-				int64(totals[Tags{
-					enforcementAction: enforcementAction,
-					status:            status,
+				int64(totals[util.Tags{
+					EnforcementAction: enforcementAction,
+					Status:            status,
 				}])); err != nil {
 				log.Error(err, "failed to report total constraints")
 			}

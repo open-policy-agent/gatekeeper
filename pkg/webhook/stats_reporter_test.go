@@ -8,7 +8,6 @@ import (
 )
 
 func TestReportRequest(t *testing.T) {
-	admissionResponse := "allow"
 	expectedTags := map[string]string{
 		"admission_status": "allow",
 	}
@@ -24,11 +23,11 @@ func TestReportRequest(t *testing.T) {
 		t.Errorf("NewStatsReporter() error %v", err)
 	}
 
-	err = r.ReportRequest(admissionResponse, expectedDurationValueMin)
+	err = r.ReportRequest(allowResponse, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportRequest(admissionResponse, expectedDurationValueMax)
+	err = r.ReportRequest(allowResponse, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}

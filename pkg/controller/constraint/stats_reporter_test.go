@@ -9,8 +9,8 @@ import (
 
 func TestReportConstraints(t *testing.T) {
 	var expectedValue int64 = 10
-	expectedTags := Tags{
-		enforcementAction: util.Deny,
+	expectedTags := util.Tags{
+		EnforcementAction: util.Deny,
 	}
 
 	r, err := NewStatsReporter()
@@ -31,7 +31,7 @@ func TestReportConstraints(t *testing.T) {
 		t.Error("ReportConstraints should have aggregation LastValue()")
 	}
 	for _, tag := range row[0].Tags {
-		if tag.Value != string(expectedTags.enforcementAction) {
+		if tag.Value != string(expectedTags.EnforcementAction) {
 			t.Errorf("ReportConstraints tags does not match for %v", tag.Key.Name())
 		}
 	}
