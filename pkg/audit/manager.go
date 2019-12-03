@@ -72,7 +72,7 @@ type StatusViolation struct {
 
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
-	reporter, err := NewStatsReporter()
+	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
 		return nil, err

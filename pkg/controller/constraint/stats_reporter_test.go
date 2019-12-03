@@ -9,16 +9,16 @@ import (
 
 func TestReportConstraints(t *testing.T) {
 	var expectedValue int64 = 10
-	expectedTags := Tags{
+	expectedTags := tags{
 		enforcementAction: util.Deny,
 	}
 
-	r, err := NewStatsReporter()
+	r, err := newStatsReporter()
 	if err != nil {
-		t.Errorf("NewStatsReporter() error %v", err)
+		t.Errorf("newStatsReporter() error %v", err)
 	}
 
-	err = r.ReportConstraints(expectedTags, expectedValue)
+	err = r.reportConstraints(expectedTags, expectedValue)
 	if err != nil {
 		t.Errorf("ReportConstraints error %v", err)
 	}

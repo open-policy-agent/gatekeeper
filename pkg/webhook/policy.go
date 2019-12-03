@@ -91,7 +91,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	log := log.WithValues("hookType", "validation")
 
 	var timeStart = time.Now()
-	reporter, err := NewStatsReporter()
+	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
 	}

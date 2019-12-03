@@ -38,8 +38,8 @@ type reporter struct {
 	ctx context.Context
 }
 
-// NewStatsReporter creaters a reporter for webhook metrics
-func NewStatsReporter() (StatsReporter, error) {
+// newStatsReporter creaters a reporter for webhook metrics
+func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),
 	)

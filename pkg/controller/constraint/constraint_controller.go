@@ -37,10 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
+var (
+	log                   = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
+	knownConstraintStatus = []status{activeStatus, errorStatus}
+)
 
 const (
-	finalizerName = "finalizers.gatekeeper.sh/constraint"
+	finalizerName        = "finalizers.gatekeeper.sh/constraint"
+	activeStatus  status = "active"
+	errorStatus   status = "error"
 )
 
 type Adder struct {
@@ -49,30 +54,21 @@ type Adder struct {
 }
 
 type ConstraintsCache struct {
-	sync.RWMutex
-	Cache
+	mux   sync.RWMutex
+	cache map[string]tags
 }
 
-type Cache map[string]Tags
-
-type Tags struct {
+type tags struct {
 	enforcementAction util.EnforcementAction
 	status            status
 }
 
-var knownConstraintStatus = []status{activeStatus, errorStatus}
-
 type status string
-
-const (
-	activeStatus status = "active"
-	errorStatus  status = "error"
-)
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
-	reporter, err := NewStatsReporter()
+	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
 		return err
@@ -150,7 +146,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	r.constraintsCache.AddConstraintKey(constraintKey, Tags{
+	r.constraintsCache.addConstraintKey(constraintKey, tags{
 		enforcementAction: enforcementAction,
 		status:            activeStatus,
 	})
@@ -158,7 +154,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 
 	defer func() {
 		if reportMetrics {
-			r.constraintsCache.ReportTotalConstraints(r.reporter)
+			r.constraintsCache.reportTotalConstraints(r.reporter)
 		}
 	}()
 
@@ -179,7 +175,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		if err := r.cacheConstraint(instance); err != nil {
-			r.constraintsCache.AddConstraintKey(constraintKey, Tags{
+			r.constraintsCache.addConstraintKey(constraintKey, tags{
 				enforcementAction: enforcementAction,
 				status:            errorStatus,
 			})
@@ -210,7 +206,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 			// removing constraint entry from cache
-			r.constraintsCache.DeleteConstraintKey(constraintKey)
+			r.constraintsCache.deleteConstraintKey(constraintKey)
 		}
 	}
 	return reconcile.Result{}, nil
@@ -251,41 +247,47 @@ func removeString(s string, items []string) []string {
 	return rval
 }
 
-func (c *ConstraintsCache) AddConstraintKey(constraintKey string, t Tags) {
-	c.Lock()
-	defer c.Unlock()
+func NewConstraintsCache() *ConstraintsCache {
+	return &ConstraintsCache{
+		cache: make(map[string]tags),
+	}
+}
 
-	c.Cache[constraintKey] = Tags{
+func (c *ConstraintsCache) addConstraintKey(constraintKey string, t tags) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.cache[constraintKey] = tags{
 		enforcementAction: t.enforcementAction,
 		status:            t.status,
 	}
 }
 
-func (c *ConstraintsCache) DeleteConstraintKey(constraintKey string) {
-	c.Lock()
-	defer c.Unlock()
+func (c *ConstraintsCache) deleteConstraintKey(constraintKey string) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 
-	delete(c.Cache, constraintKey)
+	delete(c.cache, constraintKey)
 }
 
-func (c *ConstraintsCache) ReportTotalConstraints(reporter StatsReporter) {
-	c.RLock()
-	defer c.RUnlock()
+func (c *ConstraintsCache) reportTotalConstraints(reporter StatsReporter) {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 
-	totals := make(map[Tags]int)
+	totals := make(map[tags]int)
 	// report total number of constraints
-	for _, v := range c.Cache {
+	for _, v := range c.cache {
 		totals[v]++
 	}
 
 	for _, enforcementAction := range util.KnownEnforcementActions {
 		for _, status := range knownConstraintStatus {
-			if err := reporter.ReportConstraints(
-				Tags{
+			if err := reporter.reportConstraints(
+				tags{
 					enforcementAction: enforcementAction,
 					status:            status,
 				},
-				int64(totals[Tags{
+				int64(totals[tags{
 					enforcementAction: enforcementAction,
 					status:            status,
 				}])); err != nil {

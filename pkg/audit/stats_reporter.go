@@ -73,8 +73,8 @@ type StatsReporter interface {
 	ReportLatency(d time.Duration) error
 }
 
-// NewStatsReporter creaters a reporter for audit metrics
-func NewStatsReporter() (StatsReporter, error) {
+// newStatsReporter creaters a reporter for audit metrics
+func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),
 	)

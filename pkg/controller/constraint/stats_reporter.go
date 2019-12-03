@@ -39,7 +39,7 @@ func register() {
 	}
 }
 
-func (r *reporter) ReportConstraints(t Tags, v int64) error {
+func (r *reporter) reportConstraints(t tags, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(enforcementActionKey, string(t.enforcementAction)),
@@ -53,11 +53,11 @@ func (r *reporter) ReportConstraints(t Tags, v int64) error {
 
 // StatsReporter reports audit metrics
 type StatsReporter interface {
-	ReportConstraints(t Tags, v int64) error
+	reportConstraints(t tags, v int64) error
 }
 
-// NewStatsReporter creaters a reporter for audit metrics
-func NewStatsReporter() (StatsReporter, error) {
+// newStatsReporter creaters a reporter for audit metrics
+func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),
 	)

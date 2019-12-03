@@ -13,9 +13,9 @@ func TestReportTotalViolations(t *testing.T) {
 		"enforcement_action": "deny",
 	}
 
-	r, err := NewStatsReporter()
+	r, err := newStatsReporter()
 	if err != nil {
-		t.Errorf("NewStatsReporter() error %v", err)
+		t.Errorf("newStatsReporter() error %v", err)
 	}
 
 	err = r.ReportTotalViolations("deny", expectedValue)
@@ -47,9 +47,9 @@ func TestReportLatency(t *testing.T) {
 	var expectedLatencyMin float64 = 100
 	var expectedLatencyMax float64 = 500
 
-	r, err := NewStatsReporter()
+	r, err := newStatsReporter()
 	if err != nil {
-		t.Errorf("NewStatsReporter() error %v", err)
+		t.Errorf("newStatsReporter() error %v", err)
 	}
 
 	err = r.ReportLatency(expectedLatencyValueMin)

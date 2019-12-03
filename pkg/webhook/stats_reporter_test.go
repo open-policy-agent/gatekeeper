@@ -18,9 +18,9 @@ func TestReportRequest(t *testing.T) {
 	var expectedDurationMax float64 = 5
 	var expectedCount int64 = 2
 
-	r, err := NewStatsReporter()
+	r, err := newStatsReporter()
 	if err != nil {
-		t.Errorf("NewStatsReporter() error %v", err)
+		t.Errorf("newStatsReporter() error %v", err)
 	}
 
 	err = r.ReportRequest(allowResponse, expectedDurationValueMin)
