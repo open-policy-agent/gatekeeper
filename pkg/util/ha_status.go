@@ -34,8 +34,8 @@ func GetCTHAStatus(template *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodStatus) {
 	id := getID()
 	status.ID = id
-	for i, status := range template.Status.ByPod {
-		if status.ID == id {
+	for i, s := range template.Status.ByPod {
+		if s.ID == id {
 			template.Status.ByPod[i] = status
 			return
 		}
@@ -68,8 +68,8 @@ func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
 func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
 	id := getID()
 	status.ID = id
-	for i, status := range cfg.Status.ByPod {
-		if status.ID == id {
+	for i, s := range cfg.Status.ByPod {
+		if s.ID == id {
 			cfg.Status.ByPod[i] = status
 			return
 		}
