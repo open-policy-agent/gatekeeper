@@ -123,7 +123,6 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	var reportMetrics bool
 	constraintKey := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
 	if err != nil {
@@ -133,6 +132,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		EnforcementAction: enforcementAction,
 		Status:            util.ActiveStatus,
 	})
+	reportMetrics := true
 
 	defer func() {
 		if reportMetrics {
@@ -191,7 +191,6 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			r.deleteConstraintKey(constraintKey)
 		}
 	}
-	reportMetrics = true
 	return reconcile.Result{}, nil
 }
 
