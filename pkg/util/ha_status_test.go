@@ -109,7 +109,7 @@ func TestUnstructuredHAStatus(t *testing.T) {
 				}
 			}
 			// Check deletion
-			for i, _ := range tt.Statuses {
+			for i := range tt.Statuses {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
 					t.Fatal(err)
@@ -191,7 +191,7 @@ func TestCfgAStatus(t *testing.T) {
 				}
 			}
 			// Check deletion
-			for i, _ := range tt.Kinds {
+			for i := range tt.Kinds {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
 					t.Fatal(err)
@@ -264,7 +264,7 @@ func TestCTHAStatus(t *testing.T) {
 				}
 			}
 			// Check deletion
-			for i, _ := range tt.Errors {
+			for i := range tt.Errors {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
 					t.Fatal(err)
