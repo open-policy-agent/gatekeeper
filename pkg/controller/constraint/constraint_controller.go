@@ -127,7 +127,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err := r.cacheConstraint(instance); err != nil {
+		if err = r.cacheConstraint(instance); err != nil {
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -135,10 +135,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			return reconcile.Result{}, err
 		}
 		status["enforced"] = true
-		if err := util.SetHAStatus(instance, status); err != nil {
+		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err := r.Update(context.Background(), instance); err != nil {
+		if err = r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 	} else {
@@ -163,7 +163,7 @@ func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructure
 	obj := instance.DeepCopy()
 	// Remove the status field since we do not need it for OPA
 	unstructured.RemoveNestedField(obj.Object, "status")
-	_, err := r.opa.AddConstraint(context.Background(), instance)
+	_, err := r.opa.AddConstraint(context.Background(), obj)
 	return err
 }
 
