@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -33,13 +34,25 @@ func GetCTHAStatus(template *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodStatus) {
 	id := getID()
 	status.ID = id
-	for i, status := range template.Status.ByPod {
-		if status.ID == id {
+	for i, s := range template.Status.ByPod {
+		if s.ID == id {
 			template.Status.ByPod[i] = status
 			return
 		}
 	}
 	template.Status.ByPod = append(template.Status.ByPod, status)
+}
+
+func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
+	id := getID()
+	var newStatus []*v1beta1.ByPodStatus
+	for _, status := range template.Status.ByPod {
+		if status.ID == id {
+			continue
+		}
+		newStatus = append(newStatus, status)
+	}
+	template.Status.ByPod = newStatus
 }
 
 func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
@@ -55,13 +68,25 @@ func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
 func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
 	id := getID()
 	status.ID = id
-	for i, status := range cfg.Status.ByPod {
-		if status.ID == id {
+	for i, s := range cfg.Status.ByPod {
+		if s.ID == id {
 			cfg.Status.ByPod[i] = status
 			return
 		}
 	}
 	cfg.Status.ByPod = append(cfg.Status.ByPod, status)
+}
+
+func DeleteCfgHAStatus(cfg *v1alpha1.Config) {
+	id := getID()
+	var newStatus []*v1alpha1.ByPod
+	for _, status := range cfg.Status.ByPod {
+		if status.ID == id {
+			continue
+		}
+		newStatus = append(newStatus, status)
+	}
+	cfg.Status.ByPod = newStatus
 }
 
 // GetHAStatus gets the value of a pod-specific subfield of status
@@ -138,6 +163,43 @@ func SetHAStatus(obj *unstructured.Unstructured, status map[string]interface{}) 
 	if err := unstructured.SetNestedSlice(
 		obj.Object, statuses, "status", "byPod"); err != nil {
 		return errors.Wrap(err, "while setting HA status")
+	}
+	return nil
+}
+
+func DeleteHAStatus(obj *unstructured.Unstructured) error {
+	id := getID()
+
+	statuses, exists, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
+	if err != nil {
+		return errors.Wrap(err, "while deleting HA status")
+	}
+	if !exists {
+		return nil
+	}
+
+	newStatus := make([]interface{}, 0)
+
+	for i, s := range statuses {
+		curStatus, ok := s.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("element %d in byPod status is malformed", i)
+		}
+		curID2, ok := curStatus["id"]
+		if !ok {
+			return fmt.Errorf("element %d in byPod status is missing an `id` field", i)
+		}
+		curID, ok := curID2.(string)
+		if !ok {
+			return fmt.Errorf("element %d in byPod status' `id` field is not a string: %v", i, curID2)
+		}
+		if id == curID {
+			continue
+		}
+		newStatus = append(newStatus, s)
+	}
+	if err := unstructured.SetNestedSlice(obj.Object, newStatus, "status", "byPod"); err != nil {
+		return errors.Wrap(err, "while writing deleted byPod status")
 	}
 	return nil
 }
