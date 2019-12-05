@@ -146,12 +146,8 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	r.constraintsCache.addConstraintKey(constraintKey, tags{
-		enforcementAction: enforcementAction,
-		status:            activeStatus,
-	})
-	reportMetrics := true
 
+	reportMetrics := false
 	defer func() {
 		if reportMetrics {
 			r.constraintsCache.reportTotalConstraints(r.reporter)
@@ -193,6 +189,12 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err := r.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
+		// adding constraint to cache and sending metrics
+		r.constraintsCache.addConstraintKey(constraintKey, tags{
+			enforcementAction: enforcementAction,
+			status:            activeStatus,
+		})
+		reportMetrics = true
 	} else {
 		// Handle deletion
 		if HasFinalizer(instance) {
@@ -207,6 +209,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 			// removing constraint entry from cache
 			r.constraintsCache.deleteConstraintKey(constraintKey)
+			reportMetrics = true
 		}
 	}
 	return reconcile.Result{}, nil
