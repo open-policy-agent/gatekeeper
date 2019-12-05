@@ -108,6 +108,27 @@ func TestUnstructuredHAStatus(t *testing.T) {
 					t.Errorf("t2: f = %v; wanted %v", f, s)
 				}
 			}
+			// Check deletion
+			for i := range tt.Statuses {
+				pod := fmt.Sprintf("Pod%d", i)
+				if err := os.Setenv("POD_NAME", pod); err != nil {
+					t.Fatal(err)
+				}
+				if err := DeleteHAStatus(obj); err != nil {
+					t.Errorf("could not delete status: %s", err)
+				}
+				statuses, exists, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
+				if err != nil {
+					t.Errorf("error while getting byPod: %v", err)
+				}
+				if !exists {
+					t.Errorf("byPod does not exist")
+				}
+				expected := len(tt.Statuses) - i - 1
+				if len(statuses) != expected {
+					t.Errorf("len(statuses) = %d; want %d", len(statuses), expected)
+				}
+			}
 		})
 	}
 }
@@ -169,6 +190,18 @@ func TestCfgAStatus(t *testing.T) {
 					t.Errorf("t2: st2.AllFinalizers = %v; wanted %v", st2.AllFinalizers, ks)
 				}
 			}
+			// Check deletion
+			for i := range tt.Kinds {
+				pod := fmt.Sprintf("Pod%d", i)
+				if err := os.Setenv("POD_NAME", pod); err != nil {
+					t.Fatal(err)
+				}
+				DeleteCfgHAStatus(obj)
+				expected := len(tt.Kinds) - i - 1
+				if len(obj.Status.ByPod) != expected {
+					t.Errorf("len(statuses) = %d; want %d", len(obj.Status.ByPod), expected)
+				}
+			}
 		})
 	}
 }
@@ -228,6 +261,18 @@ func TestCTHAStatus(t *testing.T) {
 				}
 				if !reflect.DeepEqual(st2.Errors, es) {
 					t.Errorf("t2: st2.Errors = %v; wanted %v", st2.Errors, es)
+				}
+			}
+			// Check deletion
+			for i := range tt.Errors {
+				pod := fmt.Sprintf("Pod%d", i)
+				if err := os.Setenv("POD_NAME", pod); err != nil {
+					t.Fatal(err)
+				}
+				DeleteCTHAStatus(obj)
+				expected := len(tt.Errors) - i - 1
+				if len(obj.Status.ByPod) != expected {
+					t.Errorf("len(statuses) = %d; want %d", len(obj.Status.ByPod), expected)
 				}
 			}
 		})
