@@ -391,9 +391,9 @@ func removeString(s string, items []string) []string {
 	return rval
 }
 
-// RemoveAllFinalizers removes all finalizers from constraints and
-// constraint templates
-func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
+// TearDownState removes all finalizers from constraints and
+// constraint templates as well as any pod-specific status written
+func TearDownState(c client.Client, finished chan struct{}) {
 	defer close(finished)
 	toList := func(m map[types.NamespacedName]string) []string {
 		var out []string
@@ -406,7 +406,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 	templates := &v1beta1.ConstraintTemplateList{}
 	names := make(map[types.NamespacedName]string)
 	if err := c.List(context.Background(), templates); err != nil {
-		log.Error(err, "could not clean all contraint/template finalizers")
+		log.Error(err, "could not clean all contraint/template state")
 		return
 	}
 	for _, templ := range templates.Items {
@@ -414,7 +414,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 	}
 	log.Info("found constraint templates to scrub", "templates", toList(names))
 	cleanLoop := func() (bool, error) {
-		log.Info("removing finalizers from constraint templates", "templates", toList(names))
+		log.Info("removing state from constraint templates", "templates", toList(names))
 		for nn, kind := range names {
 			listKind := kind + "List"
 			// TODO these should be constants somewhere
@@ -430,14 +430,15 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 			}
 			success := true
 			for _, obj := range objs.Items {
-				if !constraint.HasFinalizer(&obj) {
-					continue
-				}
-				log.Info("scrubing constraint finalizer", "name", obj.GetName())
+				log.Info("scrubing constraint state", "name", obj.GetName())
 				constraint.RemoveFinalizer(&obj)
+				if err := util.DeleteHAStatus(&obj); err != nil {
+					success = false
+					log.Error(err, "could not remove pod-specific status")
+				}
 				if err := c.Update(context.Background(), &obj); err != nil {
 					success = false
-					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
+					log.Error(err, "could not scrub constraint state", "name", obj.GetName())
 				}
 			}
 			if success {
@@ -452,6 +453,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 					}
 				}
 				RemoveFinalizer(templ)
+				util.DeleteCTHAStatus(templ)
 				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
 					log.Error(err, "while writing a constraint template for cleanup", "template", nn)
 					continue
@@ -465,7 +467,7 @@ func RemoveAllFinalizers(c client.Client, finished chan struct{}) {
 		return false, nil
 	}
 	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 500 * time.Millisecond,
+		Duration: 50 * time.Millisecond,
 		Factor:   2,
 		Jitter:   1,
 		Steps:    10,

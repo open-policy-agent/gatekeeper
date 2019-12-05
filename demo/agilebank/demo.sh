@@ -5,6 +5,9 @@
 clear
 
 kubectl apply -f sync.yaml >> /dev/null
+kubectl apply -f dryrun/existing_resources >> /dev/null
+
+clear
 
 echo "===== ENTER developer ====="
 echo
@@ -27,6 +30,7 @@ read
 p "\"Never again,\" says the admin as they delete the namespace."
 NO_WAIT=false
 
+clear
 echo
 echo "===== ENTER admin ====="
 echo
@@ -82,6 +86,7 @@ echo
 echo "===== EXIT developer ====="
 echo
 
+clear
 NO_WAIT=true
 p "All is well with the world, until the big outage. The bank is down for hours."
 read
@@ -98,9 +103,59 @@ read
 NO_WAIT=false
 pe "kubectl get k8scontainerlimits.constraints.gatekeeper.sh  container-must-have-limits -o yaml"
 echo
+wait
+clear
+
+p "Weeks gone by, the company now has a new policy to rollout to production."
+echo
+
+p "We need to ensure all ingress hostnames are unique."
+echo
+
+p "Introducing new policies is dangerous and can often be a breaking change. How do we gain confidence in the new policy before enforcing them in production? What if it breaks a core piece of software, what if it brings down the entire stack?!"
+echo
+
+echo "===== ENTER admin ====="
+echo
+p "We can use the dry run feature in Gatekeeper to preview the effect of policy changes in production without impacting the workload and our users!"
+read
+
+clear
+NO_WAIT=false
+
+pe "kubectl apply -f dryrun/k8suniqueingresshost_template.yaml"
+echo
+
+pe "kubectl apply -f dryrun/unique-ingress-host.yaml"
+echo
+
+pe "cat dryrun/k8suniqueingresshost_template.yaml"
+echo
+
+pe "cat dryrun/unique-ingress-host.yaml"
+echo
+
+pe "kubectl get ingress --all-namespaces"
+echo
+
+pe "kubectl get K8sUniqueIngressHost.constraints.gatekeeper.sh  unique-ingress-host -o yaml"
+echo
+
+p "Let's see if this new policy in dry run mode blocks operations on the cluster?"
+echo
+
+pe "cat dryrun/bad_resource/duplicate_ing.yaml"
+echo
+
+pe "kubectl apply -f dryrun/bad_resource/duplicate_ing.yaml"
+echo
+
 
 p "THE END"
 
+kubectl delete -f dryrun/existing_resources
+kubectl delete -f dryrun/bad_resource/
+kubectl delete -f dryrun
 kubectl delete -f good_resources
 kubectl delete ns advanced-transaction-system
 kubectl delete -f constraints
