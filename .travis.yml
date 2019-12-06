@@ -14,6 +14,7 @@ jobs:
         - GOLANGCILINT_VERSION=1.21.0
         - GO111MODULE=on go get -u github.com/golangci/golangci-lint/cmd/golangci-lint@v${GOLANGCILINT_VERSION}
       script:
+        - make lint
         - make e2e-bootstrap
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
