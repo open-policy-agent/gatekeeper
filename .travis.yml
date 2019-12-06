@@ -26,7 +26,7 @@ jobs:
           skip_cleanup: true
           script:
             - make docker-login
-            - make docker-push-dev
+            - make docker-push-dev IMG=gatekeeper-e2e:latest
           on:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
@@ -35,7 +35,7 @@ jobs:
           skip_cleanup: true
           script:
             - make docker-login
-            - make docker-push-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
+            - make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TRAVIS_TAG}
           on:
             repo: open-policy-agent/gatekeeper
             tags: true # only push release image tag for tags
