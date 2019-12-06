@@ -24,18 +24,14 @@ jobs:
       deploy:
         - provider: script
           skip_cleanup: true
-          script:
-            - make docker-login
-            - make docker-push-dev IMG=gatekeeper-e2e:latest
+          script: make docker-login && make docker-push-dev IMG=gatekeeper-e2e:latest
           on:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
         - provider: script
           skip_cleanup: true
-          script:
-            - make docker-login
-            - make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TRAVIS_TAG}
+          script: make docker-login && make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TRAVIS_TAG}
           on:
             repo: open-policy-agent/gatekeeper
             tags: true # only push release image tag for tags
