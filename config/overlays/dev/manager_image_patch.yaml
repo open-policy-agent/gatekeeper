@@ -7,5 +7,5 @@ spec:
   template: 
     spec: 
       containers: 
-      - image: gcr.io/smythe-kpc/open-policy-agent/gatekeeper:latest
+      - image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.0
         name: manager

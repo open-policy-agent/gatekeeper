@@ -14,7 +14,7 @@ jobs:
         - GOLANGCILINT_VERSION=1.21.0
         - GO111MODULE=on go get -u github.com/golangci/golangci-lint/cmd/golangci-lint@v${GOLANGCILINT_VERSION}
       script:
-        - make
+        - make lint
         - make e2e-bootstrap
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
@@ -24,14 +24,18 @@ jobs:
       deploy:
         - provider: script
           skip_cleanup: true
-          script: make travis-dev-deploy
+          script:
+            - make docker-login
+            - make docker-push-dev
           on:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
         - provider: script
           skip_cleanup: true
-          script: make travis-release-deploy IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
+          script:
+            - make docker-login
+            - make docker-push-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} VERSION=${TRAVIS_TAG}
           on:
             repo: open-policy-agent/gatekeeper
             tags: true # only push release image tag for tags
