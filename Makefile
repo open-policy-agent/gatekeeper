@@ -169,9 +169,6 @@ target-template-source:
 	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/; s/data\[\"{{.ConstraintsRoot}}\"\]/{{.ConstraintsRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
 	@printf "\`\n" >> pkg/target/target_template_source.go
 
-docker-build-ci:
-	docker build --pull . -t $(IMG) -f Dockerfile_ci
-
 # Push the docker image
 docker-push:
 	docker push ${IMG}
@@ -181,13 +178,6 @@ release:
 
 release-manifest:
 		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper_kubebuilder_v2.yaml
-
-
-# Travis Dev Deployment
-travis-dev-deploy: docker-login docker-build-ci docker-push-dev
-
-# Travis Release
-travis-release-deploy: docker-login docker-build-ci docker-push-release
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
