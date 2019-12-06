@@ -38,6 +38,18 @@ Finally, Gatekeeper's engine is designed to be portable, allowing administrators
 
 #### Prerequisites
 
+##### Minimum Kubernetes Version
+
+**To use Gatekeeper, you should have a minimum Kubernetes version of 1.14, which adds
+webhook timeouts.**
+
+You can install Gatekeeper in earlier versions of Kubernetes either by
+removing incompatible fields from the manifest or by setting `--validate=false`
+when applying the manifest. Be warned that, without timeouts on the webhook, your
+API Server could timeout when Gatekeeper is down. Kubernetes 1.14 fixes this issue.
+
+##### RBAC Permissions
+
 For either installation method, make sure you have cluster admin permissions:
 
 ```sh
@@ -130,7 +142,7 @@ Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-ag
 
 ### Constraint Templates
 
-Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/v0.10.7/how-do-i-write-policies/) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
+Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/latest/#rego) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
 
 Here is an example constraint template that requires all labels described by the constraint to be present:
 
