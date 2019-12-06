@@ -98,7 +98,7 @@ install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
+deploy: patch-image manifests
 	touch -a ./config/overlays/dev/manager_image_patch.yaml
 # TODO use kustomize for CRDs
 	kubectl apply -f config/crd/bases
@@ -108,8 +108,8 @@ deploy: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
+	kustomize build config/default  -o deploy/gatekeeper.yaml
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
 
 # Run go fmt against code
 fmt:
@@ -169,9 +169,6 @@ target-template-source:
 	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/; s/data\[\"{{.ConstraintsRoot}}\"\]/{{.ConstraintsRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
 	@printf "\`\n" >> pkg/target/target_template_source.go
 
-docker-build-ci:
-	docker build --pull . -t $(IMG) -f Dockerfile_ci
-
 # Push the docker image
 docker-push:
 	docker push ${IMG}
@@ -180,14 +177,7 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper_kubebuilder_v2.yaml
-
-
-# Travis Dev Deployment
-travis-dev-deploy: docker-login docker-build-ci docker-push-dev
-
-# Travis Release
-travis-release-deploy: docker-login docker-build-ci docker-push-release
+		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
