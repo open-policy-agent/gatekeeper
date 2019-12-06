@@ -331,6 +331,11 @@ spec:
           requests:
             cpu: 100m
             memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
         volumeMounts:
         - mountPath: /certs
           name: cert

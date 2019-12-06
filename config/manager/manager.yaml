@@ -48,4 +48,9 @@ spec:
           requests:
             cpu: 100m
             memory: 256Mi
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 999
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
       terminationGracePeriodSeconds: 60
