@@ -40,7 +40,7 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 
 	```
 	git checkout -b release-<NEW VERSION>
-	git commit -a -s -m "Prepare <NEW VERSION> release" --signoff
+	git commit -a -s -m "Prepare <NEW VERSION> release"
 	git push <YOUR FORK>
 	```
 
@@ -83,6 +83,6 @@ Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` d
 1. Commit the changes and push to remote repository to create a pull request.
 
 	```
-	git commit -a -s -m "Bump deployment <version>" --signoff
+	git commit -a -s -m "Bump deployment <version>"
 	git push <YOUR FORK>
 	```
