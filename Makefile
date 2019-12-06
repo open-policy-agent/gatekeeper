@@ -98,7 +98,7 @@ install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
+deploy: patch-image manifests
 	touch -a ./config/overlays/dev/manager_image_patch.yaml
 # TODO use kustomize for CRDs
 	kubectl apply -f config/crd/bases
