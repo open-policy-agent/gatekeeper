@@ -3,26 +3,24 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
   name: gatekeeper-system
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.2.2
   creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh
   names:
     kind: Config
-    listKind: ConfigList
     plural: configs
-    singular: config
   scope: Namespaced
   validation:
     openAPIV3Schema:
-      description: Config is the Schema for the configs API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -37,7 +35,6 @@ spec:
         metadata:
           type: object
         spec:
-          description: ConfigSpec defines the desired state of Config
           properties:
             sync:
               description: Configuration for syncing k8s objects
@@ -86,7 +83,6 @@ spec:
               type: object
           type: object
         status:
-          description: ConfigStatus defines the observed state of Config
           properties:
             byPod:
               description: List of statuses as seen by individual pods
@@ -110,12 +106,7 @@ spec:
                 type: object
               type: array
           type: object
-      type: object
   version: v1alpha1
-  versions:
-  - name: v1alpha1
-    served: true
-    storage: true
 status:
   acceptedNames:
     kind: ""
@@ -130,132 +121,153 @@ metadata:
   name: gatekeeper-manager-role
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - '*'
   resources:
   - '*'
   verbs:
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - admissionregistration.k8s.io
-  resources:
-  - mutatingwebhookconfigurations
-  - validatingwebhookconfigurations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
   - update
-  - watch
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
-  verbs:
-  - create
-  - delete
-  - get
-  - list
   - patch
-  - update
-  - watch
 - apiGroups:
   - config.gatekeeper.sh
   resources:
   - configs
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - config.gatekeeper.sh
   resources:
   - configs/status
   verbs:
   - get
-  - patch
   - update
+  - patch
 - apiGroups:
   - constraints.gatekeeper.sh
   resources:
   - '*'
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates/status
   verbs:
   - get
-  - patch
   - update
+  - patch
+- apiGroups:
+  - constraints.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  creationTimestamp: null
   name: gatekeeper-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -269,13 +281,16 @@ subjects:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: gatekeeper-webhook-server-cert
+  name: gatekeeper-webhook-server-secret
   namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: gatekeeper-webhook-service
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: gatekeeper-controller-manager-service
   namespace: gatekeeper-system
 spec:
   ports:
@@ -283,30 +298,32 @@ spec:
     targetPort: 8443
   selector:
     control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   labels:
     control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: 1
   selector:
     matchLabels:
       control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  serviceName: gatekeeper-controller-manager-service
   template:
     metadata:
       labels:
         control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
     spec:
       containers:
       - args:
         - --auditInterval=30
         - --port=8443
-        command:
-        - /manager
         env:
         - name: POD_NAMESPACE
           valueFrom:
@@ -317,6 +334,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: SECRET_NAME
+          value: gatekeeper-webhook-server-secret
         image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
         imagePullPolicy: Always
         name: manager
@@ -340,38 +359,7 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: gatekeeper-webhook-server-cert
----
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: ValidatingWebhookConfiguration
-metadata:
-  creationTimestamp: null
-  name: gatekeeper-validating-webhook-configuration
-webhooks:
-- clientConfig:
-    caBundle: Cg==
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admit
-  failurePolicy: Ignore
-  name: validation.gatekeeper.sh
-  namespaceSelector:
-    matchExpressions:
-    - key: control-plane
-      operator: DoesNotExist
-  rules:
-  - apiGroups:
-    - '*'
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - '*'
-  sideEffects: None
-  timeoutSeconds: 5
+          secretName: gatekeeper-webhook-server-secret
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -419,10 +407,6 @@ spec:
             targets:
               items:
                 properties:
-                  libs:
-                    items:
-                      type: string
-                    type: array
                   rego:
                     type: string
                   target:
