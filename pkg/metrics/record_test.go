@@ -10,8 +10,9 @@ import (
 
 func TestRecord(t *testing.T) {
 	const measureName = "test_total"
+	const expectedValue int64 = 10
+	const expectedRowLength = 1
 	testM := stats.Int64(measureName, measureName, stats.UnitDimensionless)
-	var expectedValue int64 = 10
 
 	ctx := context.Background()
 	testView := &view.View{
@@ -26,15 +27,26 @@ func TestRecord(t *testing.T) {
 
 	Record(ctx, testM.M(expectedValue))
 
-	row, err := view.RetrieveData(measureName)
-	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, measureName)
-	}
-	value, ok := row[0].Data.(*view.LastValueData)
+	row := checkData(t, measureName, expectedRowLength)
+	value, ok := row.Data.(*view.LastValueData)
 	if !ok {
 		t.Error("ReportConstraints should have aggregation LastValue()")
 	}
 	if int64(value.Value) != expectedValue {
 		t.Errorf("Metric: %v - Expected %v, got %v. ", measureName, value.Value, expectedValue)
 	}
+}
+
+func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
+	row, err := view.RetrieveData(name)
+	if err != nil {
+		t.Errorf("Error when retrieving data: %v from %v", err, name)
+	}
+	if len(row) != expectedRowLength {
+		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
+	}
+	if row[0].Data == nil {
+		t.Errorf("Expected row data not to be nil")
+	}
+	return row[0]
 }
