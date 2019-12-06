@@ -108,8 +108,8 @@ deploy: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default  -o deploy/gatekeeper_kubebuilder_v2.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper_kubebuilder_v2.yaml ; cat $${x} >> deploy/gatekeeper_kubebuilder_v2.yaml ; done'
+	kustomize build config/default  -o deploy/gatekeeper.yaml
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
 
 # Run go fmt against code
 fmt:
@@ -177,7 +177,7 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper_kubebuilder_v2.yaml
+		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
