@@ -37,7 +37,6 @@ jobs:
             tags: true # only push release image tag for tags
     - stage: "helm build, test"
       script:
-        - make manager
         - make e2e-bootstrap
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_RELEASE=latest
