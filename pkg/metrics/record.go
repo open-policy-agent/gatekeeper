@@ -6,10 +6,7 @@ import (
 	"go.opencensus.io/stats"
 )
 
-func Record(ctx context.Context, ms stats.Measurement, ros ...stats.Options) {
+func Record(ctx context.Context, ms stats.Measurement, ros ...stats.Options) error {
 	ros = append(ros, stats.WithMeasurements(ms))
-
-	if err := stats.RecordWithOptions(ctx, ros...); err != nil {
-		log.Error(err, "failed to record metric")
-	}
+	return stats.RecordWithOptions(ctx, ros...)
 }

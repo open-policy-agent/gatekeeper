@@ -90,6 +90,5 @@ type reporter struct {
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
-	metrics.Record(ctx, m)
-	return nil
+	return metrics.Record(ctx, m)
 }

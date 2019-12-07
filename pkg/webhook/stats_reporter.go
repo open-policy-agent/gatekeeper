@@ -60,15 +60,11 @@ func (r *reporter) ReportRequest(response requestResponse, d time.Duration) erro
 		return err
 	}
 
-	if err := r.report(ctx, responseTimeInSecM.M(d.Seconds())); err != nil {
-		log.Error(err, "failed to report request")
-	}
-	return nil
+	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
-	metrics.Record(ctx, m)
-	return nil
+	return metrics.Record(ctx, m)
 }
 
 func register() {
