@@ -85,6 +85,7 @@ func main() {
 	err := metrics.NewMetricsExporter()
 	if err != nil {
 		setupLog.Error(err, "error initializing metrics exporter")
+		os.Exit(1)
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{

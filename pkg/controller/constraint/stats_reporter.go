@@ -21,10 +21,12 @@ var (
 )
 
 func init() {
-	register()
+	if err := register(); err != nil {
+		panic(err)
+	}
 }
 
-func register() {
+func register() error {
 	views := []*view.View{
 		{
 			Name:        totalConstraintsName,
@@ -33,10 +35,7 @@ func register() {
 			TagKeys:     []tag.Key{enforcementActionKey, statusKey},
 		},
 	}
-
-	if err := view.Register(views...); err != nil {
-		panic(err)
-	}
+	return view.Register(views...)
 }
 
 func (r *reporter) reportConstraints(t tags, v int64) error {
@@ -73,6 +72,5 @@ type reporter struct {
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
-	metrics.Record(ctx, m)
-	return nil
+	return metrics.Record(ctx, m)
 }

@@ -24,10 +24,12 @@ var (
 )
 
 func init() {
-	register()
+	if err := register(); err != nil {
+		panic(err)
+	}
 }
 
-func register() {
+func register() error {
 	views := []*view.View{
 		{
 			Name:        totalViolationsName,
@@ -41,10 +43,7 @@ func register() {
 			Aggregation: view.Distribution(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5),
 		},
 	}
-
-	if err := view.Register(views...); err != nil {
-		panic(err)
-	}
+	return view.Register(views...)
 }
 
 func (r *reporter) ReportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {

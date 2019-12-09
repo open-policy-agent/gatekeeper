@@ -25,7 +25,9 @@ var (
 )
 
 func init() {
-	register()
+	if err := register(); err != nil {
+		panic(err)
+	}
 }
 
 // StatsReporter reports webhook metrics
@@ -67,23 +69,22 @@ func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
 
-func register() {
-	if err := view.Register(
-		&view.View{
+func register() error {
+	views := []*view.View{
+		{
 			Name:        requestCountName,
 			Description: "The number of requests that are routed to webhook",
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Count(),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
-		&view.View{
+		{
 			Name:        requestDurationName,
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
-	); err != nil {
-		panic(err)
 	}
+	return view.Register(views...)
 }

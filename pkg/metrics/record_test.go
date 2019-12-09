@@ -25,7 +25,9 @@ func TestRecord(t *testing.T) {
 	}
 	defer view.Unregister(testView)
 
-	Record(ctx, testM.M(expectedValue))
+	if err := Record(ctx, testM.M(expectedValue)); err != nil {
+		t.Errorf("failed while recording: %v", err)
+	}
 
 	row := checkData(t, measureName, expectedRowLength)
 	value, ok := row.Data.(*view.LastValueData)
