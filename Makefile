@@ -194,12 +194,6 @@ release-manifest:
 	@sed -i "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
 	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" chart/gatekeeper-operator/values.yaml
 
-# Travis Dev Deployment
-travis-dev-deploy: docker-login docker-build-ci docker-push-dev
-
-# Travis Release
-travis-release-deploy: docker-login docker-build-ci docker-push-release
-
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
 	-kubectl delete -n gatekeeper-system Config config
