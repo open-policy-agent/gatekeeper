@@ -4,16 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"strings"
-	"time"
-
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -21,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"strings"
+	"time"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
@@ -114,21 +115,23 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 
-	if *auditFromCache {
-		resp, err := am.opa.Audit(ctx)
-		log.Info("Audit opa.Audit() results", "violations", len(resp.Results()))
-		if err != nil {
-			return err
-		}
-	} else {
-		resp, err := am.auditResources(ctx)
-		log.Info("Audit results", "violations", len(resp.Results()))
-		if err != nil {
-			return err
-		}
-	}
+	var resp *constraintTypes.Responses
 
-	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
+	if *auditFromCache == true {
+		log.Info("Auditing from cache")
+		resp, err = am.opa.Audit(ctx)
+		if err != nil {
+			return err
+		}
+		log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
+	} else {
+		log.Info("Auditing via discovery client")
+		resp, err = am.auditResources(ctx)
+		if err != nil {
+			return err
+		}
+		log.Info("Audit discovery client audit results", "violations", len(resp.Results()))
+	}
 
 	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(resp)
 	if err != nil {
@@ -156,51 +159,88 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 		return nil, err
 	}
 
-	//c := am.client
-
 	responses := constraintTypes.NewResponses()
-	errMap := make(opa.ErrorMap)
 
-	serverResources, err := discoveryClient.ServerResources()
+	_, serverResourceLists, err := discoveryClient.ServerGroupsAndResources()
+
 	if err != nil {
 		return responses, err
 	}
 
-	for i := 0; i < len(serverResources); i++ {
+	errMap := make(opa.ErrorMap)
 
+	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool) // map of Kind (key) to GroupVersion (value)
+	for _, rl := range serverResourceLists {
+		gv := metav1.GroupVersion{
+			Group:   rl.GroupVersionKind().Group,
+			Version: rl.GroupVersionKind().Version,
+		}
+		if _, ok := clusterAPIResources[gv]; !ok {
+			clusterAPIResources[gv] = make(map[string]bool)
+		}
+		for _, resource := range rl.APIResources {
+			if !strings.Contains(resource.Name, "/") {
+				clusterAPIResources[gv][resource.Kind] = true
+			}
+		}
 	}
-	//serverResources.APIResources
 
-	/*
-	   	cfg := &queryCfg{}
-	   	for _, opt := range opts {
-	   		opt(cfg)
-	   	}
-	   TargetLoop:
-	   	for name, target := range c.targets {
-	   		// Short-circuiting question applies here as well
-	   		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil, drivers.Tracing(cfg.enableTracing))
-	   		if err != nil {
-	   			errMap[name] = err
-	   			continue
-	   		}
-	   		for _, r := range resp.Results {
-	   			if err := target.HandleViolation(r); err != nil {
-	   				errMap[name] = err
-	   				continue TargetLoop
-	   			}
-	   		}
-	   		resp.Target = name
-	   		responses.ByTarget[name] = resp
-	   	}
-	   	if len(errMap) == 0 {
-	   		return responses, nil
-	   	}
-	*/
-	if len(errMap) == 0 {
-		return responses, nil
+	for gv, gvKinds := range clusterAPIResources {
+		for kind := range gvKinds {
+			objList := &unstructured.UnstructuredList{}
+			objList.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   gv.Group,
+				Version: gv.Version,
+				Kind:    kind + "List",
+			})
+
+			am.client.List(ctx, objList)
+
+			for _, obj := range objList.Items {
+				resourceJSON, err := json.Marshal(obj.Object)
+				if err != nil {
+					log.Error(err, "Unable to marshal JSON encoding of object for audit", "object", obj.Object)
+					continue
+				}
+
+				req := admissionv1beta1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   obj.GetObjectKind().GroupVersionKind().Group,
+						Version: obj.GetObjectKind().GroupVersionKind().Version,
+						Kind:    obj.GetObjectKind().GroupVersionKind().Kind,
+					},
+					Object: runtime.RawExtension{
+						Raw: resourceJSON,
+					},
+				}
+
+				resp, err := am.opa.Review(ctx, req)
+
+				if err != nil {
+					for target := range resp.ByTarget {
+						if _, ok := errMap[target]; !ok {
+							errMap[target] = err
+						} else {
+							errMap[target] = errors.New(errMap[target].Error() + "\n" + err.Error())
+						}
+					}
+				} else if len(resp.Results()) > 0 { // @TODO note this may include enforcementactions..
+					for targetName, targetResponse := range resp.ByTarget {
+						if _, ok := responses.ByTarget[targetName]; !ok {
+							responses.ByTarget[targetName] = targetResponse
+						} else {
+							responses.ByTarget[targetName].Results = append(responses.ByTarget[targetName].Results, targetResponse.Results...)
+						}
+					}
+				}
+			}
+		}
 	}
-	return responses, errMap
+
+	if len(errMap) > 0 {
+		return responses, errMap
+	}
+	return responses, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
@@ -334,7 +374,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 				ts:      timestamp,
 				tv:      totalViolations,
 			}
-			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
+			//log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
 		}
 	}
