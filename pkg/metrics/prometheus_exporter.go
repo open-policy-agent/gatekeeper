@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	stdlog "log"
 	"net/http"
 	"sync"
 
@@ -29,9 +30,7 @@ func newPrometheusExporter() (view.Exporter, error) {
 	// Start the server for Prometheus scraping
 	go func() {
 		srv := startNewPromSrv(e, *prometheusPort)
-		if err := srv.ListenAndServe(); err != nil {
-			log.Error(err, "Failed to ListenAndServe")
-		}
+		stdlog.Fatal(srv.ListenAndServe())
 	}()
 	return e, nil
 }
