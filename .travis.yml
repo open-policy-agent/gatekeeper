@@ -35,6 +35,13 @@ jobs:
           on:
             repo: open-policy-agent/gatekeeper
             tags: true # only push release image tag for tags
+    - stage: "helm build, test"
+      script:
+        - make e2e-bootstrap
+        - make e2e-build-load-image IMG=gatekeeper-e2e:latest
+        - make e2e-helm-deploy HELM_REPO=gatekeeper-e2e HELM_RELEASE=latest
+        - make test-e2e
+        - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
     - stage: "verify release"
       if: repo = open-policy-agent/gatekeeper AND type != pull_request AND tag IS present
       script:
