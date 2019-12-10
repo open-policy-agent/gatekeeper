@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPHostNamespace
-        listKind: K8sPSPHostNamespaceList
-        plural: k8spsphostnamespace
-        singular: k8spsphostnamespace
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
