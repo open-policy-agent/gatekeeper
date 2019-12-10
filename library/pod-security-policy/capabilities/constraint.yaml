@@ -1,7 +1,7 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sAllowedRepos
+kind: K8sPSPCapabilities
 metadata:
-  name: prod-repo-is-openpolicyagent
+  name: capabilities-demo
 spec:
   match:
     kinds:
