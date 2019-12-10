@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPVolumeTypes
-        listKind: K8sPSPVolumeTypesList
-        plural: k8spspvolumetypes
-        singular: k8spspvolumetypes
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

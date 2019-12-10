@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPFlexVolumes
-        listKind: K8sPSPFlexVolumesList
-        plural: k8spspflexvolumes
-        singular: k8spspflexvolumes
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

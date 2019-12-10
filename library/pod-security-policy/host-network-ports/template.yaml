@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPHostNetworkingPorts
-        listKind: K8sPSPHostNetworkingPortsList
-        plural: k8spsphostnetworkingports
-        singular: k8spsphostnetworkingports
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
