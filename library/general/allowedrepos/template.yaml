@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sAllowedRepos
-        listKind: K8sAllowedReposList
-        plural: k8sallowedrepos
-        singular: k8sallowedrepos
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

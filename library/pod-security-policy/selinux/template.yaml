@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPSELinux
-        listKind: K8sPSPSELinuxList
-        plural: k8spspselinux
-        singular: k8spspselinux
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
