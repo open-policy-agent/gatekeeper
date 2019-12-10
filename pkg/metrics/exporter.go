@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"go.opencensus.io/stats/view"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (
@@ -21,8 +22,46 @@ var (
 
 const prometheusExporter = "prometheus"
 
-func NewMetricsExporter() error {
-	ce := getCurMetricsExporter()
+type Manager struct {
+	mgr manager.Manager
+}
+
+func AddToManager(m manager.Manager) error {
+	mm, err := New(m)
+	if err != nil {
+		return err
+	}
+	return m.Add(mm)
+}
+
+func New(mgr manager.Manager) (*Manager, error) {
+	mm := &Manager{
+		mgr: mgr,
+	}
+	return mm, nil
+}
+
+// Start implements the Runnable interface
+func (mm *Manager) Start(stop <-chan struct{}) error {
+	log.Info("Starting metrics manager")
+	defer log.Info("Stopping metrics manager workers")
+	errCh := make(chan error)
+	go func() { errCh <- mm.newMetricsExporter(stop) }()
+	select {
+	case <-stop:
+		return nil
+	case err := <-errCh:
+		if err != nil {
+			return err
+		}
+	}
+	// We must block indefinitely or manager will exit
+	<-stop
+	return nil
+}
+
+func (mm *Manager) newMetricsExporter(stop <-chan struct{}) error {
+	ce := mm.getCurMetricsExporter()
 	// If there is a Prometheus Exporter server running, stop it.
 	resetCurPromSrv()
 
@@ -33,11 +72,11 @@ func NewMetricsExporter() error {
 	}
 	var e view.Exporter
 	var err error
-	m := strings.ToLower(*metricsBackend)
-	switch m {
+	mb := strings.ToLower(*metricsBackend)
+	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
-		e, err = newPrometheusExporter()
+		e, err = newPrometheusExporter(stop)
 	default:
 		err = fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
 	}
@@ -53,7 +92,7 @@ func NewMetricsExporter() error {
 	return nil
 }
 
-func getCurMetricsExporter() view.Exporter {
+func (mm *Manager) getCurMetricsExporter() view.Exporter {
 	metricsMux.RLock()
 	defer metricsMux.RUnlock()
 	return curMetricsExporter

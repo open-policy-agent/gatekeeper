@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	stdlog "log"
 	"net/http"
 	"sync"
 
@@ -20,18 +19,27 @@ var log = logf.Log.WithName("metrics")
 
 const namespace = "gatekeeper"
 
-func newPrometheusExporter() (view.Exporter, error) {
+func newPrometheusExporter(stop <-chan struct{}) (view.Exporter, error) {
 	e, err := prometheus.NewExporter(prometheus.Options{Namespace: namespace})
 	if err != nil {
 		log.Error(err, "Failed to create the Prometheus exporter.")
 		return nil, err
 	}
+	errCh := make(chan error)
 	log.Info("Starting server for OpenCensus Prometheus exporter")
 	// Start the server for Prometheus scraping
 	go func() {
 		srv := startNewPromSrv(e, *prometheusPort)
-		stdlog.Fatal(srv.ListenAndServe())
+		errCh <- srv.ListenAndServe()
 	}()
+	select {
+	case <-stop:
+		return e, nil
+	case err := <-errCh:
+		if err != nil {
+			return e, err
+		}
+	}
 	return e, nil
 }
 

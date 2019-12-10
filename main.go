@@ -82,12 +82,6 @@ func main() {
 	}
 	ctrl.SetLogger(crzap.Logger(true))
 
-	err := metrics.NewMetricsExporter()
-	if err != nil {
-		setupLog.Error(err, "error initializing metrics exporter")
-		os.Exit(1)
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: *metricsAddr,
@@ -137,6 +131,12 @@ func main() {
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade to the manager")
+		os.Exit(1)
+	}
+
+	setupLog.Info("setting up metrics")
+	if err := metrics.AddToManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register metrics to the manager")
 		os.Exit(1)
 	}
 
