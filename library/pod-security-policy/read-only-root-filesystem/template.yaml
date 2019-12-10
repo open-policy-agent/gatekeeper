@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPReadOnlyRootFilesystem
-        listKind: K8sPSPReadOnlyRootFilesystemContainerList
-        plural: k8spspreadonlyfilesystem
-        singular: k8spspreadonlyfilesystem
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

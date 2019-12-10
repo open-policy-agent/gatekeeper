@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPAllowPrivilegeEscalationContainer
-        listKind: K8sPSPAllowPrivilegeEscalationContainerList
-        plural: k8spspallowprivilegeescalationcontainer
-        singular: k8spspallowprivilegeescalationcontainer
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
