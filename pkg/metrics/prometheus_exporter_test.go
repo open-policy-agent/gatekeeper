@@ -8,10 +8,15 @@ import (
 func TestPrometheusExporter(t *testing.T) {
 	const expectedAddr = ":8888"
 
-	_, err := newPrometheusExporter()
-	if err != nil {
-		t.Error(err)
-	}
+	go func() {
+		e, err := newPrometheusExporter()
+		if err != nil {
+			t.Error(err)
+		}
+		if e == nil {
+			t.Fatal("expected prometheus exporter but got nil")
+		}
+	}()
 
 	time.Sleep(100 * time.Millisecond)
 	srv := getCurPromSrv()
