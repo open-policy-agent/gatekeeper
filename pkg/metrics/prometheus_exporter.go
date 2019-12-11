@@ -19,7 +19,7 @@ var log = logf.Log.WithName("metrics")
 
 const namespace = "gatekeeper"
 
-func newPrometheusExporter(stop <-chan struct{}) (view.Exporter, error) {
+func newPrometheusExporter() (view.Exporter, error) {
 	e, err := prometheus.NewExporter(prometheus.Options{Namespace: namespace})
 	if err != nil {
 		log.Error(err, "Failed to create the Prometheus exporter.")
@@ -32,14 +32,6 @@ func newPrometheusExporter(stop <-chan struct{}) (view.Exporter, error) {
 		srv := startNewPromSrv(e, *prometheusPort)
 		errCh <- srv.ListenAndServe()
 	}()
-	select {
-	case <-stop:
-		return e, nil
-	case err := <-errCh:
-		if err != nil {
-			return e, err
-		}
-	}
 	return e, nil
 }
 

@@ -46,7 +46,7 @@ func (mm *Manager) Start(stop <-chan struct{}) error {
 	log.Info("Starting metrics manager")
 	defer log.Info("Stopping metrics manager workers")
 	errCh := make(chan error)
-	go func() { errCh <- mm.newMetricsExporter(stop) }()
+	go func() { errCh <- mm.newMetricsExporter() }()
 	select {
 	case <-stop:
 		return nil
@@ -60,7 +60,7 @@ func (mm *Manager) Start(stop <-chan struct{}) error {
 	return nil
 }
 
-func (mm *Manager) newMetricsExporter(stop <-chan struct{}) error {
+func (mm *Manager) newMetricsExporter() error {
 	ce := mm.getCurMetricsExporter()
 	// If there is a Prometheus Exporter server running, stop it.
 	resetCurPromSrv()
@@ -76,7 +76,7 @@ func (mm *Manager) newMetricsExporter(stop <-chan struct{}) error {
 	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
-		e, err = newPrometheusExporter(stop)
+		e, err = newPrometheusExporter()
 	default:
 		err = fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
 	}
