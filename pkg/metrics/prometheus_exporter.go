@@ -32,6 +32,12 @@ func newPrometheusExporter() (view.Exporter, error) {
 		srv := startNewPromSrv(e, *prometheusPort)
 		errCh <- srv.ListenAndServe()
 	}()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return e, err
+		}
+	}
 	return e, nil
 }
 

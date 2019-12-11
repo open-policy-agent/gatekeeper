@@ -22,57 +22,45 @@ var (
 
 const prometheusExporter = "prometheus"
 
-type Manager struct {
+type Runner struct {
 	mgr manager.Manager
 }
 
 func AddToManager(m manager.Manager) error {
-	mm, err := New(m)
+	mr, err := New(m)
 	if err != nil {
 		return err
 	}
-	return m.Add(mm)
+	return m.Add(mr)
 }
 
-func New(mgr manager.Manager) (*Manager, error) {
-	mm := &Manager{
+func New(mgr manager.Manager) (*Runner, error) {
+	mm := &Runner{
 		mgr: mgr,
 	}
 	return mm, nil
 }
 
 // Start implements the Runnable interface
-func (mm *Manager) Start(stop <-chan struct{}) error {
-	log.Info("Starting metrics manager")
-	defer log.Info("Stopping metrics manager workers")
-	errCh := make(chan error)
-	go func() { errCh <- mm.newMetricsExporter() }()
-	select {
-	case <-stop:
-		return nil
-	case err := <-errCh:
-		if err != nil {
-			return err
-		}
-	}
-	// We must block indefinitely or manager will exit
-	<-stop
-	return nil
+func (r *Runner) Start(stop <-chan struct{}) error {
+	log.Info("Starting metrics runner")
+	defer log.Info("Stopping metrics runner workers")
+	return r.newMetricsExporter()
 }
 
-func (mm *Manager) newMetricsExporter() error {
-	ce := mm.getCurMetricsExporter()
+func (r *Runner) newMetricsExporter() error {
+	ce := r.getCurMetricsExporter()
 	// If there is a Prometheus Exporter server running, stop it.
 	resetCurPromSrv()
 
 	if ce != nil {
-		// UnregisterExporter is idempotent and it can be called multiple times for the same exporter
-		// without side effects.
+		// UnregisterExporter is idempotent and it can be called multiple times for the same exporter without side effects.
 		view.UnregisterExporter(ce)
 	}
 	var e view.Exporter
 	var err error
 	mb := strings.ToLower(*metricsBackend)
+	log.Info("metrics", "using backend", mb)
 	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
@@ -92,7 +80,7 @@ func (mm *Manager) newMetricsExporter() error {
 	return nil
 }
 
-func (mm *Manager) getCurMetricsExporter() view.Exporter {
+func (r *Runner) getCurMetricsExporter() view.Exporter {
 	metricsMux.RLock()
 	defer metricsMux.RUnlock()
 	return curMetricsExporter
