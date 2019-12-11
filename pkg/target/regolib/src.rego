@@ -10,6 +10,8 @@ autoreject_review[rejection] {
   match := get_default(spec, "match", {})
   has_field(match, "namespaceSelector")
   not data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+  not input.review._unstable.namespace
+  not input.review.namespace == ""
   rejection := {
     "msg": "Namespace is not cached in OPA.",
     "details": {},
@@ -196,6 +198,15 @@ matches_label_selector(selector, labels) {
 # Namespace Selector Logic #
 ############################
 
+get_ns[out] {
+  out := input.review._unstable.namespace
+}
+
+get_ns[out] {
+  not input.review._unstable.namespace
+  out := data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+}
+
 matches_namespaces(match) {
   not has_field(match, "namespaces")
 }
@@ -212,9 +223,10 @@ matches_nsselector(match) {
 
 matches_nsselector(match) {
   has_field(match, "namespaceSelector")
-  ns := data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
+  get_ns[ns]
   matches_namespace_selector(match, ns)
 }
+
 
 # Checks to see if a kubernetes NamespaceSelector matches a namespace with a given set of labels
 # A non-existent selector or labels should be represented by an empty object ("{}")

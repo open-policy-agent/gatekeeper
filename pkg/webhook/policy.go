@@ -10,6 +10,8 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	corev1 "k8s.io/api/core/v1"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/api"
 	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
@@ -21,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -252,8 +255,16 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 			}
 		}
 	}
+	review := &target.SideloadNamespace{AdmissionRequest: &req.AdmissionRequest}
+	if req.AdmissionRequest.Namespace != "" {
+		ns := &corev1.Namespace{}
+		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+			return nil, err
+		}
+		review.Namespace = ns
+	}
 
-	resp, err := h.opa.Review(ctx, req.AdmissionRequest, opa.Tracing(traceEnabled))
+	resp, err := h.opa.Review(ctx, review, opa.Tracing(traceEnabled))
 	if traceEnabled {
 		log.Info(resp.TraceDump())
 	}
