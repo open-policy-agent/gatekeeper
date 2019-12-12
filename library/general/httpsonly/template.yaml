@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sHttpsOnly
-        listKind: K8sHttpsOnlyList
-        plural: k8shttpsonly
-        singular: k8shttpsonly
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

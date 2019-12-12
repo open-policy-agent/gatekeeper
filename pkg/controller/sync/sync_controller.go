@@ -153,8 +153,10 @@ func HasFinalizer(obj *unstructured.Unstructured) bool {
 }
 
 func RemoveFinalizer(c client.Client, obj *unstructured.Unstructured) error {
-	obj.SetFinalizers(removeString(finalizerName, obj.GetFinalizers()))
-	return c.Update(context.Background(), obj)
+	newObj := obj.DeepCopy()
+	newObj.SetFinalizers(removeString(finalizerName, obj.GetFinalizers()))
+
+	return c.Patch(context.Background(), newObj, client.MergeFrom(obj))
 }
 
 func containsString(s string, items []string) bool {
