@@ -1,4 +1,3 @@
-
 # Image URL to use all building/pushing image targets
 REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
@@ -81,6 +80,17 @@ e2e-build-load-image: docker-build
 e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
+e2e-helm-deploy:
+	# tiller needs enough permissions to create CRDs
+	kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
+	# Download and install helm
+	curl https://raw.githubusercontent.com/helm/helm/master/scripts/get > get_helm.sh
+	chmod 700 get_helm.sh
+	./get_helm.sh
+	helm init --wait --history-max=5
+	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
+	helm install chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+
 # Build manager binary
 manager: generate fmt vet
 	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
@@ -110,6 +120,7 @@ manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	kustomize build config/default  -o deploy/gatekeeper.yaml
 	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
+	sh chart/gatekeeper-operator/generate_helm_template.sh
 
 # Run go fmt against code
 fmt:
@@ -177,7 +188,11 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-		@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
+	@sed -i "s/version: .*/version: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
+	@sed -i "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
+	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" chart/gatekeeper-operator/values.yaml
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:

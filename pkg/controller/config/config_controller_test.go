@@ -18,6 +18,7 @@ package config
 import (
 	"errors"
 	"sort"
+	gosync "sync"
 	"testing"
 	"time"
 
@@ -67,11 +68,17 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
+	ctrl.SetLogger(zap.Logger(true))
+
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	ctrl.SetLogger(zap.Logger(true))
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	watcher := watch.New(mgr.GetConfig())
+	if err := mgr.Add(watcher); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
 	c = mgr.GetClient()
 
 	// initialize OPA
@@ -86,19 +93,20 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	watcher := watch.New(ctx, mgr.GetConfig())
 	rec, _ := newReconciler(mgr, opa, watcher)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			close(stopMgr)
+			mgrStopped.Wait()
+		})
+	}
 
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
+	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(context.TODO(), instance)
@@ -146,7 +154,10 @@ func TestReconcile(t *testing.T) {
 	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
 	g.Expect(len(util.GetCfgHAStatus(orig).AllFinalizers)).NotTo(gomega.Equal(0))
 
-	cancel()
+	testMgrStopped()
+	if err := watcher.Pause(); err != nil {
+		t.Fatalf("unable to pause watch manager: %s", err)
+	}
 	time.Sleep(1 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
@@ -157,7 +168,7 @@ func TestReconcile(t *testing.T) {
 
 	g.Eventually(func() error {
 		obj := &configv1alpha1.Config{}
-		if err := c.Get(context.TODO(), CfgKey, obj); err != nil {
+		if err := newCli.Get(context.TODO(), CfgKey, obj); err != nil {
 			return err
 		}
 		if hasFinalizer(obj) {
@@ -171,7 +182,7 @@ func TestReconcile(t *testing.T) {
 
 	g.Eventually(func() error {
 		cleanNs := &unstructured.Unstructured{}
-		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
+		if err := newCli.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
 			return err
 		}
 		if sync.HasFinalizer(cleanNs) {
