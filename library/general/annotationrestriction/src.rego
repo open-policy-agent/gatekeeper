@@ -1,8 +1,17 @@
 package requiredannotations
 
+violation[{"msg": msg}] {
+  value := input.request.object.metadata.annotations[key]
+  expected := input.parameters.annotations[_]
+  expected.key == key
+  expected.desiredValue != value
+  msg := sprintf("Annotation <%v: %v> does not equal allowed value: %v", [key, value, expected.desiredValue])
+}
+
 violation[{"msg": msg, "details": {}}] {
-    #Retrieve the reference to the annotation you are looking for,
-    #compare it to the value you specified, denies if they do not match.
-    not input.review.object.metadata.annotations[input.parameters.annotationKey] == input.parameters.annotationValue
-    msg := sprintf("Create / update of <%v> blocked - Annotation key <%v> must have value '%v'.", [input.review.object.kind, input.parameters.annotationKey, input.parameters.annotationValue])
+  provided := input.request.object.metadata.annotations[key]
+  required := {annotation | annotation := input.parameters.annotations[_].key}
+  missing := required - provided
+  count(missing) > 0
+  msg := sprintf("you must provide annotations: '%v'.", [missing])
 }

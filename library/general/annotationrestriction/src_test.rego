@@ -66,7 +66,6 @@ test_input_two_wrong {
     count(results) == 2
 }
 
-
 empty_ingress = out {
   out = {
     "object": {
