@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,10 @@ violation[{"msg": "denied!"}] {
 	ctrl.SetLogger(zap.Logger(true))
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	wm := watch.New(mgr.GetConfig())
+	if err := mgr.Add(wm); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
 	c = mgr.GetClient()
 
 	// initialize OPA
@@ -101,18 +106,20 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	rec, _ := newReconciler(mgr, opa, watch.New(ctx, mgr.GetConfig()))
+	rec, _ := newReconciler(mgr, opa, wm)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	once := sync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			close(stopMgr)
+			mgrStopped.Wait()
+		})
+	}
 
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
+	defer testMgrStopped()
 
 	// Create the ConstraintTemplate object and expect the CRD to be created
 	err = c.Create(context.TODO(), instance)
@@ -270,7 +277,10 @@ anyrule[}}}//invalid//rego
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
 
-	cancel()
+	testMgrStopped()
+	if err := wm.Pause(); err != nil {
+		t.Fatalf("unable to pause watch manager: %s", err)
+	}
 	time.Sleep(5 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
@@ -280,7 +290,7 @@ anyrule[}}}//invalid//rego
 
 	g.Eventually(func() error {
 		obj := &v1beta1.ConstraintTemplate{}
-		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
+		if err := newCli.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
 			return err
 		}
 		if containsString(finalizerName, obj.GetFinalizers()) {
