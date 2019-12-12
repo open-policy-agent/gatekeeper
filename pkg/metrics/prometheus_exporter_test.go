@@ -14,7 +14,7 @@ func TestPrometheusExporter(t *testing.T) {
 			t.Error(err)
 		}
 		if e == nil {
-			t.Fatal("expected prometheus exporter but got nil")
+			t.Error("expected prometheus exporter but got nil")
 		}
 	}()
 
