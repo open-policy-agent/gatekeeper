@@ -48,8 +48,7 @@ func (r *runner) Start(stop <-chan struct{}) error {
 	go func() { errCh <- r.newMetricsExporter() }()
 	select {
 	case <-stop:
-		err := r.shutdownMetricsExporter(ctx)
-		return err
+		return r.shutdownMetricsExporter(ctx)
 	case err := <-errCh:
 		if err != nil {
 			return err
@@ -79,13 +78,15 @@ func (r *runner) newMetricsExporter() error {
 
 func (r *runner) shutdownMetricsExporter(ctx context.Context) error {
 	mb := strings.ToLower(*metricsBackend)
-	var err error
 	switch mb {
 	case prometheusExporter:
 		log.Info("shutting down prometheus server")
-		err = curPromSrv.Shutdown(ctx)
+		if err := curPromSrv.Shutdown(ctx); err != nil {
+			return err
+		}
+		return nil
 	default:
-		err = fmt.Errorf("nothing to shutdown for unsupported metrics backend %v", *metricsBackend)
+		log.Info("nothing to shutdown for unsupported metrics backend %v", *metricsBackend)
+		return nil
 	}
-	return err
 }
