@@ -39,16 +39,18 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 1. Commit the changes and push to remote repository to create a pull request.
 
 	```
-	git commit -a -s -m "Prepare <version> release"
-    git commit --amend --signoff
-	git push <FORK> <FEATURE-BRANCH>
+	git checkout -b release-<NEW VERSION>
+	git commit -a -s -m "Prepare <NEW VERSION> release"
+	git push <YOUR FORK>
 	```
 
 1. Once the PR is merged to master, tag master with release version and push tags to remote repository.
 
 	```
-	git tag -a <NEWVERSION> -m '<NEWVERSION>'
-	git push origin <NEWVERSION>
+	git checkout master
+	git pull origin master
+	git tag -a <NEW VERSION> -m '<NEW VERSION>'
+	git push origin <NEW VERSION>
 	```
 
 1. Pushing the release tag will trigger the Travis-CI pipeline to run `make travis-release-deploy`. 
@@ -61,7 +63,7 @@ Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` d
 1. Open browser and go to https://github.com/open-policy-agent/gatekeeper/releases
 
 1. Create a new release from the new tag version.
-	- Release title: <NEWVERSION>
+	- Release title: <NEW VERSION>
     - Update release message with Features, Bug Fixes, Breaking Changes, etc.
 	- Click `Publish release` will automatically include the binaries from the tag.
 
@@ -70,6 +72,7 @@ Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` d
 1. Execute the release-manifest target to update deployment yamls. Give the semantic version of the release:
 
 	```
+	git checkout -b 'release-manifest-<VERSION>'
 	make release-manifest NEWVERSION=v3.0.4-beta.x
 	```
 1. Preview the changes:
@@ -81,6 +84,5 @@ Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` d
 
 	```
 	git commit -a -s -m "Bump deployment <version>"
-    git commit --amend --signoff
-	git push <FORK> <FEATURE-BRANCH>
+	git push <YOUR FORK>
 	```

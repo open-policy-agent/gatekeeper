@@ -38,6 +38,18 @@ Finally, Gatekeeper's engine is designed to be portable, allowing administrators
 
 #### Prerequisites
 
+##### Minimum Kubernetes Version
+
+**To use Gatekeeper, you should have a minimum Kubernetes version of 1.14, which adds
+webhook timeouts.**
+
+You can install Gatekeeper in earlier versions of Kubernetes either by
+removing incompatible fields from the manifest or by setting `--validate=false`
+when applying the manifest. Be warned that, without timeouts on the webhook, your
+API Server could timeout when Gatekeeper is down. Kubernetes 1.14 fixes this issue.
+
+##### RBAC Permissions
+
 For either installation method, make sure you have cluster admin permissions:
 
 ```sh
@@ -67,6 +79,15 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * run `make patch-image REPOSITORY=<YOUR DESIRED DESTINATION DOCKER IMAGE>`
    * make sure your kubectl context is set to the desired installation cluster
    * run `make deploy`
+
+#### Deploying via Helm ####
+
+A basic Helm v2 template exists in `chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via 
+```sh
+helm install chart/gatekeeper-operator/
+```
+
+You can alter the variables in `chart/gatekeeper-operator/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
 ### Uninstallation
 
@@ -100,6 +121,13 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
    * cd to the repository directory
    * run `make uninstall`
 
+##### Using Helm
+
+If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
+```sh
+helm delete <release name> --purge
+```
+
 ##### Manually Removing Constraints
 
 If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
@@ -114,7 +142,7 @@ Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-ag
 
 ### Constraint Templates
 
-Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/v0.10.7/how-do-i-write-policies/) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
+Before you can define a constraint, you must first define a `ConstraintTemplate`, which describes both the [Rego](https://www.openpolicyagent.org/docs/latest/#rego) that enforces the constraint and the schema of the constraint. The schema of the constraint allows an admin to fine-tune the behavior of a constraint, much like arguments to a function.
 
 Here is an example constraint template that requires all labels described by the constraint to be present:
 
@@ -364,3 +392,41 @@ To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
+
+# FAQ
+
+## Finalizers
+
+### Why does Gatekeeper add sync finalizers?
+
+When Gatekeeper syncs resources it's adding them to OPA's internal cache. This
+cache may be used by constraints to render decisions. Because of this stale data
+is bad. It can lead to invalid rejections (e.g. when a uniqueness constraint is
+violated because an update conflicts with a since-deleted resource), or invalid
+acceptance (e.g. if a constraint uses the cache to make sure a Deployment exists
+before a Service can be created). Finalizers help avoid stale state by making
+sure Gatekeeper has processed the deletion and removed the object from its cache
+before the API Server can garbage collect the object.
+
+### How can I remove finalizers? Why are they hanging around?
+
+If Gatekeeper is running, it should automatically clean up the finalizer. If it
+isn't this is a misbehavior that should be investigated. Please file a bug with
+as much data as you can gather. Including logs, memory usage and utilization, CPU usage and
+utilization and any other information that may be helpful.
+
+If Gatekeeper is not running:
+
+* If it did not have a clean exit, Gatekeeper's garbage collection routine would
+  have been unable to run. Reasons for an unclean exit are:
+  * The service account was deleted before the Pod exited, blocking the GC
+    process (this can happen if you delete the gatekeeer-system namespace
+    before deleting the deployment or deleting the manifest all at
+    once).
+  * The container was sent a hard kill signal
+  * The container had a panic
+
+It is safest to remove the Config resource before uninstalling Gatekeeper, as
+that causes finalizers to be removed outside of the normal GC process.
+
+Finalizers can be removed manually via `kubectl edit` or `kubectl patch`

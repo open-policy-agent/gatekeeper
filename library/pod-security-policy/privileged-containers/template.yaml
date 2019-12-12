@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPPrivilegedContainer
-        listKind: K8sPSPPrivilegedContainerList
-        plural: k8spspprivilegedcontainer
-        singular: k8spspprivilegedcontainer
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

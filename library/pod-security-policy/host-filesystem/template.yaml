@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPHostFilesystem
-        listKind: K8sPSPHostFilesystemList
-        plural: k8spsphostfilesystem
-        singular: k8spsphostfilesystem
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

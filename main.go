@@ -150,7 +150,7 @@ func main() {
 	time.Sleep(5 * time.Second)
 
 	// Create a fresh client to be sure RESTmapper is up-to-date
-	setupLog.Info("removing finalizers...")
+	setupLog.Info("cleaning state...")
 	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: mgr.GetScheme(), Mapper: nil})
 	if err != nil {
 		setupLog.Error(err, "unable to create cleanup client")
@@ -160,15 +160,15 @@ func main() {
 	// Clean up sync finalizers
 	// This logic should be disabled if OPA is run as a sidecar
 	syncCleaned := make(chan struct{})
-	go configController.RemoveAllConfigFinalizers(cli, syncCleaned)
+	go configController.TearDownState(cli, syncCleaned)
 
 	// Clean up constraint finalizers
 	templatesCleaned := make(chan struct{})
-	go constrainttemplate.RemoveAllFinalizers(cli, templatesCleaned)
+	go constrainttemplate.TearDownState(cli, templatesCleaned)
 
 	<-syncCleaned
 	<-templatesCleaned
-	setupLog.Info("finalizers removed")
+	setupLog.Info("state cleaned")
 	if hadError {
 		os.Exit(1)
 	}

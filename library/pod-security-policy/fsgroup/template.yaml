@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPFSGroup
-        listKind: K8sPSPFSGroupList
-        plural: k8spspfsgroup
-        singular: k8spspfsgroup
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

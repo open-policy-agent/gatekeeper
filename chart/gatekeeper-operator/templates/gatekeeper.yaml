@@ -2,7 +2,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-system
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
@@ -10,7 +14,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.2
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
   creationTimestamp: null
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh
@@ -18,6 +29,8 @@ spec:
     kind: Config
     listKind: ConfigList
     plural: configs
+    shortNames:
+    - config
     singular: config
   scope: Namespaced
   validation:
@@ -116,17 +129,118 @@ spec:
   - name: v1alpha1
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+  creationTimestamp: null
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    controller-tools.k8s.io: "1.0"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: constrainttemplates.templates.gatekeeper.sh
+spec:
+  group: templates.gatekeeper.sh
+  names:
+    kind: ConstraintTemplate
+    plural: constrainttemplates
+    shortNames:
+    - constraints
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            crd:
+              properties:
+                spec:
+                  properties:
+                    names:
+                      properties:
+                        kind:
+                          type: string
+                      type: object
+                    validation:
+                      type: object
+                  type: object
+              type: object
+            targets:
+              items:
+                properties:
+                  libs:
+                    items:
+                      type: string
+                    type: array
+                  rego:
+                    type: string
+                  target:
+                    type: string
+                type: object
+              type: array
+          type: object
+        status:
+          properties:
+            byPod:
+              items:
+                properties:
+                  errors:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        location:
+                          type: string
+                        message:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
+                    type: string
+                type: object
+              type: array
+            created:
+              type: boolean
+          type: object
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-manager-role
 rules:
 - apiGroups:
@@ -256,6 +370,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -269,12 +388,22 @@ subjects:
 apiVersion: v1
 kind: Secret
 metadata:
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-service
   namespace: gatekeeper-system
 spec:
@@ -282,29 +411,60 @@ spec:
   - port: 443
     targetPort: 8443
   selector:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: 1
+  replicas: {{ .Values.Replicas }}
+  resources: 
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
   selector:
     matchLabels:
+      app: '{{ template "gatekeeper-operator.name" . }}'
+      chart: '{{ template "gatekeeper-operator.name" . }}'
       control-plane: controller-manager
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
   template:
     metadata:
       labels:
+        app: '{{ template "gatekeeper-operator.name" . }}'
+        chart: '{{ template "gatekeeper-operator.name" . }}'
         control-plane: controller-manager
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
     spec:
       containers:
       - args:
-        - --auditInterval=30
+        - --auditInterval={{ .Values.auditInterval }}
         - --port=8443
+        - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
         command:
         - /manager
         env:
@@ -317,8 +477,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.0.4-beta.2
-        imagePullPolicy: Always
+        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         name: manager
         ports:
         - containerPort: 8443
@@ -346,6 +506,11 @@ apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: gatekeeper-validating-webhook-configuration
 webhooks:
 - clientConfig:
@@ -372,102 +537,3 @@ webhooks:
     - '*'
   sideEffects: None
   timeoutSeconds: 5
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  creationTimestamp: null
-  labels:
-    controller-tools.k8s.io: "1.0"
-  name: constrainttemplates.templates.gatekeeper.sh
-spec:
-  group: templates.gatekeeper.sh
-  names:
-    kind: ConstraintTemplate
-    plural: constrainttemplates
-  scope: Cluster
-  validation:
-    openAPIV3Schema:
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          properties:
-            crd:
-              properties:
-                spec:
-                  properties:
-                    names:
-                      properties:
-                        kind:
-                          type: string
-                      type: object
-                    validation:
-                      type: object
-                  type: object
-              type: object
-            targets:
-              items:
-                properties:
-                  libs:
-                    items:
-                      type: string
-                    type: array
-                  rego:
-                    type: string
-                  target:
-                    type: string
-                type: object
-              type: array
-          type: object
-        status:
-          properties:
-            byPod:
-              items:
-                properties:
-                  errors:
-                    items:
-                      properties:
-                        code:
-                          type: string
-                        location:
-                          type: string
-                        message:
-                          type: string
-                      required:
-                      - code
-                      - message
-                      type: object
-                    type: array
-                  id:
-                    description: a unique identifier for the pod that wrote the status
-                    type: string
-                type: object
-              type: array
-            created:
-              type: boolean
-          type: object
-  version: v1beta1
-  versions:
-  - name: v1beta1
-    served: true
-    storage: true
-  - name: v1alpha1
-    served: true
-    storage: false
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

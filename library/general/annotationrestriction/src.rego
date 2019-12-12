@@ -13,5 +13,5 @@ violation[{"msg": msg, "details": {}}] {
   required := {annotation | annotation := input.parameters.annotations[_].key}
   missing := required - provided
   count(missing) > 0
-  msg := sprintf("you must provide annotations: '%v'.", [missing])
+  msg := sprintf("You must provide annotations: '%v'.", [missing])
 }
