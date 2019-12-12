@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,7 +34,6 @@ import (
 
 const (
 	caName                 = "gatekeeper-ca"
-	namespace              = "gatekeeper-system"
 	service                = "gatekeeper-webhook-service"
 	certName               = "tls.crt"
 	keyName                = "tls.key"
@@ -47,11 +47,11 @@ var crLog = logf.Log.WithName("cert-rotation")
 
 var (
 	secretKey = types.NamespacedName{
-		Namespace: namespace,
+		Namespace: util.GetNamespace(),
 		Name:      "gatekeeper-webhook-server-cert",
 	}
 	// DNSName is <service name>.<namespace>.svc
-	DNSName = fmt.Sprintf("%s.%s.svc", service, namespace)
+	DNSName = fmt.Sprintf("%s.%s.svc", service, util.GetNamespace())
 	vwhGVK  = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 	vwhKey  = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
 )
