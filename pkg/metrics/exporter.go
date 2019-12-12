@@ -1,18 +1,13 @@
 package metrics
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"strings"
-	"sync"
 
 	"go.opencensus.io/stats/view"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-)
-
-var (
-	curMetricsExporter view.Exporter
-	metricsMux         sync.RWMutex
 )
 
 var (
@@ -22,45 +17,52 @@ var (
 
 const prometheusExporter = "prometheus"
 
-type Runner struct {
+var _ manager.Runnable = &runner{}
+
+type runner struct {
 	mgr manager.Manager
 }
 
 func AddToManager(m manager.Manager) error {
-	mr, err := New(m)
+	mr, err := new(m)
 	if err != nil {
 		return err
 	}
 	return m.Add(mr)
 }
 
-func New(mgr manager.Manager) (*Runner, error) {
-	mm := &Runner{
+func new(mgr manager.Manager) (*runner, error) {
+	mr := &runner{
 		mgr: mgr,
 	}
-	return mm, nil
+	return mr, nil
 }
 
 // Start implements the Runnable interface
-func (r *Runner) Start(stop <-chan struct{}) error {
+func (r *runner) Start(stop <-chan struct{}) error {
 	log.Info("Starting metrics runner")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	defer log.Info("Stopping metrics runner workers")
-	return r.newMetricsExporter()
+	errCh := make(chan error)
+	go func() { errCh <- r.newMetricsExporter() }()
+	select {
+	case <-stop:
+		err := r.shutdownMetricsExporter(ctx)
+		return err
+	case err := <-errCh:
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *Runner) newMetricsExporter() error {
-	ce := r.getCurMetricsExporter()
-	// If there is a Prometheus Exporter server running, stop it.
-	resetCurPromSrv()
-
-	if ce != nil {
-		// UnregisterExporter is idempotent and it can be called multiple times for the same exporter without side effects.
-		view.UnregisterExporter(ce)
-	}
+func (r *runner) newMetricsExporter() error {
 	var e view.Exporter
 	var err error
 	mb := strings.ToLower(*metricsBackend)
-	log.Info("metrics", "using backend", mb)
+	log.Info("metrics", "backend", mb)
 	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
@@ -71,17 +73,19 @@ func (r *Runner) newMetricsExporter() error {
 	if err != nil {
 		return err
 	}
-
-	metricsMux.Lock()
-	defer metricsMux.Unlock()
 	view.RegisterExporter(e)
-	curMetricsExporter = e
-
 	return nil
 }
 
-func (r *Runner) getCurMetricsExporter() view.Exporter {
-	metricsMux.RLock()
-	defer metricsMux.RUnlock()
-	return curMetricsExporter
+func (r *runner) shutdownMetricsExporter(ctx context.Context) error {
+	mb := strings.ToLower(*metricsBackend)
+	var err error
+	switch mb {
+	case prometheusExporter:
+		log.Info("shutting down prometheus server")
+		err = curPromSrv.Shutdown(ctx)
+	default:
+		err = fmt.Errorf("nothing to shutdown for unsupported metrics backend %v", *metricsBackend)
+	}
+	return err
 }

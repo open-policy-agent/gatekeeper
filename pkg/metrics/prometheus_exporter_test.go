@@ -19,8 +19,7 @@ func TestPrometheusExporter(t *testing.T) {
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	srv := getCurPromSrv()
-	if srv.Addr != expectedAddr {
-		t.Errorf("Expected address %v but got %v", expectedAddr, srv.Addr)
+	if curPromSrv.Addr != expectedAddr {
+		t.Errorf("Expected address %v but got %v", expectedAddr, curPromSrv.Addr)
 	}
 }

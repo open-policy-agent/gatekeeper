@@ -131,10 +131,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return vResp
 	}
 
-	var requestResponse requestResponse
+	// default response is deny
+	requestResponse := denyResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportRequest(requestResponse, time.Since(timeStart)); err != nil {
+			if err := h.reporter.ReportRequest(
+				requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
 		}
