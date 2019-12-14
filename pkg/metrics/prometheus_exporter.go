@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
-	"go.opencensus.io/stats/view"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -15,11 +14,11 @@ var log = logf.Log.WithName("metrics")
 
 const namespace = "gatekeeper"
 
-func newPrometheusExporter() (view.Exporter, error) {
+func newPrometheusExporter() error {
 	e, err := prometheus.NewExporter(prometheus.Options{Namespace: namespace})
 	if err != nil {
 		log.Error(err, "Failed to create the Prometheus exporter.")
-		return nil, err
+		return err
 	}
 	errCh := make(chan error)
 	log.Info("Starting server for OpenCensus Prometheus exporter")
@@ -28,9 +27,9 @@ func newPrometheusExporter() (view.Exporter, error) {
 	errCh <- srv.ListenAndServe()
 	err = <-errCh
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
 func startNewPromSrv(e *prometheus.Exporter, port int) *http.Server {

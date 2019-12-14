@@ -9,12 +9,9 @@ func TestPrometheusExporter(t *testing.T) {
 	const expectedAddr = ":8888"
 
 	go func() {
-		e, err := newPrometheusExporter()
+		err := newPrometheusExporter()
 		if err != nil {
 			t.Error(err)
-		}
-		if e == nil {
-			t.Error("expected prometheus exporter but got nil")
 		}
 	}()
 

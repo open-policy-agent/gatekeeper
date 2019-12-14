@@ -81,9 +81,10 @@ type validationHandler struct {
 type requestResponse string
 
 const (
-	errorResponse requestResponse = "error"
-	denyResponse  requestResponse = "deny"
-	allowResponse requestResponse = "allow"
+	errorResponse   requestResponse = "error"
+	denyResponse    requestResponse = "deny"
+	allowResponse   requestResponse = "allow"
+	unknownResponse requestResponse = "unknown"
 )
 
 // Handle the validation request
@@ -131,8 +132,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return vResp
 	}
 
-	// default response is deny
-	requestResponse := denyResponse
+	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
 			if err := h.reporter.ReportRequest(

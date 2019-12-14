@@ -65,7 +65,7 @@ func (r *runner) newMetricsExporter() error {
 	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
-		e, err = newPrometheusExporter()
+		err = newPrometheusExporter()
 	default:
 		err = fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
 	}
@@ -81,8 +81,10 @@ func (r *runner) shutdownMetricsExporter(ctx context.Context) error {
 	switch mb {
 	case prometheusExporter:
 		log.Info("shutting down prometheus server")
-		if err := curPromSrv.Shutdown(ctx); err != nil {
-			return err
+		if curPromSrv != nil {
+			if err := curPromSrv.Shutdown(ctx); err != nil {
+				return err
+			}
 		}
 		return nil
 	default:
