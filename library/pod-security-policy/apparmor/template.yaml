@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPAppArmor
-        listKind: K8sPSPAppArmorList
-        plural: k8spspapparmor
-        singular: k8spspapparmor
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

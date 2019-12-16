@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPProcMount
-        listKind: K8sPSPProcMountList
-        plural: k8spspprocmount
-        singular: k8spspprocmount
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

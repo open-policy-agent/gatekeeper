@@ -21,13 +21,14 @@ import (
 func newForTest(fn func(*rest.Config) (Discovery, error)) *Manager {
 	wm := &Manager{
 		newMgrFn:     newFakeMgr,
-		stopper:      make(chan struct{}),
+		stopper:      func() {},
 		managedKinds: newRecordKeeper(),
 		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          nil,
 		newDiscovery: fn,
 	}
 	wm.managedKinds.mgr = wm
+	wm.started.Store(false)
 	return wm
 }
 
@@ -127,7 +128,7 @@ func makeGvk(k string) schema.GroupVersionKind {
 
 func waitForWatchManagerStart(wm *Manager) bool {
 	for i := 0; i < 10; i++ {
-		if wm.started == true {
+		if wm.started.Load().(bool) == true {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -403,7 +404,7 @@ func TestRegistrar(t *testing.T) {
 	}
 
 	t.Run("Manager restarts when not started", func(t *testing.T) {
-		wm.started = false
+		wm.started.Store(false)
 		b, err := wm.updateManager()
 		if err != nil {
 			t.Errorf("Could not update manager: %s", err)

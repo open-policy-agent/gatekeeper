@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sPSPAllowedUsers
-        listKind: K8sPSPAllowedUsersList
-        plural: k8spspallowedusers
-        singular: k8spspallowedusers
       validation:
         openAPIV3Schema:
           properties:

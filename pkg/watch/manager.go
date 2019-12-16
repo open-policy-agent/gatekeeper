@@ -1,13 +1,12 @@
 package watch
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	errp "github.com/pkg/errors"
@@ -26,10 +25,11 @@ var log = logf.Log.WithName("watchManager")
 type Manager struct {
 	newMgrFn   func(*Manager) (manager.Manager, error)
 	startedMux sync.RWMutex
-	stopper    chan struct{}
+	stopper    func()
 	stopped    chan struct{}
-	started    bool
-	paused     bool
+	// started is a bool (which is not thread-safe by default)
+	started atomic.Value
+	paused  bool
 	// managedKinds stores the kinds that should be managed, mapping CRD Kind to CRD Name
 	managedKinds *recordKeeper
 	// watchedKinds are the kinds that have a currently running constraint controller
@@ -47,18 +47,17 @@ func newDiscovery(c *rest.Config) (Discovery, error) {
 	return discovery.NewDiscoveryClientForConfig(c)
 }
 
-func New(ctx context.Context, cfg *rest.Config) *Manager {
+func New(cfg *rest.Config) *Manager {
 	wm := &Manager{
 		newMgrFn:     newMgr,
-		stopper:      make(chan struct{}),
-		stopped:      make(chan struct{}),
+		stopper:      func() {},
 		managedKinds: newRecordKeeper(),
 		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          cfg,
 		newDiscovery: newDiscovery,
 	}
+	wm.started.Store(false)
 	wm.managedKinds.mgr = wm
-	go wm.updateManagerLoop(ctx)
 	return wm
 }
 
@@ -77,33 +76,6 @@ func newMgr(wm *Manager) (manager.Manager, error) {
 	return mgr, nil
 }
 
-func (wm *Manager) addWatch(gvk schema.GroupVersionKind, registrar *Registrar) error {
-	wv := vitals{
-		gvk:        gvk,
-		registrars: map[*Registrar]bool{registrar: true},
-	}
-	wm.managedKinds.Update(map[string]map[schema.GroupVersionKind]vitals{registrar.parentName: {gvk: wv}})
-	return nil
-}
-
-func (wm *Manager) replaceWatchSet(gvks []schema.GroupVersionKind, registrar *Registrar) error {
-	roster := make(map[schema.GroupVersionKind]vitals)
-	for _, gvk := range gvks {
-		wv := vitals{
-			gvk:        gvk,
-			registrars: map[*Registrar]bool{registrar: true},
-		}
-		roster[gvk] = wv
-	}
-	wm.managedKinds.ReplaceRegistrarRoster(registrar, roster)
-	return nil
-}
-
-func (wm *Manager) removeWatch(gvk schema.GroupVersionKind, registrar *Registrar) error {
-	wm.managedKinds.Remove(map[string][]schema.GroupVersionKind{registrar.parentName: {gvk}})
-	return nil
-}
-
 // updateManager scans for changes to the watch list and restarts the manager if any are detected
 func (wm *Manager) updateManager() (bool, error) {
 	intent, err := wm.managedKinds.Get()
@@ -114,7 +86,8 @@ func (wm *Manager) updateManager() (bool, error) {
 	if err != nil {
 		return false, errp.Wrap(err, "error gathering watch changes, not restarting watch manager")
 	}
-	if wm.started && len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
+	started := wm.started.Load().(bool)
+	if started && len(added) == 0 && len(removed) == 0 && len(changed) == 0 {
 		return false, nil
 	}
 	var a, r, c []string
@@ -127,14 +100,14 @@ func (wm *Manager) updateManager() (bool, error) {
 	for k := range changed {
 		a = append(c, k.String())
 	}
-	log.Info("Watcher registry found changes and/or needs restarting", "started", wm.started, "add", a, "remove", r, "change", c)
+	log.Info("Watcher registry found changes and/or needs restarting", "started", started, "add", a, "remove", r, "change", c)
 
 	readyToAdd, err := wm.filterPendingResources(added)
 	if err != nil {
 		return false, errp.Wrap(err, "could not filter pending resources, not restarting watch manager")
 	}
 
-	if wm.started && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
+	if started && len(readyToAdd) == 0 && len(removed) == 0 && len(changed) == 0 {
 		log.Info("Only changes are pending additions; not restarting watch manager")
 		return false, nil
 	}
@@ -162,18 +135,19 @@ func (wm *Manager) updateManager() (bool, error) {
 	return true, nil
 }
 
-// updateManagerLoop looks for changes to the watch roster every 5 seconds. This method has a dual
+// Start looks for changes to the watch roster every 5 seconds. This method has a
 // benefit compared to restarting the manager every time a controller changes the watch
 // of placing an upper bound on how often the manager restarts.
-func (wm *Manager) updateManagerLoop(ctx context.Context) {
+func (wm *Manager) Start(done <-chan struct{}) error {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-done:
 			log.Info("watch manager shutting down")
 			wm.close()
-			return
-		default:
-			time.Sleep(5 * time.Second)
+			return nil
+		case <-ticker.C:
 			if _, err := wm.updateOrPause(); err != nil {
 				log.Error(err, "error in updateManagerLoop")
 			}
@@ -198,9 +172,8 @@ func (wm *Manager) updateOrPause() (bool, error) {
 func (wm *Manager) Pause() error {
 	wm.startedMux.Lock()
 	defer wm.startedMux.Unlock()
-	if wm.started {
-		close(wm.stopper)
-		wm.stopper = make(chan struct{})
+	if wm.stopped != nil {
+		wm.stopper()
 		select {
 		case <-wm.stopped:
 		case <-time.After(10 * time.Second):
@@ -227,13 +200,17 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		kindStr = append(kindStr, gvk.String())
 	}
 	log.Info("restarting Watch Manager", "kinds", strings.Join(kindStr, ", "))
-	close(wm.stopper)
+	wm.stopper()
 	// Only block on the old manager's exit if one has previously been started
-	if wm.started {
+	if wm.stopped != nil {
 		<-wm.stopped
 	}
 
-	wm.stopper = make(chan struct{})
+	stopper := make(chan struct{})
+	stopOnce := sync.Once{}
+	wm.stopper = func() {
+		stopOnce.Do(func() { close(stopper) })
+	}
 	wm.stopped = make(chan struct{})
 	mgr, err := wm.newMgrFn(wm)
 	if err != nil {
@@ -248,18 +225,18 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		}
 	}
 
-	go wm.startMgr(mgr, wm.stopper, wm.stopped, kindStr)
+	go wm.startMgr(mgr, stopper, wm.stopped, kindStr)
 	return nil
 }
 
 func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
 	log.Info("Calling Manager.Start()", "kinds", kinds)
-	wm.started = true
+	wm.started.Store(true)
 	if err := mgr.Start(stopper); err != nil {
 		log.Error(err, "error starting watch manager")
 	}
 	// mgr.Start() only returns after the manager has completely stopped
-	wm.started = false
+	wm.started.Store(false)
 	close(stopped)
 	log.Info("sub-manager exiting", "kinds", kinds)
 }
@@ -320,169 +297,17 @@ func (wm *Manager) filterPendingResources(kinds map[schema.GroupVersionKind]vita
 }
 
 func (wm *Manager) close() {
-	close(wm.stopper)
+	log.Info("attempting to stop watch manager...")
+	wm.startedMux.Lock()
+	defer wm.startedMux.Unlock()
+	wm.stopper()
 	log.Info("waiting for watch manager to shut down")
-	<-wm.stopped
+	if wm.stopped != nil {
+		<-wm.stopped
+	}
 	log.Info("watch manager finished shutting down")
 }
 
 func (wm *Manager) GetManagedGVK() ([]schema.GroupVersionKind, error) {
 	return wm.managedKinds.GetGVK()
-}
-
-type vitals struct {
-	gvk        schema.GroupVersionKind
-	registrars map[*Registrar]bool
-}
-
-func (w *vitals) merge(wv vitals) (vitals, error) {
-	registrars := make(map[*Registrar]bool)
-	for r := range w.registrars {
-		registrars[r] = true
-	}
-	for r := range wv.registrars {
-		registrars[r] = true
-	}
-	return vitals{
-		gvk:        w.gvk,
-		registrars: registrars,
-	}, nil
-}
-
-func (w *vitals) addFns() []func(manager.Manager, schema.GroupVersionKind) error {
-	var addFns []func(manager.Manager, schema.GroupVersionKind) error
-	for r := range w.registrars {
-		addFns = append(addFns, r.addFns...)
-	}
-	return addFns
-}
-
-// recordKeeper holds the source of truth for the intended state of the manager
-// This is essentially a read/write lock on the wrapped map (the `intent` variable)
-type recordKeeper struct {
-	// map[registrarName][kind]
-	intent     map[string]map[schema.GroupVersionKind]vitals
-	intentMux  sync.RWMutex
-	registrars map[string]*Registrar
-	mgr        *Manager
-}
-
-func (r *recordKeeper) NewRegistrar(parentName string, addFns []func(manager.Manager, schema.GroupVersionKind) error) (*Registrar, error) {
-	r.intentMux.Lock()
-	defer r.intentMux.Unlock()
-	if _, ok := r.registrars[parentName]; ok {
-		return nil, fmt.Errorf("registrar for %s already exists", parentName)
-	}
-	addFnsCpy := make([]func(manager.Manager, schema.GroupVersionKind) error, len(addFns))
-	copy(addFnsCpy, addFns)
-	r.registrars[parentName] = &Registrar{
-		parentName: parentName,
-		addFns:     addFnsCpy,
-		mgr:        r.mgr,
-	}
-	return r.registrars[parentName], nil
-}
-
-func (r *recordKeeper) Update(u map[string]map[schema.GroupVersionKind]vitals) {
-	r.intentMux.Lock()
-	defer r.intentMux.Unlock()
-	for k := range u {
-		if _, ok := r.intent[k]; !ok {
-			r.intent[k] = make(map[schema.GroupVersionKind]vitals)
-		}
-		for k2, v := range u[k] {
-			r.intent[k][k2] = v
-		}
-	}
-}
-
-func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.GroupVersionKind]vitals) {
-	r.intentMux.Lock()
-	defer r.intentMux.Unlock()
-	r.intent[reg.parentName] = roster
-}
-
-func (r *recordKeeper) Remove(rm map[string][]schema.GroupVersionKind) {
-	r.intentMux.Lock()
-	defer r.intentMux.Unlock()
-	for k, lst := range rm {
-		for _, k2 := range lst {
-			delete(r.intent[k], k2)
-		}
-	}
-}
-
-func (r *recordKeeper) Get() (map[schema.GroupVersionKind]vitals, error) {
-	r.intentMux.RLock()
-	defer r.intentMux.RUnlock()
-	cpy := make(map[string]map[schema.GroupVersionKind]vitals)
-	for k := range r.intent {
-		cpy[k] = make(map[schema.GroupVersionKind]vitals)
-		for k2, v := range r.intent[k] {
-			cpy[k][k2] = v
-		}
-	}
-	managedKinds := make(map[schema.GroupVersionKind]vitals)
-	for _, registrar := range cpy {
-		for gvk, v := range registrar {
-			if mk, ok := managedKinds[gvk]; ok {
-				merged, err := mk.merge(v)
-				if err != nil {
-					return nil, err
-				}
-				managedKinds[gvk] = merged
-			} else {
-				managedKinds[gvk] = v
-			}
-		}
-	}
-	return managedKinds, nil
-}
-
-func (r *recordKeeper) GetGVK() ([]schema.GroupVersionKind, error) {
-	var gvks []schema.GroupVersionKind
-
-	g, err := r.Get()
-	if err != nil {
-		return nil, err
-	}
-	for gvk := range g {
-		gvks = append(gvks, gvk)
-	}
-	return gvks, nil
-}
-
-func newRecordKeeper() *recordKeeper {
-	return &recordKeeper{
-		intent:     make(map[string]map[schema.GroupVersionKind]vitals),
-		registrars: make(map[string]*Registrar),
-	}
-}
-
-// A Registrar allows a parent to add/remove child watches
-type Registrar struct {
-	parentName string
-	addFns     []func(manager.Manager, schema.GroupVersionKind) error
-	mgr        *Manager
-}
-
-// AddWatch registers a watch for the given kind
-func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
-	return r.mgr.addWatch(gvk, r)
-}
-
-func (r *Registrar) ReplaceWatch(gvks []schema.GroupVersionKind) error {
-	return r.mgr.replaceWatchSet(gvks, r)
-}
-
-func (r *Registrar) RemoveWatch(gvk schema.GroupVersionKind) error {
-	return r.mgr.removeWatch(gvk, r)
-}
-
-func (r *Registrar) Pause() error {
-	return r.mgr.Pause()
-}
-
-func (r *Registrar) Unpause() error {
-	return r.mgr.Unpause()
 }
