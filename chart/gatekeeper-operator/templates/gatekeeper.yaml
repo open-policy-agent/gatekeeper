@@ -5,6 +5,7 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper-ignore: no-self-managing
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-system
@@ -525,7 +526,7 @@ webhooks:
   name: validation.gatekeeper.sh
   namespaceSelector:
     matchExpressions:
-    - key: control-plane
+    - key: gatekeeper-ignore
       operator: DoesNotExist
   rules:
   - apiGroups:
@@ -537,5 +538,25 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 5
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Ignore
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
   sideEffects: None
   timeoutSeconds: 5

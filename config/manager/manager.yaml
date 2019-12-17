@@ -3,6 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper-ignore: no-self-managing
   name: system
 ---
 apiVersion: apps/v1

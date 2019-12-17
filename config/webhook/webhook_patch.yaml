@@ -16,5 +16,8 @@ webhooks:
     timeoutSeconds: 5
     namespaceSelector:
       matchExpressions:
-        - key: control-plane
+        - key: gatekeeper-ignore
           operator: DoesNotExist
+  - name: check-ignore-label.gatekeeper.sh
+    sideEffects: None
+    timeoutSeconds: 5
