@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -46,11 +47,6 @@ var (
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
 
-var supportedEnforcementActions = []string{
-	"deny",
-	"dryrun",
-}
-
 // +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -74,16 +70,34 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
-	opa    *opa.Client
-	client client.Client
+	opa      *opa.Client
+	client   client.Client
+	reporter StatsReporter
 
 	// for testing
 	injectedConfig *v1alpha1.Config
 }
 
+type requestResponse string
+
+const (
+	errorResponse   requestResponse = "error"
+	denyResponse    requestResponse = "deny"
+	allowResponse   requestResponse = "allow"
+	unknownResponse requestResponse = "unknown"
+)
+
 // Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
+
+	var timeStart = time.Now()
+	reporter, err := newStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+	}
+	h.reporter = reporter
+
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
 	}
@@ -118,6 +132,16 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return vResp
 	}
 
+	requestResponse := unknownResponse
+	defer func() {
+		if h.reporter != nil {
+			if err := h.reporter.ReportRequest(
+				requestResponse, time.Since(timeStart)); err != nil {
+				log.Error(err, "failed to report request")
+			}
+		}
+	}()
+
 	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {
 		log.Error(err, "error executing query")
@@ -126,8 +150,10 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			vResp.Result = &metav1.Status{}
 		}
 		vResp.Result.Code = http.StatusInternalServerError
+		requestResponse = errorResponse
 		return vResp
 	}
+
 	res := resp.Results()
 	if len(res) != 0 {
 		var msgs []string
@@ -142,9 +168,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 				vResp.Result = &metav1.Status{}
 			}
 			vResp.Result.Code = http.StatusForbidden
+			requestResponse = denyResponse
 			return vResp
 		}
 	}
+
+	requestResponse = allowResponse
 	return admission.ValidationResponse(true, "")
 }
 
@@ -209,9 +238,10 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 	if err != nil {
 		return false, err
 	}
-	if found && enforcementActionString != "" {
+	enforcementAction := util.EnforcementAction(enforcementActionString)
+	if found && enforcementAction != "" {
 		if !*disableEnforcementActionValidation {
-			err = validateEnforcementAction(enforcementActionString)
+			err = util.ValidateEnforcementAction(enforcementAction)
 			if err != nil {
 				return false, err
 			}
@@ -220,15 +250,6 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 		return true, nil
 	}
 	return false, nil
-}
-
-func validateEnforcementAction(input string) error {
-	for _, n := range supportedEnforcementActions {
-		if input == n {
-			return nil
-		}
-	}
-	return fmt.Errorf("Could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
 }
 
 // traceSwitch returns true if a request should be traced

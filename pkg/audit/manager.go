@@ -9,6 +9,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,13 +39,14 @@ var (
 
 // Manager allows us to audit resources periodically
 type Manager struct {
-	client  client.Client
-	opa     *opa.Client
-	stopper chan struct{}
-	stopped chan struct{}
-	mgr     manager.Manager
-	ctx     context.Context
-	ucloop  *updateConstraintLoop
+	client   client.Client
+	opa      *opa.Client
+	stopper  chan struct{}
+	stopped  chan struct{}
+	mgr      manager.Manager
+	ctx      context.Context
+	ucloop   *updateConstraintLoop
+	reporter StatsReporter
 }
 
 type auditResult struct {
@@ -70,18 +72,34 @@ type StatusViolation struct {
 
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
+	reporter, err := newStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+		return nil, err
+	}
+
 	am := &Manager{
-		opa:     opa,
-		stopper: make(chan struct{}),
-		stopped: make(chan struct{}),
-		mgr:     mgr,
-		ctx:     ctx,
+		opa:      opa,
+		stopper:  make(chan struct{}),
+		stopped:  make(chan struct{}),
+		mgr:      mgr,
+		ctx:      ctx,
+		reporter: reporter,
 	}
 	return am, nil
 }
 
 // audit performs an audit then updates the status of all constraint resources with the results
 func (am *Manager) audit(ctx context.Context) error {
+	timeStart := time.Now()
+	// record audit latency
+	defer func() {
+		latency := time.Since(timeStart)
+		if err := am.reporter.ReportLatency(latency); err != nil {
+			log.Error(err, "failed to report latency")
+		}
+	}()
+
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
@@ -98,6 +116,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
 	// get updatedLists
 	updateLists := make(map[string][]auditResult)
@@ -165,7 +184,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 
 	for _, r := range resp.Results() {
 		selfLink := r.Constraint.GetSelfLink()
-		totalViolationsPerConstraint[selfLink] = totalViolationsPerConstraint[selfLink] + 1
+		totalViolationsPerConstraint[selfLink]++
 		// skip if this constraint has reached the constraintViolationsLimit
 		if len(updateLists[selfLink]) < *constraintViolationsLimit {
 			name := r.Constraint.GetName()
@@ -205,6 +224,12 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 	group := resourceGV[0]
 	version := resourceGV[1]
 
+	// resetting total violations per enforcement action
+	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+	for _, action := range util.KnownEnforcementActions {
+		totalViolationsPerEnforcementAction[action] = 0
+	}
+
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
 		log.Info("constraint", "resource kind", r.Kind)
@@ -220,12 +245,19 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 			return err
 		}
 		log.Info("constraint", "count of constraints", len(instanceList.Items))
+
 		updateConstraints := make(map[string]unstructured.Unstructured, len(instanceList.Items))
 		// get each constraint
 		for _, item := range instanceList.Items {
 			updateConstraints[item.GetSelfLink()] = item
-		}
 
+			enforcementAction, err := util.GetEnforcementAction(item.Object)
+			if err != nil {
+				return err
+			}
+
+			totalViolationsPerEnforcementAction[enforcementAction] += totalViolations[item.GetSelfLink()]
+		}
 		if len(updateConstraints) > 0 {
 			if am.ucloop != nil {
 				close(am.ucloop.stop)
@@ -245,6 +277,12 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 			}
 			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
+		}
+	}
+
+	for k, v := range totalViolationsPerEnforcementAction {
+		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
+			log.Error(err, "failed to report total violations")
 		}
 	}
 	return nil
