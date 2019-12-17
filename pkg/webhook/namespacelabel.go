@@ -21,7 +21,7 @@ func init() {
 
 const ignoreLabel = "gatekeeper-ignore"
 
-// +kubebuilder:webhook:verbs=CREATE;UPDATE,path=/v1/admitlabel,mutating=false,failurePolicy=ignore,groups="",resources=namespaces,versions=*,name=check-ignore-label.gatekeeper.sh
+// +kubebuilder:webhook:verbs=CREATE;UPDATE,path=/v1/admitlabel,mutating=false,failurePolicy=fail,groups="",resources=namespaces,versions=*,name=check-ignore-label.gatekeeper.sh
 
 // AddLabelWebhook registers the label webhook server with the manager
 func AddLabelWebhook(mgr manager.Manager, _ *opa.Client) error {

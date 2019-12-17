@@ -12,7 +12,7 @@ webhooks:
       name: webhook-service
       namespace: system
       path: /v1/admitlabel
-  failurePolicy: Ignore
+  failurePolicy: Fail
   name: check-ignore-label.gatekeeper.sh
   rules:
   - apiGroups:
