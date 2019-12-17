@@ -6,14 +6,14 @@ import (
 	"os"
 	"testing"
 
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	types "k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	types "k8s.io/api/admission/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func gvk(group, version, kind string) metav1.GroupVersionKind {
@@ -21,25 +21,25 @@ func gvk(group, version, kind string) metav1.GroupVersionKind {
 }
 
 func TestAdmission(t *testing.T) {
-	tests := []struct{
-		name string
-		kind metav1.GroupVersionKind
-		obj runtime.Object
-		op types.Operation
+	tests := []struct {
+		name          string
+		kind          metav1.GroupVersionKind
+		obj           runtime.Object
+		op            types.Operation
 		expectAllowed bool
-	} {
+	}{
 		{
-			name: "Wrong group",
-			kind: gvk("random", "v1", "Namespace"),
-			obj: &unstructured.Unstructured{},
-			op: types.Create,
+			name:          "Wrong group",
+			kind:          gvk("random", "v1", "Namespace"),
+			obj:           &unstructured.Unstructured{},
+			op:            types.Create,
 			expectAllowed: true,
 		},
 		{
-			name: "Wrong kind",
-			kind: gvk("", "v1", "Arbitrary"),
-			obj: &unstructured.Unstructured{},
-			op: types.Create,
+			name:          "Wrong kind",
+			kind:          gvk("", "v1", "Arbitrary"),
+			obj:           &unstructured.Unstructured{},
+			op:            types.Create,
 			expectAllowed: true,
 		},
 		{
@@ -47,11 +47,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "random-namespace",
+					Name:   "random-namespace",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Create,
+			op:            types.Create,
 			expectAllowed: false,
 		},
 		{
@@ -59,11 +59,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "random-namespace",
+					Name:   "random-namespace",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Update,
+			op:            types.Update,
 			expectAllowed: false,
 		},
 		{
@@ -71,11 +71,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "random-namespace",
+					Name:   "random-namespace",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Delete,
+			op:            types.Delete,
 			expectAllowed: true,
 		},
 		{
@@ -86,7 +86,7 @@ func TestAdmission(t *testing.T) {
 					Name: "random-namespace",
 				},
 			},
-			op: types.Create,
+			op:            types.Create,
 			expectAllowed: true,
 		},
 		{
@@ -94,11 +94,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "random-namespace",
+					Name:   "random-namespace",
 					Labels: map[string]string{"some-label": "true"},
 				},
 			},
-			op: types.Update,
+			op:            types.Update,
 			expectAllowed: true,
 		},
 		{
@@ -106,11 +106,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-system",
+					Name:   "gatekeeper-system",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Create,
+			op:            types.Create,
 			expectAllowed: true,
 		},
 		{
@@ -118,11 +118,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-system",
+					Name:   "gatekeeper-system",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Update,
+			op:            types.Update,
 			expectAllowed: true,
 		},
 		{
@@ -130,11 +130,11 @@ func TestAdmission(t *testing.T) {
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "gatekeeper-system",
+					Name:   "gatekeeper-system",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op: types.Delete,
+			op:            types.Delete,
 			expectAllowed: true,
 		},
 	}
@@ -149,10 +149,10 @@ func TestAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := admission.Request {
-				AdmissionRequest: admissionv1beta1.AdmissionRequest {
-					Kind: tt.kind,
-					Object: runtime.RawExtension{Raw: bytes},
+			req := admission.Request{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+					Kind:      tt.kind,
+					Object:    runtime.RawExtension{Raw: bytes},
 					Operation: tt.op,
 				},
 			}
@@ -165,16 +165,15 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
-
 func TestBadSerialization(t *testing.T) {
 	if err := os.Setenv("POD_NAME", "gatekeeper-system"); err != nil {
 		t.Fatal(err)
 	}
 
-	req := admission.Request {
-		AdmissionRequest: admissionv1beta1.AdmissionRequest {
-			Kind: gvk("", "v1", "Namespace"),
-			Object: runtime.RawExtension{Raw: []byte("asdfadsfa  awdf+-=-=pasdf")},
+	req := admission.Request{
+		AdmissionRequest: admissionv1beta1.AdmissionRequest{
+			Kind:      gvk("", "v1", "Namespace"),
+			Object:    runtime.RawExtension{Raw: []byte("asdfadsfa  awdf+-=-=pasdf")},
 			Operation: types.Create,
 		},
 	}
