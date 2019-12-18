@@ -15,13 +15,16 @@ import (
 	"github.com/open-policy-agent/gatekeeper/api"
 	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -273,8 +276,16 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 			}
 		}
 	}
+	review := &target.SideloadNamespace{AdmissionRequest: &req.AdmissionRequest}
+	if req.AdmissionRequest.Namespace != "" {
+		ns := &corev1.Namespace{}
+		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+			return nil, err
+		}
+		review.Namespace = ns
+	}
 
-	resp, err := h.opa.Review(ctx, req.AdmissionRequest, opa.Tracing(traceEnabled))
+	resp, err := h.opa.Review(ctx, review, opa.Tracing(traceEnabled))
 	if traceEnabled {
 		log.Info(resp.TraceDump())
 	}

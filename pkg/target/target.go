@@ -11,6 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,6 +37,20 @@ type WipeData struct{}
 
 func processWipeData() (bool, string, interface{}, error) {
 	return true, "", nil, nil
+}
+
+type SideloadNamespace struct {
+	AdmissionRequest *admissionv1beta1.AdmissionRequest
+	Namespace        *corev1.Namespace
+}
+
+type augmentedReview struct {
+	*admissionv1beta1.AdmissionRequest
+	Unstable *unstable `json:"_unstable,omitempty"`
+}
+
+type unstable struct {
+	Namespace *corev1.Namespace `json:"namespace,omitempty"`
 }
 
 func processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
@@ -73,6 +88,10 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 		return true, data, nil
 	case *admissionv1beta1.AdmissionRequest:
 		return true, data, nil
+	case SideloadNamespace:
+		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case *SideloadNamespace:
+		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
 	}
 	return false, nil, nil
 }
