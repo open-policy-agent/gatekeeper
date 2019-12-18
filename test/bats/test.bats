@@ -18,8 +18,8 @@ teardown() {
 
 @test "namespace label webhook is serving" {
   cert=$(mktemp)
-  wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
   CLEAN_CMD="${CLEAN_CMD}; rm ${CERT}"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
 
   kubectl port-forward -n gatekeeper-system deployment/gatekeeper-controller-manager 8443:8443 &
   FORWARDING_PID=$!
