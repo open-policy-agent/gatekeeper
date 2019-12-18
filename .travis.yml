@@ -18,7 +18,7 @@ jobs:
         - make e2e-bootstrap
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
         - make patch-image IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-        - make deploy
+        - make deploy IMG=gatekeeper-e2e:latest
         - make test-e2e
         - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
       deploy:
