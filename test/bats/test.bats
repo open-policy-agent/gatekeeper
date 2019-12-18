@@ -25,7 +25,7 @@ teardown() {
   FORWARDING_PID=$!
   CLEAN_CMD="${CLEAN_CMD}; kill ${FORWARDING_PID}"
 
-	run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --connect-to gatekeeper-webhook-service.gatekeeper-system.svc:8443:localhost:8443 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
+	run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --resolve gatekeeper-webhook-service.gatekeeper-system.svc:8443:127.0.0.1 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
   assert_success
 }
 
