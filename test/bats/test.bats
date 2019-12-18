@@ -5,9 +5,27 @@ load helpers
 BATS_TESTS_DIR=test/bats/tests
 WAIT_TIME=120
 SLEEP_TIME=1
+CLEAN_CMD="echo cleaning..."
+
+teardown() {
+  bash -c "${CLEAN_CMD}"
+}
 
 @test "gatekeeper-controller-manager is running" {
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
+  assert_success
+}
+
+@test "namespace label webhook is serving" {
+  cert=$(mktemp)
+  wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
+  CLEAN_CMD="${CLEAN_CMD}; rm ${CERT}"
+
+  kubectl port-forward -n gatekeeper-system deployment/gatekeeper-controller-manager 8443:8443 &
+  FORWARDING_PID=$!
+  CLEAN_CMD="${CLEAN_CMD}; kill ${FORWARDING_PID}"
+
+	run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --connect-to gatekeeper-webhook-service.gatekeeper-system.svc:8443:localhost:8443 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
   assert_success
 }
 
