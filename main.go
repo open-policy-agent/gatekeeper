@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -132,6 +133,12 @@ func main() {
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade to the manager")
+		os.Exit(1)
+	}
+
+	setupLog.Info("setting up metrics")
+	if err := metrics.AddToManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register metrics to the manager")
 		os.Exit(1)
 	}
 

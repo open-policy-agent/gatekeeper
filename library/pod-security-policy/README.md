@@ -19,7 +19,7 @@ An adminstrator can control the following by setting the field in PSP or by depl
 | Requiring the use of a read only root file system | `readOnlyRootFilesystem`                                                    | [read-only-root-filesystem](read-only-root-filesystem)   |
 | The user and group IDs of the container           | `runAsUser`, `runAsGroup`, `supplementalGroups`                             | [users](users)
 | Restricting escalation to root privileges         | `allowPrivilegeEscalation`, `defaultAllowPrivilegeEscalation`               | [allow-privilege-escalation](allow-privilege-escalation) |
-| Linux capabilities                                | `defaultAddCapabilities`, `requiredDropCapabilities`, `allowedCapabilities` |
+| Linux capabilities                                | `defaultAddCapabilities`, `requiredDropCapabilities`, `allowedCapabilities` | [capabilities](capabilities)
 | The SELinux context of the container              | `seLinux`                                                                   | [seLinux](selinux)                                       |
 | The Allowed Proc Mount types for the container    | `allowedProcMountTypes`                                                     | [proc-mount](proc-mount)                                 |
 | The AppArmor profile used by containers           | annotations                                                                 | [apparmor](apparmor)                                     |
