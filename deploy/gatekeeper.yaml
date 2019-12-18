@@ -305,6 +305,7 @@ spec:
       - args:
         - --auditInterval=30
         - --port=8443
+        - --logtostderr
         command:
         - /manager
         env:

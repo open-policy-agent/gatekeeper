@@ -464,6 +464,7 @@ spec:
       - args:
         - --auditInterval={{ .Values.auditInterval }}
         - --port=8443
+        - --logtostderr
         - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
         command:
         - /manager
