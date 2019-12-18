@@ -71,5 +71,4 @@ get_ca_cert() {
     return 1
   fi
   kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > $destination
-  return $?
 }
