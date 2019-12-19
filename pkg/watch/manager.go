@@ -206,12 +206,6 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		<-wm.stopped
 	}
 
-	stopper := make(chan struct{})
-	stopOnce := sync.Once{}
-	wm.stopper = func() {
-		stopOnce.Do(func() { close(stopper) })
-	}
-	wm.stopped = make(chan struct{})
 	mgr, err := wm.newMgrFn(wm)
 	if err != nil {
 		return err
@@ -225,19 +219,25 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		}
 	}
 
+	wm.stopped = make(chan struct{})
+	stopper := make(chan struct{})
+	stopOnce := sync.Once{}
+	wm.stopper = func() {
+		stopOnce.Do(func() { close(stopper) })
+	}
 	go wm.startMgr(mgr, stopper, wm.stopped, kindStr)
 	return nil
 }
 
 func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
+	defer wm.started.Store(false)
+	defer close(stopped)
 	log.Info("Calling Manager.Start()", "kinds", kinds)
 	wm.started.Store(true)
 	if err := mgr.Start(stopper); err != nil {
 		log.Error(err, "error starting watch manager")
 	}
 	// mgr.Start() only returns after the manager has completely stopped
-	wm.started.Store(false)
-	close(stopped)
 	log.Info("sub-manager exiting", "kinds", kinds)
 }
 
