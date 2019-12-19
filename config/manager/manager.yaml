@@ -29,7 +29,7 @@ spec:
           - "--auditInterval=30"
           - "--port=8443"
           - "--logtostderr"
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.1
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.0
         imagePullPolicy: Always
         name: manager
         env:
