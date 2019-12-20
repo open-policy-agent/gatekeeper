@@ -105,7 +105,11 @@ func main() {
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	wm := watch.New(mgr.GetConfig())
+	wm, err := watch.New(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create watch manager")
+		os.Exit(1)
+	}
 	if err := mgr.Add(wm); err != nil {
 		setupLog.Error(err, "unable to register watch manager to the manager")
 		os.Exit(1)

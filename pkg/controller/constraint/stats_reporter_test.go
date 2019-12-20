@@ -33,7 +33,7 @@ func TestReportConstraints(t *testing.T) {
 		}
 	}
 	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalConstraintsName, value.Value, expectedValue)
+		t.Errorf("Metric: %v - Expected %v, got %v", totalConstraintsName, expectedValue, value.Value)
 	}
 }
 

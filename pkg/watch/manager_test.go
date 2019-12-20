@@ -18,7 +18,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-func newForTest(fn func(*rest.Config) (Discovery, error)) *Manager {
+func newForTest(fn func(*rest.Config) (Discovery, error)) (*Manager, error) {
+	metrics, err := newStatsReporter()
+	if err != nil {
+		return nil, err
+	}
 	wm := &Manager{
 		newMgrFn:     newFakeMgr,
 		stopper:      func() {},
@@ -26,10 +30,11 @@ func newForTest(fn func(*rest.Config) (Discovery, error)) *Manager {
 		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          nil,
 		newDiscovery: fn,
+		metrics:      metrics,
 	}
 	wm.managedKinds.mgr = wm
 	wm.started.Store(false)
-	return wm
+	return wm, nil
 }
 
 func newFakeMgr(wm *Manager) (manager.Manager, error) {
@@ -137,7 +142,10 @@ func waitForWatchManagerStart(wm *Manager) bool {
 }
 
 func TestRegistrar(t *testing.T) {
-	wm := newForTest(newDiscoveryFactory(false, "FooCRD"))
+	wm, err := newForTest(newDiscoveryFactory(false, "FooCRD"))
+	if err != nil {
+		t.Fatalf("Error creating Manager: %s", err)
+	}
 	defer wm.close()
 	reg, err := wm.NewRegistrar("foo", nil)
 	if err != nil {

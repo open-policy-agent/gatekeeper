@@ -36,6 +36,7 @@ type Manager struct {
 	watchedKinds map[schema.GroupVersionKind]vitals
 	cfg          *rest.Config
 	newDiscovery func(*rest.Config) (Discovery, error)
+	metrics      *reporter
 }
 
 type Discovery interface {
@@ -47,7 +48,11 @@ func newDiscovery(c *rest.Config) (Discovery, error) {
 	return discovery.NewDiscoveryClientForConfig(c)
 }
 
-func New(cfg *rest.Config) *Manager {
+func New(cfg *rest.Config) (*Manager, error) {
+	metrics, err := newStatsReporter()
+	if err != nil {
+		return nil, err
+	}
 	wm := &Manager{
 		newMgrFn:     newMgr,
 		stopper:      func() {},
@@ -55,10 +60,11 @@ func New(cfg *rest.Config) *Manager {
 		watchedKinds: make(map[schema.GroupVersionKind]vitals),
 		cfg:          cfg,
 		newDiscovery: newDiscovery,
+		metrics:      metrics,
 	}
 	wm.started.Store(false)
 	wm.managedKinds.mgr = wm
-	return wm
+	return wm, nil
 }
 
 func (wm *Manager) NewRegistrar(parent string, addFns []func(manager.Manager, schema.GroupVersionKind) error) (*Registrar, error) {
@@ -81,6 +87,9 @@ func (wm *Manager) updateManager() (bool, error) {
 	intent, err := wm.managedKinds.Get()
 	if err != nil {
 		return false, errp.Wrap(err, "error while retrieving managedKinds, not restarting watch manager")
+	}
+	if err := wm.metrics.reportGvkIntentCount(int64(len(intent))); err != nil {
+		log.Error(err, "while reporting gvk intent count metric")
 	}
 	added, removed, changed, err := wm.gatherChanges(intent)
 	if err != nil {
@@ -160,6 +169,10 @@ func (wm *Manager) Start(done <-chan struct{}) error {
 func (wm *Manager) updateOrPause() (bool, error) {
 	wm.startedMux.Lock()
 	defer wm.startedMux.Unlock()
+	// Report restart check after acquiring the lock so that we can detect deadlocks
+	if err := wm.metrics.reportRestartCheck(); err != nil {
+		log.Error(err, "while trying to report restart check metric")
+	}
 	if wm.paused {
 		log.Info("update manager is paused")
 		return false, nil
@@ -219,6 +232,11 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		}
 	}
 
+	// reporting the restart after all potentially blocking calls will help narrow
+	// down the cause of any deadlocks by checking if last_restart > last_restart_check
+	if err := wm.metrics.reportRestart(); err != nil {
+		log.Error(err, "while trying to report restart metric")
+	}
 	wm.stopped = make(chan struct{})
 	stopper := make(chan struct{})
 	stopOnce := sync.Once{}
@@ -232,6 +250,17 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
 	defer wm.started.Store(false)
 	defer close(stopped)
+	if err := wm.metrics.reportIsRunning(1); err != nil {
+		log.Error(err, "while trying to report running metric")
+	}
+	defer func() {
+		if err := wm.metrics.reportIsRunning(0); err != nil {
+			log.Error(err, "while trying to report stopped metric")
+		}
+	}()
+	if err := wm.metrics.reportGvkCount(int64(len(kinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
+	}
 	log.Info("Calling Manager.Start()", "kinds", kinds)
 	wm.started.Store(true)
 	if err := mgr.Start(stopper); err != nil {
