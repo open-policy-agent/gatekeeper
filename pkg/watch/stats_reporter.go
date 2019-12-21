@@ -38,6 +38,7 @@ func register() error {
 		{
 			Name:        lastRestart,
 			Measure:     lastRestartM,
+			Description: "The epoch timestamp of the last time the watch manager has restarted",
 			Aggregation: view.LastValue(),
 		},
 		{
@@ -49,21 +50,25 @@ func register() error {
 		{
 			Name:        lastRestartCheck,
 			Measure:     lastRestartCheckM,
+			Description: "The epoch timestamp of the last time the watch manager was checked for a restart condition. This is a heartbeat that should occur regularly",
 			Aggregation: view.LastValue(),
 		},
 		{
 			Name:        gvkCount,
 			Measure:     gvkCountM,
+			Description: "The total number of Group/Version/Kinds currently watched by the watch manager",
 			Aggregation: view.LastValue(),
 		},
 		{
 			Name:        gvkIntentCount,
 			Measure:     gvkIntentCountM,
+			Description: "The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart",
 			Aggregation: view.LastValue(),
 		},
 		{
 			Name:        isRunning,
 			Measure:     isRunningM,
+			Description: "Whether the watch manager is running. This is expected to be 1 the majority of the time with brief periods of downtime due to the watch manager being paused or restarted",
 			Aggregation: view.LastValue(),
 		},
 	}
@@ -76,54 +81,29 @@ func now() float64 {
 }
 
 func (r *reporter) reportRestartCheck() error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, lastRestartCheckM.M(r.now()))
+	return metrics.Record(r.ctx, lastRestartCheckM.M(r.now()))
 }
 
 func (r *reporter) reportRestart() error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, lastRestartM.M(r.now()))
+	return metrics.Record(r.ctx, lastRestartM.M(r.now()))
 }
 
 func (r *reporter) reportGvkCount(count int64) error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, gvkCountM.M(count))
+	return metrics.Record(r.ctx, gvkCountM.M(count))
 }
 
 func (r *reporter) reportGvkIntentCount(count int64) error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, gvkIntentCountM.M(count))
+	return metrics.Record(r.ctx, gvkIntentCountM.M(count))
 }
 
 func (r *reporter) reportIsRunning(running int64) error {
-	ctx, err := tag.New(r.ctx)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, isRunningM.M(running))
+	return metrics.Record(r.ctx, isRunningM.M(running))
 }
 
 // newStatsReporter creates a reporter for watch metrics
 func newStatsReporter() (*reporter, error) {
 	ctx, err := tag.New(
-		context.Background(),
+		context.TODO(),
 	)
 	if err != nil {
 		return nil, err
@@ -135,8 +115,4 @@ func newStatsReporter() (*reporter, error) {
 type reporter struct {
 	ctx context.Context
 	now func() float64
-}
-
-func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
 }
