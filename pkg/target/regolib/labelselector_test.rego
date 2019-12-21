@@ -1,5 +1,49 @@
 package target
 
+# Test object/oldobject
+
+matching_object = {
+  "metadata": {"labels": {"match": "yes"}}
+}
+
+non_matching_object = {
+  "metadata": {"labels": {"match": "no"}}
+}
+
+test_object_only_match {
+  any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review.object as matching_object
+}
+
+test_object_only_non_match {
+  not any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review.object as non_matching_object
+}
+
+test_old_object_only_match {
+  any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review.oldObject as matching_object
+}
+
+test_old_object_only_non_match {
+  not any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review.oldObject as non_matching_object
+}
+
+test_obj_mix_both_match {
+  any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review as {"object": matching_object, "oldObject": matching_object}
+}
+
+test_obj_mix_old_match {
+  any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review as {"object": non_matching_object, "oldObject": matching_object}
+}
+
+test_obj_mix_new_match {
+  any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review as {"object": matching_object, "oldObject": non_matching_object}
+}
+
+test_obj_mix_no_match {
+  not any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review as {"object": non_matching_object, "oldObject": non_matching_object}
+}
+
+# Test empty cases
+
 test_empty_selector_matches_empty_labelset {
   matches_label_selector({}, {})
 }
