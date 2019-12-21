@@ -485,6 +485,9 @@ spec:
         - containerPort: 8443
           name: webhook-server
           protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
         resources:
           limits:
             cpu: 1000m

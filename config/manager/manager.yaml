@@ -32,6 +32,10 @@ spec:
         image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.2
         imagePullPolicy: Always
         name: manager
+        ports:
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
         env:
           - name: POD_NAMESPACE
             valueFrom:
