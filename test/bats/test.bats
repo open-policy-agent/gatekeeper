@@ -78,10 +78,6 @@ SLEEP_TIME=1
   assert_success
 }
 
-@test "waiting for namespaces to be synced" {
-	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get ns no-dupes -o jsonpath='{.metadata.finalizers}' | grep finalizers.gatekeeper.sh/sync"
-}
-
 @test "unique labels test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8suniquelabel_template.yaml
   assert_success

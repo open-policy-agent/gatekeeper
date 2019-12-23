@@ -30,8 +30,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -68,6 +66,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	if err != nil {
 		return err
 	}
+
+	// Wipe cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
+	if _, err := a.Opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
+		return err
+	}
+
 	return add(mgr, r)
 }
 
@@ -123,7 +127,6 @@ type ReconcileConfig struct {
 	opa     *opa.Client
 	watcher *watch.Registrar
 	watched *watchSet
-	fc      *finalizerCleanup
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update;patch
@@ -153,7 +156,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	newSyncOnly := newSet()
-	toClean := newSet()
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !hasFinalizer(instance) {
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
@@ -170,11 +172,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		if hasFinalizer(instance) {
 			removeFinalizer(instance)
 		}
-	}
-	// make sure old finalizers get cleaned up even on restart
-	status := util.GetCfgHAStatus(instance)
-	for _, gvk := range status.AllFinalizers {
-		toClean.Add(configv1alpha1.ToGVK(gvk))
 	}
 
 	if !r.watched.Equals(newSyncOnly) {
@@ -193,34 +190,11 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 	}
 
-	toClean.AddSet(r.watched)
-	toClean.AddSet(newSyncOnly)
-	items := toClean.Items()
-	allFinalizers := make([]configv1alpha1.GVK, len(items))
-	for i, gvk := range items {
-		allFinalizers[i] = configv1alpha1.ToAPIGVK(gvk)
-	}
-	status.AllFinalizers = allFinalizers
-	toClean.RemoveSet(newSyncOnly)
-	if toClean.Size() > 0 {
-		if r.fc != nil {
-			close(r.fc.stop)
-			select {
-			case <-r.fc.stopped:
-			case <-time.After(60 * time.Second):
-			}
-		}
-		r.fc, _, _ = newFinalizerCleanup(toClean, r)
-		log.Info("starting finalizer cleaning loop", "toclean", toClean.String())
-		go r.fc.Clean()
-	}
-
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	util.SetCfgHAStatus(instance, status)
-	log.Info("updating config resource", "obj", instance, "allFinalizers", allFinalizers)
+	log.Info("updating config resource", "obj", instance)
 	if err := r.Update(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -248,9 +222,7 @@ func removeString(s string, items []string) []string {
 }
 
 // TearDownState removes all finalizers
-// written by the config and sync controllers
-// and deletes this pod's pod-specific status
-// for the config
+// written by the config controller
 func TearDownState(c client.Client, finished chan struct{}) {
 	defer close(finished)
 	syncCfg := &configv1alpha1.Config{}
@@ -258,43 +230,32 @@ func TearDownState(c client.Client, finished chan struct{}) {
 		log.Error(err, "while retrieving sync config")
 		return
 	}
-	status := util.GetCfgHAStatus(syncCfg)
-	syncFinalizersToClean := newSet()
-	for _, gvk := range status.AllFinalizers {
-		syncFinalizersToClean.Add(configv1alpha1.ToGVK(gvk))
+	cleanFn := func() (bool, error) {
+		syncCfg := &configv1alpha1.Config{}
+		if err := c.Get(context.Background(), CfgKey, syncCfg); err != nil {
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			log.Error(err, "get error while removing finalizer from config")
+			return false, nil
+		}
+		removeFinalizer(syncCfg)
+		if err := c.Update(context.Background(), syncCfg); err != nil {
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			log.Error(err, "write error while removing finalizer from config")
+			return false, nil
+		}
+		return true, nil
 	}
-	cleaner, _, stopped := newFinalizerCleanup(syncFinalizersToClean, c)
-	cleaner.Clean()
-	<-stopped
-	if cleaner.ws.Size() == 0 {
-		cleanFn := func() (bool, error) {
-			syncCfg := &configv1alpha1.Config{}
-			if err := c.Get(context.Background(), CfgKey, syncCfg); err != nil {
-				if errors.IsNotFound(err) {
-					return true, nil
-				}
-				log.Error(err, "get error while removing finalizer from config")
-				return false, nil
-			}
-			removeFinalizer(syncCfg)
-			util.DeleteCfgHAStatus(syncCfg)
-			if err := c.Update(context.Background(), syncCfg); err != nil {
-				if errors.IsNotFound(err) {
-					return true, nil
-				}
-				log.Error(err, "write error while removing finalizer from config")
-				return false, nil
-			}
-			return true, nil
-		}
-		if err := wait.ExponentialBackoff(wait.Backoff{
-			Duration: 500 * time.Millisecond,
-			Factor:   2,
-			Jitter:   1,
-			Steps:    10,
-		}, cleanFn); err != nil {
-			log.Error(err, "max retries for removal of config finalizer reached")
-		}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 500 * time.Millisecond,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, cleanFn); err != nil {
+		log.Error(err, "max retries for removal of config finalizer reached")
 	}
 }
 
@@ -304,92 +265,6 @@ func hasFinalizer(instance *configv1alpha1.Config) bool {
 
 func removeFinalizer(instance *configv1alpha1.Config) {
 	instance.SetFinalizers(removeString(finalizerName, instance.GetFinalizers()))
-}
-
-type finalizerCleanup struct {
-	ws      *watchSet
-	c       client.Client
-	stop    chan struct{}
-	stopped chan struct{}
-}
-
-func newFinalizerCleanup(cleanSet *watchSet, c client.Client) (*finalizerCleanup, chan struct{}, chan struct{}) {
-	stop := make(chan struct{})
-	stopped := make(chan struct{})
-	return &finalizerCleanup{
-		ws:      cleanSet,
-		c:       c,
-		stop:    stop,
-		stopped: stopped,
-	}, stop, stopped
-}
-
-func (fc *finalizerCleanup) Clean() {
-	defer close(fc.stopped)
-	cleanLoop := func() (bool, error) {
-		for gvk := range fc.ws.Dump() {
-			select {
-			case <-fc.stop:
-				return true, nil
-			default:
-				log := log.WithValues("gvk", gvk)
-				log.Info("cleaning watch finalizer")
-				l := &unstructured.UnstructuredList{}
-				listGvk := gvk
-				listGvk.Kind = listGvk.Kind + "List"
-				l.SetGroupVersionKind(listGvk)
-				if err := fc.c.List(context.TODO(), l); err != nil {
-					// If the kind is not recognized, there is nothing to clean
-					if !meta.IsNoMatchError(err) {
-						log.Error(err, "while listing synced resources for cleanup", "kind", listGvk.Kind)
-						continue
-					}
-				}
-				failure := false
-				for _, obj := range l.Items {
-					if !syncc.HasFinalizer(&obj) {
-						continue
-					}
-					if err := syncc.RemoveFinalizer(fc.c, &obj); err != nil {
-						failure = true
-						log.Error(err, "could not remove finalizer", "name", obj.GetName(), "namespace", obj.GetNamespace())
-					}
-				}
-				if !failure {
-					instance := &configv1alpha1.Config{}
-					if err := fc.c.Get(context.Background(), CfgKey, instance); err != nil {
-						log.Info("could not retrieve config to report removed finalizer")
-					}
-					var allFinalizers []configv1alpha1.GVK
-					status := util.GetCfgHAStatus(instance)
-					for _, v := range status.AllFinalizers {
-						if configv1alpha1.ToGVK(v) != gvk {
-							allFinalizers = append(allFinalizers, v)
-						}
-					}
-					status.AllFinalizers = allFinalizers
-					util.SetCfgHAStatus(instance, status)
-					if err := fc.c.Update(context.Background(), instance); err != nil {
-						log.Info("could not record removed finalizer")
-					}
-					fc.ws.Remove(gvk)
-				}
-			}
-		}
-		if fc.ws.Size() == 0 {
-			return true, nil
-		}
-		return false, nil
-	}
-
-	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 500 * time.Millisecond,
-		Factor:   2,
-		Jitter:   1,
-		Steps:    10,
-	}, cleanLoop); err != nil {
-		log.Error(err, "max retries for cleanup", "remaining gvks", fc.ws.Dump())
-	}
 }
 
 func newSet() *watchSet {

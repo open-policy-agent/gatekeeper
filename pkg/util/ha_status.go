@@ -7,8 +7,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	v1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 )
 
 func getID() string {
@@ -53,40 +51,6 @@ func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
 		newStatus = append(newStatus, status)
 	}
 	template.Status.ByPod = newStatus
-}
-
-func GetCfgHAStatus(cfg *v1alpha1.Config) *v1alpha1.ByPod {
-	id := getID()
-	for _, status := range cfg.Status.ByPod {
-		if status.ID == id {
-			return status
-		}
-	}
-	return &v1alpha1.ByPod{ID: id}
-}
-
-func SetCfgHAStatus(cfg *v1alpha1.Config, status *v1alpha1.ByPod) {
-	id := getID()
-	status.ID = id
-	for i, s := range cfg.Status.ByPod {
-		if s.ID == id {
-			cfg.Status.ByPod[i] = status
-			return
-		}
-	}
-	cfg.Status.ByPod = append(cfg.Status.ByPod, status)
-}
-
-func DeleteCfgHAStatus(cfg *v1alpha1.Config) {
-	id := getID()
-	var newStatus []*v1alpha1.ByPod
-	for _, status := range cfg.Status.ByPod {
-		if status.ID == id {
-			continue
-		}
-		newStatus = append(newStatus, status)
-	}
-	cfg.Status.ByPod = newStatus
 }
 
 // GetHAStatus gets the value of a pod-specific subfield of status
