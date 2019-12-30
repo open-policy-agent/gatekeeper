@@ -99,6 +99,8 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// This is a deletion; remove the data
+			instance.SetNamespace(request.Namespace)
+			instance.SetName(request.Name)
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -110,6 +112,13 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// For some reason 'Status' objects corresponding to rejection messages are being pushed
 	if instance.GroupVersionKind() != r.gvk {
 		log.Info("ignoring unexpected data", "data", instance)
+		return reconcile.Result{}, nil
+	}
+
+	if !instance.GetDeletionTimestamp().IsZero() {
+		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, nil
 	}
 
