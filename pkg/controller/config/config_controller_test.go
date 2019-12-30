@@ -26,9 +26,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -137,22 +135,9 @@ func TestReconcile(t *testing.T) {
 
 	// Test finalizer removal
 
-	g.Eventually(func() error {
-		ns := &unstructured.Unstructured{}
-		ns.SetGroupVersionKind(nsGvk)
-		if err := c.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
-			return err
-		}
-		if !sync.HasFinalizer(ns) {
-			return errors.New("namespace has no sync finalizer")
-		}
-		return nil
-	}, timeout).Should(gomega.BeNil())
-
 	orig := &configv1alpha1.Config{}
 	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
 	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
-	g.Expect(len(util.GetCfgHAStatus(orig).AllFinalizers)).NotTo(gomega.Equal(0))
 
 	testMgrStopped()
 	if err := watcher.Pause(); err != nil {
@@ -174,21 +159,6 @@ func TestReconcile(t *testing.T) {
 		if hasFinalizer(obj) {
 			return errors.New("config resource still has sync finalizer")
 		}
-		if len(obj.Status.ByPod) != 0 {
-			return errors.New("config resource still has pod-specific status")
-		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
-
-	g.Eventually(func() error {
-		cleanNs := &unstructured.Unstructured{}
-		if err := newCli.Get(context.Background(), types.NamespacedName{Name: "testns"}, ns); err != nil {
-			return err
-		}
-		if sync.HasFinalizer(cleanNs) {
-			return errors.New("testns namespace still has sync finalizer")
-		}
-		return nil
-	}, timeout).Should(gomega.BeNil())
-
 }

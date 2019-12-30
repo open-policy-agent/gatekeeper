@@ -79,7 +79,13 @@ SLEEP_TIME=1
 }
 
 @test "waiting for namespaces to be synced" {
-	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get ns no-dupes -o jsonpath='{.metadata.finalizers}' | grep finalizers.gatekeeper.sh/sync"
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/ns_must_sync.yaml
+  assert_success
+
+  wait_for_process $((4 * $WAIT_TIME)) $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-sync -o json | jq -e '.status.totalViolations == 1'"
+
+  run kubectl delete -f ${BATS_TESTS_DIR}/constraints/ns_must_sync.yaml
+  assert_success
 }
 
 @test "unique labels test" {

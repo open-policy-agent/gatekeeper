@@ -17,7 +17,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ConfigSpec defines the desired state of Config
@@ -56,27 +55,9 @@ type SyncOnlyEntry struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
-type ByPod struct {
-	// a unique identifier for the pod that wrote the status
-	ID string `json:"id,omitempty"`
-	// List of Group/Version/Kinds with finalizers
-	AllFinalizers []GVK `json:"allFinalizers,omitempty"`
-}
-
 // ConfigStatus defines the observed state of Config
 type ConfigStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// List of statuses as seen by individual pods
-	ByPod []*ByPod `json:"byPod,omitempty"`
-}
-
-func ToAPIGVK(gvk schema.GroupVersionKind) GVK {
-	return GVK{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}
-}
-
-func ToGVK(gvk GVK) schema.GroupVersionKind {
-	return schema.GroupVersionKind{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}
 }
 
 type GVK struct {
