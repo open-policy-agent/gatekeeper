@@ -39,20 +39,21 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: HELMSUBST_VALUES_REPLICAS_PLACEHOLDER
+  replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   selector:
     matchLabels:
       app: gatekeeper-operator
       release: RELEASE_NAME
-  resources: HELMSUBST_DEPLOYMENT_RESOURCES
   template:
     spec:
       containers:
-      -  name: manager
-         args:
-         - --auditInterval={{ .Values.auditInterval }}
-         - --port=8443
-         - --logtostderr
-         - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
-         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
-         image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        - name: manager
+          args:
+            - --auditInterval={{ .Values.auditInterval }}
+            - --port=8443
+            - --logtostderr
+            - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+          resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
+      nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
