@@ -43,7 +43,7 @@ func TestReportRequest(t *testing.T) {
 		}
 	}
 	if count.Value != expectedCount {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestCountName, count.Value, expectedCount)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestCountName, expectedCount, count.Value)
 	}
 
 	// Duration test
@@ -58,10 +58,10 @@ func TestReportRequest(t *testing.T) {
 		}
 	}
 	if DurationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, DurationValue.Min, expectedDurationMin)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, expectedDurationMin, DurationValue.Min)
 	}
 	if DurationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, DurationValue.Max, expectedDurationMax)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, expectedDurationMax, DurationValue.Max)
 	}
 }
 
