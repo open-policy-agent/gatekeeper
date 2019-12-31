@@ -8,7 +8,9 @@ import (
 )
 
 func TestReportIngestion(t *testing.T) {
-	reset()
+	if err := reset(); err != nil {
+		t.Errorf("Could not reset stats: %v", err)
+	}
 	expectedTags := map[string]string{
 		"status": "active",
 	}
