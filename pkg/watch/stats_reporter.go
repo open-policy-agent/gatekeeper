@@ -25,6 +25,45 @@ var (
 	gvkCountM         = stats.Int64(gvkCount, "Total number of watched GroupVersionKinds", stats.UnitDimensionless)
 	gvkIntentCountM   = stats.Int64(gvkIntentCount, "Total number of GroupVersionKinds with a registered watch intent", stats.UnitDimensionless)
 	isRunningM        = stats.Int64(isRunning, "One if the watch manager is running, zero if not", stats.UnitDimensionless)
+
+	views = []*view.View{
+	{
+		Name:        lastRestart,
+		Measure:     lastRestartM,
+		Description: "The epoch timestamp of the last time the watch manager has restarted",
+		Aggregation: view.LastValue(),
+	},
+	{
+		Name:        totalRestarts,
+		Measure:     lastRestartM,
+		Description: "Total number of times the watch manager has restarted",
+		Aggregation: view.Count(),
+	},
+	{
+		Name:        lastRestartCheck,
+		Measure:     lastRestartCheckM,
+		Description: "The epoch timestamp of the last time the watch manager was checked for a restart condition. This is a heartbeat that should occur regularly",
+		Aggregation: view.LastValue(),
+	},
+	{
+		Name:        gvkCount,
+		Measure:     gvkCountM,
+		Description: "The total number of Group/Version/Kinds currently watched by the watch manager",
+		Aggregation: view.LastValue(),
+	},
+	{
+		Name:        gvkIntentCount,
+		Measure:     gvkIntentCountM,
+		Description: "The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart",
+		Aggregation: view.LastValue(),
+	},
+	{
+		Name:        isRunning,
+		Measure:     isRunningM,
+		Description: "Whether the watch manager is running. This is expected to be 1 the majority of the time with brief periods of downtime due to the watch manager being paused or restarted",
+		Aggregation: view.LastValue(),
+	},
+}
 )
 
 func init() {
@@ -34,45 +73,12 @@ func init() {
 }
 
 func register() error {
-	views := []*view.View{
-		{
-			Name:        lastRestart,
-			Measure:     lastRestartM,
-			Description: "The epoch timestamp of the last time the watch manager has restarted",
-			Aggregation: view.LastValue(),
-		},
-		{
-			Name:        totalRestarts,
-			Measure:     lastRestartM,
-			Description: "Total number of times the watch manager has restarted",
-			Aggregation: view.Count(),
-		},
-		{
-			Name:        lastRestartCheck,
-			Measure:     lastRestartCheckM,
-			Description: "The epoch timestamp of the last time the watch manager was checked for a restart condition. This is a heartbeat that should occur regularly",
-			Aggregation: view.LastValue(),
-		},
-		{
-			Name:        gvkCount,
-			Measure:     gvkCountM,
-			Description: "The total number of Group/Version/Kinds currently watched by the watch manager",
-			Aggregation: view.LastValue(),
-		},
-		{
-			Name:        gvkIntentCount,
-			Measure:     gvkIntentCountM,
-			Description: "The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart",
-			Aggregation: view.LastValue(),
-		},
-		{
-			Name:        isRunning,
-			Measure:     isRunningM,
-			Description: "Whether the watch manager is running. This is expected to be 1 the majority of the time with brief periods of downtime due to the watch manager being paused or restarted",
-			Aggregation: view.LastValue(),
-		},
-	}
 	return view.Register(views...)
+}
+
+func reset() error {
+	view.Unregister(views...)
+	return register()
 }
 
 // now returns the timestamp as a second-denominated float

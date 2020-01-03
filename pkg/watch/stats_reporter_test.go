@@ -45,7 +45,7 @@ func TestLastRestart(t *testing.T) {
 		return float64(expectedTime)
 	}
 
-	countBasis := checkData(t, totalRestarts, expectedRowLength).Data.(*view.CountData).Value
+	reset()
 
 	r, err := newStatsReporter()
 	if err != nil {
@@ -75,8 +75,8 @@ func TestLastRestart(t *testing.T) {
 	if len(countRow.Tags) != 0 {
 		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
 	}
-	if countValue.Value != countBasis+1 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, countBasis+1, countValue.Value)
+	if countValue.Value != 1 {
+		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, 1, countValue.Value)
 	}
 
 	if err = r.reportRestart(); err != nil {
@@ -91,8 +91,8 @@ func TestLastRestart(t *testing.T) {
 	if len(countRow2.Tags) != 0 {
 		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
 	}
-	if countValue2.Value != countBasis+2 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, countBasis+2, countValue2.Value)
+	if countValue2.Value != 2 {
+		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, 2, countValue2.Value)
 	}
 }
 
