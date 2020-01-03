@@ -112,22 +112,30 @@ type reporter struct {
 
 type ctRegistry struct {
 	cache map[types.NamespacedName]ctStatus
+	dirty bool
 }
 
-func (r *ctRegistry) add(key types.NamespacedName, status ctStatus) bool {
+func (r *ctRegistry) add(key types.NamespacedName, status ctStatus) {
 	v, ok := r.cache[key]
 	if ok && v == status {
-		return false
+		return
 	}
 	r.cache[key] = status
-	return true
+	r.dirty = true
 }
 
 func (r *ctRegistry) remove(key types.NamespacedName) {
+	if _, ok := r.cache[key]; !ok {
+		return
+	}
 	delete(r.cache, key)
+	r.dirty = true
 }
 
 func (r *ctRegistry) report(metrics *reporter) {
+	if !r.dirty {
+		return
+	}
 	totals := map[ctStatus]int64{
 		statusError:  0,
 		statusActive: 0,

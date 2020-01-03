@@ -150,37 +150,19 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	dirty := false
-	defer func() {
-		if dirty {
-			r.metrics.registry.report(r.metrics)
-		}
-	}()
-
-	reportError := func() {
-		dirty = r.metrics.registry.add(request.NamespacedName, statusError)
-	}
-
-	reportSuccess := func() {
-		dirty = r.metrics.registry.add(request.NamespacedName, statusActive)
-	}
-
-	reportDelete := func() {
-		r.metrics.registry.remove(request.NamespacedName)
-		dirty = true
-	}
+	defer r.metrics.registry.report(r.metrics)
 
 	status := util.GetCTHAStatus(instance)
 	status.Errors = nil
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
-		reportError()
+		r.metrics.registry.add(request.NamespacedName, statusError)
 		log.Error(err, "conversion error")
 		return reconcile.Result{}, err
 	}
 	crd, err := r.opa.CreateCRD(context.Background(), versionless)
 	if err != nil {
-		reportError()
+		r.metrics.registry.add(request.NamespacedName, statusError)
 		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
@@ -210,30 +192,30 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		if err != nil && errors.IsNotFound(err) {
 			result, err := r.handleCreate(instance, crd)
 			if err != nil {
-				reportError()
+				r.metrics.registry.add(request.NamespacedName, statusError)
 			}
 			if !result.Requeue {
-				reportSuccess()
+				r.metrics.registry.add(request.NamespacedName, statusActive)
 			}
 			return result, err
 
 		} else if err != nil {
-			reportError()
+			r.metrics.registry.add(request.NamespacedName, statusError)
 			return reconcile.Result{}, err
 
 		} else {
 			unversionedCRD := &apiextensions.CustomResourceDefinition{}
 			if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
-				reportError()
+				r.metrics.registry.add(request.NamespacedName, statusError)
 				log.Error(err, "conversion error")
 				return reconcile.Result{}, err
 			}
 			result, err := r.handleUpdate(instance, crd, unversionedCRD)
 			if err != nil {
-				reportError()
+				r.metrics.registry.add(request.NamespacedName, statusError)
 			}
 			if !result.Requeue {
-				reportSuccess()
+				r.metrics.registry.add(request.NamespacedName, statusActive)
 			}
 			return result, err
 		}
@@ -241,10 +223,10 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	result, err := r.handleDelete(instance, crd)
 	if err != nil {
-		reportError()
+		r.metrics.registry.add(request.NamespacedName, statusError)
 	}
 	if !result.Requeue {
-		reportDelete()
+		r.metrics.registry.remove(request.NamespacedName)
 	}
 	return result, err
 }
