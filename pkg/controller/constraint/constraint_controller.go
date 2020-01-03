@@ -161,7 +161,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 		}
-		log.Info("instance will be added", "instance", instance)
+		log.Info("handling constraint update", "instance", instance)
 		status, err := util.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
