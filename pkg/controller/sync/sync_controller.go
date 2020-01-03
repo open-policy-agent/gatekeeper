@@ -18,7 +18,6 @@ package sync
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -36,10 +35,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
-
-const (
-	finalizerName = "finalizers.gatekeeper.sh/sync"
-)
 
 type Adder struct {
 	Opa *opa.Client
@@ -103,8 +98,12 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
+			// This is a deletion; remove the data
+			instance.SetNamespace(request.Namespace)
+			instance.SetName(request.Name)
+			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -116,64 +115,17 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	if instance.GetDeletionTimestamp().IsZero() {
-		if !containsString(finalizerName, instance.GetFinalizers()) {
-			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
-			// For some reason the instance sometimes gets changed by update when there is a race
-			// condition that leads to a validating webhook deny of the update
-			cpy := instance.DeepCopy()
-			if err := r.Update(context.Background(), cpy); err != nil {
-				return reconcile.Result{}, err
-			}
-			if !reflect.DeepEqual(instance, cpy) {
-				log.Info("instance and cpy differ")
-			}
-		}
-		log.Info("data will be added", "data", instance)
-		if _, err := r.opa.AddData(context.Background(), instance); err != nil {
+	if !instance.GetDeletionTimestamp().IsZero() {
+		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
-	} else {
-		// Handle deletion
-		if HasFinalizer(instance) {
-			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			if err := RemoveFinalizer(r, instance); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
+		return reconcile.Result{}, nil
+	}
+
+	log.Info("data will be added", "data", instance)
+	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func HasFinalizer(obj *unstructured.Unstructured) bool {
-	return containsString(finalizerName, obj.GetFinalizers())
-}
-
-func RemoveFinalizer(c client.Client, obj *unstructured.Unstructured) error {
-	newObj := obj.DeepCopy()
-	newObj.SetFinalizers(removeString(finalizerName, obj.GetFinalizers()))
-
-	return c.Patch(context.Background(), newObj, client.MergeFrom(obj))
-}
-
-func containsString(s string, items []string) bool {
-	for _, item := range items {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(s string, items []string) []string {
-	var rval []string
-	for _, item := range items {
-		if item != s {
-			rval = append(rval, item)
-		}
-	}
-	return rval
 }

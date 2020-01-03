@@ -3,20 +3,14 @@ scriptdir="$(dirname "$0")"
 cd "$scriptdir"
 cp ./../../deploy/gatekeeper.yaml ${PWD}/helm-modifications/_temp.yaml
 kustomize build helm-modifications -o templates/gatekeeper.yaml
-sed -i -E "s/HELMSUBST_DEPLOYMENT_RESOURCES/\
-\n{{ toYaml .Values.resources | indent 12 }}\
-\n    {{- with .Values.nodeSelector }}\
-\n      nodeSelector:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}\
-\n    {{- with .Values.affinity }}\
+sed -i -E "s/HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES/\
+\n{{ toYaml .Values.resources | indent 10 }}/" templates/gatekeeper.yaml
+sed -i -E "s/HELMSUBST_DEPLOYMENT_POD_SCHEDULING/\
+\n{{ toYaml .Values.nodeSelector | indent 8 }}\
 \n      affinity:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}\
-\n    {{- with .Values.tolerations }}\
+\n{{ toYaml .Values.affinity | indent 8 }}\
 \n      tolerations:\
-\n{{ toYaml . | indent 8 }}\
-\n    {{- end }}/" templates/gatekeeper.yaml
-sed -i "s/HELMSUBST_VALUES_REPLICAS_PLACEHOLDER/{{ .Values.replicas }}/g" templates/gatekeeper.yaml
+\n{{ toYaml .Values.tolerations | indent 8 }}/" templates/gatekeeper.yaml
+sed -i "s/HELMSUBST_DEPLOYMENT_REPLICAS/{{ .Values.replicas }}/g" templates/gatekeeper.yaml
 rm ./helm-modifications/_temp.yaml
 echo "Helm template created under 'chart/gatekeeper-operator/templates'"

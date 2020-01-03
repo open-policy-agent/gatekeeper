@@ -13,7 +13,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.2
+    controller-gen.kubebuilder.io/version: v0.2.4
     helm.sh/hook: crd-install
     helm.sh/hook-delete-policy: before-hook-creation
   creationTimestamp: null
@@ -430,20 +430,6 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: {{ .Values.replicas }}
-  resources:
-{{ toYaml .Values.resources | indent 12 }}
-    {{- with .Values.nodeSelector }}
-      nodeSelector:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.affinity }}
-      affinity:
-{{ toYaml . | indent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
-      tolerations:
-{{ toYaml . | indent 8 }}
-    {{- end }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper-operator.name" . }}'
@@ -489,12 +475,7 @@ spec:
           name: metrics
           protocol: TCP
         resources:
-          limits:
-            cpu: 1000m
-            memory: 512Mi
-          requests:
-            cpu: 100m
-            memory: 256Mi
+{{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           runAsGroup: 999
@@ -504,6 +485,12 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
       terminationGracePeriodSeconds: 60
       volumes:
       - name: cert

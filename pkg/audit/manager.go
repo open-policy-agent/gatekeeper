@@ -290,7 +290,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
-	log.Info("updating constraint", "constraintName", constraintName)
+	log.Info("updating constraint status", "constraintName", constraintName)
 	// create constraint status violations
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
