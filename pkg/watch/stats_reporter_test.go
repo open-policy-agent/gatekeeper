@@ -45,7 +45,9 @@ func TestLastRestart(t *testing.T) {
 		return float64(expectedTime)
 	}
 
-	reset()
+	if err := reset(); err != nil {
+		t.Errorf("Could not reset stats: %v", err)
+	}
 
 	r, err := newStatsReporter()
 	if err != nil {
