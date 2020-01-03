@@ -73,7 +73,10 @@ func TestReconcile(t *testing.T) {
 	ctrl.SetLogger(zap.Logger(true))
 	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	watcher := watch.New(mgr.GetConfig())
+	watcher, err := watch.New(mgr.GetConfig())
+	if err != nil {
+		t.Fatalf("could not create watch manager: %s", err)
+	}
 	if err := mgr.Add(watcher); err != nil {
 		t.Fatalf("could not add watch manager to manager: %s", err)
 	}
