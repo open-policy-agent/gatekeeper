@@ -145,9 +145,14 @@ func (r *ctRegistry) report(metrics *reporter) {
 	for _, status := range r.cache {
 		totals[status]++
 	}
+	hadErr := false
 	for status, count := range totals {
 		if err := metrics.reportCtCount(status, count); err != nil {
 			log.Error(err, "failed to report total constraint templates")
+			hadErr = true
 		}
+	}
+	if !hadErr {
+		r.dirty = false
 	}
 }
