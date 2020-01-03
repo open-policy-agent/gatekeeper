@@ -15,11 +15,13 @@ const (
 	ctCount        = "total_constraint_templates"
 	ingestCount    = "constraint_template_ingestion_count"
 	ingestDuration = "constraint_template_ingestion_duration_seconds"
+
+	ctCountDesc = "Number of observed constraint templates"
 )
 
 var (
-	ctCountM        = stats.Int64(ctCount, "Total number of constraint templates", stats.UnitDimensionless)
-	ingestDurationM = stats.Float64(ingestDuration, "Total time to ingest a constraint template in seconds", stats.UnitSeconds)
+	ctCountM        = stats.Int64(ctCount, ctCountDesc, stats.UnitDimensionless)
+	ingestDurationM = stats.Float64(ingestDuration, "How long it took to ingest a constraint template in seconds", stats.UnitSeconds)
 
 	statusKey = tag.MustNewKey("status")
 
@@ -27,7 +29,7 @@ var (
 		{
 			Name:        ctCount,
 			Measure:     ctCountM,
-			Description: "Total number of constraint templates",
+			Description: ctCountDesc,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{statusKey},
 		},
@@ -41,7 +43,7 @@ var (
 		{
 			Name:        ingestDuration,
 			Measure:     ingestDurationM,
-			Description: "Total time to ingest a constraint template in seconds",
+			Description: "Distribution of how long it took to ingest a constraint template in seconds",
 			Aggregation: view.Distribution(0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5),
 			TagKeys:     []tag.Key{statusKey},
 		},
