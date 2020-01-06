@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
@@ -91,6 +92,14 @@ func (m *fakeMgr) GetAPIReader() client.Reader {
 }
 
 func (m *fakeMgr) GetWebhookServer() *webhook.Server {
+	return nil
+}
+
+func (m *fakeMgr) AddHealthzCheck(string, healthz.Checker) error {
+	return nil
+}
+
+func (m *fakeMgr) AddReadyzCheck(string, healthz.Checker) error {
 	return nil
 }
 

@@ -19,7 +19,8 @@ func (errs Errors) Error() string {
 }
 
 // Format implements fmt.Formatter to make this play nice with handling stack traces produced from
-// github.com/pkg/errors
+// github.com/pkg/errors.
+//nolint:errcheck // suppress errors rendering errors
 func (errs Errors) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':

@@ -24,7 +24,11 @@ func Driver(d drivers.Driver) BackendOpt {
 // NewBackend creates a new backend. A backend could be a connection to a remote server or
 // a new local OPA instance.
 func NewBackend(opts ...BackendOpt) (*Backend, error) {
-	b := &Backend{crd: newCRDHelper()}
+	helper, err := newCRDHelper()
+	if err != nil {
+		return nil, err
+	}
+	b := &Backend{crd: helper}
 	for _, opt := range opts {
 		opt(b)
 	}

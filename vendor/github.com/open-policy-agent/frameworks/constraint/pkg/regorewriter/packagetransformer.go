@@ -35,8 +35,6 @@ func (p *PackagePrefixer) Transform(ref ast.Ref) ast.Ref {
 	for _, prefix := range p.prefix {
 		newRef = append(newRef, ast.StringTerm(prefix))
 	}
-	for _, t := range ref[1:] {
-		newRef = append(newRef, t)
-	}
+	newRef = append(newRef, ref[1:]...)
 	return newRef
 }
