@@ -70,7 +70,10 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
-   * Make sure [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed, your kubectl context is set to the desired installation cluster, and you have a container registry you can write to that is readable by the target cluster.
+   * Make sure that:
+       * [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
+       * Your kubectl context is set to the desired installation cluster.
+       * You have a container registry you can write to that is readable by the target cluster.
    * Clone the Gatekeeper repository to your local system:
      ```sh
      git clone https://github.com/open-policy-agent/gatekeeper.git
