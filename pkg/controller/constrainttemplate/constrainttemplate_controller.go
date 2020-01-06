@@ -25,6 +25,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
@@ -156,13 +157,13 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	status.Errors = nil
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
-		r.metrics.registry.add(request.NamespacedName, statusError)
+		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		return reconcile.Result{}, err
 	}
 	crd, err := r.opa.CreateCRD(context.Background(), versionless)
 	if err != nil {
-		r.metrics.registry.add(request.NamespacedName, statusError)
+		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
@@ -192,30 +193,30 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		if err != nil && errors.IsNotFound(err) {
 			result, err := r.handleCreate(instance, crd)
 			if err != nil {
-				r.metrics.registry.add(request.NamespacedName, statusError)
+				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			}
 			if !result.Requeue {
-				r.metrics.registry.add(request.NamespacedName, statusActive)
+				r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 			}
 			return result, err
 
 		} else if err != nil {
-			r.metrics.registry.add(request.NamespacedName, statusError)
+			r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			return reconcile.Result{}, err
 
 		} else {
 			unversionedCRD := &apiextensions.CustomResourceDefinition{}
 			if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
-				r.metrics.registry.add(request.NamespacedName, statusError)
+				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				log.Error(err, "conversion error")
 				return reconcile.Result{}, err
 			}
 			result, err := r.handleUpdate(instance, crd, unversionedCRD)
 			if err != nil {
-				r.metrics.registry.add(request.NamespacedName, statusError)
+				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			}
 			if !result.Requeue {
-				r.metrics.registry.add(request.NamespacedName, statusActive)
+				r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 			}
 			return result, err
 		}
@@ -223,7 +224,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	result, err := r.handleDelete(instance, crd)
 	if err != nil {
-		r.metrics.registry.add(request.NamespacedName, statusError)
+		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 	}
 	if !result.Requeue {
 		r.metrics.registry.remove(request.NamespacedName)
@@ -252,7 +253,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	}
 	beginCompile := time.Now()
 	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
-		if err := r.metrics.reportIngestDuration(statusError, time.Since(beginCompile)); err != nil {
+		if err := r.metrics.reportIngestDuration(metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
 		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
@@ -264,7 +265,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		}
 		return reconcile.Result{}, err
 	}
-	if err := r.metrics.reportIngestDuration(statusActive, time.Since(beginCompile)); err != nil {
+	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
 	log.Info("adding to watcher registry")
@@ -320,7 +321,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	beginCompile := time.Now()
 	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
-		if err := r.metrics.reportIngestDuration(statusError, time.Since(beginCompile)); err != nil {
+		if err := r.metrics.reportIngestDuration(metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
 		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
@@ -332,7 +333,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		}
 		return reconcile.Result{}, err
 	}
-	if err := r.metrics.reportIngestDuration(statusActive, time.Since(beginCompile)); err != nil {
+	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
 	log.Info("making sure constraint is in watcher registry")

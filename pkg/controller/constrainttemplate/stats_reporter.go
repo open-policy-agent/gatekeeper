@@ -50,13 +50,6 @@ var (
 	}
 )
 
-type ctStatus string
-
-const (
-	statusActive = ctStatus("active")
-	statusError  = ctStatus("error")
-)
-
 func init() {
 	if err := register(); err != nil {
 		panic(err)
@@ -72,7 +65,7 @@ func reset() error {
 	return register()
 }
 
-func (r *reporter) reportCtCount(status ctStatus, count int64) error {
+func (r *reporter) reportCtCount(status metrics.Status, count int64) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(statusKey, string(status)),
@@ -83,7 +76,7 @@ func (r *reporter) reportCtCount(status ctStatus, count int64) error {
 	return metrics.Record(ctx, ctCountM.M(count))
 }
 
-func (r *reporter) reportIngestDuration(status ctStatus, d time.Duration) error {
+func (r *reporter) reportIngestDuration(status metrics.Status, d time.Duration) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(statusKey, string(status)),
@@ -103,7 +96,7 @@ func newStatsReporter() (*reporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg := &ctRegistry{cache: make(map[types.NamespacedName]ctStatus)}
+	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
 	return &reporter{ctx: ctx, registry: reg}, nil
 }
 
@@ -113,11 +106,11 @@ type reporter struct {
 }
 
 type ctRegistry struct {
-	cache map[types.NamespacedName]ctStatus
+	cache map[types.NamespacedName]metrics.Status
 	dirty bool
 }
 
-func (r *ctRegistry) add(key types.NamespacedName, status ctStatus) {
+func (r *ctRegistry) add(key types.NamespacedName, status metrics.Status) {
 	v, ok := r.cache[key]
 	if ok && v == status {
 		return
@@ -134,20 +127,17 @@ func (r *ctRegistry) remove(key types.NamespacedName) {
 	r.dirty = true
 }
 
-func (r *ctRegistry) report(metrics *reporter) {
+func (r *ctRegistry) report(mReporter *reporter) {
 	if !r.dirty {
 		return
 	}
-	totals := map[ctStatus]int64{
-		statusError:  0,
-		statusActive: 0,
-	}
+	totals := make(map[metrics.Status]int64)
 	for _, status := range r.cache {
 		totals[status]++
 	}
 	hadErr := false
-	for status, count := range totals {
-		if err := metrics.reportCtCount(status, count); err != nil {
+	for _, status := range metrics.AllStatuses {
+		if err := mReporter.reportCtCount(status, totals[status]); err != nil {
 			log.Error(err, "failed to report total constraint templates")
 			hadErr = true
 		}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -38,14 +39,11 @@ import (
 )
 
 var (
-	log                   = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
-	knownConstraintStatus = []status{activeStatus, errorStatus}
+	log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
 )
 
 const (
-	finalizerName        = "finalizers.gatekeeper.sh/constraint"
-	activeStatus  status = "active"
-	errorStatus   status = "error"
+	finalizerName = "finalizers.gatekeeper.sh/constraint"
 )
 
 type Adder struct {
@@ -60,10 +58,8 @@ type ConstraintsCache struct {
 
 type tags struct {
 	enforcementAction util.EnforcementAction
-	status            status
+	status            metrics.Status
 }
-
-type status string
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -173,7 +169,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err := r.cacheConstraint(instance); err != nil {
 			r.constraintsCache.addConstraintKey(constraintKey, tags{
 				enforcementAction: enforcementAction,
-				status:            errorStatus,
+				status:            metrics.ErrorStatus,
 			})
 			reportMetrics = true
 			return reconcile.Result{}, err
@@ -192,7 +188,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		// adding constraint to cache and sending metrics
 		r.constraintsCache.addConstraintKey(constraintKey, tags{
 			enforcementAction: enforcementAction,
-			status:            activeStatus,
+			status:            metrics.ActiveStatus,
 		})
 		reportMetrics = true
 	} else {
@@ -284,7 +280,7 @@ func (c *ConstraintsCache) reportTotalConstraints(reporter StatsReporter) {
 	}
 
 	for _, enforcementAction := range util.KnownEnforcementActions {
-		for _, status := range knownConstraintStatus {
+		for _, status := range metrics.AllStatuses {
 			if err := reporter.reportConstraints(
 				tags{
 					enforcementAction: enforcementAction,

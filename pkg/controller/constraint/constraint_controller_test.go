@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
@@ -15,7 +16,7 @@ func TestTotalConstraintsCache(t *testing.T) {
 
 	constraintsCache.addConstraintKey("test", tags{
 		enforcementAction: util.Deny,
-		status:            activeStatus,
+		status:            metrics.ActiveStatus,
 	})
 	if len(constraintsCache.cache) != 1 {
 		t.Errorf("cache: %v, wanted cache with 1 element", spew.Sdump(constraintsCache.cache))

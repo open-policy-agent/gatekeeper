@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"go.opencensus.io/stats/view"
 )
 
@@ -25,11 +26,11 @@ func TestReportIngestion(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportIngestDuration(statusActive, expectedDurationValueMin)
+	err = r.reportIngestDuration(metrics.ActiveStatus, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.reportIngestDuration(statusActive, expectedDurationValueMax)
+	err = r.reportIngestDuration(metrics.ActiveStatus, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
@@ -75,7 +76,7 @@ func TestGauges(t *testing.T) {
 	}
 	tc := []struct {
 		name string
-		fn   func(ctStatus, int64) error
+		fn   func(metrics.Status, int64) error
 	}{
 		{
 			name: ctCount,
@@ -90,7 +91,7 @@ func TestGauges(t *testing.T) {
 				"status": "active",
 			}
 
-			err = tt.fn(statusActive, expectedValue)
+			err = tt.fn(metrics.ActiveStatus, expectedValue)
 			if err != nil {
 				t.Errorf("function error %v", err)
 			}
