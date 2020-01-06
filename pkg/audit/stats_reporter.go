@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	totalViolationsName = "total_violations"
-	auditDurationName   = "audit_duration_seconds"
+	violationsName    = "violations"
+	auditDurationName = "audit_duration_seconds"
 )
 
 var (
-	violationsTotalM = stats.Int64(totalViolationsName, "Total number of violations per constraint", stats.UnitDimensionless)
-	auditDurationM   = stats.Float64(auditDurationName, "Latency of audit operation in seconds", stats.UnitSeconds)
+	violationsM    = stats.Int64(violationsName, "Total number of violations per constraint", stats.UnitDimensionless)
+	auditDurationM = stats.Float64(auditDurationName, "Latency of audit operation in seconds", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )
@@ -32,8 +32,8 @@ func init() {
 func register() error {
 	views := []*view.View{
 		{
-			Name:        totalViolationsName,
-			Measure:     violationsTotalM,
+			Name:        violationsName,
+			Measure:     violationsM,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{enforcementActionKey},
 		},
@@ -54,7 +54,7 @@ func (r *reporter) ReportTotalViolations(enforcementAction util.EnforcementActio
 		return err
 	}
 
-	return r.report(ctx, violationsTotalM.M(v))
+	return r.report(ctx, violationsM.M(v))
 }
 
 func (r *reporter) ReportLatency(d time.Duration) error {

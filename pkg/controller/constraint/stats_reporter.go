@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	totalConstraintsName = "total_constraints"
+	totalConstraintsName = "constraints"
 )
 
 var (

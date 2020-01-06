@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	ctCount        = "total_constraint_templates"
+	ctCount        = "constraint_templates"
 	ingestCount    = "constraint_template_ingestion_count"
 	ingestDuration = "constraint_template_ingestion_duration_seconds"
 

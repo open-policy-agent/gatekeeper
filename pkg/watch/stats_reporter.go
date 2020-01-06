@@ -13,9 +13,9 @@ import (
 const (
 	lastRestart      = "watch_manager_last_restart_time"
 	lastRestartCheck = "watch_manager_last_restart_check_time"
-	totalRestarts    = "watch_manager_total_restart_attempts"
-	gvkCount         = "watch_manager_total_watched_gvk"
-	gvkIntentCount   = "watch_manager_total_intended_watch_gvk"
+	totalRestarts    = "watch_manager_restart_attempts"
+	gvkCount         = "watch_manager_watched_gvk"
+	gvkIntentCount   = "watch_manager_intended_watch_gvk"
 	isRunning        = "watch_manager_is_running"
 )
 

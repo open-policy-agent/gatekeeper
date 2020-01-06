@@ -22,7 +22,7 @@ func TestReportTotalViolations(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportTotalViolations error %v", err)
 	}
-	row := checkData(t, totalViolationsName, expectedRowLength)
+	row := checkData(t, violationsName, expectedRowLength)
 	value, ok := row.Data.(*view.LastValueData)
 	if !ok {
 		t.Error("ReportTotalViolations should have aggregation LastValue()")
@@ -33,7 +33,7 @@ func TestReportTotalViolations(t *testing.T) {
 		}
 	}
 	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalViolationsName, value.Value, expectedValue)
+		t.Errorf("Metric: %v - Expected %v, got %v", violationsName, value.Value, expectedValue)
 	}
 }
 
