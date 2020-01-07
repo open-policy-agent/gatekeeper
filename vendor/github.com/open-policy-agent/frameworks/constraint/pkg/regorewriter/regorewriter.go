@@ -13,6 +13,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+const vLog = 2
+const vLogDetail = vLog + 1
+
 // RegoRewriter rewrites rego code by updating library package paths by prepending a prefix
 // and updating references to library code accordingly.
 type RegoRewriter struct {
@@ -87,8 +90,11 @@ func (r *RegoRewriter) AddLib(path, src string) error {
 
 // addTestDir adds a test dir inside one of the provided paths.
 func (r *RegoRewriter) addTestDir(testDirPath string) error {
-	glog.Infof("Walking test dir %s", testDirPath)
+	glog.V(vLog).Infof("Walking test dir %s", testDirPath)
 	walkFn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return errors.Wrapf(err, "walk error on path %s", path)
+		}
 		if info.IsDir() {
 			return nil
 		}
@@ -96,7 +102,7 @@ func (r *RegoRewriter) addTestDir(testDirPath string) error {
 			return nil
 		}
 
-		glog.Infof("reading %s", path)
+		glog.V(vLog).Infof("reading %s", path)
 		bytes, err := ioutil.ReadFile(path)
 		if err != nil {
 			return err
@@ -113,7 +119,7 @@ func (r *RegoRewriter) addTestDir(testDirPath string) error {
 
 // addFileFromFs reads a file from the filesystem, parses it then appends it to slice.
 func (r *RegoRewriter) addFileFromFs(path string, slice *[]*Module) error {
-	glog.Infof("adding file %s", path)
+	glog.V(vLog).Infof("adding file %s", path)
 	if !strings.HasSuffix(path, ".rego") {
 		return errors.Errorf("invalid file specified %s", path)
 	}
@@ -200,11 +206,11 @@ func (r *RegoRewriter) forAllModules(f func(*Module) error) error {
 func (r *RegoRewriter) checkImports() error {
 	return r.forAllModules(func(m *Module) error {
 		if m.IsTestFile() {
-			glog.Infof("skipping import check for %s", m.FilePath)
+			glog.V(vLog).Infof("skipping import check for %s", m.FilePath)
 			return nil
 		}
 
-		glog.Infof("checking %s", m.FilePath)
+		glog.V(vLogDetail).Infof("checking %s", m.FilePath)
 		for _, i := range m.Module.Imports {
 			if err := r.checkImport(i); err != nil {
 				return err
@@ -242,33 +248,32 @@ func (r *RegoRewriter) allowedLibPackage(ref ast.Ref) bool {
 
 // checkRef will check that a ref is allowed based on externs and known libs.
 func (r *RegoRewriter) checkRef(ref ast.Ref) error {
-	glog.Infof("  Checking ref %s", ref)
+	glog.V(vLogDetail).Infof("  Checking ref %s", ref)
 	if !isDataRef(ref) {
 		return nil
 	}
 
 	for _, extern := range r.allowedExterns {
 		if isSubRef(extern, ref) {
-			glog.Infof("Found extern ref %s for %s", extern, ref)
+			glog.V(vLogDetail).Infof("Found extern ref %s for %s", extern, ref)
 			return nil
 		}
 	}
 
 	for _, lib := range r.allowedLibPrefixes {
 		if isSubRef(lib, ref) {
-			glog.Infof("Found lib ref %s for %s", lib, ref)
+			glog.V(vLogDetail).Infof("Found lib ref %s for %s", lib, ref)
 			return nil
 		}
 	}
 
-	glog.Infof("Disallowed ref %s", ref)
 	return errors.Errorf("disallowed ref %s", ref)
 }
 
 // checkImport checks the import statement to ensure that it's a subref of an allowed lib prefix.
 func (r *RegoRewriter) checkImport(i *ast.Import) error {
 	want := i.Path.String()
-	glog.Infof("checking import %s", want)
+	glog.V(vLog).Infof("checking import %s", want)
 
 	importRef := i.Path.Value.(ast.Ref)
 	if isSubRef(inputRefPrefix, importRef) {
@@ -290,11 +295,11 @@ func (r *RegoRewriter) checkDataReferences() error {
 	// walk AST, look for data references
 	return r.forAllModules(func(m *Module) error {
 		if m.IsTestFile() {
-			glog.Infof("skipping check data references for %s", m.FilePath)
+			glog.V(vLogDetail).Infof("skipping check data references for %s", m.FilePath)
 			return nil
 		}
 
-		glog.Infof("checking data references for %s", m.FilePath)
+		glog.V(vLogDetail).Infof("checking data references for %s", m.FilePath)
 		var errs Errors
 		for _, rule := range m.Module.Rules {
 			ast.WalkRefs(rule, func(ref ast.Ref) bool {
@@ -324,7 +329,7 @@ func (r *RegoRewriter) checkSources() error {
 
 // refNeedsRewrite checks if the Ref refers to the 'data' element.
 func (r *RegoRewriter) refNeedsRewrite(ref ast.Ref) bool {
-	if !isDataRef(ref) || isTestDataRef(ref) {
+	if !isDataRef(ref) {
 		return false
 	}
 	for _, extRef := range r.allowedExterns {
@@ -371,9 +376,9 @@ func (r *RegoRewriter) Rewrite() (*Sources, error) {
 	// libs, entryPoints - update import and other refs
 	err := r.forAllModules(func(mod *Module) error {
 		for _, i := range mod.Module.Imports {
-			glog.Infof("import: %s %#v", i.Path, i.Path)
+			glog.V(vLogDetail).Infof("import: %s %#v", i.Path, i.Path)
 			for _, t := range i.Path.Value.(ast.Ref) {
-				glog.Infof("  term: %s %#v %#v", t, t, reflect.TypeOf(t.Value).String())
+				glog.V(vLogDetail).Infof("  term: %s %#v %#v", t, t, reflect.TypeOf(t.Value).String())
 			}
 			i.Path = r.rewriteImportPath(i.Path)
 		}
