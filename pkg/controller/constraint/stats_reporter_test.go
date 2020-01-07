@@ -22,7 +22,7 @@ func TestReportConstraints(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportConstraints error %v", err)
 	}
-	row := checkData(t, totalConstraintsName, expectedRowLength)
+	row := checkData(t, constraintsMetricName, expectedRowLength)
 	value, ok := row.Data.(*view.LastValueData)
 	if !ok {
 		t.Error("ReportConstraints should have aggregation LastValue()")
@@ -33,7 +33,7 @@ func TestReportConstraints(t *testing.T) {
 		}
 	}
 	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalConstraintsName, expectedValue, value.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v", constraintsMetricName, expectedValue, value.Value)
 	}
 }
 

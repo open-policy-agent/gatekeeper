@@ -11,54 +11,54 @@ import (
 )
 
 const (
-	lastRestart      = "watch_manager_last_restart_time"
-	lastRestartCheck = "watch_manager_last_restart_check_time"
-	totalRestarts    = "watch_manager_total_restart_attempts"
-	gvkCount         = "watch_manager_total_watched_gvk"
-	gvkIntentCount   = "watch_manager_total_intended_watch_gvk"
-	isRunning        = "watch_manager_is_running"
+	lastRestartMetricName      = "watch_manager_last_restart_time"
+	lastRestartCheckMetricName = "watch_manager_last_restart_check_time"
+	totalRestartsMetricName    = "watch_manager_restart_attempts"
+	gvkCountMetricName         = "watch_manager_watched_gvk"
+	gvkIntentCountMetricName   = "watch_manager_intended_watch_gvk"
+	isRunningMetricName        = "watch_manager_is_running"
 )
 
 var (
-	lastRestartM      = stats.Float64(lastRestart, "Timestamp of last watch manager restart", stats.UnitSeconds)
-	lastRestartCheckM = stats.Float64(lastRestartCheck, "Timestamp of last time watch manager checked if it needed to restart", stats.UnitSeconds)
-	gvkCountM         = stats.Int64(gvkCount, "Total number of watched GroupVersionKinds", stats.UnitDimensionless)
-	gvkIntentCountM   = stats.Int64(gvkIntentCount, "Total number of GroupVersionKinds with a registered watch intent", stats.UnitDimensionless)
-	isRunningM        = stats.Int64(isRunning, "One if the watch manager is running, zero if not", stats.UnitDimensionless)
+	lastRestartM      = stats.Float64(lastRestartMetricName, "Timestamp of last watch manager restart", stats.UnitSeconds)
+	lastRestartCheckM = stats.Float64(lastRestartCheckMetricName, "Timestamp of last time watch manager checked if it needed to restart", stats.UnitSeconds)
+	gvkCountM         = stats.Int64(gvkCountMetricName, "Total number of watched GroupVersionKinds", stats.UnitDimensionless)
+	gvkIntentCountM   = stats.Int64(gvkIntentCountMetricName, "Total number of GroupVersionKinds with a registered watch intent", stats.UnitDimensionless)
+	isRunningM        = stats.Int64(isRunningMetricName, "One if the watch manager is running, zero if not", stats.UnitDimensionless)
 
 	views = []*view.View{
 		{
-			Name:        lastRestart,
+			Name:        lastRestartMetricName,
 			Measure:     lastRestartM,
 			Description: "The epoch timestamp of the last time the watch manager has restarted",
 			Aggregation: view.LastValue(),
 		},
 		{
-			Name:        totalRestarts,
+			Name:        totalRestartsMetricName,
 			Measure:     lastRestartM,
 			Description: "Total number of times the watch manager has restarted",
 			Aggregation: view.Count(),
 		},
 		{
-			Name:        lastRestartCheck,
+			Name:        lastRestartCheckMetricName,
 			Measure:     lastRestartCheckM,
 			Description: "The epoch timestamp of the last time the watch manager was checked for a restart condition. This is a heartbeat that should occur regularly",
 			Aggregation: view.LastValue(),
 		},
 		{
-			Name:        gvkCount,
+			Name:        gvkCountMetricName,
 			Measure:     gvkCountM,
 			Description: "The total number of Group/Version/Kinds currently watched by the watch manager",
 			Aggregation: view.LastValue(),
 		},
 		{
-			Name:        gvkIntentCount,
+			Name:        gvkIntentCountMetricName,
 			Measure:     gvkIntentCountM,
 			Description: "The total number of Group/Version/Kinds that the watch manager has instructions to watch. This could differ from the actual count due to resources being pending, non-existent, or a failure of the watch manager to restart",
 			Aggregation: view.LastValue(),
 		},
 		{
-			Name:        isRunning,
+			Name:        isRunningMetricName,
 			Measure:     isRunningM,
 			Description: "Whether the watch manager is running. This is expected to be 1 the majority of the time with brief periods of downtime due to the watch manager being paused or restarted",
 			Aggregation: view.LastValue(),

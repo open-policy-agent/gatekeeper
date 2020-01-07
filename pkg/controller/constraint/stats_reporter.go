@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	totalConstraintsName = "total_constraints"
+	constraintsMetricName = "constraints"
 )
 
 var (
-	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of constraints", stats.UnitDimensionless)
+	constraintsM = stats.Int64(constraintsMetricName, "Current number of known constraints", stats.UnitDimensionless)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 	statusKey            = tag.MustNewKey("status")
@@ -29,8 +29,8 @@ func init() {
 func register() error {
 	views := []*view.View{
 		{
-			Name:        totalConstraintsName,
-			Measure:     constraintsTotalM,
+			Name:        constraintsMetricName,
+			Measure:     constraintsM,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{enforcementActionKey, statusKey},
 		},
@@ -47,7 +47,7 @@ func (r *reporter) reportConstraints(t tags, v int64) error {
 		return err
 	}
 
-	return r.report(ctx, constraintsTotalM.M(v))
+	return r.report(ctx, constraintsM.M(v))
 }
 
 // StatsReporter reports audit metrics
