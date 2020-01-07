@@ -52,7 +52,7 @@ func TestReportIngestion(t *testing.T) {
 
 	// Duration test
 	row = checkData(t, ingestDuration, expectedRowLength)
-	DurationValue, ok := row.Data.(*view.DistributionData)
+	durationValue, ok := row.Data.(*view.DistributionData)
 	if !ok {
 		t.Error("ingestDuration should have aggregation Distribution()")
 	}
@@ -61,11 +61,11 @@ func TestReportIngestion(t *testing.T) {
 			t.Errorf("ingestDuration tags does not match for %v", tag.Key.Name())
 		}
 	}
-	if DurationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, DurationValue.Min, expectedDurationMin)
+	if durationValue.Min != expectedDurationMin {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Min, expectedDurationMin)
 	}
-	if DurationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, DurationValue.Max, expectedDurationMax)
+	if durationValue.Max != expectedDurationMax {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Max, expectedDurationMax)
 	}
 }
 
