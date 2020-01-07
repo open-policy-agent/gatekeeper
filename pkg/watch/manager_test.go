@@ -181,11 +181,10 @@ func TestRegistrar(t *testing.T) {
 		if b == false {
 			t.Errorf("Manager not restarted on first add")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
 
 	t.Run("Second add watch does nothing", func(t *testing.T) {
 		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
@@ -215,11 +214,10 @@ func TestRegistrar(t *testing.T) {
 		if b == true {
 			t.Errorf("Manager restarted, wanted no op")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
 
 	reg2, err := wm.NewRegistrar("bar", nil)
 	if err != nil {
@@ -254,11 +252,10 @@ func TestRegistrar(t *testing.T) {
 		if b == false {
 			t.Errorf("Manager not restarted")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
 
 	t.Run("First remove makes for a change", func(t *testing.T) {
 		if err := reg2.RemoveWatch(makeGvk("FooCRD")); err != nil {
@@ -289,11 +286,10 @@ func TestRegistrar(t *testing.T) {
 		if b == false {
 			t.Errorf("Manager not restarted")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
 
 	t.Run("Second remove makes for a remove", func(t *testing.T) {
 		if err := reg.RemoveWatch(makeGvk("FooCRD")); err != nil {
@@ -324,17 +320,15 @@ func TestRegistrar(t *testing.T) {
 		if b == false {
 			t.Errorf("Manager not restarted")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
 
-	if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
-		t.Fatalf("Error adding watch: %s", err)
-	}
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
-
 	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
+		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
+			t.Fatalf("Error adding watch: %s", err)
+		}
 		wm.newDiscovery = newDiscoveryFactory(true)
 		expectedAdded := newChange("FooCRD", reg)
 		managedKinds, err := wm.managedKinds.Get()
@@ -370,16 +364,15 @@ func TestRegistrar(t *testing.T) {
 		if b == false {
 			t.Errorf("Manager should have updated now that CRD is found")
 		}
+		if waitForWatchManagerStart(wm) == false {
+			t.Errorf("Watch manager was not set to started")
+		}
 	})
 
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
-	}
-
-	if err := reg.ReplaceWatch([]schema.GroupVersionKind{}); err != nil {
-		t.Fatalf("Error replacing watch: %s", err)
-	}
 	t.Run("Replace works", func(t *testing.T) {
+		if err := reg.ReplaceWatch([]schema.GroupVersionKind{}); err != nil {
+			t.Fatalf("Error replacing watch: %s", err)
+		}
 		expectedRemoved := newChange("FooCRD", reg)
 		managedKinds, err := wm.managedKinds.Get()
 		if err != nil {
@@ -404,6 +397,34 @@ func TestRegistrar(t *testing.T) {
 		}
 		if b == false {
 			t.Errorf("Manager should have updated now that CRD is found")
+		}
+	})
+
+	t.Run("Missing existing resources dumped on restart", func(t *testing.T) {
+		if err := reg.ReplaceWatch([]schema.GroupVersionKind{makeGvk("initialCRD"), makeGvk("secondCRD")}); err != nil {
+			t.Fatalf("Error replacing watch: %s", err)
+		}
+		wm.newDiscovery = newDiscoveryFactory(false, "initialCRD", "secondCRD")
+		b, err := wm.updateManager()
+		if err != nil {
+			t.Errorf("Could not update manager: %s", err)
+		}
+		if b == false {
+			t.Errorf("Manager should have updated for new CRDs")
+		}
+		if err := reg.ReplaceWatch([]schema.GroupVersionKind{makeGvk("initialCRD")}); err != nil {
+			t.Fatalf("Error replacing watch: %s", err)
+		}
+		wm.newDiscovery = newDiscoveryFactory(true, "initialCRD")
+		b, err = wm.updateManager()
+		if err != nil {
+			t.Errorf("Could not update manager: %s", err)
+		}
+		if b == false {
+			t.Errorf("Manager should have updated for removed CRD")
+		}
+		if len(wm.watchedKinds) != 0 {
+			t.Errorf("Manager should be watching zero kinds, watching: %v", wm.watchedKinds)
 		}
 	})
 
