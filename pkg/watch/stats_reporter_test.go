@@ -24,7 +24,7 @@ func TestLastRestartCheck(t *testing.T) {
 	if err != nil {
 		t.Errorf("reportRestartCheck error %v", err)
 	}
-	row := checkData(t, lastRestartCheck, expectedRowLength)
+	row := checkData(t, lastRestartCheckMetricName, expectedRowLength)
 	value, ok := row.Data.(*view.LastValueData)
 	if !ok {
 		t.Error("reportRestartCheck should have aggregation LastValue()")
@@ -33,7 +33,7 @@ func TestLastRestartCheck(t *testing.T) {
 		t.Errorf("reportRestartCheck tags is non-empty, got: %v", row.Tags)
 	}
 	if value.Value != expectedTime {
-		t.Errorf("Metric: %v - Expected %v, got %v", lastRestartCheck, expectedTime, value.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v", lastRestartCheckMetricName, expectedTime, value.Value)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestLastRestart(t *testing.T) {
 	if err := r.reportRestart(); err != nil {
 		t.Errorf("reportRestart error %v", err)
 	}
-	row := checkData(t, lastRestart, expectedRowLength)
+	row := checkData(t, lastRestartMetricName, expectedRowLength)
 	value, ok := row.Data.(*view.LastValueData)
 	if !ok {
 		t.Error("reportRestart should have aggregation LastValue()")
@@ -66,10 +66,10 @@ func TestLastRestart(t *testing.T) {
 		t.Errorf("reportRestart tags is non-empty, got: %v", row.Tags)
 	}
 	if value.Value != expectedTime {
-		t.Errorf("Metric: %v - Expected %v, got %v", lastRestart, expectedTime, value.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v", lastRestartMetricName, expectedTime, value.Value)
 	}
 
-	countRow := checkData(t, totalRestarts, expectedRowLength)
+	countRow := checkData(t, totalRestartsMetricName, expectedRowLength)
 	countValue, ok := countRow.Data.(*view.CountData)
 	if !ok {
 		t.Fatalf("totalRestarts should have type CountData: %s", reflect.TypeOf(countRow.Data))
@@ -78,14 +78,14 @@ func TestLastRestart(t *testing.T) {
 		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
 	}
 	if countValue.Value != 1 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, 1, countValue.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v", totalRestartsMetricName, 1, countValue.Value)
 	}
 
 	if err = r.reportRestart(); err != nil {
 		t.Errorf("reportRestart error %v", err)
 	}
 
-	countRow2 := checkData(t, totalRestarts, expectedRowLength)
+	countRow2 := checkData(t, totalRestartsMetricName, expectedRowLength)
 	countValue2, ok := countRow2.Data.(*view.CountData)
 	if !ok {
 		t.Fatalf("totalRestarts should have type CountData: %s", reflect.TypeOf(countRow2.Data))
@@ -94,7 +94,7 @@ func TestLastRestart(t *testing.T) {
 		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
 	}
 	if countValue2.Value != 2 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestarts, 2, countValue2.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v", totalRestartsMetricName, 2, countValue2.Value)
 	}
 }
 
@@ -108,15 +108,15 @@ func TestGauges(t *testing.T) {
 		fn   func(int64) error
 	}{
 		{
-			name: gvkCount,
+			name: gvkCountMetricName,
 			fn:   r.reportGvkCount,
 		},
 		{
-			name: gvkIntentCount,
+			name: gvkIntentCountMetricName,
 			fn:   r.reportGvkIntentCount,
 		},
 		{
-			name: isRunning,
+			name: isRunningMetricName,
 			fn:   r.reportIsRunning,
 		},
 	}

@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	requestCountName    = "request_count"
-	requestDurationName = "request_duration_seconds"
+	requestCountMetricName    = "request_count"
+	requestDurationMetricName = "request_duration_seconds"
 )
 
 var (
 	responseTimeInSecM = stats.Float64(
-		requestDurationName,
+		requestDurationMetricName,
 		"The response time in seconds",
 		stats.UnitSeconds)
 
@@ -72,14 +72,14 @@ func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 func register() error {
 	views := []*view.View{
 		{
-			Name:        requestCountName,
+			Name:        requestCountMetricName,
 			Description: "The number of requests that are routed to webhook",
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Count(),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
 		{
-			Name:        requestDurationName,
+			Name:        requestDurationMetricName,
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
