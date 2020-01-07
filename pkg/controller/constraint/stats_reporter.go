@@ -14,7 +14,7 @@ const (
 )
 
 var (
-	constraintsTotalM = stats.Int64(totalConstraintsName, "Total number of constraints", stats.UnitDimensionless)
+	constraintsTotalM = stats.Int64(totalConstraintsName, "Current number of known constraints", stats.UnitDimensionless)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 	statusKey            = tag.MustNewKey("status")
