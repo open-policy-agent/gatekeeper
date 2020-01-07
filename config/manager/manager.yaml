@@ -53,6 +53,14 @@ spec:
           requests:
             cpu: 100m
             memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
         securityContext:
           runAsUser: 1000
           runAsGroup: 999
