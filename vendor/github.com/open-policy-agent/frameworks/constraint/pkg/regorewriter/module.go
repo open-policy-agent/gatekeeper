@@ -22,7 +22,7 @@ func (m *Module) Write() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(m.Path(), b, 640)
+	return ioutil.WriteFile(m.Path(), b, 0640)
 }
 
 // Content returns the module as a byte slice of rego source code.

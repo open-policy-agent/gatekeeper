@@ -14,16 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package scheme contains utilities for gradually building Schemes,
-// which contain information associating Go types with Kubernetes
-// groups, versions, and kinds.
-//
-// Deprecated: use pkg/scheme instead.
-package scheme
+// +k8s:deepcopy-gen=package
+// +k8s:protobuf-gen=package
+// +k8s:conversion-gen=k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
+// +k8s:defaulter-gen=TypeMeta
+// +k8s:openapi-gen=true
+// +groupName=apiextensions.k8s.io
 
-import (
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
-)
-
-// Builder builds a new Scheme for mapping go types to Kubernetes GroupVersionKinds.
-type Builder = scheme.Builder
+// Package v1 is the v1 version of the API.
+package v1 // import "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"

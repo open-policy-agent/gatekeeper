@@ -96,7 +96,7 @@ func (d *driver) checkModuleSetName(name string) error {
 	if name == "" {
 		return errors.Errorf("Modules name prefix cannot be empty")
 	}
-	if strings.Index(name, moduleSetSep) != -1 {
+	if strings.Contains(name, moduleSetSep) {
 		return errors.Errorf("Modules name prefix not allowed to contain the sequence n%s", moduleSetSep)
 	}
 	return nil
@@ -251,7 +251,9 @@ func (d *driver) PutData(ctx context.Context, path string, data interface{}) err
 	}
 	if _, err := d.storage.Read(ctx, txn, p); err != nil {
 		if storage.IsNotFound(err) {
-			storage.MakeDir(ctx, d.storage, txn, p[:len(p)-1])
+			if err := storage.MakeDir(ctx, d.storage, txn, p[:len(p)-1]); err != nil {
+				return err
+			}
 		} else {
 			d.storage.Abort(ctx, txn)
 			return err
