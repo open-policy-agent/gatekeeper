@@ -79,8 +79,8 @@ func TestGauges(t *testing.T) {
 		fn   func(metrics.Status, int64) error
 	}{
 		{
-			name: ctCount,
-			fn:   r.reportCtCount,
+			name: ctMetricName,
+			fn:   r.reportCtMetric,
 		},
 	}
 	for _, tt := range tc {

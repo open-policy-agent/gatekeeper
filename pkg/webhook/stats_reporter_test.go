@@ -32,7 +32,7 @@ func TestReportRequest(t *testing.T) {
 	}
 
 	// count test
-	row := checkData(t, requestCountName, expectedRowLength)
+	row := checkData(t, requestCountMetricName, expectedRowLength)
 	count, ok := row.Data.(*view.CountData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Count()")
@@ -43,11 +43,11 @@ func TestReportRequest(t *testing.T) {
 		}
 	}
 	if count.Value != expectedCount {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestCountName, expectedCount, count.Value)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestCountMetricName, expectedCount, count.Value)
 	}
 
 	// Duration test
-	row = checkData(t, requestDurationName, expectedRowLength)
+	row = checkData(t, requestDurationMetricName, expectedRowLength)
 	DurationValue, ok := row.Data.(*view.DistributionData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Distribution()")
@@ -58,10 +58,10 @@ func TestReportRequest(t *testing.T) {
 		}
 	}
 	if DurationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, expectedDurationMin, DurationValue.Min)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, expectedDurationMin, DurationValue.Min)
 	}
 	if DurationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationName, expectedDurationMax, DurationValue.Max)
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, expectedDurationMax, DurationValue.Max)
 	}
 }
 

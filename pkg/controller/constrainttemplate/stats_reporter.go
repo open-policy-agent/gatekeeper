@@ -12,24 +12,24 @@ import (
 )
 
 const (
-	ctCount        = "constraint_templates"
+	ctMetricName   = "constraint_templates"
 	ingestCount    = "constraint_template_ingestion_count"
 	ingestDuration = "constraint_template_ingestion_duration_seconds"
 
-	ctCountDesc = "Number of observed constraint templates"
+	ctDesc = "Number of observed constraint templates"
 )
 
 var (
-	ctCountM        = stats.Int64(ctCount, ctCountDesc, stats.UnitDimensionless)
+	ctM             = stats.Int64(ctMetricName, ctDesc, stats.UnitDimensionless)
 	ingestDurationM = stats.Float64(ingestDuration, "How long it took to ingest a constraint template in seconds", stats.UnitSeconds)
 
 	statusKey = tag.MustNewKey("status")
 
 	views = []*view.View{
 		{
-			Name:        ctCount,
-			Measure:     ctCountM,
-			Description: ctCountDesc,
+			Name:        ctMetricName,
+			Measure:     ctM,
+			Description: ctDesc,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{statusKey},
 		},
@@ -65,7 +65,7 @@ func reset() error {
 	return register()
 }
 
-func (r *reporter) reportCtCount(status metrics.Status, count int64) error {
+func (r *reporter) reportCtMetric(status metrics.Status, count int64) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(statusKey, string(status)),
@@ -73,7 +73,7 @@ func (r *reporter) reportCtCount(status metrics.Status, count int64) error {
 	if err != nil {
 		return err
 	}
-	return metrics.Record(ctx, ctCountM.M(count))
+	return metrics.Record(ctx, ctM.M(count))
 }
 
 func (r *reporter) reportIngestDuration(status metrics.Status, d time.Duration) error {
@@ -137,7 +137,7 @@ func (r *ctRegistry) report(mReporter *reporter) {
 	}
 	hadErr := false
 	for _, status := range metrics.AllStatuses {
-		if err := mReporter.reportCtCount(status, totals[status]); err != nil {
+		if err := mReporter.reportCtMetric(status, totals[status]); err != nil {
 			log.Error(err, "failed to report total constraint templates")
 			hadErr = true
 		}
