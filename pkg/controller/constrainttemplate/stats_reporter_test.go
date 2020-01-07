@@ -28,22 +28,22 @@ func TestReportIngestion(t *testing.T) {
 	}
 	err = r.reportIngestDuration(metrics.ActiveStatus, expectedDurationValueMin)
 	if err != nil {
-		t.Errorf("ReportRequest error %v", err)
+		t.Errorf("reportIngestDuration error %v", err)
 	}
 	err = r.reportIngestDuration(metrics.ActiveStatus, expectedDurationValueMax)
 	if err != nil {
-		t.Errorf("ReportRequest error %v", err)
+		t.Errorf("reportIngestDuration error %v", err)
 	}
 
 	// count test
 	row := checkData(t, ingestCount, expectedRowLength)
 	count, ok := row.Data.(*view.CountData)
 	if !ok {
-		t.Error("ReportRequest should have aggregation Count()")
+		t.Error("ingestCount should have aggregation Count()")
 	}
 	for _, tag := range row.Tags {
 		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
+			t.Errorf("ingestCount tags does not match for %v", tag.Key.Name())
 		}
 	}
 	if count.Value != expectedCount {
@@ -54,11 +54,11 @@ func TestReportIngestion(t *testing.T) {
 	row = checkData(t, ingestDuration, expectedRowLength)
 	DurationValue, ok := row.Data.(*view.DistributionData)
 	if !ok {
-		t.Error("ReportRequest should have aggregation Distribution()")
+		t.Error("ingestDuration should have aggregation Distribution()")
 	}
 	for _, tag := range row.Tags {
 		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
+			t.Errorf("ingestDuration tags does not match for %v", tag.Key.Name())
 		}
 	}
 	if DurationValue.Min != expectedDurationMin {
@@ -106,7 +106,7 @@ func TestGauges(t *testing.T) {
 			}
 			for _, tag := range row.Tags {
 				if tag.Value != expectedTags[tag.Key.Name()] {
-					t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
+					t.Errorf("%v tags does not match for %v", tt.name, tag.Key.Name())
 				}
 			}
 			if int64(value.Value) != expectedValue {
