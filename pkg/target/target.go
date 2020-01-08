@@ -111,6 +111,20 @@ func getString(m map[string]interface{}, k string) (string, error) {
 	return s, nil
 }
 
+// nestedMap augments unstructured.NestedMap to interpret a nil-valued field
+// as missing
+func nestedMap(rmap map[string]interface{}, field string) (map[string]interface{}, bool, error) {
+	objMap, found, err := unstructured.NestedMap(rmap, field)
+	if err != nil || !found {
+		if val, found, err2 := unstructured.NestedFieldNoCopy(rmap, field); val == nil && found == true && err2 == nil {
+			return nil, false, nil
+		} else {
+			return nil, false, err
+		}
+	}
+	return objMap, true, nil
+}
+
 func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	rmap, ok := result.Review.(map[string]interface{})
 	if !ok {
@@ -135,24 +149,17 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 		apiVersion = fmt.Sprintf("%s/%s", group, version)
 	}
 
-	objMap, found, err := unstructured.NestedMap(rmap, "object")
-	if err != nil || !found {
-		if val, _, err2 := unstructured.NestedFieldNoCopy(rmap, "object"); val == nil && err2 == nil {
-			objMap2, found2, err3 := unstructured.NestedMap(rmap, "oldObject")
-			if err3 != nil {
-				return errors.Wrap(err, "HandleViolation:NestedMapOldObj")
-			}
-			if !found2 {
-				return errors.New("no object or oldObject returned in review")
-			}
-			objMap = objMap2
-		} else {
-			if err != nil {
-				return errors.Wrap(err, "HandleViolation:NestedMap")
-			}
-			if !found {
-				return errors.New("no object returned in review")
-			}
+	objMap, found, err := nestedMap(rmap, "object")
+	if err != nil {
+		return errors.Wrap(err, "HandleViolation:NestedMap")
+	}
+	if !found {
+		objMap, found, err = nestedMap(rmap, "oldObject")
+		if err != nil {
+			return errors.Wrap(err, "HandleViolation:NestedMapOldObj")
+		}
+		if !found {
+			return errors.New("no object or oldObject returned in review")
 		}
 	}
 
