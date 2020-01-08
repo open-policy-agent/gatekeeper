@@ -311,7 +311,9 @@ status:
 ```
 > NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-To configure Audit frequency, update the `--auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `--constraintViolationsLimit` flag, which defaults to `20`.
+- Audit interval: set `--auditInterval=123` (defaults to every `60` seconds)
+- Audit violations per constraint: set `--constraintViolationsLimit=123` (defaults to `20`)
+- Disable: set `--auditInterval=0`
 
 ### Log denies / dryrun
 
