@@ -47,6 +47,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
+	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
 
@@ -161,7 +162,20 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	if len(res) != 0 {
 		var msgs []string
 		for _, r := range res {
-			if r.EnforcementAction == "deny" {
+			if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
+				if *logDenies {
+					log.WithValues(
+						"process", "admission",
+						"event_type", "violation",
+						"constraint_name", r.Constraint.GetName(),
+						"constraint_kind", r.Constraint.GetKind(),
+						"constraint_action", r.EnforcementAction,
+						"resource_kind", req.AdmissionRequest.Kind.Kind,
+						"resource_namespace", req.AdmissionRequest.Namespace,
+						"resource_name", req.AdmissionRequest.Name,
+					).Info("denied admission")
+				}
+
 				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 			}
 		}

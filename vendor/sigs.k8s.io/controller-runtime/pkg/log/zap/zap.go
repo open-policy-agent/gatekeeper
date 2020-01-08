@@ -41,11 +41,9 @@ func New(opts ...Opts) logr.Logger {
 // (stacktraces on warnings, no sampling), otherwise a Zap production
 // config will be used (stacktraces on errors, sampling).
 //
-// Deprecated, use New() and the functional opts pattern instead:
+// Deprecated: use New() and the functional opts pattern instead:
 //
-// New(func(o *Options){
-//    o.Development: development,
-// })
+// New(UseDevMode(development))
 func Logger(development bool) logr.Logger {
 	return LoggerTo(os.Stderr, development)
 }
@@ -54,12 +52,9 @@ func Logger(development bool) logr.Logger {
 // to the given destination, instead of stderr.  It otherwise behaves like
 // ZapLogger.
 //
-// Deprecated, use New() and the functional opts pattern instead:
+// Deprecated: use New() and the functional opts pattern instead:
 //
-// New(func(o *Options){
-//    o.Development: development,
-//    o.DestWriter: writer,
-// })
+// New(UseDevMode(development), WriteTo(writer))
 func LoggerTo(destWriter io.Writer, development bool) logr.Logger {
 	return zapr.NewLogger(RawLoggerTo(destWriter, development))
 }
@@ -67,42 +62,87 @@ func LoggerTo(destWriter io.Writer, development bool) logr.Logger {
 // RawLoggerTo returns a new zap.Logger configured with KubeAwareEncoder
 // which logs to a given destination
 //
-// Deprecated, use NewRaw() and the functional opts pattern instead:
+// Deprecated: use NewRaw() and the functional opts pattern instead:
 //
-// NewRaw(func(o *Options){
-//    o.Development: development,
-// })
+// NewRaw(UseDevMode(development), WriteTo(destWriter), RawZapOpts(opts...))
 func RawLoggerTo(destWriter io.Writer, development bool, opts ...zap.Option) *zap.Logger {
-	o := func(o *Options) {
-		o.DestWritter = destWriter
-		o.Development = development
-		o.ZapOpts = opts
-	}
-	return NewRaw(o)
+	return NewRaw(UseDevMode(development), WriteTo(destWriter), RawZapOpts(opts...))
 }
 
 // Opts allows to manipulate Options
 type Opts func(*Options)
 
+// UseDevMode sets the logger to use (or not use) development mode (more
+// human-readable output, extra stack traces and logging information, etc).
+// See Options.Development
+func UseDevMode(enabled bool) Opts {
+	return func(o *Options) {
+		o.Development = enabled
+	}
+}
+
+// WriteTo configures the logger to write to the given io.Writer, instead of standard error.
+// See Options.DestWritter
+func WriteTo(out io.Writer) Opts {
+	return func(o *Options) {
+		o.DestWritter = out
+	}
+}
+
+// Encoder configures how the logger will encode the output e.g JSON or console.
+// See Options.Encoder
+func Encoder(encoder zapcore.Encoder) func(o *Options) {
+	return func(o *Options) {
+		o.Encoder = encoder
+	}
+}
+
+// Level sets the the minimum enabled logging level e.g Debug, Info
+// See Options.Level
+func Level(level *zap.AtomicLevel) func(o *Options) {
+	return func(o *Options) {
+		o.Level = level
+	}
+}
+
+// StacktraceLevel configures the logger to record a stack trace for all messages at
+// or above a given level.
+// See Options.StacktraceLevel
+func StacktraceLevel(stacktraceLevel *zap.AtomicLevel) func(o *Options) {
+	return func(o *Options) {
+		o.StacktraceLevel = stacktraceLevel
+	}
+}
+
+// RawZapOpts allows appending arbitrary zap.Options to configure the underlying zap logger.
+// See Options.ZapOpts
+func RawZapOpts(zapOpts ...zap.Option) func(o *Options) {
+	return func(o *Options) {
+		o.ZapOpts = append(o.ZapOpts, zapOpts...)
+	}
+}
+
 // Options contains all possible settings
 type Options struct {
-	// If Development is true, a Zap development config will be used
+	// Development configures the logger to use a Zap development config
 	// (stacktraces on warnings, no sampling), otherwise a Zap production
 	// config will be used (stacktraces on errors, sampling).
 	Development bool
-	// The encoder to use, defaults to console when Development is true
-	// and JSON otherwise
+	// Encoder configures how Zap will encode the output.  Defaults to
+	// console when Development is true and JSON otherwise
 	Encoder zapcore.Encoder
-	// The destination to write to, defaults to os.Stderr
+	// DestWritter controls the destination of the log output.  Defaults to
+	// os.Stderr.
 	DestWritter io.Writer
-	// The level to use, defaults to Debug when Development is true and
-	// Info otherwise
+	// Level configures the verbosity of the logging.  Defaults to Debug when
+	// Development is true and Info otherwise
 	Level *zap.AtomicLevel
 	// StacktraceLevel is the level at and above which stacktraces will
 	// be recorded for all messages. Defaults to Warn when Development
 	// is true and Error otherwise
 	StacktraceLevel *zap.AtomicLevel
-	// Raw zap.Options to configure on the underlying zap logger
+	// ZapOpts allows passing arbitrary zap.Options to configure on the
+	// underlying Zap logger.
 	ZapOpts []zap.Option
 }
 

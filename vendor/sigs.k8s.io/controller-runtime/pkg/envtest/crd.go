@@ -37,7 +37,7 @@ import (
 
 // CRDInstallOptions are the options for installing CRDs
 type CRDInstallOptions struct {
-	// Paths is the path to the directory containing CRDs
+	// Paths is a list of paths to the directories containing CRDs
 	Paths []string
 
 	// CRDs is a list of CRDs to install
@@ -46,11 +46,11 @@ type CRDInstallOptions struct {
 	// ErrorIfPathMissing will cause an error if a Path does not exist
 	ErrorIfPathMissing bool
 
-	// maxTime is the max time to wait
-	maxTime time.Duration
+	// MaxTime is the max time to wait
+	MaxTime time.Duration
 
-	// pollInterval is the interval to check
-	pollInterval time.Duration
+	// PollInterval is the interval to check
+	PollInterval time.Duration
 }
 
 const defaultPollInterval = 100 * time.Millisecond
@@ -97,11 +97,11 @@ func readCRDFiles(options *CRDInstallOptions) error {
 
 // defaultCRDOptions sets the default values for CRDs
 func defaultCRDOptions(o *CRDInstallOptions) {
-	if o.maxTime == 0 {
-		o.maxTime = defaultMaxWait
+	if o.MaxTime == 0 {
+		o.MaxTime = defaultMaxWait
 	}
-	if o.pollInterval == 0 {
-		o.pollInterval = defaultPollInterval
+	if o.PollInterval == 0 {
+		o.PollInterval = defaultPollInterval
 	}
 }
 
@@ -132,7 +132,7 @@ func WaitForCRDs(config *rest.Config, crds []*apiextensionsv1beta1.CustomResourc
 
 	// Poll until all resources are found in discovery
 	p := &poller{config: config, waitingFor: waitingFor}
-	return wait.PollImmediate(options.pollInterval, options.maxTime, p.poll)
+	return wait.PollImmediate(options.PollInterval, options.MaxTime, p.poll)
 }
 
 // poller checks if all the resources have been found in discovery, and returns false if not

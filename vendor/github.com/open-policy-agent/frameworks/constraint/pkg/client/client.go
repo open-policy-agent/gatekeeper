@@ -200,13 +200,6 @@ type constraintTemplateArtifacts struct {
 	targetHandler TargetHandler
 }
 
-// constraintTemplateModule is a rego source module from the CT.  This can refer to a lib or entry
-// point.
-type constraintTemplateModule struct {
-	path string
-	rego string
-}
-
 // createTemplateArtifacts will validate the CT, create the CRD for the CT's constraints, then
 // validate and rewrite the rego sources specified in the CT.
 func (c *Client) createTemplateArtifacts(templ *templates.ConstraintTemplate) (*constraintTemplateArtifacts, error) {
@@ -531,6 +524,9 @@ func (c *Client) init() error {
 			return err
 		}
 		src, err := format.Ast(libModule)
+		if err != nil {
+			return fmt.Errorf("Could not re-format Rego source: %v", err)
+		}
 		if err := c.backend.driver.PutModule(context.Background(), path, string(src)); err != nil {
 			return fmt.Errorf("Error %s from compiled source:\n%s", err, src)
 		}

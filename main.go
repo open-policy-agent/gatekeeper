@@ -52,7 +52,7 @@ var (
 
 var (
 	logLevel    = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
-	metricsAddr = flag.String("metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	metricsAddr = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
 	port        = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
 	certDir     = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 )

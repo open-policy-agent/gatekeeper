@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified ")
+	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
 	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
 	emptyAuditResults         []auditResult
 )
