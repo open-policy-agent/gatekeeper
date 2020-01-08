@@ -279,7 +279,7 @@ func TestConstraintEnforcement(t *testing.T) {
 					Kind:    tc.obj.GroupVersionKind().Kind,
 				},
 				Object: runtime.RawExtension{
-					Raw: []byte(objData),
+					Raw: objData,
 				},
 				Namespace: tc.ns.Name,
 			}
