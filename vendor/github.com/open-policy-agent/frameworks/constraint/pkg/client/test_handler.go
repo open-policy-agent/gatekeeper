@@ -115,5 +115,4 @@ func (h *handler) ValidateConstraint(u *unstructured.Unstructured) error {
 type targetData struct {
 	Name          string
 	ForConstraint string
-	vals          map[string]interface{}
 }
