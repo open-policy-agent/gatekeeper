@@ -295,6 +295,31 @@ func TestConstraintEnforcement(t *testing.T) {
 				}
 				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res.TraceDump(), dump)
 			}
+
+			// also test oldObject
+			req2 := &admissionv1beta1.AdmissionRequest{
+				Kind: metav1.GroupVersionKind{
+					Group:   tc.obj.GroupVersionKind().Group,
+					Version: tc.obj.GroupVersionKind().Version,
+					Kind:    tc.obj.GroupVersionKind().Kind,
+				},
+				OldObject: runtime.RawExtension{
+					Raw: objData,
+				},
+				Namespace: tc.ns.Name,
+			}
+			fullReq2 := &SideloadNamespace{Namespace: tc.ns, AdmissionRequest: req2}
+			res2, err := c.Review(context.Background(), fullReq2, client.Tracing(true))
+			if err != nil {
+				t.Errorf("Error reviewing second request: %s", err)
+			}
+			if (len(res2.Results()) == 0) != tc.allowed {
+				dump, err := c.Dump(context.Background())
+				if err != nil {
+					t.Logf("error dumping: %s", err)
+				}
+				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res2.TraceDump(), dump)
+			}
 		})
 	}
 }

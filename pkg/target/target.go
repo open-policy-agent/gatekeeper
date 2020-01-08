@@ -136,12 +136,26 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	}
 
 	objMap, found, err := unstructured.NestedMap(rmap, "object")
-	if err != nil {
-		return errors.Wrap(err, "HandleViolation:NestedMap")
+	if err != nil || !found {
+		if val, _, err2 := unstructured.NestedFieldNoCopy(rmap, "object"); val == nil && err2 == nil {
+			objMap2, found2, err3 := unstructured.NestedMap(rmap, "oldObject")
+			if err3 != nil {
+				return errors.Wrap(err, "HandleViolation:NestedMapOldObj")
+			}
+			if !found2 {
+				return errors.New("no object or oldObject returned in review")
+			}
+			objMap = objMap2
+		} else {
+			if err != nil {
+				return errors.Wrap(err, "HandleViolation:NestedMap")
+			}
+			if !found {
+				return errors.New("no object returned in review")
+			}
+		}
 	}
-	if !found {
-		return errors.New("no object returned in review")
-	}
+
 	objMap["apiVersion"] = apiVersion
 	objMap["kind"] = kind
 
