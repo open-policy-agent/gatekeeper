@@ -116,11 +116,10 @@ func getString(m map[string]interface{}, k string) (string, error) {
 func nestedMap(rmap map[string]interface{}, field string) (map[string]interface{}, bool, error) {
 	objMap, found, err := unstructured.NestedMap(rmap, field)
 	if err != nil || !found {
-		if val, found, err2 := unstructured.NestedFieldNoCopy(rmap, field); val == nil && found == true && err2 == nil {
+		if val, found, err2 := unstructured.NestedFieldNoCopy(rmap, field); val == nil && found && err2 == nil {
 			return nil, false, nil
-		} else {
-			return nil, false, err
 		}
+		return nil, false, err
 	}
 	return objMap, true, nil
 }
