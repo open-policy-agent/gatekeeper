@@ -313,6 +313,11 @@ status:
 
 To configure Audit frequency, update the `--auditInterval` flag, which defaults to every `60` seconds. To configure limits for how many audit violations to show per constraint, update the `--constraintViolationsLimit` flag, which defaults to `20`.
 
+### Log denies / dryrun
+
+Set the `--log-denies` flat to log all denies and dryrun failures.
+This is useful when trying to see what is being denied/fails dry-run and keeping a log to debug cluster problems without having to enable syncing or looking through the status of all constraints.
+
 ### Dry Run
 
 When rolling out new constraints to running clusters, the dry run functionality can be helpful as it enables constraints to be deployed in the cluster without making actual changes. This allows constraints to be tested in a running cluster without enforcing them. Cluster resources that are impacted by the dry run constraint are surfaced as violations in the `status` field of the constraint. 
