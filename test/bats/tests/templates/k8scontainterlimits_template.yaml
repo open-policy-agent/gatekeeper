@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sContainerLimits
-        listKind: K8sContainerLimitsList
-        plural: k8scontainerlimits
-        singular: k8scontainerlimits
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

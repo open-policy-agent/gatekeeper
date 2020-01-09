@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sBannedImageTags
-        listKind: K8sBannedImageTagsList
-        plural: k8sbannedimagetags
-        singular: k8sbannedimagetags
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:

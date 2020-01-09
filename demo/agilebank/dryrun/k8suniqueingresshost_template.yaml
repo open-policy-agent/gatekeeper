@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sUniqueIngressHost
-        listKind: K8sUniqueIngressHostList
-        plural: k8suniqueingresshost
-        singular: k8suniqueingresshost
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

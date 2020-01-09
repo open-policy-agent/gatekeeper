@@ -29,9 +29,6 @@ spec:
     spec:
       names:
         kind: K8sBadRego
-        listKind: K8sBadRegoList
-        plural: k8sbadrego
-        singular: k8sbadrego
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
@@ -51,9 +48,6 @@ spec:
     spec:
       names:
         kind: K8sGoodRego
-        listKind: K8sGoodRegoList
-        plural: k8sgoodrego
-        singular: k8sgoodrego
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
