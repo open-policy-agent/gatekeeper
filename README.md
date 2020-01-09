@@ -358,6 +358,31 @@ status:
 ```
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
+### Exempting Namespaces from Gatekeeper
+
+If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
+
+   1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
+   
+        ```yaml
+          namespaceSelector:
+            matchExpressions:
+            - key: admission.gatekeeper.sh/ignore
+              operator: DoesNotExist
+        ```
+      the default Gatekeeper manifest should already have added this. The default name for the
+      webhook configuration is `gatekeeper-validating-webhook-configuration` and the default
+      name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
+
+   2. Tell Gatekeeper it's okay for the namespace to be ignored by adding a flag to the pod:
+      `--exempt-namespaces=<NAMESPACE NAME>`. This step is necessary because otherwise the
+      permission to modify a namespace would be equivalent to the permission to exempt everything
+      in that namespace from policy checks. This way a user must explicitly have permissions
+      to configure the Gatekeeper pod before they can add exemptions.
+
+   3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
+      to the label is ignored, so it can be used to annotate the reason for the exemption.
+
 ### Debugging
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
