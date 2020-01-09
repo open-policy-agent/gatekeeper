@@ -16,7 +16,11 @@ webhooks:
     timeoutSeconds: 5
     namespaceSelector:
       matchExpressions:
-        - key: gatekeeper-ignore
+        # using the control-plane label to bypass Gatekeeper is deprecated
+        # and will be removed on Feb 9th
+        - key: control-plane
+          operator: DoesNotExist
+        - key: admission.gatekeeper.sh/ignore
           operator: DoesNotExist
   - name: check-ignore-label.gatekeeper.sh
     sideEffects: None

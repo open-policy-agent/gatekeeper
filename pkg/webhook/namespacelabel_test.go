@@ -3,7 +3,6 @@ package webhook
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -102,11 +101,11 @@ func TestAdmission(t *testing.T) {
 			expectAllowed: true,
 		},
 		{
-			name: "Gatekeeper Namespace create allowed",
+			name: "Exempt Namespace create allowed",
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "gatekeeper-system",
+					Name:   "random-allowed-ns",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
@@ -114,11 +113,11 @@ func TestAdmission(t *testing.T) {
 			expectAllowed: true,
 		},
 		{
-			name: "Gatekeeper Namespace update allowed",
+			name: "Exempt Namespace update allowed",
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "gatekeeper-system",
+					Name:   "random-allowed-ns",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
@@ -126,11 +125,11 @@ func TestAdmission(t *testing.T) {
 			expectAllowed: true,
 		},
 		{
-			name: "Gatekeeper Namespace delete allowed",
+			name: "Exempt Namespace delete allowed",
 			kind: gvk("", "v1", "Namespace"),
 			obj: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   "gatekeeper-system",
+					Name:   "random-allowed-ns",
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
@@ -140,9 +139,7 @@ func TestAdmission(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := os.Setenv("POD_NAME", "gatekeeper-system"); err != nil {
-				t.Fatal(err)
-			}
+			exemptNamespaces = map[string]bool{"random-allowed-ns": true}
 			gvk := tt.obj.GetObjectKind()
 			gvk.SetGroupVersionKind(schema.GroupVersionKind{Group: tt.kind.Group, Version: tt.kind.Version, Kind: tt.kind.Kind})
 			bytes, err := json.Marshal(tt.obj)
@@ -166,10 +163,6 @@ func TestAdmission(t *testing.T) {
 }
 
 func TestBadSerialization(t *testing.T) {
-	if err := os.Setenv("POD_NAME", "gatekeeper-system"); err != nil {
-		t.Fatal(err)
-	}
-
 	req := admission.Request{
 		AdmissionRequest: admissionv1beta1.AdmissionRequest{
 			Kind:      gvk("", "v1", "Namespace"),

@@ -10,7 +10,7 @@ namePrefix: gatekeeper-
 
 # Labels to add to all resources and selectors.
 commonLabels:
-  gatekeeper-system: "yes"
+  gatekeeper.sh/system: "yes"
 
 bases:
 - ../crd
