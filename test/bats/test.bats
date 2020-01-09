@@ -54,6 +54,16 @@ teardown() {
   assert_success
 }
 
+@test "no ignore label unless namespace is exempt test" {
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/ignore_label_ns.yaml
+  assert_failure
+}
+
+@test "gatekeeper-system ignore label can be patched" {
+  run kubectl patch ns gatekeeper-system --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
+  assert_success
+}
+
 @test "required labels test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   assert_success
