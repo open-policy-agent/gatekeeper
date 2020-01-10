@@ -36,6 +36,9 @@ spec:
         - containerPort: 8888
           name: metrics
           protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
         env:
           - name: POD_NAMESPACE
             valueFrom:
