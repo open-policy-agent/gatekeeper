@@ -36,10 +36,7 @@ matching_constraints[constraint] {
   matches_nsselector(match)
 
   label_selector := get_default(match, "labelSelector", {})
-  obj := get_default(input.review, "object", {})
-  metadata := get_default(obj, "metadata", {})
-  labels := get_default(metadata, "labels", {})
-  matches_label_selector(label_selector, labels)
+  any_labelselector_match(label_selector)
 }
 
 # Namespace-scoped objects
@@ -197,6 +194,32 @@ matches_label_selector(selector, labels) {
     get_default(matchExpressions[i], "values", []))}
 
   any(mismatches) == false
+}
+
+any_labelselector_match(label_selector) {
+  get_default(input.review, "oldObject", {}) == {}
+
+  obj := get_default(input.review, "object", {})
+  metadata := get_default(obj, "metadata", {})
+  labels := get_default(metadata, "labels", {})
+  matches_label_selector(label_selector, labels)
+}
+
+any_labelselector_match(label_selector) {
+  get_default(input.review, "oldObject", {}) != {}
+
+  obj := get_default(input.review, "object", {})
+  metadata := get_default(obj, "metadata", {})
+  labels := get_default(metadata, "labels", {})
+
+  old_obj := get_default(input.review, "oldObject", {})
+  old_metadata := get_default(old_obj, "metadata", {})
+  old_labels := get_default(old_metadata, "labels", {})
+
+  all_labels := [labels, old_labels]
+  matches := {matches | l := all_labels[_]; matches := matches_label_selector(label_selector, l)}
+
+  any(matches)
 }
 
 ############################

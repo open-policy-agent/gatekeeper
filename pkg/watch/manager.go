@@ -132,15 +132,29 @@ func (wm *Manager) updateManager() (bool, error) {
 		}
 	}
 
-	for gvk, vitals := range readyToAdd {
-		newWatchedKinds[gvk] = vitals
+	filteredNewWatchedKinds, err := wm.filterPendingResources(newWatchedKinds)
+	if err != nil {
+		return false, errp.Wrap(err, "could not filter new watched kinds, not restarting watch manager")
+	}
+	if len(filteredNewWatchedKinds) != len(newWatchedKinds) {
+		var missing []string
+		for k := range newWatchedKinds {
+			if _, ok := filteredNewWatchedKinds[k]; !ok {
+				missing = append(missing, k.String())
+			}
+		}
+		log.Info("previously watched resources have gone pending, removing them from the watch list", "pending", missing)
 	}
 
-	if err := wm.restartManager(newWatchedKinds); err != nil {
+	for gvk, vitals := range readyToAdd {
+		filteredNewWatchedKinds[gvk] = vitals
+	}
+
+	if err := wm.restartManager(filteredNewWatchedKinds); err != nil {
 		return false, errp.Wrap(err, "could not restart watch manager: %s")
 	}
 
-	wm.watchedKinds = newWatchedKinds
+	wm.watchedKinds = filteredNewWatchedKinds
 	return true, nil
 }
 

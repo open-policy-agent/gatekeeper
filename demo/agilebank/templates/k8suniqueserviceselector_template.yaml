@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sUniqueServiceSelector
-        listKind: K8sUniqueServiceSelectorList
-        plural: k8suniqueserviceselector
-        singular: k8suniqueserviceselector
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

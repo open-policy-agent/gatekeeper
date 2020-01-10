@@ -7,9 +7,6 @@ spec:
     spec:
       names:
         kind: K8sUniqueLabel
-        listKind: K8sUniqueLabelList
-        plural: k8suniquelabels
-        singular: k8suniquelabel
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
