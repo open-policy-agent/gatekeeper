@@ -457,6 +457,7 @@ spec:
         - --port=8443
         - --logtostderr
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --exempt-namespaces=gatekeeper-system
         command:
         - /manager
         env:
