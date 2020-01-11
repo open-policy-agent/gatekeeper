@@ -298,6 +298,10 @@ spec:
               fieldPath: metadata.name
         image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.2
         imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
         name: manager
         ports:
         - containerPort: 8443
@@ -306,6 +310,13 @@ spec:
         - containerPort: 8888
           name: metrics
           protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
         resources:
           limits:
             cpu: 1000m

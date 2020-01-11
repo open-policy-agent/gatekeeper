@@ -444,6 +444,10 @@ spec:
               fieldPath: metadata.name
         image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
         name: manager
         ports:
         - containerPort: 8443
@@ -452,7 +456,14 @@ spec:
         - containerPort: 8888
           name: metrics
           protocol: TCP
-        resources: 
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+        resources:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -463,7 +474,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector: 
+      nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.affinity | indent 8 }}

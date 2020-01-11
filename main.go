@@ -41,6 +41,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
 )
@@ -52,6 +53,7 @@ var (
 
 var (
 	logLevel    = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
+	healthAddr  = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
 	metricsAddr = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
 	port        = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
 	certDir     = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
@@ -82,11 +84,12 @@ func main() {
 	ctrl.SetLogger(crzap.Logger(true))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: *metricsAddr,
-		LeaderElection:     false,
-		Port:               *port,
-		CertDir:            *certDir,
+		Scheme:                 scheme,
+		MetricsBindAddress:     *metricsAddr,
+		LeaderElection:         false,
+		Port:                   *port,
+		CertDir:                *certDir,
+		HealthProbeBindAddress: *healthAddr,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -147,6 +150,15 @@ func main() {
 	}
 
 	// +kubebuilder:scaffold:builder
+
+	if err := mgr.AddReadyzCheck("default", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to create ready check")
+		os.Exit(1)
+	}
+	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to create health check")
+		os.Exit(1)
+	}
 
 	setupLog.Info("starting manager")
 	hadError := false
