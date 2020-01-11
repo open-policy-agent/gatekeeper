@@ -97,10 +97,17 @@ has_field(object, field) = false {
 
 # get_default returns the value of an object's field or the provided default value.
 # It avoids creating an undefined state when trying to access an object attribute that does
-# not exist
+# not exist. It considers a null value to be missing.
 get_default(object, field, _default) = output {
   has_field(object, field)
   output = object[field]
+  output != null
+}
+
+get_default(object, field, _default) = output {
+  has_field(object, field)
+  object[field] == null
+  output = _default
 }
 
 get_default(object, field, _default) = output {

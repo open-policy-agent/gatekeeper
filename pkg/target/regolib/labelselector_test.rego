@@ -42,6 +42,10 @@ test_obj_mix_no_match {
   not any_labelselector_match({"matchLabels": {"match": "yes"}}) with input.review as {"object": non_matching_object, "oldObject": non_matching_object}
 }
 
+test_negative_match_against_null_extra_object{
+  not any_labelselector_match({"matchExpressions": [{"key": "match", "operator": "NotIn", "values": ["no"]}]}) with input.review as {"object": non_matching_object, "oldObject": null}
+}
+
 # Test empty cases
 
 test_empty_selector_matches_empty_labelset {
