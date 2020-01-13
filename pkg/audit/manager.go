@@ -35,7 +35,7 @@ const (
 var (
 	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
 	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from cache when auditing")
+	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emptyAuditResults         []auditResult
 )
 
@@ -169,7 +169,7 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 
 	errMap := make(opa.ErrorMap)
 
-	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool) // map of Kind (key) to GroupVersion (value)
+	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool)
 	for _, rl := range serverResourceLists {
 		gv := metav1.GroupVersion{
 			Group:   rl.GroupVersionKind().Group,
@@ -224,7 +224,7 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 							errMap[target] = errors.New(errMap[target].Error() + "\n" + err.Error())
 						}
 					}
-				} else if len(resp.Results()) > 0 { // @TODO note this may include enforcementactions..
+				} else if len(resp.Results()) > 0 {
 					for targetName, targetResponse := range resp.ByTarget {
 						if _, ok := responses.ByTarget[targetName]; !ok {
 							responses.ByTarget[targetName] = targetResponse
