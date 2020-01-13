@@ -297,7 +297,7 @@ matches_nsselector(match) {
 matches_nsselector(match) {
   is_ns(input.review.kind)
   has_field(match, "namespaceSelector")
-  any_labelselector_match(get_default(match, "namespaceSelector", {}), ns)
+  any_labelselector_match(get_default(match, "namespaceSelector", {}))
 }
 
 
