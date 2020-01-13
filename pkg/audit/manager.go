@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"strings"
+	"time"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -20,8 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"strings"
-	"time"
 )
 
 var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
