@@ -117,7 +117,7 @@ func (am *Manager) audit(ctx context.Context) error {
 
 	var resp *constraintTypes.Responses
 
-	if *auditFromCache == true {
+	if *auditFromCache {
 		log.Info("Auditing from cache")
 		resp, err = am.opa.Audit(ctx)
 		if err != nil {
@@ -194,7 +194,11 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 				Kind:    kind + "List",
 			})
 
-			am.client.List(ctx, objList)
+			err := am.client.List(ctx, objList)
+			if err != nil {
+				log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+				continue
+			}
 
 			for _, obj := range objList.Items {
 				resourceJSON, err := json.Marshal(obj.Object)
