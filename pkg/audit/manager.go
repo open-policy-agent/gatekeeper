@@ -374,7 +374,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 				ts:      timestamp,
 				tv:      totalViolations,
 			}
-			//log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
+			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
 		}
 	}
