@@ -76,6 +76,7 @@ type StatusViolation struct {
 
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
+	checkDeprecatedFlags()
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -433,9 +434,9 @@ func (ucloop *updateConstraintLoop) update() {
 	}
 }
 
-// CheckDeprecatedFlags Temporary fallback to check deprecated --auditInterval and --constraintViolationsLimit flags, which are now --audit-interval and --constraint-violations-limit
+// Temporary fallback to check deprecated --auditInterval and --constraintViolationsLimit flags, which are now --audit-interval and --constraint-violations-limit
 // @TODO to be removed in an upcoming release
-func CheckDeprecatedFlags() {
+func checkDeprecatedFlags() {
 	foundAuditInterval := false
 	foundConstraintViolationsLimit := false
 

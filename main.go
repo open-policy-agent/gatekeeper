@@ -70,7 +70,6 @@ func init() {
 
 func main() {
 	flag.Parse()
-	audit.CheckDeprecatedFlags()
 
 	switch *logLevel {
 	case "DEBUG":
