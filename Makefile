@@ -111,9 +111,9 @@ install: manifests
 deploy: patch-image manifests
 	touch -a ./config/overlays/dev/manager_image_patch.yaml
 # TODO use kustomize for CRDs
-	kubectl apply -f config/crd/bases --validate=false
-	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy --validate=false
-	kustomize build config/overlays/dev | kubectl apply -f - --validate=false
+	kubectl apply -f config/crd/bases
+	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
+	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
