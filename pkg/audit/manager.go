@@ -118,12 +118,8 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
-	// get updatedLists
-	updateLists := make(map[string][]auditResult)
-	totalViolationsPerConstraint := make(map[string]int64)
-	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 
-	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err = getUpdateListsFromAuditResponses(resp)
+	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(resp)
 	if err != nil {
 		return err
 	}
