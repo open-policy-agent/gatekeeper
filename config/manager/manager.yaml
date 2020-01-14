@@ -26,7 +26,6 @@ spec:
       - command:
         - /manager
         args:
-          - "--audit-from-cache=false"
           - "--auditInterval=30"
           - "--port=8443"
           - "--logtostderr"
