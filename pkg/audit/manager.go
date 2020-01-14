@@ -123,16 +123,9 @@ func (am *Manager) audit(ctx context.Context) error {
 	totalViolationsPerConstraint := make(map[string]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 
-	if len(resp.Results()) > 0 {
-		updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err = getUpdateListsFromAuditResponses(resp)
-		if err != nil {
-			return err
-		}
-	} else {
-		// resetting total violations per enforcement action
-		for _, action := range util.KnownEnforcementActions {
-			totalViolationsPerEnforcementAction[action] = 0
-		}
+	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err = getUpdateListsFromAuditResponses(resp)
+	if err != nil {
+		return err
 	}
 	for k, v := range totalViolationsPerEnforcementAction {
 		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
