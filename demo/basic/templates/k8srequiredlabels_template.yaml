@@ -7,6 +7,9 @@ spec:
     spec:
       names:
         kind: K8sRequiredLabels
+        listKind: K8sRequiredLabelsList
+        plural: k8srequiredlabels
+        singular: k8srequiredlabels
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
@@ -18,11 +21,53 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8srequiredlabels
+        default is_not_excluded_namespace = false
+        default is_not_excluded_with_regex_namespace = false
+        default is_not_excluded_pod = false
+        default is_not_excluded_with_regex__pod = false
 
         violation[{"msg": msg, "details": {"missing_labels": missing}}] {
           provided := {label | input.review.object.metadata.labels[label]}
           required := {label | label := input.parameters.labels[_]}
           missing := required - provided
           count(missing) > 0
-          msg := sprintf("you must provide labels: %v", [missing])
+          is_not_excluded_namespace
+          is_not_excluded_with_regex_namespace
+          msg := sprintf("MISSING LABELS: you must provide these labels: %v", [missing])
+        }
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          is_not_excluded_pod
+          is_not_excluded_with_regex__pod
+          msg := sprintf("MISSING LABELS: you must provide these labels: %v", [missing])
+        }
+
+        is_not_excluded_namespace {
+          provided_namespace := {input.review.object.metadata.name}
+          ignored_namespaces := {exclude | exclude := input.parameters.exclude[_]}
+          excluded := provided_namespace & ignored_namespaces
+          count(excluded) < 1
+          input.review.kind.kind == "Namespace"
+          }
+
+        is_not_excluded_with_regex_namespace {
+          re_match(input.parameters.excludePattern,input.review.object.metadata.name) == false
+          input.review.kind.kind == "Namespace"
+        }
+
+        is_not_excluded_pod {
+          provided_pod := {input.review.object.metadata.name}
+          ignored_pod := {exclude | exclude := input.parameters.exclude[_]}
+          excluded := provided_pod & ignored_pod
+          count(excluded) < 1
+          input.review.kind.kind == "Pod"
+          }
+
+        is_not_excluded_with_regex__pod {
+          re_match(input.parameters.excludePattern,input.review.object.metadata.name) == false
+          input.review.kind.kind == "Pod"
         }

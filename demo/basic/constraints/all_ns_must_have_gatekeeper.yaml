@@ -9,3 +9,6 @@ spec:
         kinds: ["Namespace"]
   parameters:
     labels: ["gatekeeper"]
+    exclude:
+    - default
+    excludePattern: "kube-*"
