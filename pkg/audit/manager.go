@@ -172,9 +172,15 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 
 	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool)
 	for _, rl := range serverResourceLists {
+		gvParsed, err := schema.ParseGroupVersion(rl.GroupVersion)
+		if err != nil {
+			log.Error(err, "Error parsing groupversion", "groupversion", rl.GroupVersion)
+			continue
+		}
+
 		gv := metav1.GroupVersion{
-			Group:   rl.GroupVersionKind().Group,
-			Version: rl.GroupVersionKind().Version,
+			Group:   gvParsed.Group,
+			Version: gvParsed.Version,
 		}
 		if _, ok := clusterAPIResources[gv]; !ok {
 			clusterAPIResources[gv] = make(map[string]bool)
