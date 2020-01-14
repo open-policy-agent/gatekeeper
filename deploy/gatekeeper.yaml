@@ -281,7 +281,7 @@ spec:
     spec:
       containers:
       - args:
-        - --auditInterval=30
+        - --audit-interval=30
         - --port=8443
         - --logtostderr
         command:

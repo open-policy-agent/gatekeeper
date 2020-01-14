@@ -132,6 +132,7 @@ func main() {
 	}
 
 	setupLog.Info("setting up audit")
+	audit.CheckDeprecatedFlags()
 	if err := audit.AddToManager(mgr, client); err != nil {
 		setupLog.Error(err, "unable to register audit to the manager")
 		os.Exit(1)
