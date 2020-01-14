@@ -102,10 +102,17 @@ has_field(object, field) = false {
 
 # get_default returns the value of an object's field or the provided default value.
 # It avoids creating an undefined state when trying to access an object attribute that does
-# not exist
+# not exist. It considers a null value to be missing.
 get_default(object, field, _default) = output {
   has_field(object, field)
   output = object[field]
+  output != null
+}
+
+get_default(object, field, _default) = output {
+  has_field(object, field)
+  object[field] == null
+  output = _default
 }
 
 get_default(object, field, _default) = output {
@@ -196,8 +203,10 @@ matches_label_selector(selector, labels) {
   any(mismatches) == false
 }
 
+# object exists, old object is undefined
 any_labelselector_match(label_selector) {
   get_default(input.review, "oldObject", {}) == {}
+  get_default(input.review, "object", {}) != {}
 
   obj := get_default(input.review, "object", {})
   metadata := get_default(obj, "metadata", {})
@@ -205,8 +214,21 @@ any_labelselector_match(label_selector) {
   matches_label_selector(label_selector, labels)
 }
 
+# old object exists, object is undefined
 any_labelselector_match(label_selector) {
   get_default(input.review, "oldObject", {}) != {}
+  get_default(input.review, "object", {}) == {}
+
+  obj := get_default(input.review, "oldObject", {})
+  metadata := get_default(obj, "metadata", {})
+  labels := get_default(metadata, "labels", {})
+  matches_label_selector(label_selector, labels)
+}
+
+# both object and old object are defined
+any_labelselector_match(label_selector) {
+  get_default(input.review, "oldObject", {}) != {}
+  get_default(input.review, "object", {}) != {}
 
   obj := get_default(input.review, "object", {})
   metadata := get_default(obj, "metadata", {})
@@ -222,9 +244,24 @@ any_labelselector_match(label_selector) {
   any(matches)
 }
 
+# neither object nor old object are defined
+# this should never happen, included for completeness
+any_labelselector_match(label_selector) {
+  get_default(input.review, "oldObject", {}) == {}
+  get_default(input.review, "object", {}) == {}
+
+  labels = {}
+  matches_label_selector(label_selector, labels)
+}
+
 ############################
 # Namespace Selector Logic #
 ############################
+
+is_ns(kind) {
+  kind.group == ""
+  kind.kind == "Namespace"
+}
 
 get_ns[out] {
   out := input.review._unstable.namespace
@@ -250,9 +287,17 @@ matches_nsselector(match) {
 }
 
 matches_nsselector(match) {
+  not is_ns(input.review.kind)
   has_field(match, "namespaceSelector")
   get_ns[ns]
   matches_namespace_selector(match, ns)
+}
+
+# if we are matching against a namespace, match against either the old or new object
+matches_nsselector(match) {
+  is_ns(input.review.kind)
+  has_field(match, "namespaceSelector")
+  any_labelselector_match(get_default(match, "namespaceSelector", {}))
 }
 
 
