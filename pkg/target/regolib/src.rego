@@ -285,8 +285,9 @@ matches_namespaces(match) {
 
 matches_namespaces(match) {
   has_field(match, "namespaces")
-  ns := {n | n = match.namespaces[_]}
-  count({input.review.namespace} - ns) == 0
+  get_ns_name[ns]
+  nss := {n | n = match.namespaces[_]}
+  count({ns} - nss) == 0
 }
 
 does_not_match_excludednamespaces(match) {
