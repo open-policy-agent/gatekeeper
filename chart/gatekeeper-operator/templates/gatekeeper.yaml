@@ -426,10 +426,10 @@ spec:
     spec:
       containers:
       - args:
-        - --audit-interval={{ .Values.auditInterval }}
+        - --auditInterval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
-        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
         command:
         - /manager
         env:

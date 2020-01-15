@@ -49,10 +49,10 @@ spec:
       containers:
         - name: manager
           args:
-            - --audit-interval={{ .Values.auditInterval }}
+            - --auditInterval={{ .Values.auditInterval }}
             - --port=8443
             - --logtostderr
-            - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+            - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES

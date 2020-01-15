@@ -26,7 +26,7 @@ spec:
       - command:
         - /manager
         args:
-          - "--audit-interval=30"
+          - "--auditInterval=30"
           - "--port=8443"
           - "--logtostderr"
         image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.3
