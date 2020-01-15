@@ -358,7 +358,10 @@ status:
 ```
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
-### Exempting Namespaces from Gatekeeper
+### Exempting Namespaces from the Gatekeeper Admission Webhook
+
+Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints is
+necessary to exclude them from audit.
 
 If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
 
@@ -444,17 +447,6 @@ The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/dem
 
 ## Finalizers
 
-### Why does Gatekeeper add sync finalizers?
-
-When Gatekeeper syncs resources it's adding them to OPA's internal cache. This
-cache may be used by constraints to render decisions. Because of this stale data
-is bad. It can lead to invalid rejections (e.g. when a uniqueness constraint is
-violated because an update conflicts with a since-deleted resource), or invalid
-acceptance (e.g. if a constraint uses the cache to make sure a Deployment exists
-before a Service can be created). Finalizers help avoid stale state by making
-sure Gatekeeper has processed the deletion and removed the object from its cache
-before the API Server can garbage collect the object.
-
 ### How can I remove finalizers? Why are they hanging around?
 
 If Gatekeeper is running, it should automatically clean up the finalizer. If it
@@ -472,8 +464,5 @@ If Gatekeeper is not running:
     once).
   * The container was sent a hard kill signal
   * The container had a panic
-
-It is safest to remove the Config resource before uninstalling Gatekeeper, as
-that causes finalizers to be removed outside of the normal GC process.
 
 Finalizers can be removed manually via `kubectl edit` or `kubectl patch`
