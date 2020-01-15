@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -92,8 +93,40 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
 	case *SideloadNamespace:
 		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case unstructured.Unstructured:
+		admissionRequest, err := convertUnstructuredToAdmissionRequest(obj)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
+	case *unstructured.Unstructured:
+		admissionRequest, err := convertUnstructuredToAdmissionRequest(obj)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
 	}
 	return false, nil, nil
+}
+
+func processUnstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
+	resourceJSON, err := json.Marshal(obj.Object)
+	if err != nil {
+		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")
+	}
+
+	req := admissionv1beta1.AdmissionRequest{
+		Kind: metav1.GroupVersionKind{
+			Group:   obj.GetObjectKind().GroupVersionKind().Group,
+			Version: obj.GetObjectKind().GroupVersionKind().Version,
+			Kind:    obj.GetObjectKind().GroupVersionKind().Kind,
+		},
+		Object: runtime.RawExtension{
+			Raw: resourceJSON,
+		},
+	}
+
+	return req, nil
 }
 
 func getString(m map[string]interface{}, k string) (string, error) {

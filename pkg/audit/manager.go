@@ -11,11 +11,9 @@ import (
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -208,24 +206,7 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 			}
 
 			for _, obj := range objList.Items {
-				resourceJSON, err := json.Marshal(obj.Object)
-				if err != nil {
-					log.Error(err, "Unable to marshal JSON encoding of object for audit", "object", obj.Object)
-					continue
-				}
-
-				req := admissionv1beta1.AdmissionRequest{
-					Kind: metav1.GroupVersionKind{
-						Group:   obj.GetObjectKind().GroupVersionKind().Group,
-						Version: obj.GetObjectKind().GroupVersionKind().Version,
-						Kind:    obj.GetObjectKind().GroupVersionKind().Kind,
-					},
-					Object: runtime.RawExtension{
-						Raw: resourceJSON,
-					},
-				}
-
-				resp, err := am.opa.Review(ctx, req)
+				resp, err := am.opa.Review(ctx, obj)
 
 				if err != nil {
 					for target := range resp.ByTarget {
