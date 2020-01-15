@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -39,7 +40,7 @@ import (
 )
 
 var (
-	log = logf.Log.WithName("controller").WithValues("metaKind", "Constraint")
+	log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_controller")
 )
 
 const (
@@ -80,7 +81,7 @@ func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Cl
 		Client:           mgr.GetClient(),
 		scheme:           mgr.GetScheme(),
 		opa:              opa,
-		log:              log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
+		log:              log.WithValues(logging.ConstraintKind, gvk.Kind, logging.ConstraintAPIVersion, gvk.GroupVersion().String()),
 		gvk:              gvk,
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
@@ -157,7 +158,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				return reconcile.Result{Requeue: true}, nil
 			}
 		}
-		log.Info("handling constraint update", "instance", instance)
+		r.log.Info("handling constraint update", "instance", instance)
 		status, err := util.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -172,6 +173,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				status:            metrics.ErrorStatus,
 			})
 			reportMetrics = true
+			logAddition(r.log, instance, enforcementAction)
 			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
@@ -196,9 +198,11 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if HasFinalizer(instance) {
 			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
 				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
+					logRemoval(r.log, instance, enforcementAction)
 					return reconcile.Result{}, err
 				}
 			}
+			logRemoval(r.log, instance, enforcementAction)
 			RemoveFinalizer(instance)
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
@@ -209,6 +213,26 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func logAddition(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction) {
+	l.Info(
+		"constraint added to OPA",
+		logging.EventType, "constraint_added",
+		logging.ConstraintName, constraint.GetName(),
+		logging.ConstraintAction, string(enforcementAction),
+		logging.ConstraintStatus, "enforced",
+	)
+}
+
+func logRemoval(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction) {
+	l.Info(
+		"constraint removed from OPA",
+		logging.EventType, "constraint_removed",
+		logging.ConstraintName, constraint.GetName(),
+		logging.ConstraintAction, string(enforcementAction),
+		logging.ConstraintStatus, "unenforced",
+	)
 }
 
 func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructured) error {
