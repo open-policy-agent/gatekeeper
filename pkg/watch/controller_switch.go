@@ -4,9 +4,8 @@ import (
 	"sync"
 )
 
-
-type ControllerSwitch struct{
-	running bool
+type ControllerSwitch struct {
+	running     bool
 	runningLock sync.RWMutex
 }
 

@@ -85,7 +85,7 @@ func newReconciler(
 	constraintsCache *ConstraintsCache) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		Client:           mgr.GetClient(),
-		cs: cs,
+		cs:               cs,
 		scheme:           mgr.GetScheme(),
 		opa:              opa,
 		log:              log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
@@ -119,7 +119,7 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	client.Client
-	cs *watch.ControllerSwitch
+	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
 	opa              *opa.Client
 	gvk              schema.GroupVersionKind

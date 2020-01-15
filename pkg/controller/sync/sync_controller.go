@@ -52,7 +52,7 @@ func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind, cs *watch.
 func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, cs *watch.ControllerSwitch) reconcile.Reconciler {
 	return &ReconcileSync{
 		Client: mgr.GetClient(),
-		cs: cs,
+		cs:     cs,
 		scheme: mgr.GetScheme(),
 		opa:    opa,
 		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
@@ -84,7 +84,7 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 // ReconcileSync reconciles an arbitrary object described by Kind
 type ReconcileSync struct {
 	client.Client
-	cs *watch.ControllerSwitch
+	cs     *watch.ControllerSwitch
 	scheme *runtime.Scheme
 	opa    *opa.Client
 	gvk    schema.GroupVersionKind
