@@ -81,7 +81,7 @@ func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Cl
 		Client:           mgr.GetClient(),
 		scheme:           mgr.GetScheme(),
 		opa:              opa,
-		log:              log.WithValues(logging.ConstraintKind, gvk.Kind, logging.ConstraintApiVersion, gvk.GroupVersion().String()),
+		log:              log.WithValues(logging.ConstraintKind, gvk.Kind, logging.ConstraintAPIVersion, gvk.GroupVersion().String()),
 		gvk:              gvk,
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
