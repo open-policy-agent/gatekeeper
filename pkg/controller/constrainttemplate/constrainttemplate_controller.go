@@ -25,6 +25,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -53,7 +54,7 @@ const (
 	ctrlName      = "constrainttemplate-controller"
 )
 
-var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate")
+var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 
 type Adder struct {
 	Opa          *opa.Client
@@ -159,6 +160,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
+		logError(request.NamespacedName.Name)
 		return reconcile.Result{}, err
 	}
 	crd, err := r.opa.CreateCRD(context.Background(), versionless)
@@ -180,6 +182,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			log.Error(updateErr, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
+		logError(request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
 	util.SetCTHAStatus(instance, status)
@@ -193,14 +196,17 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		if err != nil && errors.IsNotFound(err) {
 			result, err := r.handleCreate(instance, crd)
 			if err != nil {
+				logError(request.NamespacedName.Name)
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			}
 			if !result.Requeue {
+				logAction(instance, createdAction)
 				r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 			}
 			return result, err
 
 		} else if err != nil {
+			logError(request.NamespacedName.Name)
 			r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			return reconcile.Result{}, err
 
@@ -209,13 +215,16 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 				log.Error(err, "conversion error")
+				logError(request.NamespacedName.Name)
 				return reconcile.Result{}, err
 			}
 			result, err := r.handleUpdate(instance, crd, unversionedCRD)
 			if err != nil {
+				logError(request.NamespacedName.Name)
 				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 			}
 			if !result.Requeue {
+				logAction(instance, updatedAction)
 				r.metrics.registry.add(request.NamespacedName, metrics.ActiveStatus)
 			}
 			return result, err
@@ -224,9 +233,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	result, err := r.handleDelete(instance, crd)
 	if err != nil {
+		logError(request.NamespacedName.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 	}
 	if !result.Requeue {
+		logAction(instance, deletedAction)
 		r.metrics.registry.remove(request.NamespacedName)
 	}
 	return result, err
@@ -406,6 +417,30 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		}
 	}
 	return reconcile.Result{}, nil
+}
+
+type action string
+
+const (
+	createdAction = action("created")
+	updatedAction = action("updated")
+	deletedAction = action("deleted")
+)
+
+func logAction(template *v1beta1.ConstraintTemplate, a action) {
+	log.Info(
+		fmt.Sprintf("template was %s", string(a)),
+		logging.EventType, fmt.Sprintf("template_%s", string(a)),
+		logging.TemplateName, template.GetName(),
+	)
+}
+
+func logError(name string) {
+	log.Info(
+		"unable to ingest template",
+		logging.EventType, "template_ingest_error",
+		logging.TemplateName, name,
+	)
 }
 
 func RemoveFinalizer(instance *v1beta1.ConstraintTemplate) {
