@@ -118,13 +118,14 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
-	// get updatedLists
-	updateLists := make(map[string][]auditResult)
-	totalViolationsPerConstraint := make(map[string]int64)
-	if len(resp.Results()) > 0 {
-		updateLists, totalViolationsPerConstraint, err = getUpdateListsFromAuditResponses(resp)
-		if err != nil {
-			return err
+
+	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(resp)
+	if err != nil {
+		return err
+	}
+	for k, v := range totalViolationsPerEnforcementAction {
+		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
+			log.Error(err, "failed to report total violations")
 		}
 	}
 	// get all constraint kinds
@@ -178,9 +179,14 @@ func (am *Manager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
 	return discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
 }
 
-func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[string][]auditResult, map[string]int64, error) {
+func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
 	updateLists := make(map[string][]auditResult)
 	totalViolationsPerConstraint := make(map[string]int64)
+	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+	// resetting total violations per enforcement action
+	for _, action := range util.KnownEnforcementActions {
+		totalViolationsPerEnforcementAction[action] = 0
+	}
 
 	for _, r := range resp.Results() {
 		selfLink := r.Constraint.GetSelfLink()
@@ -198,7 +204,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 			}
 			resource, ok := r.Resource.(*unstructured.Unstructured)
 			if !ok {
-				return nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
+				return nil, nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
 			}
 			rname := resource.GetName()
 			rkind := resource.GetKind()
@@ -215,20 +221,16 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 				enforcementAction: enforcementAction,
 			})
 		}
+		enforcementAction := util.EnforcementAction(r.EnforcementAction)
+		totalViolationsPerEnforcementAction[enforcementAction]++
 	}
-	return updateLists, totalViolationsPerConstraint, nil
+	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
 }
 
 func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
 	resourceGV := strings.Split(resourceList.GroupVersion, "/")
 	group := resourceGV[0]
 	version := resourceGV[1]
-
-	// resetting total violations per enforcement action
-	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
-	for _, action := range util.KnownEnforcementActions {
-		totalViolationsPerEnforcementAction[action] = 0
-	}
 
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
@@ -250,13 +252,6 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 		// get each constraint
 		for _, item := range instanceList.Items {
 			updateConstraints[item.GetSelfLink()] = item
-
-			enforcementAction, err := util.GetEnforcementAction(item.Object)
-			if err != nil {
-				return err
-			}
-
-			totalViolationsPerEnforcementAction[enforcementAction] += totalViolations[item.GetSelfLink()]
 		}
 		if len(updateConstraints) > 0 {
 			if am.ucloop != nil {
@@ -277,12 +272,6 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 			}
 			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
-		}
-	}
-
-	for k, v := range totalViolationsPerEnforcementAction {
-		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
-			log.Error(err, "failed to report total violations")
 		}
 	}
 	return nil
