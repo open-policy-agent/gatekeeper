@@ -40,14 +40,19 @@ func processWipeData() (bool, string, interface{}, error) {
 	return true, "", nil, nil
 }
 
-type SideloadNamespace struct {
+type AugmentedReview struct {
 	AdmissionRequest *admissionv1beta1.AdmissionRequest
 	Namespace        *corev1.Namespace
 }
 
-type augmentedReview struct {
+type gkReview struct {
 	*admissionv1beta1.AdmissionRequest
 	Unstable *unstable `json:"_unstable,omitempty"`
+}
+
+type AugmentedUnstructured struct {
+	Object    unstructured.Unstructured
+	Namespace *corev1.Namespace
 }
 
 type unstable struct {
@@ -89,18 +94,30 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 		return true, data, nil
 	case *admissionv1beta1.AdmissionRequest:
 		return true, data, nil
-	case SideloadNamespace:
-		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
-	case *SideloadNamespace:
-		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case AugmentedReview:
+		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case *AugmentedReview:
+		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case AugmentedUnstructured:
+		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
+	case *AugmentedUnstructured:
+		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(*data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
 	case unstructured.Unstructured:
-		admissionRequest, err := processAdmissionRequestFromUnstructured(data)
+		admissionRequest, err := unstructuredToAdmissionRequest(data)
 		if err != nil {
 			return false, nil, err
 		}
 		return true, admissionRequest, nil
 	case *unstructured.Unstructured:
-		admissionRequest, err := processAdmissionRequestFromUnstructured(*data)
+		admissionRequest, err := unstructuredToAdmissionRequest(*data)
 		if err != nil {
 			return false, nil, err
 		}
@@ -109,7 +126,28 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 	return false, nil, nil
 }
 
-func processAdmissionRequestFromUnstructured(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
+func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (admissionv1beta1.AdmissionRequest, error) {
+	resourceJSON, err := json.Marshal(obj.Object)
+	if err != nil {
+		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")
+	}
+
+	req := admissionv1beta1.AdmissionRequest{
+		Kind: metav1.GroupVersionKind{
+			Group:   obj.Object.GetObjectKind().GroupVersionKind().Group,
+			Version: obj.Object.GetObjectKind().GroupVersionKind().Version,
+			Kind:    obj.Object.GetObjectKind().GroupVersionKind().Kind,
+		},
+		Object: runtime.RawExtension{
+			Raw: resourceJSON,
+		},
+		Namespace: obj.Namespace.Namespace,
+	}
+
+	return req, nil
+}
+
+func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
 	resourceJSON, err := json.Marshal(obj.Object)
 	if err != nil {
 		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")

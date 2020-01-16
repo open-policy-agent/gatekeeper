@@ -283,7 +283,7 @@ func TestConstraintEnforcement(t *testing.T) {
 				},
 				Namespace: tc.ns.Name,
 			}
-			fullReq := &SideloadNamespace{Namespace: tc.ns, AdmissionRequest: req}
+			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
 			res, err := c.Review(context.Background(), fullReq, client.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing request: %s", err)
@@ -308,7 +308,7 @@ func TestConstraintEnforcement(t *testing.T) {
 				},
 				Namespace: tc.ns.Name,
 			}
-			fullReq2 := &SideloadNamespace{Namespace: tc.ns, AdmissionRequest: req2}
+			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
 			res2, err := c.Review(context.Background(), fullReq2, client.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing second request: %s", err)

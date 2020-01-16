@@ -9,8 +9,10 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -214,7 +216,19 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 			}
 
 			for _, obj := range objList.Items {
-				resp, err := am.opa.Review(ctx, obj)
+				ns := &corev1.Namespace{}
+				if obj.GetNamespace() != "" {
+					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, ns); err != nil {
+						log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+						continue
+					}
+				}
+
+				augmentedObj := target.AugmentedUnstructured{
+					Object:    obj,
+					Namespace: ns,
+				}
+				resp, err := am.opa.Review(ctx, augmentedObj)
 
 				if err != nil {
 					for target := range resp.ByTarget {
