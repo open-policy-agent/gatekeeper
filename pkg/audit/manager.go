@@ -165,7 +165,7 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 
 	responses := constraintTypes.NewResponses()
 
-	_, serverResourceLists, err := discoveryClient.ServerGroupsAndResources()
+	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 
 	if err != nil {
 		return responses, err
@@ -189,12 +189,10 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 			clusterAPIResources[gv] = make(map[string]bool)
 		}
 		for _, resource := range rl.APIResources {
-			if !strings.Contains(resource.Name, "/") {
-				for _, verb := range resource.Verbs {
-					if verb == "list" {
-						clusterAPIResources[gv][resource.Kind] = true
-						break
-					}
+			for _, verb := range resource.Verbs {
+				if verb == "list" {
+					clusterAPIResources[gv][resource.Kind] = true
+					break
 				}
 			}
 		}
