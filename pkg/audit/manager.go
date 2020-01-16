@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
@@ -25,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "audit")
 
 const (
 	crdName                          = "constrainttemplates.templates.gatekeeper.sh"
@@ -54,6 +56,7 @@ type Manager struct {
 	ctx      context.Context
 	ucloop   *updateConstraintLoop
 	reporter *reporter
+	log      logr.Logger
 }
 
 type auditResult struct {
@@ -102,6 +105,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	// record audit latency
 	defer func() {
+		logFinish(am.log)
 		latency := time.Since(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			log.Error(err, "failed to report latency")
@@ -113,6 +117,8 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	timestamp := startTime.UTC().Format(time.RFC3339)
+	am.log = log.WithValues(logging.AuditID, timestamp)
+	logStart(am.log)
 	// new client to get updated restmapper
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
 	if err != nil {
@@ -550,4 +556,45 @@ func checkDeprecatedFlags() {
 	if !foundConstraintViolationsLimit {
 		constraintViolationsLimit = constraintViolationsLimitDeprecated
 	}
+}
+
+func logStart(l logr.Logger) {
+	l.Info(
+		"auditing constraints and violations",
+		logging.EventType, "audit_started",
+	)
+}
+
+func logFinish(l logr.Logger) {
+	l.Info(
+		"auditing is complete",
+		logging.EventType, "audit_finished",
+	)
+}
+
+func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction, totalViolations int64) {
+	l.Info(
+		"constraint added to OPA",
+		logging.EventType, "constraint_audited",
+		logging.ConstraintKind, constraint.GetKind(),
+		logging.ConstraintName, constraint.GetName(),
+		logging.ConstraintNamespace, constraint.GetNamespace(),
+		logging.ConstraintAction, string(enforcementAction),
+		logging.ConstraintStatus, "enforced",
+		logging.ConstraintViolations, string(totalViolations),
+	)
+}
+
+func logViolation(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction, violation auditResult) {
+	l.Info(
+		violation.message,
+		logging.EventType, "violation_audited",
+		logging.ConstraintKind, constraint.GetKind(),
+		logging.ConstraintName, constraint.GetName(),
+		logging.ConstraintNamespace, constraint.GetNamespace(),
+		logging.ConstraintAction, string(enforcementAction),
+		logging.ResourceKind, violation.rkind,
+		logging.ResourceNamespace, violation.rnamespace,
+		logging.ResourceName, violation.rname,
+	)
 }
