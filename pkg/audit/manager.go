@@ -185,7 +185,12 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 		}
 		for _, resource := range rl.APIResources {
 			if !strings.Contains(resource.Name, "/") {
-				clusterAPIResources[gv][resource.Kind] = true
+				for _, verb := range resource.Verbs {
+					if verb == "list" {
+						clusterAPIResources[gv][resource.Kind] = true
+						break
+					}
+				}
 			}
 		}
 	}
