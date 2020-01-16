@@ -430,6 +430,7 @@ spec:
         - --port=8443
         - --logtostderr
         - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
+        - --audit-from-cache={{ .Values.auditFromCache }}
         command:
         - /manager
         env:
