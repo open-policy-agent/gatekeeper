@@ -10,6 +10,7 @@ services:
 jobs:
   include:
     - stage: "lint, build, unit test, e2e, dev deploy on master, release deploy"
+      name: "lint, build, unit test, e2e, dev deploy on master, release deploy"
       before_script:
         - GOLANGCILINT_VERSION=1.21.0
         - GO111MODULE=on go get -u github.com/golangci/golangci-lint/cmd/golangci-lint@v${GOLANGCILINT_VERSION}
@@ -32,7 +33,7 @@ jobs:
           on:
             repo: open-policy-agent/gatekeeper
             tags: true # only push release image tag for tags
-    - stage: "helm build, test"
+    - name: "helm build, test"
       script:
         - make e2e-bootstrap
         - make e2e-build-load-image IMG=gatekeeper-e2e:latest
