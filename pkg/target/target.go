@@ -94,13 +94,13 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 	case *SideloadNamespace:
 		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
 	case unstructured.Unstructured:
-		admissionRequest, err := convertUnstructuredToAdmissionRequest(obj)
+		admissionRequest, err := processAdmissionRequestFromUnstructured(data)
 		if err != nil {
 			return false, nil, err
 		}
 		return true, admissionRequest, nil
 	case *unstructured.Unstructured:
-		admissionRequest, err := convertUnstructuredToAdmissionRequest(obj)
+		admissionRequest, err := processAdmissionRequestFromUnstructured(*data)
 		if err != nil {
 			return false, nil, err
 		}
@@ -109,7 +109,7 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 	return false, nil, nil
 }
 
-func processUnstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
+func processAdmissionRequestFromUnstructured(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
 	resourceJSON, err := json.Marshal(obj.Object)
 	if err != nil {
 		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")
