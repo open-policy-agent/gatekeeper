@@ -311,9 +311,9 @@ status:
 ```
 > NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-- Audit interval: set `--auditInterval=123` (defaults to every `60` seconds)
-- Audit violations per constraint: set `--constraintViolationsLimit=123` (defaults to `20`)
-- Disable: set `--auditInterval=0`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds)
+- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
+- Disable: set `--audit-interval=0`
 
 ### Log denies / dryrun
 
