@@ -188,9 +188,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				status:            metrics.ErrorStatus,
 			})
 			reportMetrics = true
-			logAddition(r.log, instance, enforcementAction)
 			return reconcile.Result{}, err
 		}
+		logAddition(r.log, instance, enforcementAction)
 		status, err = util.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
