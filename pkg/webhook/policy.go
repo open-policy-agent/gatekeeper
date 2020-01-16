@@ -175,7 +175,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 						"resource_name", req.AdmissionRequest.Name,
 					).Info("denied admission")
 				}
-
+			}
+			// only deny enforcementAction should prompt deny admission response
+			if r.EnforcementAction == "deny" {
 				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 			}
 		}

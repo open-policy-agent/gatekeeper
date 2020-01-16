@@ -315,9 +315,9 @@ status:
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
 - Disable: set `--audit-interval=0`
 
-### Log denies / dryrun
+### Log denies
 
-Set the `--log-denies` flat to log all denies and dryrun failures.
+Set the `--log-denies` flag to log all denies and dryrun failures.
 This is useful when trying to see what is being denied/fails dry-run and keeping a log to debug cluster problems without having to enable syncing or looking through the status of all constraints.
 
 ### Dry Run
