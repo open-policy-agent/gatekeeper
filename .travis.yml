@@ -1,4 +1,4 @@
-sudo: required
+os: linux
 language: go
 go_import_path: github.com/open-policy-agent/gatekeeper
 go:
@@ -22,14 +22,12 @@ jobs:
         - echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
       deploy:
         - provider: script
-          skip_cleanup: true
           script: make docker-login && make docker-push-dev IMG=gatekeeper-e2e:latest
           on:
             repo: open-policy-agent/gatekeeper
             branch: master # only push dev image tag for master commits
             tags: false
         - provider: script
-          skip_cleanup: true
           script: make docker-login && make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TRAVIS_TAG}
           on:
             repo: open-policy-agent/gatekeeper
@@ -48,7 +46,6 @@ jobs:
         - export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
       deploy:
         - provider: script
-          skip_cleanup: true
           script: make e2e-verify-release IMG=quay.io/open-policy-agent/gatekeeper:${TRAVIS_TAG} USE_LOCAL_IMG=false
           on:
             repo: open-policy-agent/gatekeeper
