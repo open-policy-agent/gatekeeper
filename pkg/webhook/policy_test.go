@@ -9,12 +9,15 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -431,6 +434,115 @@ func TestTracing(t *testing.T) {
 				if r.Trace != nil && !tt.TraceExpected {
 					t.Error("Trace when no trace is expected")
 				}
+			}
+		})
+	}
+}
+
+func newConstraint(kind, name string, enforcementAction string, t *testing.T) *unstructured.Unstructured {
+	c := &unstructured.Unstructured{}
+	c.SetGroupVersionKind(k8schema.GroupVersionKind{
+		Group:   "constraints.gatekeeper.sh",
+		Version: "v1alpha1",
+		Kind:    kind,
+	})
+	c.SetName(name)
+	if err := unstructured.SetNestedField(c.Object, enforcementAction, "spec", "enforcementAction"); err != nil {
+		t.Errorf("unable to set enforcementAction for constraint resources: %s", err)
+	}
+	return c
+}
+
+func TestGetDenyMessages(t *testing.T) {
+	resDryRun := &rtypes.Result{
+		Msg:               "test",
+		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
+		EnforcementAction: "dryrun",
+	}
+	resDeny := &rtypes.Result{
+		Msg:               "test",
+		Constraint:        newConstraint("Foo", "ph", "deny", t),
+		EnforcementAction: "deny",
+	}
+	resRandom := &rtypes.Result{
+		Msg:               "test",
+		Constraint:        newConstraint("Foo", "ph", "random", t),
+		EnforcementAction: "random",
+	}
+
+	tc := []struct {
+		Name             string
+		Result           []*rtypes.Result
+		ExpectedMsgCount int
+	}{
+		{
+			Name: "Only One Dry Run",
+			Result: []*rtypes.Result{
+				resDryRun,
+			},
+			ExpectedMsgCount: 0,
+		},
+		{
+			Name: "Only One Deny",
+			Result: []*rtypes.Result{
+				resDeny,
+			},
+			ExpectedMsgCount: 1,
+		},
+		{
+			Name: "One Dry Run and One Deny",
+			Result: []*rtypes.Result{
+				resDryRun,
+				resDeny,
+			},
+			ExpectedMsgCount: 1,
+		},
+		{
+			Name: "Two Deny",
+			Result: []*rtypes.Result{
+				resDeny,
+				resDeny,
+			},
+			ExpectedMsgCount: 2,
+		},
+		{
+			Name: "Two Dry Run",
+			Result: []*rtypes.Result{
+				resDryRun,
+				resDryRun,
+			},
+			ExpectedMsgCount: 0,
+		},
+		{
+			Name: "Random EnforcementAction",
+			Result: []*rtypes.Result{
+				resRandom,
+			},
+			ExpectedMsgCount: 0,
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			opa, err := makeOpaClient()
+			if err != nil {
+				t.Fatalf("Could not initialize OPA: %s", err)
+			}
+			handler := validationHandler{opa: opa}
+			review := atypes.Request{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Namespace",
+					},
+					Object: runtime.RawExtension{
+						Raw: []byte(`{"apiVersion": "v1", "kind": "Namespace"}`),
+					},
+				},
+			}
+			msgs := handler.getDenyMessages(tt.Result, review)
+			if len(msgs) != tt.ExpectedMsgCount {
+				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
 			}
 		})
 	}
