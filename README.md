@@ -316,9 +316,9 @@ status:
 
 By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-### Log denies / dryrun
+### Log denies
 
-Set the `--log-denies` flat to log all denies and dryrun failures.
+Set the `--log-denies` flag to log all denies and dryrun failures.
 This is useful when trying to see what is being denied/fails dry-run and keeping a log to debug cluster problems without having to enable syncing or looking through the status of all constraints.
 
 ### Dry Run
