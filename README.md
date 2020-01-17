@@ -439,6 +439,16 @@ When applying the constraint using `kubectl apply -f constraint.yaml` with a Con
 
 To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
 
+### Emergency Recovery
+
+If a situation arises where Gatekeeper is preventing the cluster from operating correctly,
+the webhook can be disabled. This will remove all Gatekeeper admission checks. Assuming
+the default webhook name has been used this can be achieved by running:
+
+`kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration`
+
+Redeploying the webhook configuration will re-enable Gatekeeper.
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
