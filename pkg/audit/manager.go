@@ -122,6 +122,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	var resp *constraintTypes.Responses
+	var res []*constraintTypes.Result
 
 	if *auditFromCache {
 		log.Info("Auditing from cache")
@@ -129,17 +130,18 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		log.Info("Audit opa.Audit() audit results", "violations", len(resp.Results()))
+		res = resp.Results()
+		log.Info("Audit opa.Audit() results", "violations", len(res))
 	} else {
 		log.Info("Auditing via discovery client")
-		resp, err = am.auditResources(ctx)
+		res, err = am.auditResources(ctx)
 		if err != nil {
 			return err
 		}
-		log.Info("Audit discovery client audit results", "violations", len(resp.Results()))
+		log.Info("Audit discovery client results", "violations", len(res))
 	}
 
-	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(resp)
+	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(res)
 	if err != nil {
 		return err
 	}
@@ -159,21 +161,18 @@ func (am *Manager) audit(ctx context.Context) error {
 	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
-func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Responses, error) {
+// Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
+func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Result, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	responses := constraintTypes.NewResponses()
-
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 
 	if err != nil {
-		return responses, err
+		return nil, err
 	}
-
-	errMap := make(opa.ErrorMap)
 
 	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool)
 	for _, rl := range serverResourceLists {
@@ -199,6 +198,9 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 			}
 		}
 	}
+
+	var responses []*constraintTypes.Result
+	var errs opa.Errors
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
@@ -231,28 +233,16 @@ func (am *Manager) auditResources(ctx context.Context) (*constraintTypes.Respons
 				resp, err := am.opa.Review(ctx, augmentedObj)
 
 				if err != nil {
-					for target := range resp.ByTarget {
-						if _, ok := errMap[target]; !ok {
-							errMap[target] = err
-						} else {
-							errMap[target] = errors.New(errMap[target].Error() + "\n" + err.Error())
-						}
-					}
+					errs = append(errs, err)
 				} else if len(resp.Results()) > 0 {
-					for targetName, targetResponse := range resp.ByTarget {
-						if _, ok := responses.ByTarget[targetName]; !ok {
-							responses.ByTarget[targetName] = targetResponse
-						} else {
-							responses.ByTarget[targetName].Results = append(responses.ByTarget[targetName].Results, targetResponse.Results...)
-						}
-					}
+					responses = append(responses, resp.Results()...)
 				}
 			}
 		}
 	}
 
-	if len(errMap) > 0 {
-		return responses, errMap
+	if len(errs) > 0 {
+		return responses, errs
 	}
 	return responses, nil
 }
@@ -297,7 +287,7 @@ func (am *Manager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
 	return discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
 }
 
-func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
+func getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
 	updateLists := make(map[string][]auditResult)
 	totalViolationsPerConstraint := make(map[string]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
@@ -306,7 +296,7 @@ func getUpdateListsFromAuditResponses(resp *constraintTypes.Responses) (map[stri
 		totalViolationsPerEnforcementAction[action] = 0
 	}
 
-	for _, r := range resp.Results() {
+	for _, r := range res {
 		selfLink := r.Constraint.GetSelfLink()
 		totalViolationsPerConstraint[selfLink]++
 		// skip if this constraint has reached the constraintViolationsLimit

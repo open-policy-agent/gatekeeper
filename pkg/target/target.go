@@ -126,13 +126,12 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 	return false, nil, nil
 }
 
-func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (admissionv1beta1.AdmissionRequest, error) {
+func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkReview, error) {
 	req, err := unstructuredToAdmissionRequest(obj.Object)
 	if err != nil {
-		return req, err
+		return gkReview{}, err
 	}
-	req.Namespace = obj.Namespace.Namespace
-	return req, nil
+	return gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}, nil
 }
 
 func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
