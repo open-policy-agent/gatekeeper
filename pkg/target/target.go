@@ -127,30 +127,18 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 }
 
 func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (admissionv1beta1.AdmissionRequest, error) {
-	resourceJSON, err := json.Marshal(obj.Object)
+	req, err := unstructuredToAdmissionRequest(obj.Object)
 	if err != nil {
-		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")
+		return req, err
 	}
-
-	req := admissionv1beta1.AdmissionRequest{
-		Kind: metav1.GroupVersionKind{
-			Group:   obj.Object.GetObjectKind().GroupVersionKind().Group,
-			Version: obj.Object.GetObjectKind().GroupVersionKind().Version,
-			Kind:    obj.Object.GetObjectKind().GroupVersionKind().Kind,
-		},
-		Object: runtime.RawExtension{
-			Raw: resourceJSON,
-		},
-		Namespace: obj.Namespace.Namespace,
-	}
-
+	req.Namespace = obj.Namespace.Namespace
 	return req, nil
 }
 
 func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
 	resourceJSON, err := json.Marshal(obj.Object)
 	if err != nil {
-		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object for audit")
+		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
 	}
 
 	req := admissionv1beta1.AdmissionRequest{
@@ -162,6 +150,7 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1b
 		Object: runtime.RawExtension{
 			Raw: resourceJSON,
 		},
+		Name: obj.GetName(),
 	}
 
 	return req, nil
