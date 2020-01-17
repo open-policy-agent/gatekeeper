@@ -26,10 +26,10 @@ spec:
       - command:
         - /manager
         args:
-          - "--auditInterval=30"
+          - "--audit-interval=30"
           - "--port=8443"
           - "--logtostderr"
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.3
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.4
         imagePullPolicy: Always
         name: manager
         ports:
