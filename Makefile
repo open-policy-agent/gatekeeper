@@ -89,7 +89,7 @@ e2e-helm-deploy:
 	./get_helm.sh
 	helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	helm install chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
 
 # Build manager binary
 manager: generate fmt vet
@@ -118,9 +118,9 @@ deploy: patch-image manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default  -o deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> deploy/gatekeeper.yaml ; cat $${x} >> deploy/gatekeeper.yaml ; done'
-	sh chart/gatekeeper-operator/generate_helm_template.sh
+	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
+	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> manifest_staging/deploy/gatekeeper.yaml ; cat $${x} >> manifest_staging/deploy/gatekeeper.yaml ; done'
+	sh manifest_staging/chart/gatekeeper-operator/generate_helm_template.sh
 
 # Run go fmt against code
 fmt:
@@ -188,11 +188,17 @@ release:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 
 release-manifest:
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./deploy/gatekeeper.yaml
+	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./manifest_staging/deploy/gatekeeper.yaml
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" chart/gatekeeper-operator/Chart.yaml
 	@sed -i "s/release: .*/release: ${NEWVERSION}/" chart/gatekeeper-operator/values.yaml
 	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" chart/gatekeeper-operator/values.yaml
+
+promote-staging-manifest:
+	@rm -rf deploy
+	@cp -r manifest_staging/deploy .
+	@rm -rf chart
+	@cp -r manifest_staging/chart .
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
