@@ -159,39 +159,44 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	if len(res) != 0 {
-		var msgs []string
-		for _, r := range res {
-			if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
-				if *logDenies {
-					log.WithValues(
-						"process", "admission",
-						"event_type", "violation",
-						"constraint_name", r.Constraint.GetName(),
-						"constraint_kind", r.Constraint.GetKind(),
-						"constraint_action", r.EnforcementAction,
-						"resource_kind", req.AdmissionRequest.Kind.Kind,
-						"resource_namespace", req.AdmissionRequest.Namespace,
-						"resource_name", req.AdmissionRequest.Name,
-					).Info("denied admission")
-				}
-
-				msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
-			}
+	msgs := h.getDenyMessages(res, req)
+	if len(msgs) > 0 {
+		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+		if vResp.Result == nil {
+			vResp.Result = &metav1.Status{}
 		}
-		if len(msgs) > 0 {
-			vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
-			if vResp.Result == nil {
-				vResp.Result = &metav1.Status{}
-			}
-			vResp.Result.Code = http.StatusForbidden
-			requestResponse = denyResponse
-			return vResp
-		}
+		vResp.Result.Code = http.StatusForbidden
+		requestResponse = denyResponse
+		return vResp
 	}
 
 	requestResponse = allowResponse
 	return admission.ValidationResponse(true, "")
+}
+
+func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
+	var msgs []string
+	for _, r := range res {
+		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
+			if *logDenies {
+				log.WithValues(
+					"process", "admission",
+					"event_type", "violation",
+					"constraint_name", r.Constraint.GetName(),
+					"constraint_kind", r.Constraint.GetKind(),
+					"constraint_action", r.EnforcementAction,
+					"resource_kind", req.AdmissionRequest.Kind.Kind,
+					"resource_namespace", req.AdmissionRequest.Namespace,
+					"resource_name", req.AdmissionRequest.Name,
+				).Info("denied admission")
+			}
+		}
+		// only deny enforcementAction should prompt deny admission response
+		if r.EnforcementAction == "deny" {
+			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+		}
+	}
+	return msgs
 }
 
 func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error) {
