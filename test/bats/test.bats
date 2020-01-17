@@ -36,7 +36,7 @@ SLEEP_TIME=1
   assert_success
 }
 
-@test "required labels test" {
+@test "required labels dryrun test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   assert_success
 
@@ -50,9 +50,11 @@ SLEEP_TIME=1
   run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_success
 
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.spec.enforcementAction' | grep dryrun"
+
+  # deploying a violation with dryrun enforcement action will be accepted
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
-  assert_match 'denied the request' "$output"
-  assert_failure
+  assert_success
 }
 
 @test "container limits test" {
@@ -78,6 +80,16 @@ SLEEP_TIME=1
   assert_success
 }
 
+@test "required labels audit test" {
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
+
+  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
+  [[ "$violations" -eq 6 ]]
+
+  totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
+  [[ "$totalViolations" -eq 6 ]]
+}
+
 @test "unique labels test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8suniquelabel_template.yaml
   assert_success
@@ -91,16 +103,6 @@ SLEEP_TIME=1
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8suniquelabel.constraints.gatekeeper.sh ns-gk-label-unique -o yaml | grep enforced"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/no_dupe_ns_2.yaml
-  assert_match 'denied the request' "$output"
+  wait_for_process $WAIT_TIME $SLEEP_TIME assert_match 'denied the request' "$output"
   assert_failure
-}
-
-@test "required labels audit test" {
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
-
-  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
-  [[ "$violations" -eq 5 ]]
-
-  totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
-  [[ "$totalViolations" -eq 5 ]]
 }
