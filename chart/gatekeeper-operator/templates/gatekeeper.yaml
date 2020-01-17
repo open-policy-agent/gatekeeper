@@ -431,10 +431,10 @@ spec:
     spec:
       containers:
       - args:
-        - --auditInterval={{ .Values.auditInterval }}
+        - --audit-interval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
-        - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
+        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         command:
         - /manager
         env:
@@ -468,7 +468,7 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
+        resources:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -479,7 +479,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector: 
+      nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.affinity | indent 8 }}
