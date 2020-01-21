@@ -42,7 +42,7 @@ SLEEP_TIME=1
 
 	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
 
-  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
   assert_success
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o yaml | grep enforced"
@@ -55,6 +55,16 @@ SLEEP_TIME=1
   # deploying a violation with dryrun enforcement action will be accepted
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_success
+
+  run kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
+  assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_match 'denied the request' "$output"
+  assert_failure
 }
 
 @test "container limits test" {
@@ -84,10 +94,10 @@ SLEEP_TIME=1
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
 
   violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
-  [[ "$violations" -eq 6 ]]
+  [[ "$violations" -eq 5 ]]
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
-  [[ "$totalViolations" -eq 6 ]]
+  [[ "$totalViolations" -eq 5 ]]
 }
 
 @test "unique labels test" {
