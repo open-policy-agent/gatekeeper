@@ -109,6 +109,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		latency := time.Since(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			log.Error(err, "failed to report latency")
+			am.log.Error(err, "failed to report latency")
 		}
 	}()
 
@@ -127,7 +128,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	am.client = c
 	// don't audit anything until the constraintTemplate crd is in the cluster
 	if err := am.ensureCRDExists(ctx); err != nil {
-		log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
+		am.log.Info("Audit exits, required crd has not been deployed ", "CRD", crdName)
 		return nil
 	}
 
@@ -135,20 +136,20 @@ func (am *Manager) audit(ctx context.Context) error {
 	var res []*constraintTypes.Result
 
 	if *auditFromCache {
-		log.Info("Auditing from cache")
+		am.log.Info("Auditing from cache")
 		resp, err = am.opa.Audit(ctx)
 		if err != nil {
 			return err
 		}
 		res = resp.Results()
-		log.Info("Audit opa.Audit() results", "violations", len(res))
+		am.log.Info("Audit opa.Audit() results", "violations", len(res))
 	} else {
-		log.Info("Auditing via discovery client")
+		am.log.Info("Auditing via discovery client")
 		res, err = am.auditResources(ctx)
 		if err != nil {
 			return err
 		}
-		log.Info("Audit discovery client results", "violations", len(res))
+		am.log.Info("Audit discovery client results", "violations", len(res))
 	}
 
 	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := getUpdateListsFromAuditResponses(res)
@@ -164,7 +165,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	rs, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
-		log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
+		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
 		return nil
 	}
 	// update constraints for each kind
@@ -309,38 +310,36 @@ func getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string
 	for _, r := range res {
 		selfLink := r.Constraint.GetSelfLink()
 		totalViolationsPerConstraint[selfLink]++
-		// skip if this constraint has reached the constraintViolationsLimit
-		if len(updateLists[selfLink]) < *constraintViolationsLimit {
-			name := r.Constraint.GetName()
-			namespace := r.Constraint.GetNamespace()
-			apiVersion := r.Constraint.GetAPIVersion()
-			gvk := r.Constraint.GroupVersionKind()
-			enforcementAction := r.EnforcementAction
-			message := r.Msg
-			if len(message) > msgSize {
-				message = truncateString(message, msgSize)
-			}
-			resource, ok := r.Resource.(*unstructured.Unstructured)
-			if !ok {
-				return nil, nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
-			}
-			rname := resource.GetName()
-			rkind := resource.GetKind()
-			rnamespace := resource.GetNamespace()
-			updateLists[selfLink] = append(updateLists[selfLink], auditResult{
-				cgvk:              gvk,
-				capiversion:       apiVersion,
-				cname:             name,
-				cnamespace:        namespace,
-				rkind:             rkind,
-				rname:             rname,
-				rnamespace:        rnamespace,
-				message:           message,
-				enforcementAction: enforcementAction,
-			})
+		name := r.Constraint.GetName()
+		namespace := r.Constraint.GetNamespace()
+		apiVersion := r.Constraint.GetAPIVersion()
+		gvk := r.Constraint.GroupVersionKind()
+		enforcementAction := r.EnforcementAction
+		message := r.Msg
+		if len(message) > msgSize {
+			message = truncateString(message, msgSize)
 		}
-		enforcementAction := util.EnforcementAction(r.EnforcementAction)
-		totalViolationsPerEnforcementAction[enforcementAction]++
+		resource, ok := r.Resource.(*unstructured.Unstructured)
+		if !ok {
+			return nil, nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
+		}
+		rname := resource.GetName()
+		rkind := resource.GetKind()
+		rnamespace := resource.GetNamespace()
+		updateLists[selfLink] = append(updateLists[selfLink], auditResult{
+			cgvk:              gvk,
+			capiversion:       apiVersion,
+			cname:             name,
+			cnamespace:        namespace,
+			rkind:             rkind,
+			rname:             rname,
+			rnamespace:        rnamespace,
+			message:           message,
+			enforcementAction: enforcementAction,
+		})
+
+		ea := util.EnforcementAction(enforcementAction)
+		totalViolationsPerEnforcementAction[ea]++
 	}
 	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
 }
@@ -352,7 +351,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 
 	// get constraints for each Kind
 	for _, r := range resourceList.APIResources {
-		log.Info("constraint", "resource kind", r.Kind)
+		am.log.Info("constraint", "resource kind", r.Kind)
 		constraintGvk := schema.GroupVersionKind{
 			Group:   group,
 			Version: version,
@@ -364,7 +363,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 		if err != nil {
 			return err
 		}
-		log.Info("constraint", "count of constraints", len(instanceList.Items))
+		am.log.Info("constraint", "count of constraints", len(instanceList.Items))
 
 		updateConstraints := make(map[string]unstructured.Unstructured, len(instanceList.Items))
 		// get each constraint
@@ -387,8 +386,9 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 				ul:      updateLists,
 				ts:      timestamp,
 				tv:      totalViolations,
+				log:     am.log,
 			}
-			log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
+			am.log.Info("starting update constraints loop", "updateConstraints", updateConstraints)
 			go am.ucloop.update()
 		}
 	}
@@ -397,17 +397,27 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.A
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
-	log.Info("updating constraint status", "constraintName", constraintName)
+	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
+
+	enforcementAction, err := util.GetEnforcementAction(instance.Object)
+	if err != nil {
+		return err
+	}
+	logConstraint(ucloop.log, instance, enforcementAction, totalViolations)
 	// create constraint status violations
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
-		statusViolations = append(statusViolations, StatusViolation{
-			Kind:              ar.rkind,
-			Name:              ar.rname,
-			Namespace:         ar.rnamespace,
-			Message:           ar.message,
-			EnforcementAction: ar.enforcementAction,
-		})
+		// append statusViolations for this constraint until constraintViolationsLimit has reached
+		if len(statusViolations) < *constraintViolationsLimit {
+			statusViolations = append(statusViolations, StatusViolation{
+				Kind:              ar.rkind,
+				Name:              ar.rname,
+				Namespace:         ar.rnamespace,
+				Message:           ar.message,
+				EnforcementAction: ar.enforcementAction,
+			})
+		}
+		logViolation(ucloop.log, instance, enforcementAction, ar)
 	}
 	raw, err := json.Marshal(statusViolations)
 	if err != nil {
@@ -435,7 +445,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		}
 		if found {
 			unstructured.RemoveNestedField(instance.Object, "status", "violations")
-			log.Info("removed status violations", "constraintName", constraintName)
+			ucloop.log.Info("removed status violations", "constraintName", constraintName)
 		}
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
@@ -445,12 +455,12 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		if err := unstructured.SetNestedSlice(instance.Object, violations, "status", "violations"); err != nil {
 			return err
 		}
-		log.Info("update constraint", "object", instance)
+		ucloop.log.Info("update constraint", "object", instance)
 		err = ucloop.client.Update(ctx, instance)
 		if err != nil {
 			return err
 		}
-		log.Info("updated constraint status violations", "constraintName", constraintName, "count", len(violations))
+		ucloop.log.Info("updated constraint status violations", "constraintName", constraintName, "count", len(violations))
 	}
 	return nil
 }
@@ -474,6 +484,7 @@ type updateConstraintLoop struct {
 	ul      map[string][]auditResult
 	ts      string
 	tv      map[string]int64
+	log     logr.Logger
 }
 
 func (ucloop *updateConstraintLoop) update() {
@@ -498,13 +509,13 @@ func (ucloop *updateConstraintLoop) update() {
 				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
 					failure = true
-					log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
+					ucloop.log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
 				}
 				if constraintAuditResults, ok := ucloop.ul[latestItem.GetSelfLink()]; !ok {
 					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, 0)
 					if err != nil {
 						failure = true
-						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
+						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				} else {
 					totalViolations := ucloop.tv[latestItem.GetSelfLink()]
@@ -512,7 +523,7 @@ func (ucloop *updateConstraintLoop) update() {
 					err := ucloop.updateConstraintStatus(ctx, &latestItem, constraintAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						failure = true
-						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
+						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				}
 				if !failure {
@@ -532,7 +543,7 @@ func (ucloop *updateConstraintLoop) update() {
 		Jitter:   1,
 		Steps:    5,
 	}, updateLoop); err != nil {
-		log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
+		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
 	}
 }
 
@@ -574,7 +585,7 @@ func logFinish(l logr.Logger) {
 
 func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction, totalViolations int64) {
 	l.Info(
-		"constraint added to OPA",
+		"audit results for constraint",
 		logging.EventType, "constraint_audited",
 		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
