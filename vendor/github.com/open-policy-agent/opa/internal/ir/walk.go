@@ -4,8 +4,6 @@
 
 package ir
 
-import "sort"
-
 // Visitor defines the interface for visiting IR nodes.
 type Visitor interface {
 	Before(x interface{})
@@ -53,14 +51,12 @@ func (w *walkerImpl) walk(x interface{}) {
 		for _, s := range x.Strings {
 			w.walk(s)
 		}
-	case *Funcs:
-		keys := make([]string, 0, len(x.Funcs))
-		for k := range x.Funcs {
-			keys = append(keys, k)
+		for _, f := range x.BuiltinFuncs {
+			w.walk(f)
 		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			w.walk(x.Funcs[k])
+	case *Funcs:
+		for _, fn := range x.Funcs {
+			w.walk(fn)
 		}
 	case *Func:
 		for _, b := range x.Blocks {
@@ -81,6 +77,8 @@ func (w *walkerImpl) walk(x interface{}) {
 	case *ScanStmt:
 		w.walk(x.Block)
 	case *NotStmt:
+		w.walk(x.Block)
+	case *WithStmt:
 		w.walk(x.Block)
 	}
 }
