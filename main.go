@@ -173,12 +173,6 @@ func main() {
 		setupLog.Error(err, "could not pause watch manager, attempting cleanup anyway")
 	}
 
-	// Unfortunately there is no way to block until all child
-	// goroutines of the manager have finished, so sleep long
-	// enough for dangling reconciles to finish
-	// time.Sleep(5 * time.Second)
-	time.Sleep(5 * time.Second)
-
 	// Create a fresh client to be sure RESTmapper is up-to-date
 	setupLog.Info("cleaning state...")
 	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: mgr.GetScheme(), Mapper: nil})

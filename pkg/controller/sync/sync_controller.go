@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,15 +43,16 @@ type Adder struct {
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind) error {
-	r := newReconciler(mgr, gvk, a.Opa)
+func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind, cs *watch.ControllerSwitch) error {
+	r := newReconciler(mgr, gvk, a.Opa, cs)
 	return add(mgr, r, gvk)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, cs *watch.ControllerSwitch) reconcile.Reconciler {
 	return &ReconcileSync{
 		Client: mgr.GetClient(),
+		cs:     cs,
 		scheme: mgr.GetScheme(),
 		opa:    opa,
 		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
@@ -82,6 +84,7 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 // ReconcileSync reconciles an arbitrary object described by Kind
 type ReconcileSync struct {
 	client.Client
+	cs     *watch.ControllerSwitch
 	scheme *runtime.Scheme
 	opa    *opa.Client
 	gvk    schema.GroupVersionKind
@@ -93,6 +96,12 @@ type ReconcileSync struct {
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	enabled := r.cs.Enter()
+	defer r.cs.Exit()
+	if !enabled {
+		r.log.Info("ignoring request, sync controller disabled", "request", request)
+		return reconcile.Result{}, nil
+	}
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(r.gvk)
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -111,7 +120,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 	// For some reason 'Status' objects corresponding to rejection messages are being pushed
 	if instance.GroupVersionKind() != r.gvk {
-		log.Info("ignoring unexpected data", "data", instance)
+		r.log.Info("ignoring unexpected data", "data", instance)
 		return reconcile.Result{}, nil
 	}
 
@@ -122,7 +131,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	log.Info("data will be added", "data", instance)
+	r.log.Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}

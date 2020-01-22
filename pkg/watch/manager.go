@@ -48,6 +48,8 @@ func newDiscovery(c *rest.Config) (Discovery, error) {
 	return discovery.NewDiscoveryClientForConfig(c)
 }
 
+type AddFunction func(manager.Manager, schema.GroupVersionKind, *ControllerSwitch) error
+
 func New(cfg *rest.Config) (*Manager, error) {
 	metrics, err := newStatsReporter()
 	if err != nil {
@@ -67,7 +69,7 @@ func New(cfg *rest.Config) (*Manager, error) {
 	return wm, nil
 }
 
-func (wm *Manager) NewRegistrar(parent string, addFns []func(manager.Manager, schema.GroupVersionKind) error) (*Registrar, error) {
+func (wm *Manager) NewRegistrar(parent string, addFns []AddFunction) (*Registrar, error) {
 	return wm.managedKinds.NewRegistrar(parent, addFns)
 }
 
@@ -203,7 +205,8 @@ func (wm *Manager) Pause() error {
 		wm.stopper()
 		select {
 		case <-wm.stopped:
-		case <-time.After(10 * time.Second):
+		// Choose a long enough timeout that the API server would have already timed out
+		case <-time.After(60 * time.Second):
 			return errors.New("timeout waiting for watch manager to pause")
 		}
 	}
@@ -238,9 +241,10 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 		return err
 	}
 
+	sw := newSwitch()
 	for gvk, v := range kinds {
 		for _, fn := range v.addFns() {
-			if err := fn(mgr, gvk); err != nil {
+			if err := fn(mgr, gvk, sw); err != nil {
 				return err
 			}
 		}
@@ -257,11 +261,11 @@ func (wm *Manager) restartManager(kinds map[schema.GroupVersionKind]vitals) erro
 	wm.stopper = func() {
 		stopOnce.Do(func() { close(stopper) })
 	}
-	go wm.startMgr(mgr, stopper, wm.stopped, kindStr)
+	go wm.startMgr(mgr, sw, stopper, wm.stopped, kindStr)
 	return nil
 }
 
-func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
+func (wm *Manager) startMgr(mgr manager.Manager, sw *ControllerSwitch, stopper chan struct{}, stopped chan<- struct{}, kinds []string) {
 	defer wm.started.Store(false)
 	defer close(stopped)
 	if err := wm.metrics.reportIsRunning(1); err != nil {
@@ -282,6 +286,8 @@ func (wm *Manager) startMgr(mgr manager.Manager, stopper chan struct{}, stopped 
 	}
 	// mgr.Start() only returns after the manager has completely stopped
 	log.Info("sub-manager exiting", "kinds", kinds)
+	sw.stop()
+	log.Info("sub-manager controllers disabled")
 }
 
 // gatherChanges returns anything added, removed or changed since the last time the manager
