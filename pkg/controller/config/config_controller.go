@@ -88,7 +88,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (rec
 	syncAdder := syncc.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
-		[]func(manager.Manager, schema.GroupVersionKind) error{syncAdder.Add})
+		[]watch.AddFunction{syncAdder.Add})
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ type ReconcileConfig struct {
 	watched *watchSet
 }
 
-// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
 

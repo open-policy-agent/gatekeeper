@@ -233,6 +233,10 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
+			"excludedNamespaces": apiextensions.JSONSchemaProps{
+				Type: "array",
+				Items: &apiextensions.JSONSchemaPropsOrArray{
+					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
 			"labelSelector":     labelSelectorSchema,
 			"namespaceSelector": labelSelectorSchema,
 		},

@@ -227,6 +227,7 @@ Note the `match` field, which defines the scope of objects to which a given cons
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
    * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
+   * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
    * `labelSelector` is a standard Kubernetes label selector.
    * `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](#replicating-data) for more details.
 
@@ -311,13 +312,13 @@ status:
 ```
 > NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
-- Audit interval: set `--auditInterval=123` (defaults to every `60` seconds)
-- Audit violations per constraint: set `--constraintViolationsLimit=123` (defaults to `20`)
-- Disable: set `--auditInterval=0`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds)
+- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
+- Disable: set `--audit-interval=0`
 
-### Log denies / dryrun
+### Log denies
 
-Set the `--log-denies` flat to log all denies and dryrun failures.
+Set the `--log-denies` flag to log all denies and dryrun failures.
 This is useful when trying to see what is being denied/fails dry-run and keeping a log to debug cluster problems without having to enable syncing or looking through the status of all constraints.
 
 ### Dry Run

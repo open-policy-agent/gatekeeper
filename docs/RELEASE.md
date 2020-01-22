@@ -74,6 +74,7 @@ Upon completion of `make travis-release-deploy`, the `make e2e-verify-release` d
 	```
 	git checkout -b 'release-manifest-<VERSION>'
 	make release-manifest NEWVERSION=v3.0.4-beta.x REGISTRY=quay.io
+	make promote-staging-manifest
 	```
 1. Preview the changes:
 
