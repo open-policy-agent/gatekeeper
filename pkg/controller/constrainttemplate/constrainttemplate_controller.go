@@ -86,7 +86,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (rec
 	constraintAdder := constraint.Adder{Opa: opa, ConstraintsCache: constraintsCache}
 	w, err := wm.NewRegistrar(
 		ctrlName,
-		[]func(manager.Manager, schema.GroupVersionKind) error{constraintAdder.Add})
+		[]watch.AddFunction{constraintAdder.Add})
 	if err != nil {
 		return nil, err
 	}

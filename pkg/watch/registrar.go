@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 type vitals struct {
@@ -27,8 +26,8 @@ func (w *vitals) merge(wv vitals) (vitals, error) {
 	}, nil
 }
 
-func (w *vitals) addFns() []func(manager.Manager, schema.GroupVersionKind) error {
-	var addFns []func(manager.Manager, schema.GroupVersionKind) error
+func (w *vitals) addFns() []AddFunction {
+	var addFns []AddFunction
 	for r := range w.registrars {
 		addFns = append(addFns, r.addFns...)
 	}
@@ -45,13 +44,13 @@ type recordKeeper struct {
 	mgr        *Manager
 }
 
-func (r *recordKeeper) NewRegistrar(parentName string, addFns []func(manager.Manager, schema.GroupVersionKind) error) (*Registrar, error) {
+func (r *recordKeeper) NewRegistrar(parentName string, addFns []AddFunction) (*Registrar, error) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 	if _, ok := r.registrars[parentName]; ok {
 		return nil, fmt.Errorf("registrar for %s already exists", parentName)
 	}
-	addFnsCpy := make([]func(manager.Manager, schema.GroupVersionKind) error, len(addFns))
+	addFnsCpy := make([]AddFunction, len(addFns))
 	copy(addFnsCpy, addFns)
 	r.registrars[parentName] = &Registrar{
 		parentName:   parentName,
@@ -141,7 +140,7 @@ func newRecordKeeper() *recordKeeper {
 // A Registrar allows a parent to add/remove child watches
 type Registrar struct {
 	parentName   string
-	addFns       []func(manager.Manager, schema.GroupVersionKind) error
+	addFns       []AddFunction
 	mgr          *Manager
 	managedKinds *recordKeeper
 }
