@@ -271,6 +271,26 @@ func (mod *Module) RuleSet(name Var) RuleSet {
 	return rs
 }
 
+// UnmarshalJSON parses bs and stores the result in mod. The rules in the module
+// will have their module pointer set to mod.
+func (mod *Module) UnmarshalJSON(bs []byte) error {
+
+	// Declare a new type and use a type conversion to avoid recursively calling
+	// Module#UnmarshalJSON.
+	type module Module
+
+	if err := util.UnmarshalJSON(bs, (*module)(mod)); err != nil {
+		return err
+	}
+
+	WalkRules(mod, func(rule *Rule) bool {
+		rule.Module = mod
+		return false
+	})
+
+	return nil
+}
+
 // NewComment returns a new Comment object.
 func NewComment(text []byte) *Comment {
 	return &Comment{
@@ -994,8 +1014,9 @@ func (expr *Expr) IncludeWith(target *Term, value *Term) *Expr {
 
 // NoWith returns a copy of expr where the with modifier has been removed.
 func (expr *Expr) NoWith() *Expr {
-	expr.With = nil
-	return expr
+	cpy := *expr
+	cpy.With = nil
+	return &cpy
 }
 
 // IsEquality returns true if this is an equality expression.

@@ -411,6 +411,10 @@ spec:
                       properties:
                         kind:
                           type: string
+                        shortNames:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     validation:
                       type: object
