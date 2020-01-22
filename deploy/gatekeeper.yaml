@@ -9,7 +9,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.2
+    controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
   name: configs.config.gatekeeper.sh
 spec:
@@ -102,23 +102,12 @@ status:
   storedVersions: []
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   creationTimestamp: null
   name: gatekeeper-manager-role
+  namespace: gatekeeper-system
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -131,18 +120,13 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: gatekeeper-manager-role
+rules:
 - apiGroups:
   - '*'
   resources:
@@ -150,13 +134,10 @@ rules:
   verbs:
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
-  - mutatingwebhookconfigurations
   - validatingwebhookconfigurations
   verbs:
   - create
@@ -232,6 +213,20 @@ rules:
   - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gatekeeper-manager-rolebinding
+  namespace: gatekeeper-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gatekeeper-manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: gatekeeper-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: gatekeeper-manager-rolebinding
@@ -281,7 +276,7 @@ spec:
     spec:
       containers:
       - args:
-        - --auditInterval=30
+        - --audit-interval=30
         - --port=8443
         - --logtostderr
         command:
@@ -296,7 +291,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.3
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.4
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

@@ -28,6 +28,8 @@ matching_constraints[constraint] {
 
   matches_namespaces(match)
 
+  does_not_match_excludednamespaces(match)
+
   matches_nsselector(match)
 
   label_selector := get_default(match, "labelSelector", {})
@@ -267,6 +269,16 @@ get_ns[out] {
   out := data["{{.DataRoot}}"].cluster["v1"]["Namespace"][input.review.namespace]
 }
 
+get_ns_name[out] {
+  is_ns(input.review.kind)
+  out := input.review.object.metadata.name
+}
+
+get_ns_name[out] {
+  not is_ns(input.review.kind)
+  out := input.review.namespace
+}
+
 matches_namespaces(match) {
   not has_field(match, "namespaces")
 }
@@ -275,6 +287,17 @@ matches_namespaces(match) {
   has_field(match, "namespaces")
   ns := {n | n = match.namespaces[_]}
   count({input.review.namespace} - ns) == 0
+}
+
+does_not_match_excludednamespaces(match) {
+  not has_field(match, "excludedNamespaces")
+}
+
+does_not_match_excludednamespaces(match) {
+  has_field(match, "excludedNamespaces")
+  get_ns_name[ns]
+  nss := {n | n = match.excludedNamespaces[_]}
+  count({ns} - nss) != 0
 }
 
 matches_nsselector(match) {
