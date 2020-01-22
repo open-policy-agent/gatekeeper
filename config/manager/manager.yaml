@@ -22,6 +22,7 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      serviceAccountName: admin
       containers:
       - command:
         - /manager

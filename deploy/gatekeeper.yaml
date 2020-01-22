@@ -334,6 +334,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
       - name: cert
