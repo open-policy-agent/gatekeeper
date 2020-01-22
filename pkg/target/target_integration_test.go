@@ -86,6 +86,14 @@ func setNamespaceName(name string) buildArg {
 	}
 }
 
+func setExcludedNamespaceName(name string) buildArg {
+	return func(obj *unstructured.Unstructured) {
+		if err := unstructured.SetNestedSlice(obj.Object, []interface{}{name}, "spec", "match", "excludedNamespaces"); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func makeConstraint(o ...buildArg) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetName("my-constraint")
@@ -142,6 +150,20 @@ func TestConstraintEnforcement(t *testing.T) {
 			ns:         makeNamespace("my-ns"),
 			constraint: makeConstraint(setNamespaceName("not-my-ns")),
 			allowed:    true,
+		},
+		{
+			name:       "match excludedNamespaces",
+			obj:        makeResource("some", "Thing"),
+			ns:         makeNamespace("my-ns"),
+			constraint: makeConstraint(setExcludedNamespaceName("my-ns")),
+			allowed:    true,
+		},
+		{
+			name:       "no match excludedNamespaces",
+			obj:        makeResource("some", "Thing"),
+			ns:         makeNamespace("my-ns"),
+			constraint: makeConstraint(setExcludedNamespaceName("not-my-ns")),
+			allowed:    false,
 		},
 		{
 			name:       "match labelselector",
