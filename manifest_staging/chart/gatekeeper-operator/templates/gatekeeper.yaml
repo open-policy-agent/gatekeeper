@@ -210,6 +210,17 @@ spec:
     served: true
     storage: false
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-admin
+  namespace: gatekeeper-system
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -347,7 +358,7 @@ roleRef:
   name: gatekeeper-manager-role
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -365,7 +376,7 @@ roleRef:
   name: gatekeeper-manager-role
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
 apiVersion: v1
@@ -485,6 +496,7 @@ spec:
 {{ toYaml .Values.affinity | indent 8 }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
+      serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
       - name: cert
