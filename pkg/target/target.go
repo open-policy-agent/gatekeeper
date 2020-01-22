@@ -131,7 +131,14 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkRevie
 	if err != nil {
 		return gkReview{}, err
 	}
-	return gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}, nil
+
+	review := gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}
+
+	if obj.Namespace != nil {
+		review.Namespace = obj.Namespace.Name
+	}
+
+	return review, nil
 }
 
 func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
