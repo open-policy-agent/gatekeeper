@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -182,15 +183,17 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err := r.cacheConstraint(instance); err != nil {
-			r.constraintsCache.addConstraintKey(constraintKey, tags{
-				enforcementAction: enforcementAction,
-				status:            metrics.ErrorStatus,
-			})
-			reportMetrics = true
-			return reconcile.Result{}, err
+		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
+			if err := r.cacheConstraint(instance); err != nil {
+				r.constraintsCache.addConstraintKey(constraintKey, tags{
+					enforcementAction: enforcementAction,
+					status:            metrics.ErrorStatus,
+				})
+				reportMetrics = true
+				return reconcile.Result{}, err
+			}
+			logAddition(r.log, instance, enforcementAction)
 		}
-		logAddition(r.log, instance, enforcementAction)
 		status, err = util.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
