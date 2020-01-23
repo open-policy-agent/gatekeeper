@@ -36,6 +36,7 @@ type eval struct {
 	caller          *eval
 	cancel          Cancel
 	query           ast.Body
+	queryCompiler   ast.QueryCompiler
 	index           int
 	indexing        bool
 	bindings        *bindings
@@ -151,25 +152,33 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
 	}
 
 	locals := ast.NewValueMap()
-	localMeta := map[string]VarMetadata{}
-	e.bindings.Iter(nil, func(k, v *ast.Term) error {
-		// Check if the var has a different name in the source policy
-		name := k.Value.(ast.Var)
-		if e.compiler != nil {
-			rewritten, ok := e.compiler.RewrittenVars[name]
-			if ok {
-				name = rewritten
-			}
-		}
+	localMeta := map[ast.Var]VarMetadata{}
 
-		localMeta[k.Value.String()] = VarMetadata{
-			Name:     name.String(),
+	e.bindings.Iter(nil, func(k, v *ast.Term) error {
+		original := k.Value.(ast.Var)
+		rewritten, _ := e.rewrittenVar(original)
+		localMeta[original] = VarMetadata{
+			Name:     rewritten,
 			Location: k.Loc(),
 		}
 
 		// For backwards compatibility save a copy of the values too..
 		locals.Put(k.Value, v.Value)
 		return nil
+	})
+
+	ast.WalkTerms(x, func(term *ast.Term) bool {
+		if v, ok := term.Value.(ast.Var); ok {
+			if _, ok := localMeta[v]; !ok {
+				if rewritten, ok := e.rewrittenVar(v); ok {
+					localMeta[v] = VarMetadata{
+						Name:     rewritten,
+						Location: term.Loc(),
+					}
+				}
+			}
+		}
+		return false
 	})
 
 	var parentID uint64
@@ -567,6 +576,7 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 
 	bctx := BuiltinContext{
 		Context:  e.ctx,
+		Cancel:   e.cancel,
 		Runtime:  e.runtime,
 		Cache:    e.builtinCache,
 		Location: e.query[e.index].Location,
@@ -1181,6 +1191,20 @@ func (e *eval) resolveReadFromStorage(ref ast.Ref, a ast.Value) (ast.Value, erro
 
 func (e *eval) generateVar(suffix string) *ast.Term {
 	return ast.VarTerm(fmt.Sprintf("%v_%v", e.genvarprefix, suffix))
+}
+
+func (e *eval) rewrittenVar(v ast.Var) (ast.Var, bool) {
+	if e.compiler != nil {
+		if rw, ok := e.compiler.RewrittenVars[v]; ok {
+			return rw, true
+		}
+	}
+	if e.queryCompiler != nil {
+		if rw, ok := e.queryCompiler.RewrittenVars()[v]; ok {
+			return rw, true
+		}
+	}
+	return v, false
 }
 
 type evalBuiltin struct {

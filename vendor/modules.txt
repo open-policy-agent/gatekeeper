@@ -140,23 +140,23 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20200106214430-991b84509bcf
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20200122230709-6e9e094a381c
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1
 github.com/open-policy-agent/frameworks/constraint/pkg/client
 github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers
 github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local
 github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib
+github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints
 github.com/open-policy-agent/frameworks/constraint/pkg/core/templates
 github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter
 github.com/open-policy-agent/frameworks/constraint/pkg/types
-# github.com/open-policy-agent/opa v0.15.0
+# github.com/open-policy-agent/opa v0.16.2
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/format
 github.com/open-policy-agent/opa/internal/compiler/wasm
 github.com/open-policy-agent/opa/internal/compiler/wasm/opa
-github.com/open-policy-agent/opa/internal/file
 github.com/open-policy-agent/opa/internal/file/archive
 github.com/open-policy-agent/opa/internal/file/url
 github.com/open-policy-agent/opa/internal/ir

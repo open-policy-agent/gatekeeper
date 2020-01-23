@@ -384,6 +384,7 @@ func Convert_templates_CreateCRDError_To_v1alpha1_CreateCRDError(in *templates.C
 
 func autoConvert_v1alpha1_Names_To_templates_Names(in *Names, out *templates.Names, s conversion.Scope) error {
 	out.Kind = in.Kind
+	out.ShortNames = *(*[]string)(unsafe.Pointer(&in.ShortNames))
 	return nil
 }
 
@@ -394,6 +395,7 @@ func Convert_v1alpha1_Names_To_templates_Names(in *Names, out *templates.Names, 
 
 func autoConvert_templates_Names_To_v1alpha1_Names(in *templates.Names, out *Names, s conversion.Scope) error {
 	out.Kind = in.Kind
+	out.ShortNames = *(*[]string)(unsafe.Pointer(&in.ShortNames))
 	return nil
 }
 

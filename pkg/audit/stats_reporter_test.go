@@ -18,7 +18,7 @@ func TestReportTotalViolations(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportTotalViolations("deny", expectedValue)
+	err = r.reportTotalViolations("deny", expectedValue)
 	if err != nil {
 		t.Errorf("ReportTotalViolations error %v", err)
 	}
@@ -49,11 +49,11 @@ func TestReportLatency(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportLatency(expectedLatencyValueMin)
+	err = r.reportLatency(expectedLatencyValueMin)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
-	err = r.ReportLatency(expectedLatencyValueMax)
+	err = r.reportLatency(expectedLatencyValueMax)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
@@ -85,4 +85,30 @@ func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
 		t.Errorf("Expected row data not to be nil")
 	}
 	return row[0]
+}
+
+func TestLastRestartCheck(t *testing.T) {
+	expectedTime := time.Now()
+	expectedTs := float64(expectedTime.UnixNano()) / 1e9
+	const expectedRowLength = 1
+
+	r, err := newStatsReporter()
+	if err != nil {
+		t.Errorf("newStatsReporter() error %v", err)
+	}
+	err = r.reportRunStart(expectedTime)
+	if err != nil {
+		t.Errorf("reportRunStart error %v", err)
+	}
+	row := checkData(t, lastRunTimeMetricName, expectedRowLength)
+	value, ok := row.Data.(*view.LastValueData)
+	if !ok {
+		t.Error("lastRunTimeMetricName should have aggregation LastValue()")
+	}
+	if len(row.Tags) != 0 {
+		t.Errorf("lastRunTimeMetricName tags is non-empty, got: %v", row.Tags)
+	}
+	if value.Value != expectedTs {
+		t.Errorf("Metric: %v - Expected %v, got %v", lastRunTimeMetricName, expectedTs, value.Value)
+	}
 }

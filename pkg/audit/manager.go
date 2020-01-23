@@ -26,15 +26,19 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "audit")
 
 const (
-	crdName       = "constrainttemplates.templates.gatekeeper.sh"
-	constraintsGV = "constraints.gatekeeper.sh/v1beta1"
-	msgSize       = 256
+	crdName                          = "constrainttemplates.templates.gatekeeper.sh"
+	constraintsGV                    = "constraints.gatekeeper.sh/v1beta1"
+	msgSize                          = 256
+	defaultAuditInterval             = 60
+	defaultConstraintViolationsLimit = 20
 )
 
 var (
-	auditInterval             = flag.Int("auditInterval", 60, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
-	constraintViolationsLimit = flag.Int("constraintViolationsLimit", 20, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	emptyAuditResults         []auditResult
+	auditInterval                       = flag.Int("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
+	constraintViolationsLimit           = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditIntervalDeprecated             = flag.Int("auditInterval", defaultAuditInterval, "DEPRECATED - use --audit-interval")
+	constraintViolationsLimitDeprecated = flag.Int("constraintViolationsLimit", defaultConstraintViolationsLimit, "DEPRECATED - use --constraint-violations-limit")
+	emptyAuditResults                   []auditResult
 )
 
 // Manager allows us to audit resources periodically
@@ -46,7 +50,7 @@ type Manager struct {
 	mgr      manager.Manager
 	ctx      context.Context
 	ucloop   *updateConstraintLoop
-	reporter StatsReporter
+	reporter *reporter
 }
 
 type auditResult struct {
@@ -72,6 +76,7 @@ type StatusViolation struct {
 
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
+	checkDeprecatedFlags()
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -91,16 +96,20 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, e
 
 // audit performs an audit then updates the status of all constraint resources with the results
 func (am *Manager) audit(ctx context.Context) error {
-	timeStart := time.Now()
+	startTime := time.Now()
 	// record audit latency
 	defer func() {
-		latency := time.Since(timeStart)
-		if err := am.reporter.ReportLatency(latency); err != nil {
+		latency := time.Since(startTime)
+		if err := am.reporter.reportLatency(latency); err != nil {
 			log.Error(err, "failed to report latency")
 		}
 	}()
 
-	timestamp := time.Now().UTC().Format(time.RFC3339)
+	if err := am.reporter.reportRunStart(startTime); err != nil {
+		log.Error(err, "failed to report run start time")
+	}
+
+	timestamp := startTime.UTC().Format(time.RFC3339)
 	// new client to get updated restmapper
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
 	if err != nil {
@@ -124,7 +133,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		return err
 	}
 	for k, v := range totalViolationsPerEnforcementAction {
-		if err := am.reporter.ReportTotalViolations(k, v); err != nil {
+		if err := am.reporter.reportTotalViolations(k, v); err != nil {
 			log.Error(err, "failed to report total violations")
 		}
 	}
@@ -415,5 +424,27 @@ func (ucloop *updateConstraintLoop) update() {
 		Steps:    5,
 	}, updateLoop); err != nil {
 		log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
+	}
+}
+
+// Temporary fallback to check deprecated --auditInterval and --constraintViolationsLimit flags, which are now --audit-interval and --constraint-violations-limit
+// @TODO to be removed in an upcoming release
+func checkDeprecatedFlags() {
+	foundAuditInterval := false
+	foundConstraintViolationsLimit := false
+
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "audit-interval" {
+			foundAuditInterval = true
+		} else if f.Name == "constraint-violations-limit" {
+			foundConstraintViolationsLimit = true
+		}
+	})
+
+	if !foundAuditInterval {
+		auditInterval = auditIntervalDeprecated
+	}
+	if !foundConstraintViolationsLimit {
+		constraintViolationsLimit = constraintViolationsLimitDeprecated
 	}
 }
