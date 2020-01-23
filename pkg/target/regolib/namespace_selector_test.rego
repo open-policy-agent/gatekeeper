@@ -1,5 +1,29 @@
 package target
 
+test_name_match {
+  matches_namespaces({"namespaces": ["match"]})
+    with input.review.kind as pod_kind
+    with input.review.namespace as "match"
+}
+
+test_name_no_match {
+  not matches_namespaces({"namespaces": ["match"]})
+    with input.review.kind as pod_kind
+    with input.review.namespace as "no-match"
+}
+
+test_name_match_is_ns {
+  matches_namespaces({"namespaces": ["match"]})
+    with input.review.kind as ns_kind
+    with input.review.object.metadata.name as "match"
+}
+
+test_name_no_match_is_ns {
+  not matches_namespaces({"namespaces": ["match"]})
+    with input.review.kind as ns_kind
+    with input.review.object.metadata.name as "no-match"
+}
+
 test_sideload_match {
   matches_nsselector({"namespaceSelector": {"matchLabels": {"hi": "there"}}})
     with input.review.kind as pod_kind
