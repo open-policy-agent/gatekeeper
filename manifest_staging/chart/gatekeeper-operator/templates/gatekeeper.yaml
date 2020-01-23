@@ -465,7 +465,7 @@ spec:
         - --logtostderr
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
-        - --exempt-namespaces=gatekeeper-system
+        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:

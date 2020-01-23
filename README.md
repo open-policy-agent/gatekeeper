@@ -378,7 +378,7 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
       name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
 
    2. Tell Gatekeeper it's okay for the namespace to be ignored by adding a flag to the pod:
-      `--exempt-namespaces=<NAMESPACE NAME>`. This step is necessary because otherwise the
+      `--exempt-namespace=<NAMESPACE NAME>`. This step is necessary because otherwise the
       permission to modify a namespace would be equivalent to the permission to exempt everything
       in that namespace from policy checks. This way a user must explicitly have permissions
       to configure the Gatekeeper pod before they can add exemptions.
@@ -446,10 +446,11 @@ whose default configuration can be found in the `gatekeeper.yaml` manifest file.
 a `ValidatingWebhookConfiguration` resource named `gatekeeper-validating-webhook-configuration`.
 
 Currently the configuration specifies two webhooks: one for checking a request against
-the installed constraints and a second webhook for checking the labels on namespace requests.
-The namespace-label webhook is necessary to prevent a privilege escalation where the permission
-to add a label to a namespace is equivalent to the ability to bypass all constraints for that
-namespace. You can read more about the ability to exempt namespaces by label [above](#exempting-namespaces-from-the-gatekeeper-admission-webhook).
+the installed constraints and a second webhook for checking labels on namespace requests
+that would result in bypassing constraints for the namespace. The namespace-label webhook
+is necessary to prevent a privilege escalation where the permission to add a label to a
+namespace is equivalent to the ability to bypass all constraints for that namespace.
+You can read more about the ability to exempt namespaces by label [above](#exempting-namespaces-from-the-gatekeeper-admission-webhook).
 
 Because Kubernetes adds features with each version, if you want to know how the webhook can be configured it
 is best to look at the official documentation linked at the top of this section. However, two particularly important

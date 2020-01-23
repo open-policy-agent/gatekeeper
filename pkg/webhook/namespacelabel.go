@@ -21,7 +21,7 @@ var (
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddLabelWebhook)
-	flag.Var(exemptNamespace, "exempt-namespace", "Namespaces that are allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
+	flag.Var(exemptNamespace, "exempt-namespace", "The specified namespace is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
 }
 
 const ignoreLabel = "admission.gatekeeper.sh/ignore"
