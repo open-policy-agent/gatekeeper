@@ -16,12 +16,12 @@ import (
 )
 
 var (
-	exemptNamespaces = newNSSet()
+	exemptNamespace = newNSSet()
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddLabelWebhook)
-	flag.Var(exemptNamespaces, "exempt-namespaces", "Namespaces that are allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
+	flag.Var(exemptNamespace, "exempt-namespace", "Namespaces that are allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
 }
 
 const ignoreLabel = "admission.gatekeeper.sh/ignore"
@@ -73,7 +73,7 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 		r.Result.Code = http.StatusInternalServerError
 		return r
 	}
-	if exemptNamespaces[obj.GetName()] {
+	if exemptNamespace[obj.GetName()] {
 		return admission.Allowed(fmt.Sprintf("Namespace %s is allowed to set %s", obj.GetName(), ignoreLabel))
 	}
 	for label := range obj.GetLabels() {

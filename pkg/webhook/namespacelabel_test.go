@@ -139,7 +139,7 @@ func TestAdmission(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			exemptNamespaces = map[string]bool{"random-allowed-ns": true}
+			exemptNamespace = map[string]bool{"random-allowed-ns": true}
 			gvk := tt.obj.GetObjectKind()
 			gvk.SetGroupVersionKind(schema.GroupVersionKind{Group: tt.kind.Group, Version: tt.kind.Version, Kind: tt.kind.Kind})
 			bytes, err := json.Marshal(tt.obj)
