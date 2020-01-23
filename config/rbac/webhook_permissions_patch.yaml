@@ -1,0 +1,17 @@
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+    - admissionregistration.k8s.io
+    resources:
+    - validatingwebhookconfigurations
+    resourceNames:
+    - gatekeeper-validating-webhook-configuration
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
