@@ -294,7 +294,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 			}
 		}
 	}
-	review := &target.SideloadNamespace{AdmissionRequest: &req.AdmissionRequest}
+	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {

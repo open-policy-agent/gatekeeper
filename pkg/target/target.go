@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -39,14 +40,19 @@ func processWipeData() (bool, string, interface{}, error) {
 	return true, "", nil, nil
 }
 
-type SideloadNamespace struct {
+type AugmentedReview struct {
 	AdmissionRequest *admissionv1beta1.AdmissionRequest
 	Namespace        *corev1.Namespace
 }
 
-type augmentedReview struct {
+type gkReview struct {
 	*admissionv1beta1.AdmissionRequest
 	Unstable *unstable `json:"_unstable,omitempty"`
+}
+
+type AugmentedUnstructured struct {
+	Object    unstructured.Unstructured
+	Namespace *corev1.Namespace
 }
 
 type unstable struct {
@@ -88,12 +94,72 @@ func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, 
 		return true, data, nil
 	case *admissionv1beta1.AdmissionRequest:
 		return true, data, nil
-	case SideloadNamespace:
-		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
-	case *SideloadNamespace:
-		return true, &augmentedReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case AugmentedReview:
+		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case *AugmentedReview:
+		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+	case AugmentedUnstructured:
+		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
+	case *AugmentedUnstructured:
+		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(*data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
+	case unstructured.Unstructured:
+		admissionRequest, err := unstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
+	case *unstructured.Unstructured:
+		admissionRequest, err := unstructuredToAdmissionRequest(*data)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, admissionRequest, nil
 	}
 	return false, nil, nil
+}
+
+func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkReview, error) {
+	req, err := unstructuredToAdmissionRequest(obj.Object)
+	if err != nil {
+		return gkReview{}, err
+	}
+
+	review := gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}
+
+	if obj.Namespace != nil {
+		review.Namespace = obj.Namespace.Name
+	}
+
+	return review, nil
+}
+
+func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
+	resourceJSON, err := json.Marshal(obj.Object)
+	if err != nil {
+		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
+	}
+
+	req := admissionv1beta1.AdmissionRequest{
+		Kind: metav1.GroupVersionKind{
+			Group:   obj.GetObjectKind().GroupVersionKind().Group,
+			Version: obj.GetObjectKind().GroupVersionKind().Version,
+			Kind:    obj.GetObjectKind().GroupVersionKind().Kind,
+		},
+		Object: runtime.RawExtension{
+			Raw: resourceJSON,
+		},
+		Name: obj.GetName(),
+	}
+
+	return req, nil
 }
 
 func getString(m map[string]interface{}, k string) (string, error) {

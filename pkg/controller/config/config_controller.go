@@ -88,7 +88,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (rec
 	syncAdder := syncc.Adder{Opa: opa}
 	w, err := wm.NewRegistrar(
 		ctrlName,
-		[]func(manager.Manager, schema.GroupVersionKind) error{syncAdder.Add})
+		[]watch.AddFunction{syncAdder.Add})
 	if err != nil {
 		return nil, err
 	}

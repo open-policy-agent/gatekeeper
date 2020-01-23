@@ -5,6 +5,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type Backend struct {
@@ -51,7 +52,8 @@ func (b *Backend) NewClient(opts ...ClientOpt) (*Client, error) {
 	}
 	c := &Client{
 		backend:           b,
-		constraints:       make(map[string]*constraintEntry),
+		constraints:         make(map[string]*unstructured.Unstructured),
+		templates:         make(map[string]*templateEntry),
 		allowedDataFields: fields,
 	}
 	var errs Errors

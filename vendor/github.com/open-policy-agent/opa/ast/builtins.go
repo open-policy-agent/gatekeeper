@@ -125,6 +125,9 @@ var DefaultBuiltins = [...]*Builtin{
 	YAMLMarshal,
 	YAMLUnmarshal,
 
+	// JSON Object Manipulation
+	JSONFilter,
+
 	// Tokens
 	JWTDecode,
 	JWTVerifyRS256,
@@ -179,6 +182,7 @@ var DefaultBuiltins = [...]*Builtin{
 	NetCIDROverlap,
 	NetCIDRIntersects,
 	NetCIDRContains,
+	NetCIDRExpand,
 
 	// Glob
 	GlobMatch,
@@ -921,6 +925,41 @@ var JSONUnmarshal = &Builtin{
 	),
 }
 
+// JSONFilter filters the JSON object
+var JSONFilter = &Builtin{
+	Name: "json.filter",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewAny(
+				types.NewArray(
+					nil,
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+				types.NewSet(
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+			),
+		),
+		types.A,
+	),
+}
+
 // Base64Encode serializes the input string into base64 encoding.
 var Base64Encode = &Builtin{
 	Name: "base64.encode",
@@ -1485,6 +1524,17 @@ var NetCIDRIntersects = &Builtin{
 			types.S,
 		),
 		types.B,
+	),
+}
+
+// NetCIDRExpand returns a set of hosts inside the specified cidr.
+var NetCIDRExpand = &Builtin{
+	Name: "net.cidr_expand",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+		),
+		types.NewSet(types.S),
 	),
 }
 
