@@ -108,6 +108,8 @@ status:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
@@ -305,7 +307,7 @@ spec:
         - --audit-interval=30
         - --port=8443
         - --logtostderr
-        - --exempt-namespaces=gatekeeper-system
+        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:
