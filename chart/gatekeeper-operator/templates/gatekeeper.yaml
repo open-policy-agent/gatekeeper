@@ -7,7 +7,7 @@ metadata:
     control-plane: controller-manager
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
-  name: gatekeeper-system
+  name: '{{ .Values.namespace }}'
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -219,7 +219,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-admin
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -231,7 +231,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-role
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 rules:
 - apiGroups:
   - ""
@@ -351,7 +351,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-rolebinding
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -359,7 +359,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: gatekeeper-admin
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -377,7 +377,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: gatekeeper-admin
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 ---
 apiVersion: v1
 kind: Secret
@@ -388,7 +388,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-server-cert
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 ---
 apiVersion: v1
 kind: Service
@@ -399,7 +399,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-service
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 spec:
   ports:
   - port: 443
@@ -421,7 +421,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
-  namespace: gatekeeper-system
+  namespace: '{{ .Values.namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -519,7 +519,7 @@ webhooks:
     caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
+      namespace: '{{ .Values.namespace }}'
       path: /v1/admit
   failurePolicy: Ignore
   name: validation.gatekeeper.sh
