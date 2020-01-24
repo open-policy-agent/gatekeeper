@@ -11,6 +11,24 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
       path: /v1/admit
   failurePolicy: Ignore
   name: validation.gatekeeper.sh

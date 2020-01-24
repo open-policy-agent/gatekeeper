@@ -5,9 +5,27 @@ load helpers
 BATS_TESTS_DIR=test/bats/tests
 WAIT_TIME=120
 SLEEP_TIME=1
+CLEAN_CMD="echo cleaning..."
+
+teardown() {
+  bash -c "${CLEAN_CMD}"
+}
 
 @test "gatekeeper-controller-manager is running" {
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
+  assert_success
+}
+
+@test "namespace label webhook is serving" {
+  cert=$(mktemp)
+  CLEAN_CMD="${CLEAN_CMD}; rm ${CERT}"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
+
+  kubectl port-forward -n gatekeeper-system deployment/gatekeeper-controller-manager 8443:8443 &
+  FORWARDING_PID=$!
+  CLEAN_CMD="${CLEAN_CMD}; kill ${FORWARDING_PID}"
+
+	run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --resolve gatekeeper-webhook-service.gatekeeper-system.svc:8443:127.0.0.1 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
   assert_success
 }
 
@@ -33,6 +51,16 @@ SLEEP_TIME=1
 # creating a namespace early so it will have time to sync
 @test "create namespace for unique labels test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/good/no_dupe_ns.yaml
+  assert_success
+}
+
+@test "no ignore label unless namespace is exempt test" {
+  run kubectl apply -f ${BATS_TESTS_DIR}/good/ignore_label_ns.yaml
+  assert_failure
+}
+
+@test "gatekeeper-system ignore label can be patched" {
+  run kubectl patch ns gatekeeper-system --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
   assert_success
 }
 

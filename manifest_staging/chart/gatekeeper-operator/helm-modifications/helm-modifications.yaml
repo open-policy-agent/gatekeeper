@@ -54,6 +54,7 @@ spec:
             - --logtostderr
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --audit-from-cache={{ .Values.auditFromCache }}
+            - --exempt-namespace=gatekeeper-system
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
