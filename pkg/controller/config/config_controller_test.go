@@ -53,8 +53,8 @@ func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
-			Namespace: "gatekeeper-system",
+			Name:       "config",
+			Namespace:  "gatekeeper-system",
 			Finalizers: []string{finalizerName},
 		},
 		Spec: configv1alpha1.ConfigSpec{
