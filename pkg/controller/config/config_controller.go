@@ -155,25 +155,25 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	newSyncOnly := newSet()
-	if instance.GetDeletionTimestamp().IsZero() {
-		if !hasFinalizer(instance) {
-			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
+	// Actively remove config finalizer. This should automatically remove
+	// the finalizer over time even if state teardown didn't work correctly
+	// after a deprecation period, all finalizer code can be removed.
+	if hasFinalizer(instance) {
+		removeFinalizer(instance)
+		if err := r.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{}, err
 		}
+	}
+
+	newSyncOnly := newSet()
+	// If the config is being deleted the user is saying they don't want to
+	// sync anything
+	if instance.GetDeletionTimestamp().IsZero() {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			newSyncOnly.Add(gvk)
 		}
-		// Handle deletion
-	} else {
-		if hasFinalizer(instance) {
-			removeFinalizer(instance)
-		}
 	}
-
 	if !r.watched.Equals(newSyncOnly) {
 		// Wipe all data to avoid stale state
 		err := r.watcher.Pause()
