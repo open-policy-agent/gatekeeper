@@ -1,6 +1,6 @@
 module github.com/open-policy-agent/gatekeeper
 
-go 1.12
+go 1.13
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
@@ -14,7 +14,7 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200122230709-6e9e094a381c
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200127222620-69dff9b895a2
 	github.com/open-policy-agent/opa v0.16.2
 	github.com/pkg/errors v0.8.1
 	go.opencensus.io v0.22.2
