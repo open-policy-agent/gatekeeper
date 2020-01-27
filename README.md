@@ -358,6 +358,34 @@ status:
 ```
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
+### Exempting Namespaces from the Gatekeeper Admission Webhook
+
+Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints is
+necessary to exclude them from audit.
+
+If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
+
+   1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
+   
+        ```yaml
+          namespaceSelector:
+            matchExpressions:
+            - key: admission.gatekeeper.sh/ignore
+              operator: DoesNotExist
+        ```
+      the default Gatekeeper manifest should already have added this. The default name for the
+      webhook configuration is `gatekeeper-validating-webhook-configuration` and the default
+      name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
+
+   2. Tell Gatekeeper it's okay for the namespace to be ignored by adding a flag to the pod:
+      `--exempt-namespace=<NAMESPACE NAME>`. This step is necessary because otherwise the
+      permission to modify a namespace would be equivalent to the permission to exempt everything
+      in that namespace from policy checks. This way a user must explicitly have permissions
+      to configure the Gatekeeper pod before they can add exemptions.
+
+   3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
+      to the label is ignored, so it can be used to annotate the reason for the exemption.
+
 ### Debugging
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
@@ -411,6 +439,55 @@ When applying the constraint using `kubectl apply -f constraint.yaml` with a Con
 
 To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
 
+### Customizing Admission Behavior
+
+Gatekeeper is a [Kubernetes admission webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#webhook-configuration)
+whose default configuration can be found in the `gatekeeper.yaml` manifest file. By default, it is
+a `ValidatingWebhookConfiguration` resource named `gatekeeper-validating-webhook-configuration`.
+
+Currently the configuration specifies two webhooks: one for checking a request against
+the installed constraints and a second webhook for checking labels on namespace requests
+that would result in bypassing constraints for the namespace. The namespace-label webhook
+is necessary to prevent a privilege escalation where the permission to add a label to a
+namespace is equivalent to the ability to bypass all constraints for that namespace.
+You can read more about the ability to exempt namespaces by label [above](#exempting-namespaces-from-the-gatekeeper-admission-webhook).
+
+Because Kubernetes adds features with each version, if you want to know how the webhook can be configured it
+is best to look at the official documentation linked at the top of this section. However, two particularly important
+configuration options deserve special mention: [timeouts](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#timeouts) and
+[failure policy](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#failure-policy).
+
+Timeouts allow you to configure how long the API server will wait for a response from the admission webhook before it
+considers the request to have failed. Note that setting the timeout longer than the overall request timeout
+means that the main request will time out before the webhook's failure policy is invoked.
+
+Failure policy controls what happens when a webhook fails for whatever reason. Common
+failure scenarios include timeouts, a 5xx error from the server or the webhook being unavailable.
+You have the option to ignore errors, allowing the request through, or failing, rejecting the request.
+This results in a direct tradeoff between availability and enforcement.
+
+Currently Gatekeeper is defaulting to using `Ignore` for the constraint requests. This is because
+the webhook server currently only has one instance, which risks downtime during actions like upgrades.
+As the theoretical availability improves we will likely change the default to `Fail`.
+
+The namespace label webhook defaults to `Fail`, this is to help ensure that policies preventing
+labels that bypass the webhook from being applied are enforced. Because this webhook only gets
+called for namespace modification requests, the impact of downtime is mitigated, making the
+theoretical maximum availability less of an issue.
+
+Because the manifest is available for customization, the webhook configuration can
+be tuned to meet your specific needs if they differ from the defaults.
+
+### Emergency Recovery
+
+If a situation arises where Gatekeeper is preventing the cluster from operating correctly,
+the webhook can be disabled. This will remove all Gatekeeper admission checks. Assuming
+the default webhook name has been used this can be achieved by running:
+
+`kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration`
+
+Redeploying the webhook configuration will re-enable Gatekeeper.
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
@@ -418,17 +495,6 @@ The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/dem
 # FAQ
 
 ## Finalizers
-
-### Why does Gatekeeper add sync finalizers?
-
-When Gatekeeper syncs resources it's adding them to OPA's internal cache. This
-cache may be used by constraints to render decisions. Because of this stale data
-is bad. It can lead to invalid rejections (e.g. when a uniqueness constraint is
-violated because an update conflicts with a since-deleted resource), or invalid
-acceptance (e.g. if a constraint uses the cache to make sure a Deployment exists
-before a Service can be created). Finalizers help avoid stale state by making
-sure Gatekeeper has processed the deletion and removed the object from its cache
-before the API Server can garbage collect the object.
 
 ### How can I remove finalizers? Why are they hanging around?
 
@@ -447,8 +513,5 @@ If Gatekeeper is not running:
     once).
   * The container was sent a hard kill signal
   * The container had a panic
-
-It is safest to remove the Config resource before uninstalling Gatekeeper, as
-that causes finalizers to be removed outside of the normal GC process.
 
 Finalizers can be removed manually via `kubectl edit` or `kubectl patch`
