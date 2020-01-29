@@ -3,6 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    admission.gatekeeper.sh/ignore: no-self-managing
   name: system
 ---
 apiVersion: apps/v1
@@ -30,6 +31,7 @@ spec:
           - "--audit-interval=30"
           - "--port=8443"
           - "--logtostderr"
+          - "--exempt-namespace=gatekeeper-system"
         image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.4
         imagePullPolicy: Always
         name: manager

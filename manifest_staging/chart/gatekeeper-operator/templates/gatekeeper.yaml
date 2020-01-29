@@ -2,9 +2,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
+    admission.gatekeeper.sh/ignore: no-self-managing
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-system
@@ -20,6 +22,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: configs.config.gatekeeper.sh
@@ -220,6 +223,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-admin
@@ -232,6 +236,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-role
@@ -257,6 +262,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-role
@@ -354,6 +360,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-rolebinding
@@ -373,6 +380,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-rolebinding
@@ -391,6 +399,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-server-cert
@@ -402,6 +411,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-service
@@ -414,6 +424,7 @@ spec:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
 ---
@@ -424,6 +435,7 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
@@ -435,6 +447,7 @@ spec:
       app: '{{ template "gatekeeper-operator.name" . }}'
       chart: '{{ template "gatekeeper-operator.name" . }}'
       control-plane: controller-manager
+      gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
       release: '{{ .Release.Name }}'
   template:
@@ -443,6 +456,7 @@ spec:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
         control-plane: controller-manager
+        gatekeeper.sh/system: "yes"
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
@@ -453,6 +467,7 @@ spec:
         - --logtostderr
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
+        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:
@@ -518,6 +533,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-validating-webhook-configuration
@@ -534,6 +550,8 @@ webhooks:
     matchExpressions:
     - key: control-plane
       operator: DoesNotExist
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
   rules:
   - apiGroups:
     - '*'
@@ -544,5 +562,25 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 5
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
   sideEffects: None
   timeoutSeconds: 5

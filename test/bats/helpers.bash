@@ -64,3 +64,11 @@ wait_for_process(){
   done
   return 1
 }
+
+get_ca_cert() {
+  destination="$1"
+  if [ $(kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then
+    return 1
+  fi
+  kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > $destination
+}

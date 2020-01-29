@@ -15,7 +15,7 @@ func SemanticEqual(c1 *unstructured.Unstructured, c2 *unstructured.Unstructured)
 	if err != nil || !exists {
 		return false
 	}
-	s2, exists, err := unstructured.NestedMap(c1.Object, "spec")
+	s2, exists, err := unstructured.NestedMap(c2.Object, "spec")
 	if err != nil || !exists {
 		return false
 	}
