@@ -150,9 +150,10 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
 			exists = false
+		} else {
+			// Error reading the object - requeue the request.
+			return reconcile.Result{}, err
 		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
 	}
 
 	if exists {
