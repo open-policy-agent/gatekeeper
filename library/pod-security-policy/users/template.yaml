@@ -11,17 +11,19 @@ spec:
         openAPIV3Schema:
           properties:
             runAsUser:
-              rule:
-                type: string
-              ranges:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    min:
-                      type: integer
-                    max:
-                      type: integer
+              type: object
+              properties:
+                rule:
+                  type: string
+                ranges:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      min:
+                        type: integer
+                      max:
+                        type: integer
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
