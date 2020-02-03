@@ -131,7 +131,7 @@ func TestConstraintEnforcement(t *testing.T) {
 		allowed    bool
 	}{
 		{
-			name:       "match everything",
+			name:       "match deny all",
 			obj:        makeResource("some", "Thing"),
 			ns:         makeNamespace("my-ns"),
 			constraint: makeConstraint(),
@@ -268,6 +268,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			allowed: true,
 		},
 	}
+
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			target := &K8sValidationTarget{}
@@ -280,6 +281,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unable to set up OPA client: %s", err)
 			}
+
 			tmpl := &templates.ConstraintTemplate{}
 			if err := yaml.Unmarshal([]byte(testTemplate), tmpl); err != nil {
 				t.Fatalf("unable to unmarshal template: %s", err)
@@ -290,6 +292,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			if _, err := c.AddConstraint(context.Background(), tc.constraint); err != nil {
 				t.Fatalf("unable to add constraint: %s", err)
 			}
+
 			objData, err := json.Marshal(tc.obj.Object)
 			if err != nil {
 				t.Fatalf("unable to marshal obj: %s", err)
@@ -305,7 +308,7 @@ func TestConstraintEnforcement(t *testing.T) {
 				},
 				Namespace: tc.ns.Name,
 			}
-			fullReq := &SideloadNamespace{Namespace: tc.ns, AdmissionRequest: req}
+			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
 			res, err := c.Review(context.Background(), fullReq, client.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing request: %s", err)
@@ -318,7 +321,7 @@ func TestConstraintEnforcement(t *testing.T) {
 				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res.TraceDump(), dump)
 			}
 
-			// also test oldObject
+			//also test oldObject
 			req2 := &admissionv1beta1.AdmissionRequest{
 				Kind: metav1.GroupVersionKind{
 					Group:   tc.obj.GroupVersionKind().Group,
@@ -330,10 +333,10 @@ func TestConstraintEnforcement(t *testing.T) {
 				},
 				Namespace: tc.ns.Name,
 			}
-			fullReq2 := &SideloadNamespace{Namespace: tc.ns, AdmissionRequest: req2}
+			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
 			res2, err := c.Review(context.Background(), fullReq2, client.Tracing(true))
 			if err != nil {
-				t.Errorf("Error reviewing second request: %s", err)
+				t.Errorf("Error reviewing OldObject request: %s", err)
 			}
 			if (len(res2.Results()) == 0) != tc.allowed {
 				dump, err := c.Dump(context.Background())
@@ -341,6 +344,19 @@ func TestConstraintEnforcement(t *testing.T) {
 					t.Logf("error dumping: %s", err)
 				}
 				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res2.TraceDump(), dump)
+			}
+
+			fullReq3 := &AugmentedUnstructured{Namespace: tc.ns, Object: *tc.obj}
+			res3, err := c.Review(context.Background(), fullReq3, client.Tracing(true))
+			if err != nil {
+				t.Errorf("Error reviewing AugmentedUnstructured request: %s", err)
+			}
+			if (len(res3.Results()) == 0) != tc.allowed {
+				dump, err := c.Dump(context.Background())
+				if err != nil {
+					t.Logf("error dumping: %s", err)
+				}
+				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res3.TraceDump(), dump)
 			}
 		})
 	}

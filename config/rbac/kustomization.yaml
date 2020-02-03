@@ -10,3 +10,11 @@ resources:
 # - auth_proxy_service.yaml
 # - auth_proxy_role.yaml
 # - auth_proxy_role_binding.yaml
+
+patchesJson6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRole
+    name: manager-role
+  path: webhook_permissions_patch.yaml

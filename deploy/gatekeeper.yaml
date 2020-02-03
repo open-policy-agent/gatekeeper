@@ -2,7 +2,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
+    admission.gatekeeper.sh/ignore: no-self-managing
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-system
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
@@ -11,6 +13,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh
@@ -104,6 +108,8 @@ status:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
@@ -111,6 +117,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-role
   namespace: gatekeeper-system
 rules:
@@ -131,6 +139,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-role
 rules:
 - apiGroups:
@@ -221,6 +231,8 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-rolebinding
   namespace: gatekeeper-system
 roleRef:
@@ -235,6 +247,8 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -248,12 +262,16 @@ subjects:
 apiVersion: v1
 kind: Secret
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-webhook-service
   namespace: gatekeeper-system
 spec:
@@ -262,12 +280,14 @@ spec:
     targetPort: 8443
   selector:
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
@@ -275,16 +295,19 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
+      gatekeeper.sh/system: "yes"
   template:
     metadata:
       labels:
         control-plane: controller-manager
+        gatekeeper.sh/system: "yes"
     spec:
       containers:
       - args:
         - --audit-interval=30
         - --port=8443
         - --logtostderr
+        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:
@@ -297,7 +320,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.4
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.5
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -346,6 +369,8 @@ apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
 webhooks:
 - clientConfig:
@@ -360,6 +385,8 @@ webhooks:
     matchExpressions:
     - key: control-plane
       operator: DoesNotExist
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
   rules:
   - apiGroups:
     - '*'
@@ -370,6 +397,26 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 5
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
   sideEffects: None
   timeoutSeconds: 5
 ---
@@ -411,6 +458,10 @@ spec:
                       properties:
                         kind:
                           type: string
+                        shortNames:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     validation:
                       type: object
