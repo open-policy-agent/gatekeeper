@@ -29,10 +29,12 @@ func TestUnstructuredHAStatus(t *testing.T) {
 			Statuses: []string{"first", "second", "third"},
 		},
 	}
-	for _, tt := range tc {
+	for tn, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
 			obj := &unstructured.Unstructured{}
 			obj.Object = make(map[string]interface{})
+			objGen := int64(tn)
+			obj.SetGeneration(objGen)
 			for i, s := range tt.Statuses {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
@@ -54,6 +56,17 @@ func TestUnstructuredHAStatus(t *testing.T) {
 				}
 				if id != pod {
 					t.Errorf("id = %v; want %v", id, pod)
+				}
+				gen2, ok := st2["observedGeneration"]
+				if !ok {
+					t.Errorf("observedGeneration not set for host %d", i)
+				}
+				gen, ok := gen2.(int64)
+				if !ok {
+					t.Errorf("observedGeneration (%v) is not an integer for host %d", gen, i)
+				}
+				if gen != objGen {
+					t.Errorf("observedGeneration = %v; want %v", gen, objGen)
 				}
 				f2, ok := st2["someField"]
 				if !ok {
@@ -94,6 +107,17 @@ func TestUnstructuredHAStatus(t *testing.T) {
 				}
 				if id != pod {
 					t.Errorf("t2: id = %v; want %v", id, pod)
+				}
+				gen2, ok := st2["observedGeneration"]
+				if !ok {
+					t.Errorf("observedGeneration not set for host %d", i)
+				}
+				gen, ok := gen2.(int64)
+				if !ok {
+					t.Errorf("observedGeneration (%v) is not an integer for host %d", gen, i)
+				}
+				if gen != objGen {
+					t.Errorf("observedGeneration = %v; want %v", gen, objGen)
 				}
 				f2, ok := st2["someField"]
 				if !ok {
@@ -151,9 +175,11 @@ func TestCTHAStatus(t *testing.T) {
 			Errors: []*v1beta1.CreateCRDError{{Message: "one"}, {Message: "two"}, {Message: "three"}},
 		},
 	}
-	for _, tt := range tc {
+	for tn, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
 			obj := &v1beta1.ConstraintTemplate{}
+			objGen := int64(tn)
+			obj.SetGeneration(objGen)
 			for i, e := range tt.Errors {
 				pod := fmt.Sprintf("Pod%d", i)
 				if err := os.Setenv("POD_NAME", pod); err != nil {
@@ -166,6 +192,9 @@ func TestCTHAStatus(t *testing.T) {
 				st2 := GetCTHAStatus(obj)
 				if st2.ID != pod {
 					t.Errorf("id = %v; want %v", st2.ID, pod)
+				}
+				if st2.ObservedGeneration != objGen {
+					t.Errorf("t2: observedGeneration = %v; want %v", st2.ObservedGeneration, objGen)
 				}
 				if !reflect.DeepEqual(st2.Errors, es) {
 					t.Errorf("st2.Errors = %v; wanted %v", st2.Errors, es)
@@ -184,6 +213,9 @@ func TestCTHAStatus(t *testing.T) {
 				st2 := GetCTHAStatus(obj)
 				if st2.ID != pod {
 					t.Errorf("t2: id = %v; want %v", st2.ID, pod)
+				}
+				if st2.ObservedGeneration != objGen {
+					t.Errorf("t2: observedGeneration = %v; want %v", st2.ObservedGeneration, objGen)
 				}
 				if !reflect.DeepEqual(st2.Errors, es) {
 					t.Errorf("t2: st2.Errors = %v; wanted %v", st2.Errors, es)
