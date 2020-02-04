@@ -143,37 +143,40 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
+	exists := true
 	instance := &configv1alpha1.Config{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
+		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
-			return reconcile.Result{}, nil
+			exists = false
+		} else {
+			// Error reading the object - requeue the request.
+			return reconcile.Result{}, err
 		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
 	}
 
-	newSyncOnly := newSet()
-	if instance.GetDeletionTimestamp().IsZero() {
-		if !hasFinalizer(instance) {
-			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
+	if exists {
+		// Actively remove config finalizer. This should automatically remove
+		// the finalizer over time even if state teardown didn't work correctly
+		// after a deprecation period, all finalizer code can be removed.
+		if hasFinalizer(instance) {
+			removeFinalizer(instance)
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+	}
+
+	newSyncOnly := newSet()
+	// If the config is being deleted the user is saying they don't want to
+	// sync anything
+	if exists && instance.GetDeletionTimestamp().IsZero() {
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			newSyncOnly.Add(gvk)
 		}
-		// Handle deletion
-	} else {
-		if hasFinalizer(instance) {
-			removeFinalizer(instance)
-		}
 	}
-
 	if !r.watched.Equals(newSyncOnly) {
 		// Wipe all data to avoid stale state
 		err := r.watcher.Pause()
@@ -194,9 +197,11 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	log.Info("updating config resource", "obj", instance)
-	if err := r.Update(context.Background(), instance); err != nil {
-		return reconcile.Result{}, err
+	if exists {
+		log.Info("updating config resource", "obj", instance)
+		if err := r.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 	r.watched.Replace(newSyncOnly)
 	return reconcile.Result{}, nil
