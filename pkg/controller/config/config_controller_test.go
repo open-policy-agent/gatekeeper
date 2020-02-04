@@ -53,8 +53,9 @@ func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
-			Namespace: "gatekeeper-system",
+			Name:       "config",
+			Namespace:  "gatekeeper-system",
+			Finalizers: []string{finalizerName},
 		},
 		Spec: configv1alpha1.ConfigSpec{
 			Sync: configv1alpha1.Sync{
@@ -137,10 +138,6 @@ func TestReconcile(t *testing.T) {
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
 	// Test finalizer removal
-
-	orig := &configv1alpha1.Config{}
-	g.Expect(c.Get(context.TODO(), CfgKey, orig)).NotTo(gomega.HaveOccurred())
-	g.Expect(hasFinalizer(orig)).Should(gomega.BeTrue())
 
 	testMgrStopped()
 	if err := watcher.Pause(); err != nil {
