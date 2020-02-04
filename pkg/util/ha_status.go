@@ -13,9 +13,10 @@ func getID() string {
 	return os.Getenv("POD_NAME")
 }
 
-func blankStatus(id string) map[string]interface{} {
+func blankStatus(id string, generation int64) map[string]interface{} {
 	return map[string]interface{}{
-		"id": id,
+		"id":                 id,
+		"observedGeneration": generation,
 	}
 }
 
@@ -26,12 +27,16 @@ func GetCTHAStatus(template *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 			return status
 		}
 	}
-	return &v1beta1.ByPodStatus{ID: id}
+	return &v1beta1.ByPodStatus{
+		ID:                 id,
+		ObservedGeneration: template.GetGeneration(),
+	}
 }
 
 func SetCTHAStatus(template *v1beta1.ConstraintTemplate, status *v1beta1.ByPodStatus) {
 	id := getID()
 	status.ID = id
+	status.ObservedGeneration = template.GetGeneration()
 	for i, s := range template.Status.ByPod {
 		if s.ID == id {
 			template.Status.ByPod[i] = status
@@ -56,12 +61,13 @@ func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
 // GetHAStatus gets the value of a pod-specific subfield of status
 func GetHAStatus(obj *unstructured.Unstructured) (map[string]interface{}, error) {
 	id := getID()
+	gen := obj.GetGeneration()
 	statuses, exists, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
 	if err != nil {
 		return nil, errors.Wrap(err, "while getting HA status")
 	}
 	if !exists {
-		return blankStatus(id), nil
+		return blankStatus(id, gen), nil
 	}
 
 	for _, s := range statuses {
@@ -82,13 +88,14 @@ func GetHAStatus(obj *unstructured.Unstructured) (map[string]interface{}, error)
 		}
 	}
 
-	return blankStatus(id), nil
+	return blankStatus(id, gen), nil
 }
 
 // SetHAStatus sets the value of a pod-specific subfield of status
 func SetHAStatus(obj *unstructured.Unstructured, status map[string]interface{}) error {
 	id := getID()
 	status["id"] = id
+	status["observedGeneration"] = obj.GetGeneration()
 	statuses, exists, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
 	if err != nil {
 		return errors.Wrap(err, "while setting HA status")
