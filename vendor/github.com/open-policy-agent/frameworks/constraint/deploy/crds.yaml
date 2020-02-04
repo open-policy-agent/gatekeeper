@@ -81,6 +81,9 @@ spec:
                   id:
                     description: a unique identifier for the pod that wrote the status
                     type: string
+                  observedGeneration:
+                    description: the latest generation of this template synced by gatekeeper
+                    type: integer
                 type: object
               type: array
             created:

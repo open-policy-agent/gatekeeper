@@ -240,6 +240,7 @@ github.com/onsi/gomega v1.3.0/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5
 github.com/onsi/gomega v1.5.0/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
 github.com/onsi/gomega v1.7.0 h1:XPnZz8VVBHjVsy1vzJmRwIcSwiUO+JFfrv/xGiigmME=
 github.com/onsi/gomega v1.7.0/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
+github.com/open-policy-agent/frameworks v0.0.0-20200204005549-6c7477760b9b h1:aWgiO9bAL2XjIIgt0ISiKq8qGtbwfNskzGWCjTBq2BU=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200106214430-991b84509bcf h1:s4fGh7SWwWhJZcVUTc5HXaq861Xmlt1+63sNvl6Wstk=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200106214430-991b84509bcf/go.mod h1:YgEzIv0aenXrzcj7a4A9nv2YBD4q5M+gufEICCpdJ/8=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200121183413-7427e3c712ed h1:bDPHgDCjuFwh4sJMbiivfNy+HqzJd/V09BN4gZeRSTc=
@@ -248,6 +249,8 @@ github.com/open-policy-agent/frameworks/constraint v0.0.0-20200122230709-6e9e094
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200122230709-6e9e094a381c/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200127222620-69dff9b895a2 h1:1Z/2aSMy9k8kvAaMb2r1rSQ+we21nisxILthLRoYStw=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200127222620-69dff9b895a2/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20200204005549-6c7477760b9b h1:i7zixKxYHfCSL1pxYcYTj27fmW0NJdhY4pShs63B1p4=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20200204005549-6c7477760b9b/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
 github.com/open-policy-agent/opa v0.15.0 h1:dZKtNOSscMYy6+ni6nW1TWU2Tr8CC9eqQzf3hyZRKa4=
 github.com/open-policy-agent/opa v0.15.0/go.mod h1:P0xUE/GQAAgnvV537GzA0Ikw4+icPELRT327QJPkaKY=
 github.com/open-policy-agent/opa v0.16.0 h1:VGyBInxJkrbZ2yNBGygnevnQFJgf/18ZbohvH7Xu9dw=
@@ -495,6 +498,8 @@ sigs.k8s.io/controller-runtime v0.4.0 h1:wATM6/m+3w8lj8FXNaO6Fs/rq/vqoOjO1Q116Z9
 sigs.k8s.io/controller-runtime v0.4.0/go.mod h1:ApC79lpY3PHW9xj/w9pj+lYkLgwAAUZwfXkME1Lajns=
 sigs.k8s.io/controller-tools v0.2.2 h1:tOXKme2gR7KoM6+7Y+nzjwjbXDgqLfTuX5r7+4dvlig=
 sigs.k8s.io/controller-tools v0.2.2/go.mod h1:8SNGuj163x/sMwydREj7ld5mIMJu1cDanIfnx6xsU70=
+sigs.k8s.io/controller-tools v0.2.4 h1:la1h46EzElvWefWLqfsXrnsO3lZjpkI0asTpX6h8PLA=
+sigs.k8s.io/controller-tools v0.2.4/go.mod h1:m/ztfQNocGYBgTTCmFdnK94uVvgxeZeE3LtJvd/jIzA=
 sigs.k8s.io/structured-merge-diff v0.0.0-20190525122527-15d366b2352e/go.mod h1:wWxsB5ozmmv/SG7nM11ayaAW51xMvak/t1r0CSlcokI=
 sigs.k8s.io/structured-merge-diff v0.0.0-20190817042607-6149e4549fca/go.mod h1:IIgPezJWb76P0hotTxzDbWsMYB8APh18qZnxkomBpxA=
 sigs.k8s.io/structured-merge-diff v1.0.1/go.mod h1:IIgPezJWb76P0hotTxzDbWsMYB8APh18qZnxkomBpxA=
