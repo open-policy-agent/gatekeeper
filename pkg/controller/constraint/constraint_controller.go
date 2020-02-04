@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -182,14 +183,16 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err := r.cacheConstraint(instance); err != nil {
-			r.constraintsCache.addConstraintKey(constraintKey, tags{
-				enforcementAction: enforcementAction,
-				status:            metrics.ErrorStatus,
-			})
-			reportMetrics = true
+		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
+			if err := r.cacheConstraint(instance); err != nil {
+				r.constraintsCache.addConstraintKey(constraintKey, tags{
+					enforcementAction: enforcementAction,
+					status:            metrics.ErrorStatus,
+				})
+				reportMetrics = true
+				return reconcile.Result{}, err
+			}
 			logAddition(r.log, instance, enforcementAction)
-			return reconcile.Result{}, err
 		}
 		status, err = util.GetHAStatus(instance)
 		if err != nil {
