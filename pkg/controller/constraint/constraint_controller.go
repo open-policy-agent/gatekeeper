@@ -202,7 +202,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err = r.Update(context.Background(), instance); err != nil {
+		if err = r.Status().Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 		// adding constraint to cache and sending metrics
