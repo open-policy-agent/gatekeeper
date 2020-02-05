@@ -435,6 +435,8 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -506,7 +508,7 @@ spec:
                     description: a unique identifier for the pod that wrote the status
                     type: string
                   observedGeneration:
-                    description: the latest generation of this template synced by gatekeeper
+                    format: int64
                     type: integer
                 type: object
               type: array
