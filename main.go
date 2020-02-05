@@ -194,6 +194,8 @@ func main() {
 	<-templatesCleaned
 	setupLog.Info("state cleaned")
 	if hadError {
+		/// give the cert manager time to generate the cert
+		time.Sleep(5 * time.Second)
 		os.Exit(1)
 	}
 }
