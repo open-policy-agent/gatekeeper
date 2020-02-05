@@ -251,6 +251,8 @@ github.com/open-policy-agent/frameworks/constraint v0.0.0-20200127222620-69dff9b
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200127222620-69dff9b895a2/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200204005549-6c7477760b9b h1:i7zixKxYHfCSL1pxYcYTj27fmW0NJdhY4pShs63B1p4=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20200204005549-6c7477760b9b/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20200205030540-b82080aeed26 h1:zEhgjAuRyEHmSpD6A4ZHc45HXs1XtFL7xmSTcVuEiZQ=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20200205030540-b82080aeed26/go.mod h1:RYtG2t6a5nly9IWFMNgq/K29YzYMV9ftA7XlGOM75bs=
 github.com/open-policy-agent/opa v0.15.0 h1:dZKtNOSscMYy6+ni6nW1TWU2Tr8CC9eqQzf3hyZRKa4=
 github.com/open-policy-agent/opa v0.15.0/go.mod h1:P0xUE/GQAAgnvV537GzA0Ikw4+icPELRT327QJPkaKY=
 github.com/open-policy-agent/opa v0.16.0 h1:VGyBInxJkrbZ2yNBGygnevnQFJgf/18ZbohvH7Xu9dw=
