@@ -447,7 +447,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			unstructured.RemoveNestedField(instance.Object, "status", "violations")
 			log.Info("removed status violations", "constraintName", constraintName)
 		}
-		err = ucloop.client.Update(ctx, instance)
+		err = ucloop.client.Status().Update(ctx, instance)
 		if err != nil {
 			return err
 		}
@@ -456,7 +456,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 		log.Info("update constraint", "object", instance)
-		err = ucloop.client.Update(ctx, instance)
+		err = ucloop.client.Status().Update(ctx, instance)
 		if err != nil {
 			return err
 		}
