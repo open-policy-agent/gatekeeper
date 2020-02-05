@@ -87,7 +87,6 @@ func (h *crdHelper) createCRD(
 				Singular:   strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
 				ShortNames: templ.Spec.CRD.Spec.Names.ShortNames,
 				Categories: []string{
-					"all",
 					"constraint",
 				},
 			},
