@@ -318,11 +318,14 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	name := crd.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	if !containsString(finalizerName, instance.GetFinalizers()) {
+		// preserve original status as otherwise it will get wiped in the update
+		origStatus := instance.Status.DeepCopy()
 		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 		if err := r.Update(context.Background(), instance); err != nil {
 			log.Error(err, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
+		instance.Status = *origStatus
 	}
 	log.Info("loading constraint code into OPA")
 	versionless := &templates.ConstraintTemplate{}
