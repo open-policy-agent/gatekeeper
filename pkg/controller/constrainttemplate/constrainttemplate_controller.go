@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -136,6 +137,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ConstraintTemplate
 	err = c.Watch(&source.Kind{Type: &v1beta1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ConstraintTemplate CRDs
+	err = c.Watch(
+		&source.Kind{Type: &apiextensionsv1beta1.CustomResourceDefinition{}},
+		&handler.EnqueueRequestForOwner{
+			OwnerType: &v1beta1.ConstraintTemplate{},
+			IsController: true,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -318,6 +331,9 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		log.Error(err, "conversion error")
 		return reconcile.Result{}, err
 	}
+	if err := controllerutil.SetControllerReference(instance, crdv1beta1, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
 	if err := r.Create(context.TODO(), crdv1beta1); err != nil {
 		status := util.GetCTHAStatus(instance)
 		status.Errors = []*v1beta1.CreateCRDError{}
@@ -393,6 +409,9 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
 		if err := r.scheme.Convert(found, crdv1beta1, nil); err != nil {
 			log.Error(err, "conversion error")
+			return reconcile.Result{}, err
+		}
+		if err := controllerutil.SetControllerReference(instance, crdv1beta1, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 		if err := r.Update(context.Background(), crdv1beta1); err != nil {
