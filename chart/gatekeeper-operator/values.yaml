@@ -4,7 +4,7 @@ constraintViolationsLimit: 20
 auditFromCache: false
 image:
   repository: quay.io/open-policy-agent/gatekeeper
-  release: v3.1.0-beta.5
+  release: v3.1.0-beta.6
   pullPolicy: IfNotPresent
 nodeSelector: {}
 tolerations: []

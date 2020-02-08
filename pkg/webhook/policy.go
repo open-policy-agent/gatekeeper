@@ -289,7 +289,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 		if gvk == trace.Kind {
 			traceEnabled = true
-			if trace.Dump == "All" {
+			if strings.EqualFold(trace.Dump, "All") {
 				dump = true
 			}
 		}
