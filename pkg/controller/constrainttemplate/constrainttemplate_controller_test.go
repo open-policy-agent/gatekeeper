@@ -16,7 +16,6 @@ limitations under the License.
 package constrainttemplate
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -44,7 +43,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,7 +58,44 @@ var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Nam
 
 var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
 
-const timeout = time.Second * 5
+const timeout = time.Second * 15
+
+func newClient(cfg *rest.Config) client.Client {
+	c, err := client.New(cfg, client.Options{})
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func constraintEnforced(g *gomega.GomegaWithT) {
+	g.Eventually(func() error {
+		cstr := newDenyAllCstr()
+		err := c.Get(context.TODO(), types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		if err != nil {
+			return err
+		}
+		status, err := constraintutil.GetHAStatus(cstr)
+		if err != nil {
+			return err
+		}
+		if !status.Enforced {
+			return errors.New("constraint not enforced")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
+}
+
+func newDenyAllCstr() *unstructured.Unstructured {
+	cstr := &unstructured.Unstructured{}
+	cstr.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "constraints.gatekeeper.sh",
+		Version: "v1beta1",
+		Kind:    "DenyAll",
+	})
+	cstr.SetName("denyallconstraint")
+	return cstr
+}
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -94,6 +129,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 }
 
 func TestReconcile(t *testing.T) {
+	crdKey := types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}
 	g := gomega.NewGomegaWithT(t)
 	instance := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
@@ -123,6 +159,8 @@ violation[{"msg": "denied!"}] {
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := mgr.GetClient()
+	ctrl.SetLogger(zap.Logger(true))
+	ctx := context.Background()
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -153,10 +191,11 @@ violation[{"msg": "denied!"}] {
 	defer testMgrStopped()
 
 	// Create the ConstraintTemplate object and expect the CRD to be created
-	err = c.Create(context.TODO(), instance)
+	log.Info("CREATING CONSTRAINT TEMPLATE")
+	err = c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		err := c.Delete(context.TODO(), instance)
+		err := c.Delete(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
@@ -164,7 +203,7 @@ violation[{"msg": "denied!"}] {
 	clientset := kubernetes.NewForConfigOrDie(cfg)
 	g.Eventually(func() error {
 		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}, crd); err != nil {
+		if err := c.Get(ctx, crdKey, crd); err != nil {
 			return err
 		}
 		rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
@@ -179,31 +218,16 @@ violation[{"msg": "denied!"}] {
 		return errors.New("DenyAll not found")
 	}, timeout).Should(gomega.BeNil())
 
-	cstr := &unstructured.Unstructured{}
-	cstr.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "constraints.gatekeeper.sh",
-		Version: "v1beta1",
-		Kind:    "DenyAll",
-	})
-	cstr.SetName("denyall")
-	kindSelector := `[{"apiGroups": ["*"], "kinds": ["*"]}]`
-	ks := make([]interface{}, 0)
-	err = json.Unmarshal([]byte(kindSelector), &ks)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	err = unstructured.SetNestedSlice(cstr.Object, ks, "spec", "match", "kinds")
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-
-	dynamic := dynamic.NewForConfigOrDie(cfg)
-	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: "denyall"})
-	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
+	err = c.Create(ctx, newDenyAllCstr())
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		err = cstrClient.Delete(cstr.GetName(), &metav1.DeleteOptions{})
+		err = c.Delete(ctx, newDenyAllCstr())
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
 	g.Eventually(func() error {
-		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+		o := &unstructured.Unstructured{}
+		err := c.Get(ctx, types.NamespacedName{Name: "denyall"}, o)
 		if err != nil {
 			return err
 		}
@@ -216,6 +240,7 @@ violation[{"msg": "denied!"}] {
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
+	constraintEnforced(g)
 
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -232,15 +257,48 @@ violation[{"msg": "denied!"}] {
 		Name:      "FooNamespace",
 		Object:    runtime.RawExtension{Object: ns},
 	}
-	resp, err := opa.Review(context.TODO(), req)
+	resp, err := opa.Review(ctx, req)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	if len(resp.Results()) != 1 {
 		fmt.Println(resp.TraceDump())
-		fmt.Println(opa.Dump(context.TODO()))
+		fmt.Println(opa.Dump(ctx))
 	}
 	g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 
+	// If the CRD is deleted out from underneath the template, it is recreated
+	log.Info("TESTING CRD RECREATION ON DELETE")
+	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+	crd.SetName(crdKey.Name)
+	crd.Spec = apiextensionsv1beta1.CustomResourceDefinitionSpec{}
+	g.Expect(c.Delete(ctx, crd)).NotTo(gomega.HaveOccurred())
+
+	g.Eventually(func() error {
+		// Drain the request queue so the controller can operate
+		select {
+		case v := <-requests:
+			log.Info("Reconciling request", "request", v)
+		default:
+		}
+		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+		if err := c.Get(ctx, crdKey, crd); err != nil {
+			return err
+		}
+		if !crd.GetDeletionTimestamp().IsZero() {
+			return errors.New("Still deleting")
+		}
+		for _, cond := range crd.Status.Conditions {
+			if cond.Type == apiextensionsv1beta1.Established && cond.Status == apiextensionsv1beta1.ConditionTrue {
+				return nil
+			}
+		}
+		return errors.New("Not established")
+	}, timeout, time.Second).Should(gomega.BeNil())
+
+	g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
+	constraintEnforced(g)
+
 	// Create template with invalid rego, should populate parse error in status
+	log.Info("TESTING INVALID REGO")
 	instanceInvalidRego := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
 		Spec: v1beta1.ConstraintTemplateSpec{
@@ -266,17 +324,17 @@ anyrule[}}}//invalid//rego
 		},
 	}
 
-	err = c.Create(context.TODO(), instanceInvalidRego)
+	err = c.Create(ctx, instanceInvalidRego)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer func() {
-		err = c.Delete(context.TODO(), instanceInvalidRego)
+		err = c.Delete(ctx, instanceInvalidRego)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
 
 	g.Eventually(func() error {
 		ct := &v1beta1.ConstraintTemplate{}
-		if err := c.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
+		if err := c.Get(ctx, types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
 			return err
 		}
 		if ct.Name == "invalidrego" {
@@ -293,17 +351,27 @@ anyrule[}}}//invalid//rego
 	}, timeout).Should(gomega.BeNil())
 
 	// Test finalizer removal
+	log.Info("TESTING FINALIZER REMOVAL")
 	orig := &v1beta1.ConstraintTemplate{}
-	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, orig)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Get(ctx, types.NamespacedName{Name: "denyall"}, orig)).NotTo(gomega.HaveOccurred())
 	g.Expect(containsString(finalizerName, orig.GetFinalizers())).Should(gomega.BeTrue())
 
-	origCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
+	origCstr := newDenyAllCstr()
+	g.Eventually(func() error {
+		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, origCstr)
+		if err != nil {
+			return err
+		}
+		if !constraint.HasFinalizer(origCstr) {
+			return errors.New("Waiting on constraint")
+		}
+		return nil
+	}, timeout).Should(gomega.BeNil())
 
 	testMgrStopped()
 	cs.Stop()
 	time.Sleep(5 * time.Second)
+
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -312,7 +380,7 @@ anyrule[}}}//invalid//rego
 
 	g.Eventually(func() error {
 		obj := &v1beta1.ConstraintTemplate{}
-		if err := newCli.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
+		if err := newCli.Get(ctx, types.NamespacedName{Name: "denyall"}, obj); err != nil {
 			return err
 		}
 		if containsString(finalizerName, obj.GetFinalizers()) {
@@ -324,8 +392,9 @@ anyrule[}}}//invalid//rego
 		return nil
 	}, timeout).Should(gomega.BeNil())
 
+	cleanCstr := origCstr.DeepCopy()
 	g.Eventually(func() error {
-		cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cleanCstr)
 		if err != nil {
 			return err
 		}
@@ -344,4 +413,5 @@ anyrule[}}}//invalid//rego
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
+	log.Info("EXITING")
 }

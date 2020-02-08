@@ -145,7 +145,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(
 		&source.Kind{Type: &apiextensionsv1beta1.CustomResourceDefinition{}},
 		&handler.EnqueueRequestForOwner{
-			OwnerType: &v1beta1.ConstraintTemplate{},
+			OwnerType:    &v1beta1.ConstraintTemplate{},
 			IsController: true,
 		},
 	)
@@ -235,7 +235,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	name := crd.GetName()
 	namespace := crd.GetNamespace()
 	if instance.GetDeletionTimestamp().IsZero() {
-		// Check if the constraint already exists
+		// Check if the constraint CRD already exists
 		found := &apiextensionsv1beta1.CustomResourceDefinition{}
 		err = r.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, found)
 		if err != nil && errors.IsNotFound(err) {
@@ -345,6 +345,10 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		}
 		return reconcile.Result{}, err
 	}
+	log.Info("adding to watcher registry")
+	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind), true); err != nil {
+		return reconcile.Result{}, err
+	}
 	instance.Status.Created = true
 	if err := r.Status().Update(context.Background(), instance); err != nil {
 		return reconcile.Result{Requeue: true}, nil
@@ -358,12 +362,12 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 
 func (r *ReconcileConstraintTemplate) handleUpdate(
 	instance *v1beta1.ConstraintTemplate,
-	crd, found *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
+	proposedCRD, existingCRD *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
 	// TODO: We may want to only check in code if it has changed. This is harder to do than it sounds
 	// because even if the hash hasn't changed, OPA may have been restarted and needs code re-loaded
 	// anyway. We should see if the OPA server is smart enough to look for changes on its own, otherwise
 	// this may be too expensive to do in large clusters
-	name := crd.GetName()
+	name := proposedCRD.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	if !containsString(finalizerName, instance.GetFinalizers()) {
 		// preserve original status as otherwise it will get wiped in the update
@@ -375,6 +379,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		}
 		instance.Status = *origStatus
 	}
+
 	log.Info("loading constraint code into OPA")
 	versionless := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
@@ -382,6 +387,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		return reconcile.Result{}, err
 	}
 	beginCompile := time.Now()
+
 	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
 		if err := r.metrics.reportIngestDuration(metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			log.Error(err, "failed to report constraint template ingestion duration")
@@ -395,26 +401,31 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		}
 		return reconcile.Result{}, err
 	}
+
 	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
+
 	log.Info("making sure constraint is in watcher registry")
 	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
 		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	if !reflect.DeepEqual(crd.Spec, found.Spec) {
-		log.Info("difference in spec found, updating")
-		found.Spec = crd.Spec
-		crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
-		if err := r.scheme.Convert(found, crdv1beta1, nil); err != nil {
+
+	newCRD := existingCRD.DeepCopy()
+	newCRD.Spec = proposedCRD.Spec
+	if err := controllerutil.SetControllerReference(instance, newCRD, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if !reflect.DeepEqual(newCRD, existingCRD) {
+		newCRDv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
+		if err := r.scheme.Convert(newCRD, newCRDv1beta1, nil); err != nil {
 			log.Error(err, "conversion error")
 			return reconcile.Result{}, err
 		}
-		if err := controllerutil.SetControllerReference(instance, crdv1beta1, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
-		if err := r.Update(context.Background(), crdv1beta1); err != nil {
+
+		if err := r.Update(context.Background(), newCRDv1beta1); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
