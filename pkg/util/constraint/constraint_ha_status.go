@@ -3,7 +3,6 @@ package constraint
 import (
 	"encoding/json"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -25,7 +24,7 @@ type ByPodStatus struct {
 }
 
 func GetHAStatus(obj *unstructured.Unstructured) (*ByPodStatus, error) {
-	s, err := util.GetHAStatus(obj)
+	s, err := getHAStatus(obj)
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +48,9 @@ func SetHAStatus(obj *unstructured.Unstructured, status *ByPodStatus) error {
 	if err := json.Unmarshal(j, &s); err != nil {
 		return err
 	}
-	return util.SetHAStatus(obj, s)
+	return setHAStatus(obj, s)
 }
 
 func DeleteHAStatus(obj *unstructured.Unstructured) error {
-	return util.DeleteHAStatus(obj)
+	return deleteHAStatus(obj)
 }
