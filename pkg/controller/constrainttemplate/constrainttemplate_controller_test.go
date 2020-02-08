@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"golang.org/x/net/context"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -179,18 +180,11 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			return err
 		}
-		status, err := util.GetHAStatus(o)
+		status, err := constraintutil.GetHAStatus(o)
 		if err != nil {
 			return err
 		}
-		val, found, err := unstructured.NestedBool(status, "enforced")
-		if err != nil {
-			return err
-		}
-		if !found {
-			return errors.New("status not found")
-		}
-		if !val {
+		if !status.Enforced {
 			return errors.New("constraint not enforced")
 		}
 		return nil
