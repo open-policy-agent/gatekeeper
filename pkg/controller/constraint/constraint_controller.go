@@ -199,6 +199,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 				})
 				status.Errors = append(status.Errors, csutil.Error{Message: err.Error()})
 				if err2 := csutil.SetHAStatus(instance, status); err2 != nil {
+					log.Error(err2, "could not set constraint error status")
+				}
+				if err2 := r.Status().Update(context.TODO(), instance); err2 != nil {
 					log.Error(err2, "could not report constraint error status")
 				}
 				reportMetrics = true
