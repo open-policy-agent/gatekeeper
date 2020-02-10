@@ -2,6 +2,7 @@ package constraint
 
 import (
 	"fmt"
+
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

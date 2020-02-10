@@ -48,4 +48,3 @@ func DeleteCTHAStatus(template *v1beta1.ConstraintTemplate) {
 	}
 	template.Status.ByPod = newStatus
 }
-
