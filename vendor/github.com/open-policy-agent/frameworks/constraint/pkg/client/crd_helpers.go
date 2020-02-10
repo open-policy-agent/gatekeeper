@@ -87,7 +87,6 @@ func (h *crdHelper) createCRD(
 				Singular:   strings.ToLower(templ.Spec.CRD.Spec.Names.Kind),
 				ShortNames: templ.Spec.CRD.Spec.Names.ShortNames,
 				Categories: []string{
-					"all",
 					"constraint",
 				},
 			},
@@ -96,6 +95,10 @@ func (h *crdHelper) createCRD(
 			},
 			Scope:   "Cluster",
 			Version: v1beta1.SchemeGroupVersion.Version,
+			Subresources: &apiextensions.CustomResourceSubresources{
+				Status: &apiextensions.CustomResourceSubresourceStatus{},
+				Scale:  nil,
+			},
 			Versions: []apiextensions.CustomResourceDefinitionVersion{
 				{
 					Name:    v1beta1.SchemeGroupVersion.Version,

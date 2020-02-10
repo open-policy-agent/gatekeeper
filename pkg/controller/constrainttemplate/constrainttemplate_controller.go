@@ -178,7 +178,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		}
 
 		util.SetCTHAStatus(instance, status)
-		if updateErr := r.Update(context.Background(), instance); updateErr != nil {
+		if updateErr := r.Status().Update(context.Background(), instance); updateErr != nil {
 			log.Error(updateErr, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
@@ -271,7 +271,7 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		status := util.GetCTHAStatus(instance)
 		status.Errors = append(status.Errors, updateErr)
 		util.SetCTHAStatus(instance, status)
-		if err2 := r.Update(context.Background(), instance); err2 != nil {
+		if err2 := r.Status().Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 		}
 		return reconcile.Result{}, err
@@ -296,13 +296,13 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 		createErr := &v1beta1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
 		status.Errors = append(status.Errors, createErr)
 		util.SetCTHAStatus(instance, status)
-		if err2 := r.Update(context.Background(), instance); err2 != nil {
+		if err2 := r.Status().Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 		}
 		return reconcile.Result{}, err
 	}
 	instance.Status.Created = true
-	if err := r.Update(context.Background(), instance); err != nil {
+	if err := r.Status().Update(context.Background(), instance); err != nil {
 		return reconcile.Result{Requeue: true}, nil
 	}
 	return reconcile.Result{}, nil
@@ -318,11 +318,14 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	name := crd.GetName()
 	log := log.WithValues("name", instance.GetName(), "crdName", name)
 	if !containsString(finalizerName, instance.GetFinalizers()) {
+		// preserve original status as otherwise it will get wiped in the update
+		origStatus := instance.Status.DeepCopy()
 		instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 		if err := r.Update(context.Background(), instance); err != nil {
 			log.Error(err, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
+		instance.Status = *origStatus
 	}
 	log.Info("loading constraint code into OPA")
 	versionless := &templates.ConstraintTemplate{}
@@ -339,7 +342,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		status := util.GetCTHAStatus(instance)
 		status.Errors = append(status.Errors, updateErr)
 		util.SetCTHAStatus(instance, status)
-		if err2 := r.Update(context.Background(), instance); err2 != nil {
+		if err2 := r.Status().Update(context.Background(), instance); err2 != nil {
 			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 		}
 		return reconcile.Result{}, err
@@ -364,7 +367,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			return reconcile.Result{}, err
 		}
 	}
-	if err := r.Update(context.Background(), instance); err != nil {
+	if err := r.Status().Update(context.Background(), instance); err != nil {
 		log.Error(err, "update error")
 		return reconcile.Result{Requeue: true}, nil
 	}
@@ -515,13 +518,17 @@ func TearDownState(c client.Client, finished chan struct{}) {
 			for _, obj := range objs.Items {
 				log.Info("scrubing constraint state", "name", obj.GetName())
 				constraint.RemoveFinalizer(&obj)
+				if err := c.Update(context.Background(), &obj); err != nil {
+					success = false
+					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
+				}
 				if err := util.DeleteHAStatus(&obj); err != nil {
 					success = false
 					log.Error(err, "could not remove pod-specific status")
 				}
-				if err := c.Update(context.Background(), &obj); err != nil {
+				if err := c.Status().Update(context.Background(), &obj); err != nil {
 					success = false
-					log.Error(err, "could not scrub constraint state", "name", obj.GetName())
+					log.Error(err, "could not scrub constraint status", "name", obj.GetName())
 				}
 			}
 			if success {
@@ -536,9 +543,13 @@ func TearDownState(c client.Client, finished chan struct{}) {
 					}
 				}
 				RemoveFinalizer(templ)
-				util.DeleteCTHAStatus(templ)
 				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
-					log.Error(err, "while writing a constraint template for cleanup", "template", nn)
+					log.Error(err, "while writing a constraint template for finalizer cleanup", "template", nn)
+					continue
+				}
+				util.DeleteCTHAStatus(templ)
+				if err := c.Status().Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
+					log.Error(err, "while writing a constraint template for status cleanup", "template", nn)
 					continue
 				}
 				delete(names, nn)

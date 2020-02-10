@@ -169,9 +169,16 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 
 	if instance.GetDeletionTimestamp().IsZero() {
 		if !HasFinalizer(instance) {
+			status, _, _ := unstructured.NestedFieldCopy(instance.Object, "status")
 			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{Requeue: true}, nil
+			}
+
+			if status != nil {
+				if err := unstructured.SetNestedField(instance.Object, status, "status"); err != nil {
+					log.Error(err, "error preserving constraint status")
+				}
 			}
 		}
 		r.log.Info("handling constraint update", "instance", instance)
@@ -202,7 +209,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = util.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err = r.Update(context.Background(), instance); err != nil {
+		if err = r.Status().Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 		// adding constraint to cache and sending metrics
