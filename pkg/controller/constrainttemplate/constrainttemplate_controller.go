@@ -368,6 +368,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			return reconcile.Result{}, err
 		}
 	}
+	instance.Status.Created = true
 	if err := r.Status().Update(context.Background(), instance); err != nil {
 		log.Error(err, "update error")
 		return reconcile.Result{Requeue: true}, nil
