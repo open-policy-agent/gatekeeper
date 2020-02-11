@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	csutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -182,12 +183,12 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 		r.log.Info("handling constraint update", "instance", instance)
-		status, err := util.GetHAStatus(instance)
+		status, err := csutil.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		delete(status, "errors")
-		if err = util.SetHAStatus(instance, status); err != nil {
+		status.Errors = nil
+		if err = csutil.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
 		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
@@ -196,17 +197,20 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
+				status.Errors = append(status.Errors, csutil.Error{Message: err.Error()})
+				if err2 := csutil.SetHAStatus(instance, status); err2 != nil {
+					log.Error(err2, "could not set constraint error status")
+				}
+				if err2 := r.Status().Update(context.TODO(), instance); err2 != nil {
+					log.Error(err2, "could not report constraint error status")
+				}
 				reportMetrics = true
 				return reconcile.Result{}, err
 			}
 			logAddition(r.log, instance, enforcementAction)
 		}
-		status, err = util.GetHAStatus(instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		status["enforced"] = true
-		if err = util.SetHAStatus(instance, status); err != nil {
+		status.Enforced = true
+		if err = csutil.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
 		if err = r.Status().Update(context.Background(), instance); err != nil {

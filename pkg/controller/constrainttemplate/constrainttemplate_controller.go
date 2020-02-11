@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
@@ -522,7 +523,8 @@ func TearDownState(c client.Client, finished chan struct{}) {
 					success = false
 					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
 				}
-				if err := util.DeleteHAStatus(&obj); err != nil {
+
+				if err := constraintutil.DeleteHAStatus(&obj); err != nil {
 					success = false
 					log.Error(err, "could not remove pod-specific status")
 				}
