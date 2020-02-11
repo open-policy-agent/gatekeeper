@@ -290,12 +290,28 @@ func (am *Manager) ensureCRDExists(ctx context.Context) error {
 	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
-func (am *Manager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
+func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
-	return discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
+	l, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
+	if err != nil {
+		return nil, err
+	}
+	resourceGV := strings.Split(constraintsGV, "/")
+	group := resourceGV[0]
+	version := resourceGV[1]
+	// We have seen duplicate GVK entries on shifting to status client, remove them
+	unique := make(map[schema.GroupVersionKind]bool)
+	for _, i := range l.APIResources {
+		unique[schema.GroupVersionKind{Group: group, Version: version, Kind: i.Kind}] = true
+	}
+	var ret []schema.GroupVersionKind
+	for gvk := range unique {
+		ret = append(ret, gvk)
+	}
+	return ret, nil
 }
 
 func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
@@ -348,19 +364,10 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
-	resourceGV := strings.Split(resourceList.GroupVersion, "/")
-	group := resourceGV[0]
-	version := resourceGV[1]
-
+func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
 	// get constraints for each Kind
-	for _, r := range resourceList.APIResources {
-		am.log.Info("constraint", "resource kind", r.Kind)
-		constraintGvk := schema.GroupVersionKind{
-			Group:   group,
-			Version: version,
-			Kind:    r.Kind + "List",
-		}
+	for _, constraintGvk := range resourceList {
+		am.log.Info("constraint", "resource kind", constraintGvk.Kind)
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
 		err := am.client.List(ctx, instanceList)
