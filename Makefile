@@ -4,7 +4,7 @@ REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
 
-VERSION := v3.1.0-beta.6
+VERSION := v3.1.0-beta.7
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.6.0
