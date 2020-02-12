@@ -322,7 +322,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.6
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

@@ -32,7 +32,7 @@ spec:
           - "--port=8443"
           - "--logtostderr"
           - "--exempt-namespace=gatekeeper-system"
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.6
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7
         imagePullPolicy: Always
         name: manager
         ports:
