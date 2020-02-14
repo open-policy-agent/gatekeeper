@@ -180,7 +180,6 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 	}
 
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
-
 	if err != nil {
 		return nil, err
 	}
@@ -213,40 +212,90 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 	var responses []*constraintTypes.Result
 	var errs opa.Errors
 
-	for gv, gvKinds := range clusterAPIResources {
-		for kind := range gvKinds {
-			objList := &unstructured.UnstructuredList{}
-			objList.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   gv.Group,
-				Version: gv.Version,
-				Kind:    kind + "List",
-			})
+	ck, err := am.getAllConstraintKinds()
+	if err != nil {
+		// if no constraint is found with the constraint apiversion, then return
+		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
+		return nil, nil
+	}
 
-			err := am.client.List(ctx, objList)
+	constraintsList := make(map[string]bool)
+	constraintList := &unstructured.UnstructuredList{}
+	for _, c := range ck {
+		constraintList.SetGroupVersionKind(c)
+		if err = am.client.List(ctx, constraintList); err != nil {
+			am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+			continue
+		}
+		for _, constraint := range constraintList.Items {
+			kinds, found, err := unstructured.NestedSlice(constraint.Object, "spec", "match", "kinds")
 			if err != nil {
-				am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+				am.log.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
 				continue
 			}
-
-			for _, obj := range objList.Items {
-				ns := &corev1.Namespace{}
-				if obj.GetNamespace() != "" {
-					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, ns); err != nil {
-						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+			if found {
+				for _, k := range kinds {
+					kind, ok := k.(map[string]interface{})
+					if !ok {
+						am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
 						continue
 					}
+					kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
+					if err != nil {
+						am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+						continue
+					}
+					for _, kk := range kindsKind {
+						// adding constraint match kind to list
+						constraintsList[kk.(string)] = true
+					}
 				}
+			} else {
+				// if constraint doesn't have match kinds defined, we will look at all kinds
+				constraintsList["*"] = true
+			}
+		}
+	}
 
-				augmentedObj := target.AugmentedUnstructured{
-					Object:    obj,
-					Namespace: ns,
-				}
-				resp, err := am.opa.Review(ctx, augmentedObj)
+	for gv, gvKinds := range clusterAPIResources {
+		for kind := range gvKinds {
+			_, found := constraintsList[kind]
+			// checking kinds specified in constraints, unless kind is not defined in a constraint
+			if found || constraintsList["*"] {
+				objList := &unstructured.UnstructuredList{}
+				objList.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   gv.Group,
+					Version: gv.Version,
+					Kind:    kind + "List",
+				})
 
+				err := am.client.List(ctx, objList)
 				if err != nil {
-					errs = append(errs, err)
-				} else if len(resp.Results()) > 0 {
-					responses = append(responses, resp.Results()...)
+					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					continue
+				}
+
+				for _, obj := range objList.Items {
+					ns := &corev1.Namespace{}
+					if obj.GetNamespace() != "" {
+						ns = &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: obj.GetNamespace(),
+							},
+						}
+					}
+
+					augmentedObj := target.AugmentedUnstructured{
+						Object:    obj,
+						Namespace: ns,
+					}
+					resp, err := am.opa.Review(ctx, augmentedObj)
+
+					if err != nil {
+						errs = append(errs, err)
+					} else if len(resp.Results()) > 0 {
+						responses = append(responses, resp.Results()...)
+					}
 				}
 			}
 		}
