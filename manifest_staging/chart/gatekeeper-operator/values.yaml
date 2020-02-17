@@ -2,6 +2,7 @@ replicas: 1
 auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
+logLevel: INFO
 image:
   repository: quay.io/open-policy-agent/gatekeeper
   release: v3.1.0-beta.7
