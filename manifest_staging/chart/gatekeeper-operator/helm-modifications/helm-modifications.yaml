@@ -45,6 +45,8 @@ spec:
       app: gatekeeper-operator
       release: RELEASE_NAME
   template:
+    metadata:
+      annotations: HELMSUBST_ANNOTATIONS
     spec:
       containers:
         - name: manager
