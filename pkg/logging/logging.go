@@ -15,4 +15,5 @@ const (
 	ResourceKind         = "resource_kind"
 	ResourceNamespace    = "resource_namespace"
 	ResourceName         = "resource_name"
+	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )

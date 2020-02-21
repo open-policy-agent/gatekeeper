@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -131,7 +132,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	r.log.Info("data will be added", "data", instance)
+	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
