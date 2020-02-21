@@ -38,12 +38,10 @@ const (
 )
 
 var (
-	auditInterval                       = flag.Int("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
-	constraintViolationsLimit           = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	auditIntervalDeprecated             = flag.Int("auditInterval", defaultAuditInterval, "DEPRECATED - use --audit-interval")
-	constraintViolationsLimitDeprecated = flag.Int("constraintViolationsLimit", defaultConstraintViolationsLimit, "DEPRECATED - use --constraint-violations-limit")
-	auditFromCache                      = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
-	emptyAuditResults                   []auditResult
+	auditInterval             = flag.Int("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
+	constraintViolationsLimit = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	emptyAuditResults         []auditResult
 )
 
 // Manager allows us to audit resources periodically
@@ -83,7 +81,6 @@ type StatusViolation struct {
 
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
-	checkDeprecatedFlags()
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -550,28 +547,6 @@ func (ucloop *updateConstraintLoop) update() {
 		Steps:    5,
 	}, updateLoop); err != nil {
 		log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
-	}
-}
-
-// Temporary fallback to check deprecated --auditInterval and --constraintViolationsLimit flags, which are now --audit-interval and --constraint-violations-limit
-// @TODO to be removed in an upcoming release
-func checkDeprecatedFlags() {
-	foundAuditInterval := false
-	foundConstraintViolationsLimit := false
-
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "audit-interval" {
-			foundAuditInterval = true
-		} else if f.Name == "constraint-violations-limit" {
-			foundConstraintViolationsLimit = true
-		}
-	})
-
-	if !foundAuditInterval {
-		auditInterval = auditIntervalDeprecated
-	}
-	if !foundConstraintViolationsLimit {
-		constraintViolationsLimit = constraintViolationsLimitDeprecated
 	}
 }
 
