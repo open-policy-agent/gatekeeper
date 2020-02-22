@@ -8,6 +8,7 @@ image:
   pullPolicy: IfNotPresent
 nodeSelector: {}
 tolerations: []
+podAnnotations: {}
 resources:
   limits:
     cpu: 1000m
