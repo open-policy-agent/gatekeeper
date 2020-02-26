@@ -498,22 +498,25 @@ Two ways of working around this:
   - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
 - make the pod to run on privileged port 443 (need to run pod as root)
   - update Gatekeeper deployment manifest spec:
-  ```yaml
-  containers:
-  - args:
-    - --port=443
-    ports:
-    - containerPort: 443
-      name: webhook-server
-      protocol: TCP
-  ```
+    - remove `securityContext` settings that force the pods not to run as root
+    - update port from `8443` to `443`
+    ```yaml
+    containers:
+    - args:
+      - --port=443
+      ports:
+      - containerPort: 443
+        name: webhook-server
+        protocol: TCP
+    ```
+
   - update Gatekeeper service manifest spec:
-  ```yaml
-  ports:
-  - port: 443
-    targetPort: 443
-  ```
-  - remove `securityContext` settings that force the pods not to run as root
+    - update `targetPort` from `8443` to `443`
+    ```yaml
+    ports:
+    - port: 443
+      targetPort: 443
+    ```
 
 ## Kick The Tires
 
