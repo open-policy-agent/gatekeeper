@@ -488,9 +488,39 @@ the default webhook name has been used this can be achieved by running:
 
 Redeploying the webhook configuration will re-enable Gatekeeper.
 
+### Running on private GKE Cluster nodes
+
+By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straigth to the POD on port 8443.
+
+Two ways of working around this:
+
+- new firewall rule from master to private nodes to open port `8443` (or any other custom port)
+- make the pod to run on privileged port 443 (need to run pod as root)
+  - update Gatekeeper deployment manifest spec:
+  ```yaml
+  containers:
+  - args:
+    - --port=443
+    ports:
+    - containerPort: 443
+      name: webhook-server
+      protocol: TCP
+  ```
+  - update Gatekeeper service manifest spec:
+  ```yaml
+  ports:
+  - port: 443
+    targetPort: 443
+  ```
+  - remove `securityContext` settings that force the pods not to run as root
+
+
+
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
+
 
 # FAQ
 
