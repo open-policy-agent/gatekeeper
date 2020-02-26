@@ -495,6 +495,7 @@ By default, firewall rules restrict the cluster master communication to nodes on
 Two ways of working around this:
 
 - new firewall rule from master to private nodes to open port `8443` (or any other custom port)
+  - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
 - make the pod to run on privileged port 443 (need to run pod as root)
   - update Gatekeeper deployment manifest spec:
   ```yaml
