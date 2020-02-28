@@ -490,11 +490,11 @@ Redeploying the webhook configuration will re-enable Gatekeeper.
 
 ### Running on private GKE Cluster nodes
 
-By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straigth to the POD on port 8443.
+By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straigt to the POD on port 8443.
 
 Two ways of working around this:
 
-- new firewall rule from master to private nodes to open port `8443` (or any other custom port)
+- create a new firewall rule from master to private nodes to open port `8443` (or any other custom port)
   - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
 - make the pod to run on privileged port 443 (need to run pod as root)
   - update Gatekeeper deployment manifest spec:
