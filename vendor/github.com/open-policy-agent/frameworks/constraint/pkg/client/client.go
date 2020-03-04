@@ -11,14 +11,15 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	constraintlib "github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/format"
 	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const constraintGroup = "constraints.gatekeeper.sh"
@@ -71,7 +72,7 @@ type Client struct {
 	targets           map[string]TargetHandler
 	constraintsMux    sync.RWMutex
 	templates         map[string]*templateEntry
-	constraints       map[string]*unstructured.Unstructured
+	constraints       map[schema.GroupKind]map[string]*unstructured.Unstructured
 	allowedDataFields []string
 }
 
@@ -180,6 +181,9 @@ type basicCTArtifacts struct {
 	// calls to the drivers.Driver interface.
 	namePrefix string
 
+	// gk is the groupKind of the constraints the template creates
+	gk schema.GroupKind
+
 	// crd is the CustomResourceDefinition created from the CT.
 	crd *apiextensions.CustomResourceDefinition
 
@@ -188,7 +192,7 @@ type basicCTArtifacts struct {
 	targetHandler TargetHandler
 
 	// targetSpec is the target-oriented portion of a CT's Spec field.
-	targetSpec    *templates.Target
+	targetSpec *templates.Target
 }
 
 func (a basicCTArtifacts) CRD() *apiextensions.CustomResourceDefinition {
@@ -218,11 +222,11 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 		return nil, errors.Wrapf(err, "failed to validate targets for template %s", templ.Name)
 	}
 
-	schema, err := c.backend.crd.createSchema(templ, targetHandler)
+	sch, err := c.backend.crd.createSchema(templ, targetHandler)
 	if err != nil {
 		return nil, err
 	}
-	crd, err := c.backend.crd.createCRD(templ, schema)
+	crd, err := c.backend.crd.createCRD(templ, sch)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +238,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 
 	return &basicCTArtifacts{
 		template:      templ,
+		gk:            schema.GroupKind{Group: crd.Spec.Group, Kind: crd.Spec.Names.Kind},
 		crd:           crd,
 		targetHandler: targetHandler,
 		targetSpec:    targetSpec,
@@ -358,12 +363,15 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 		CRD:      artifacts.crd,
 		Targets:  []string{artifacts.targetHandler.GetName()},
 	}
+	if _, ok := c.constraints[artifacts.gk]; !ok {
+		c.constraints[artifacts.gk] = make(map[string]*unstructured.Unstructured)
+	}
 	resp.Handled[artifacts.targetHandler.GetName()] = true
 	return resp, nil
 }
 
 // RemoveTemplate removes the template source code from OPA and removes the CRD from the validation
-// registry.
+// registry. Any constraints relying on the template will also be removed.
 func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 
@@ -379,6 +387,17 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 		return resp, err
 	}
 
+	for _, cstr := range c.constraints[artifacts.gk] {
+		if r, err := c.removeConstraintNoLock(ctx, cstr); err != nil {
+			return r, err
+		}
+	}
+	delete(c.constraints, artifacts.gk)
+	// Also clean up root path to avoid memory leaks
+	constraintRoot := createConstraintGKPath(artifacts.targetHandler.GetName(), artifacts.gk)
+	if _, err := c.backend.driver.DeleteData(ctx, constraintRoot); err != nil {
+		return resp, err
+	}
 	delete(c.templates, c.templatesMapKey(artifacts))
 	resp.Handled[artifacts.targetHandler.GetName()] = true
 	return resp, nil
@@ -422,7 +441,17 @@ func createConstraintSubPath(constraint *unstructured.Unstructured) (string, err
 	if gvk.Kind == "" {
 		return "", fmt.Errorf("Empty kind for the constraint named %s", constraint.GetName())
 	}
-	return path.Join("cluster", gvk.Group, gvk.Kind, constraint.GetName()), nil
+	return path.Join(createConstraintGKSubPath(gvk.GroupKind()), constraint.GetName()), nil
+}
+
+// createConstraintGKPath returns the subpath for given a constraint GK
+func createConstraintGKSubPath(gk schema.GroupKind) string {
+	return "/" + path.Join("cluster", gk.Group, gk.Kind)
+}
+
+// createConstraintGKPath returns the storage path for a given constrain GK: constraints.<target>.cluster.<group>.<kind>
+func createConstraintGKPath(target string, gk schema.GroupKind) string {
+	return constraintPathMerge(target, createConstraintGKSubPath(gk))
 }
 
 // createConstraintPath returns the storage path for a given constraint: constraints.<target>.cluster.<group>.<kind>.<name>
@@ -431,7 +460,13 @@ func createConstraintPath(target string, constraint *unstructured.Unstructured) 
 	if err != nil {
 		return "", err
 	}
-	return "/" + path.Join("constraints", target, p), nil
+	return constraintPathMerge(target, p), nil
+}
+
+// constraintPathMerge is a shared function for creating constraint paths to
+// ensure uniformity, it is not meant to be called directly
+func constraintPathMerge(target, subpath string) string {
+	return "/" + path.Join("constraints", target, subpath)
 }
 
 // getTemplateEntry returns the template entry for a given constraint
@@ -439,6 +474,9 @@ func (c *Client) getTemplateEntry(constraint *unstructured.Unstructured, lock bo
 	kind := constraint.GetKind()
 	if kind == "" {
 		return nil, fmt.Errorf("Constraint %s has no kind", constraint.GetName())
+	}
+	if constraint.GroupVersionKind().Group != constraintGroup {
+		return nil, fmt.Errorf("Constraint %s has the wrong group", constraint.GetName())
 	}
 	if lock {
 		c.constraintsMux.RLock()
@@ -490,7 +528,7 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 		resp.Handled[target] = true
 	}
 	if len(errMap) == 0 {
-		c.constraints[subPath] = constraint.DeepCopy()
+		c.constraints[constraint.GroupVersionKind().GroupKind()][subPath] = constraint.DeepCopy()
 		return resp, nil
 	}
 	return resp, errMap
@@ -500,6 +538,10 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
 	c.constraintsMux.RLock()
 	defer c.constraintsMux.RUnlock()
+	return c.removeConstraintNoLock(ctx, constraint)
+}
+
+func (c *Client) removeConstraintNoLock(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
 	resp := types.NewResponses()
 	errMap := make(ErrorMap)
 	entry, err := c.getTemplateEntry(constraint, false)
@@ -526,7 +568,7 @@ func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.
 	if len(errMap) == 0 {
 		// If we ever create multi-target constraints we will need to handle this more cleverly.
 		// the short-circuiting question, cleanup, etc.
-		delete(c.constraints, subPath)
+		delete(c.constraints[constraint.GroupVersionKind().GroupKind()], subPath)
 		return resp, nil
 	}
 	return resp, errMap
@@ -539,7 +581,7 @@ func (c *Client) getConstraintNoLock(ctx context.Context, constraint *unstructur
 		return nil, err
 	}
 
-	cstr, ok := c.constraints[subPath]
+	cstr, ok := c.constraints[constraint.GroupVersionKind().GroupKind()][subPath]
 	if !ok {
 		return nil, NewMissingConstraintError(subPath)
 	}
@@ -656,7 +698,7 @@ func (c *Client) Reset(ctx context.Context) error {
 		}
 	}
 	c.templates = make(map[string]*templateEntry)
-	c.constraints = make(map[string]*unstructured.Unstructured)
+	c.constraints = make(map[schema.GroupKind]map[string]*unstructured.Unstructured)
 	return nil
 }
 
