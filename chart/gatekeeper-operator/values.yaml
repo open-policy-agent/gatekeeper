@@ -1,14 +1,46 @@
-replicas: 1
-auditInterval: 60
-constraintViolationsLimit: 20
-auditFromCache: false
+# Default values for gatekeeper-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
 image:
   repository: quay.io/open-policy-agent/gatekeeper
   release: v3.1.0-beta.7
   pullPolicy: IfNotPresent
-nodeSelector: {}
-tolerations: []
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
 podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsGroup: 999
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
 resources:
   limits:
     cpu: 1000m
@@ -16,3 +48,15 @@ resources:
   requests:
     cpu: 100m
     memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+auditInterval: 60
+constraintViolationsLimit: 20
+auditFromCache: false
+
+createCRDs: true

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gatekeeper-operator.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gatekeeper-operator.labels" . | nindent 4 }}
+    gatekeeper.sh/system: "yes"
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: webhook
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "gatekeeper-operator.selectorLabels" . | nindent 4 }}
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"

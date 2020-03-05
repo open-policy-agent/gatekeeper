@@ -1,3 +1,4 @@
+{{/* vim: set filetype=mustache: */}}
 {{/*
 Expand the name of the chart.
 */}}
@@ -34,11 +35,29 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "gatekeeper-operator.labels" -}}
-app.kubernetes.io/name: {{ include "gatekeeper-operator.name" . }}
 helm.sh/chart: {{ include "gatekeeper-operator.chart" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+{{ include "gatekeeper-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
+Selector labels
+*/}}
+{{- define "gatekeeper-operator.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "gatekeeper-operator.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "gatekeeper-operator.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+    {{ default (include "gatekeeper-operator.fullname" .) .Values.serviceAccount.name }}
+{{- else -}}
+    {{ default "default" .Values.serviceAccount.name }}
+{{- end -}}
 {{- end -}}

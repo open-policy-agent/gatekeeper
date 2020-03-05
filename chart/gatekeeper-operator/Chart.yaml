@@ -1,10 +1,11 @@
-apiVersion: v1
-description: A Helm chart for Gatekeeper
+apiVersion: v2
 name: gatekeeper-operator
-keywords:
-  - open policy agent
-version: v3.1.0-beta.7
+description: A Helm chart for Gatekeeper
+type: application
 home: https://github.com/open-policy-agent/gatekeeper
 sources:
   - https://github.com/open-policy-agent/gatekeeper.git
+keywords:
+  - open policy agent
+version: v3.1.0-beta.7
 appVersion: v3.1.0-beta.7

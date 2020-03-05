@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gatekeeper-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gatekeeper-operator.labels" . | nindent 4 }}
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+  {{- if .Values.podAnnotations }}
+  annotations:
+    {{- toYaml .Values.podAnnotations | nindent 8 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gatekeeper-operator.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+      gatekeeper.sh/system: "yes"
+  template:
+    metadata:
+      labels:
+        {{- include "gatekeeper-operator.selectorLabels" . | nindent 8 }}
+        control-plane: controller-manager
+        gatekeeper.sh/system: "yes"
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "gatekeeper-operator.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+          - --audit-interval={{ .Values.auditInterval }}
+          - --port=8443
+          - --logtostderr
+          - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+          - --audit-from-cache={{ .Values.auditFromCache }}
+          - --exempt-namespace=gatekeeper-system
+          command:
+          - /manager
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          ports:
+          - name: webhook
+            containerPort: 8443
+            protocol: TCP
+          - name: metrics 
+            containerPort: 8888
+            protocol: TCP
+          - name: healthz 
+            containerPort: 9090
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+          volumeMounts:
+          - mountPath: /certs
+            name: cert
+            readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "gatekeeper-operator.fullname" . }}-webhook-server-cert

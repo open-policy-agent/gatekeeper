@@ -115,6 +115,7 @@ deploy: patch-image manifests
 	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
 	kustomize build config/overlays/dev | kubectl apply -f -
 
+# TODO
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases

@@ -1,12 +1,36 @@
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: gatekeeper-system
   labels:
     admission.gatekeeper.sh/ignore: no-self-managing
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
-  name: gatekeeper-system
 ---
+# Source: gatekeeper-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+---
+# Source: gatekeeper-operator/templates/webhook-server-cert.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gatekeeper-operator-webhook-server-cert
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+---
+# Source: gatekeeper-operator/templates/crds.yaml
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
@@ -105,323 +129,7 @@ status:
   conditions: []
   storedVersions: []
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-admin
-  namespace: gatekeeper-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  creationTimestamp: null
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-manager-role
-  namespace: gatekeeper-system
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  creationTimestamp: null
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-manager-role
-rules:
-- apiGroups:
-  - '*'
-  resources:
-  - '*'
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - config.gatekeeper.sh
-  resources:
-  - configs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - config.gatekeeper.sh
-  resources:
-  - configs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - constraints.gatekeeper.sh
-  resources:
-  - '*'
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - templates.gatekeeper.sh
-  resources:
-  - constrainttemplates
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - templates.gatekeeper.sh
-  resources:
-  - constrainttemplates/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - admissionregistration.k8s.io
-  resourceNames:
-  - gatekeeper-validating-webhook-configuration
-  resources:
-  - validatingwebhookconfigurations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-manager-rolebinding
-  namespace: gatekeeper-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: gatekeeper-manager-role
-subjects:
-- kind: ServiceAccount
-  name: gatekeeper-admin
-  namespace: gatekeeper-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-manager-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: gatekeeper-manager-role
-subjects:
-- kind: ServiceAccount
-  name: gatekeeper-admin
-  namespace: gatekeeper-system
----
-apiVersion: v1
-kind: Secret
-metadata:
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-webhook-server-cert
-  namespace: gatekeeper-system
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-webhook-service
-  namespace: gatekeeper-system
-spec:
-  ports:
-  - port: 443
-    targetPort: 8443
-  selector:
-    control-plane: controller-manager
-    gatekeeper.sh/system: "yes"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    control-plane: controller-manager
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-controller-manager
-  namespace: gatekeeper-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      control-plane: controller-manager
-      gatekeeper.sh/system: "yes"
-  template:
-    metadata:
-      labels:
-        control-plane: controller-manager
-        gatekeeper.sh/system: "yes"
-    spec:
-      containers:
-      - args:
-        - --audit-interval=30
-        - --port=8443
-        - --logtostderr
-        - --exempt-namespace=gatekeeper-system
-        command:
-        - /manager
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7
-        imagePullPolicy: Always
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 9090
-        name: manager
-        ports:
-        - containerPort: 8443
-          name: webhook-server
-          protocol: TCP
-        - containerPort: 8888
-          name: metrics
-          protocol: TCP
-        - containerPort: 9090
-          name: healthz
-          protocol: TCP
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 9090
-        resources:
-          limits:
-            cpu: 1000m
-            memory: 512Mi
-          requests:
-            cpu: 100m
-            memory: 256Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          runAsGroup: 999
-          runAsNonRoot: true
-          runAsUser: 1000
-        volumeMounts:
-        - mountPath: /certs
-          name: cert
-          readOnly: true
-      serviceAccountName: gatekeeper-admin
-      terminationGracePeriodSeconds: 60
-      volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: gatekeeper-webhook-server-cert
----
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: ValidatingWebhookConfiguration
-metadata:
-  creationTimestamp: null
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-validating-webhook-configuration
-webhooks:
-- clientConfig:
-    caBundle: Cg==
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admit
-  failurePolicy: Ignore
-  name: validation.gatekeeper.sh
-  namespaceSelector:
-    matchExpressions:
-    - key: control-plane
-      operator: DoesNotExist
-    - key: admission.gatekeeper.sh/ignore
-      operator: DoesNotExist
-  rules:
-  - apiGroups:
-    - '*'
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - '*'
-  sideEffects: None
-  timeoutSeconds: 5
-- clientConfig:
-    caBundle: Cg==
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admitlabel
-  failurePolicy: Fail
-  name: check-ignore-label.gatekeeper.sh
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - namespaces
-  sideEffects: None
-  timeoutSeconds: 5
----
+# Source: gatekeeper-operator/templates/crds.yaml
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
@@ -529,3 +237,342 @@ status:
     plural: ""
   conditions: []
   storedVersions: []
+---
+# Source: gatekeeper-operator/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gatekeeper-operator
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
+  - configs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.gatekeeper.sh
+  resources:
+  - configs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - constraints.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - gatekeeper-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: gatekeeper-operator/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gatekeeper-operator
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gatekeeper-operator
+subjects:
+- kind: ServiceAccount
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+---
+# Source: gatekeeper-operator/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: gatekeeper-operator/templates/rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gatekeeper-operator
+subjects:
+- kind: ServiceAccount
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+---
+# Source: gatekeeper-operator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-operator-webhook
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: webhook
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+---
+# Source: gatekeeper-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-operator
+  namespace: gatekeeper-system
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gatekeeper-operator
+      app.kubernetes.io/instance: gatekeeper-operator
+      control-plane: controller-manager
+      gatekeeper.sh/system: "yes"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gatekeeper-operator
+        app.kubernetes.io/instance: gatekeeper-operator
+        control-plane: controller-manager
+        gatekeeper.sh/system: "yes"
+    spec:
+      serviceAccountName: gatekeeper-operator
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {}
+      containers:
+        - name: gatekeeper-operator
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsGroup: 999
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7"
+          imagePullPolicy: IfNotPresent
+          args:
+          - --audit-interval=60
+          - --port=8443
+          - --logtostderr
+          - --constraint-violations-limit=20
+          - --audit-from-cache=false
+          - --exempt-namespace=gatekeeper-system
+          command:
+          - /manager
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          ports:
+          - name: webhook
+            containerPort: 8443
+            protocol: TCP
+          - name: metrics 
+            containerPort: 8888
+            protocol: TCP
+          - name: healthz 
+            containerPort: 9090
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+          volumeMounts:
+          - mountPath: /certs
+            name: cert
+            readOnly: true
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-operator-webhook-server-cert
+---
+# Source: gatekeeper-operator/templates/validating-webhook-configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app.kubernetes.io/name: gatekeeper-operator
+    app.kubernetes.io/instance: gatekeeper-operator
+    app.kubernetes.io/version: "v3.1.0-beta.7"
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-operator-validating-webhook-configuration
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-operator-webhook
+      namespace: gatekeeper-system
+      path: /v1/admit
+  failurePolicy: Ignore
+  name: validation.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: control-plane
+      operator: DoesNotExist
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
+  rules:
+  - apiGroups:
+    - '*'
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - '*'
+  sideEffects: None
+  timeoutSeconds: 5
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-operator-webhook
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
+  sideEffects: None
+  timeoutSeconds: 5
