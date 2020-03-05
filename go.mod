@@ -14,7 +14,7 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200205035609-98dd039a55b1
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200304180616-c46b44c53e49
 	github.com/open-policy-agent/opa v0.16.2
 	github.com/pkg/errors v0.8.1
 	go.opencensus.io v0.22.2
