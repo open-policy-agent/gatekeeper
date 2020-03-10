@@ -40,12 +40,12 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-          - --audit-interval={{ .Values.auditInterval }}
+          - --audit-interval={{ .Values.operator.auditInterval }}
           - --port=8443
           - --logtostderr
-          - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-          - --audit-from-cache={{ .Values.auditFromCache }}
-          - --exempt-namespace=gatekeeper-system
+          - --constraint-violations-limit={{ .Values.operator.constraintViolationsLimit }}
+          - --audit-from-cache={{ .Values.operator.auditFromCache }}
+          - --exempt-namespace={{ .Release.Namespace }}
           command:
           - /manager
           env:

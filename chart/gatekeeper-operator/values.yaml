@@ -55,8 +55,12 @@ tolerations: []
 
 affinity: {}
 
-auditInterval: 60
-constraintViolationsLimit: 20
-auditFromCache: false
+operator:
+  auditInterval: 60
+  constraintViolationsLimit: 20
+  auditFromCache: false
+
+webhook:
+  caBundle: Cg==
 
 createCRDs: true

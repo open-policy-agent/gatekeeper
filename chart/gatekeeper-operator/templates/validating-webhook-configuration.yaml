@@ -7,7 +7,7 @@ metadata:
   name: {{ include "gatekeeper-operator.fullname" . }}-validating-webhook-configuration
 webhooks:
 - clientConfig:
-    caBundle: Cg==
+    caBundle: {{ .Values.webhook.caBundle }}
     service:
       name: {{ include "gatekeeper-operator.fullname" . }}-webhook
       namespace: {{ .Release.Namespace }}
@@ -35,7 +35,7 @@ webhooks:
   timeoutSeconds: 5
   {{- end }}
 - clientConfig:
-    caBundle: Cg==
+    caBundle: {{ .Values.webhook.caBundle }}
     service:
       name: {{ include "gatekeeper-operator.fullname" . }}-webhook
       namespace: {{ .Release.Namespace }}
