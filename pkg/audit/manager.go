@@ -211,14 +211,6 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 	// nsCache is used for caching namespaces and their labels
 	nsCache := make(map[string]corev1.Namespace)
-	nsList := &corev1.NamespaceList{}
-	if err := am.client.List(ctx, nsList); err != nil {
-		am.log.Error(err, "Unable to list namespaces")
-		return nil, err
-	}
-	for _, ns := range nsList.Items {
-		nsCache[ns.Name] = ns
-	}
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
@@ -236,11 +228,18 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				objNs := nsCache[obj.GetNamespace()]
+				objNs := &corev1.Namespace{}
+				if objNs, ok := nsCache[obj.GetNamespace()]; !ok {
+					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, &objNs); err != nil {
+						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+						continue
+					}
+					nsCache[obj.GetNamespace()] = objNs
+				}
 
 				augmentedObj := target.AugmentedUnstructured{
 					Object:    obj,
-					Namespace: &objNs,
+					Namespace: objNs,
 				}
 				resp, err := am.opa.Review(ctx, augmentedObj)
 
