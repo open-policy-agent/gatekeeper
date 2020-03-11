@@ -36,9 +36,10 @@ var cfg *rest.Config
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "config", "crds"),
+			filepath.Join("..", "..", "..", "config", "crd", "bases"),
 			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
+		ErrorIfCRDPathMissing: true,
 	}
 	if err := api.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
