@@ -90,8 +90,15 @@ func newNSCache() *nsCache {
 	}
 }
 
-func (c *nsCache) getNSCache() map[string]corev1.Namespace {
-	return c.cache
+func (c *nsCache) Get(ctx context.Context, client client.Client, namespace string) (corev1.Namespace, error) {
+	if ns, ok := c.cache[namespace]; !ok {
+		if err := client.Get(ctx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+			return corev1.Namespace{}, err
+		}
+		c.cache[namespace] = ns
+	}
+
+	return c.cache[namespace], nil
 }
 
 // New creates a new manager for audit
@@ -243,13 +250,10 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			for _, obj := range objList.Items {
 				ns := corev1.Namespace{}
 				if obj.GetNamespace() != "" {
-					cache := nsCache.getNSCache()
-					if ns, ok := cache[obj.GetNamespace()]; !ok {
-						if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, &ns); err != nil {
-							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
-							continue
-						}
-						cache[obj.GetNamespace()] = ns
+					ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
+					if err != nil {
+						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+						continue
 					}
 				}
 
