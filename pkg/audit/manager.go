@@ -79,6 +79,21 @@ type StatusViolation struct {
 	EnforcementAction string `json:"enforcementAction"`
 }
 
+// nsCache is used for caching namespaces and their labels
+type nsCache struct {
+	cache map[string]corev1.Namespace
+}
+
+func newNSCache() *nsCache {
+	return &nsCache{
+		cache: make(map[string]corev1.Namespace),
+	}
+}
+
+func (c *nsCache) getNSCache() map[string]corev1.Namespace {
+	return c.cache
+}
+
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
 	reporter, err := newStatsReporter()
@@ -208,9 +223,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 	var responses []*constraintTypes.Result
 	var errs opa.Errors
-
-	// nsCache is used for caching namespaces and their labels
-	nsCache := make(map[string]corev1.Namespace)
+	nsCache := newNSCache()
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
@@ -228,18 +241,21 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				objNs := &corev1.Namespace{}
-				if objNs, ok := nsCache[obj.GetNamespace()]; !ok {
-					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, &objNs); err != nil {
-						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
-						continue
+				ns := corev1.Namespace{}
+				if obj.GetNamespace() != "" {
+					cache := nsCache.getNSCache()
+					if ns, ok := cache[obj.GetNamespace()]; !ok {
+						if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, &ns); err != nil {
+							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+							continue
+						}
+						cache[obj.GetNamespace()] = ns
 					}
-					nsCache[obj.GetNamespace()] = objNs
 				}
 
 				augmentedObj := target.AugmentedUnstructured{
 					Object:    obj,
-					Namespace: objNs,
+					Namespace: &ns,
 				}
 				resp, err := am.opa.Review(ctx, augmentedObj)
 
