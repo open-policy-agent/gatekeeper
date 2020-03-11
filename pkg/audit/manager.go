@@ -79,6 +79,28 @@ type StatusViolation struct {
 	EnforcementAction string `json:"enforcementAction"`
 }
 
+// nsCache is used for caching namespaces and their labels
+type nsCache struct {
+	cache map[string]corev1.Namespace
+}
+
+func newNSCache() *nsCache {
+	return &nsCache{
+		cache: make(map[string]corev1.Namespace),
+	}
+}
+
+func (c *nsCache) Get(ctx context.Context, client client.Client, namespace string) (corev1.Namespace, error) {
+	if ns, ok := c.cache[namespace]; !ok {
+		if err := client.Get(ctx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+			return corev1.Namespace{}, err
+		}
+		c.cache[namespace] = ns
+	}
+
+	return c.cache[namespace], nil
+}
+
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
 	reporter, err := newStatsReporter()
@@ -177,7 +199,6 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 	}
 
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
-
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +230,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 	var responses []*constraintTypes.Result
 	var errs opa.Errors
+	nsCache := newNSCache()
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
@@ -226,9 +248,10 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				ns := &corev1.Namespace{}
+				ns := corev1.Namespace{}
 				if obj.GetNamespace() != "" {
-					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, ns); err != nil {
+					ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
+					if err != nil {
 						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
 						continue
 					}
@@ -236,7 +259,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 				augmentedObj := target.AugmentedUnstructured{
 					Object:    obj,
-					Namespace: ns,
+					Namespace: &ns,
 				}
 				resp, err := am.opa.Review(ctx, augmentedObj)
 
