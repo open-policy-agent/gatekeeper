@@ -34,7 +34,7 @@ Finally, Gatekeeper's engine is designed to be portable, allowing administrators
 
 ## Admission Webhook Fail-Open Status
 
-Currently Gatekeeper is defaulting to using `Ignore` for admission requests. The impact of
+Currently Gatekeeper is defaulting to using `Ignore` for admission request webhook errors. The impact of
 this is that when the webhook is down, or otherwise unreachable, constraints will not be
 enforced. Audit is expected to pick up any slack in enforcement by highlighting invalid
 resources that made it into the cluster.
