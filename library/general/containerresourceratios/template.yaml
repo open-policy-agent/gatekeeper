@@ -10,9 +10,7 @@ spec:
       validation:
         openAPIV3Schema:
           properties:
-            cpu:
-              type: string
-            memory:
+            ratio:
               type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
