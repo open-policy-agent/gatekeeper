@@ -457,6 +457,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
@@ -511,6 +513,9 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
