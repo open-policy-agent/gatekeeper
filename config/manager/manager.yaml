@@ -71,4 +71,7 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - all
       terminationGracePeriodSeconds: 60
