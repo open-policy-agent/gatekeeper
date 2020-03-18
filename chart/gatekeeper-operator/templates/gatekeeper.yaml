@@ -466,7 +466,7 @@ spec:
         release: '{{ .Release.Name }}'
       {{- if .Values.podAnnotations }}
       annotations:
-        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       {{- end }}
     spec:
       containers:
