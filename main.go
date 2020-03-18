@@ -17,6 +17,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -34,13 +35,17 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	// +kubebuilder:scaffold:imports
@@ -84,12 +89,16 @@ func main() {
 	ctrl.SetLogger(crzap.Logger(true))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
 		MetricsBindAddress:     *metricsAddr,
 		LeaderElection:         false,
 		Port:                   *port,
 		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
+		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c)
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -108,7 +117,14 @@ func main() {
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	wm, err := watch.New(mgr.GetConfig())
+	c := mgr.GetCache()
+	dc, ok := c.(watch.RemovableCache)
+	if !ok {
+		err := fmt.Errorf("expected dynamic cache, got: %T", c)
+		setupLog.Error(err, "fetching dynamic cache")
+		os.Exit(1)
+	}
+	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
 		os.Exit(1)
@@ -118,9 +134,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ControllerSwitch will be used to disable controllers during our teardown process,
+	// avoiding conflicts in finalizer cleanup.
+	sw := watch.NewSwitch()
+
 	// Setup all Controllers
-	setupLog.Info("Setting up controller")
-	if err := controller.AddToManager(mgr, client, wm); err != nil {
+	setupLog.Info("setting up controller")
+	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
 		setupLog.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
@@ -167,11 +187,11 @@ func main() {
 		hadError = true
 	}
 
-	// wm.Pause() blocks until the watch manager has stopped and ensures it does
-	// not restart
-	if err := wm.Pause(); err != nil {
-		setupLog.Error(err, "could not pause watch manager, attempting cleanup anyway")
-	}
+	// Manager stops controllers asynchronously.
+	// Instead, we use ControllerSwitch to synchronously prevent them from doing more work.
+	// This can be removed when finalizer and status teardown is removed.
+	setupLog.Info("disabling controllers...")
+	sw.Stop()
 
 	// Create a fresh client to be sure RESTmapper is up-to-date
 	setupLog.Info("cleaning state...")

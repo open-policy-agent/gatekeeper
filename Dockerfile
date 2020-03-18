@@ -4,6 +4,7 @@ FROM golang:1.13.3 as builder
 # Copy in the go src
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 COPY pkg/    pkg/
+COPY third_party/ third_party/
 COPY vendor/ vendor/
 COPY main.go main.go
 COPY api/ api/

@@ -32,10 +32,13 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,20 +46,52 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-var c client.Client
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "denyall"}}
 
 var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
 
 const timeout = time.Second * 5
+
+// setupManager sets up a controller-runtime manager with registered watch manager.
+func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
+	t.Helper()
+
+	ctrl.SetLogger(zap.Logger(true))
+	metrics.Registry = prometheus.NewRegistry()
+	mgr, err := manager.New(cfg, manager.Options{
+		MetricsBindAddress: "0",
+		NewCache:           dynamiccache.New,
+		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c)
+		},
+	})
+	if err != nil {
+		t.Fatalf("setting up controller manager: %s", err)
+	}
+	c := mgr.GetCache()
+	dc, ok := c.(watch.RemovableCache)
+	if !ok {
+		t.Fatalf("expected dynamic cache, got: %T", c)
+	}
+	wm, err := watch.New(dc)
+	if err != nil {
+		t.Fatalf("could not create watch manager: %s", err)
+	}
+	if err := mgr.Add(wm); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
+	return mgr, wm
+}
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
@@ -86,17 +121,8 @@ violation[{"msg": "denied!"}] {
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
-	ctrl.SetLogger(zap.Logger(true))
-	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	wm, err := watch.New(mgr.GetConfig())
-	if err != nil {
-		t.Fatalf("could not create watch manager: %s", err)
-	}
-	if err := mgr.Add(wm); err != nil {
-		t.Fatalf("could not add watch manager to manager: %s", err)
-	}
-	c = mgr.GetClient()
+	mgr, wm := setupManager(t)
+	c := mgr.GetClient()
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -110,7 +136,8 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	rec, _ := newReconciler(mgr, opa, wm)
+	cs := watch.NewSwitch()
+	rec, _ := newReconciler(mgr, opa, wm, cs)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -275,9 +302,7 @@ anyrule[}}}//invalid//rego
 	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
 
 	testMgrStopped()
-	if err := wm.Pause(); err != nil {
-		t.Fatalf("unable to pause watch manager: %s", err)
-	}
+	cs.Stop()
 	time.Sleep(5 * time.Second)
 	finished := make(chan struct{})
 	newCli, err := client.New(mgr.GetConfig(), client.Options{})

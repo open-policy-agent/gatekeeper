@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -58,14 +59,15 @@ const (
 var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 
 type Adder struct {
-	Opa          *opa.Client
-	WatchManager *watch.Manager
+	Opa              *opa.Client
+	WatchManager     *watch.Manager
+	ControllerSwitch *watch.ControllerSwitch
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch)
 	if err != nil {
 		return err
 	}
@@ -80,15 +82,33 @@ func (a *Adder) InjectWatchManager(wm *watch.Manager) {
 	a.WatchManager = wm
 }
 
+func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
+	a.ControllerSwitch = cs
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
-	constraintAdder := constraint.Adder{Opa: opa, ConstraintsCache: constraintsCache}
+	// Events will be used to receive events from dynamic watches registered
+	// via the registrar below.
+	events := make(chan event.GenericEvent, 1024)
+	constraintAdder := constraint.Adder{
+		Opa:              opa,
+		ConstraintsCache: constraintsCache,
+		WatchManager:     wm,
+		ControllerSwitch: cs,
+		Events:           events,
+	}
+	// Create subordinate controller - we will feed it events dynamically via watch
+	if err := constraintAdder.Add(mgr); err != nil {
+		return nil, fmt.Errorf("registering constraint controller: %w", err)
+	}
+
 	w, err := wm.NewRegistrar(
 		ctrlName,
-		[]watch.AddFunction{constraintAdder.Add})
+		events)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +121,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager) (rec
 		scheme:  mgr.GetScheme(),
 		opa:     opa,
 		watcher: w,
+		cs:      cs,
 		metrics: r,
 	}, nil
 }
@@ -130,6 +151,7 @@ type ReconcileConstraintTemplate struct {
 	scheme  *runtime.Scheme
 	watcher *watch.Registrar
 	opa     *opa.Client
+	cs      *watch.ControllerSwitch
 	metrics *reporter
 }
 
@@ -140,6 +162,15 @@ type ReconcileConstraintTemplate struct {
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
 // and what is in the ConstraintTemplate.Spec
 func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	// Short-circuit if shutting down.
+	if r.cs != nil {
+		running := r.cs.Enter()
+		defer r.cs.Exit()
+		if !running {
+			return reconcile.Result{}, nil
+		}
+	}
+
 	// Fetch the ConstraintTemplate instance
 	instance := &v1beta1.ConstraintTemplate{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
@@ -280,10 +311,6 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
-	log.Info("adding to watcher registry")
-	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
-		return reconcile.Result{}, err
-	}
 	// To support HA deployments, only one pod should be able to create CRDs
 	log.Info("creating constraint CRD")
 	crdv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
@@ -305,6 +332,10 @@ func (r *ReconcileConstraintTemplate) handleCreate(
 	instance.Status.Created = true
 	if err := r.Status().Update(context.Background(), instance); err != nil {
 		return reconcile.Result{Requeue: true}, nil
+	}
+	log.Info("adding to watcher registry")
+	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
@@ -518,7 +549,7 @@ func TearDownState(c client.Client, finished chan struct{}) {
 			}
 			success := true
 			for _, obj := range objs.Items {
-				log.Info("scrubing constraint state", "name", obj.GetName())
+				log.Info("scrubbing constraint state", "name", obj.GetName())
 				constraint.RemoveFinalizer(&obj)
 				if err := c.Update(context.Background(), &obj); err != nil {
 					success = false

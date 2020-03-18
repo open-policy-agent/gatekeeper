@@ -1,454 +1,653 @@
+/*
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package watch
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/onsi/gomega"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	kcache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
-func newForTest(fn func(*rest.Config) (Discovery, error)) (*Manager, error) {
-	metrics, err := newStatsReporter()
-	if err != nil {
-		return nil, err
+type fakeCacheInformer struct {
+	mu       sync.Mutex
+	handlers map[kcache.ResourceEventHandler]int
+}
+
+func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.handlers == nil {
+		f.handlers = make(map[kcache.ResourceEventHandler]int)
 	}
-	wm := &Manager{
-		newMgrFn:     newFakeMgr,
-		stopper:      func() {},
-		managedKinds: newRecordKeeper(),
-		watchedKinds: make(map[schema.GroupVersionKind]vitals),
-		cfg:          nil,
-		newDiscovery: fn,
-		metrics:      metrics,
-	}
-	wm.managedKinds.mgr = wm
-	wm.started.Store(false)
-	return wm, nil
+	f.handlers[h]++
 }
 
-func newFakeMgr(wm *Manager) (manager.Manager, error) {
-	return &fakeMgr{}, nil
+func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEventHandler, resyncPeriod time.Duration) {
+	f.AddEventHandler(h)
 }
 
-var _ manager.Manager = &fakeMgr{}
-
-type fakeMgr struct{}
-
-func (m *fakeMgr) Add(runnable manager.Runnable) error {
-	return nil
+func (f *fakeCacheInformer) AddIndexers(indexers kcache.Indexers) error {
+	return errors.New("not implemented")
 }
 
-func (m *fakeMgr) SetFields(interface{}) error {
-	return nil
-}
-
-func (m *fakeMgr) Start(c <-chan struct{}) error {
-	<-c
-	return nil
-}
-
-func (m *fakeMgr) GetConfig() *rest.Config {
-	return nil
-}
-
-func (m *fakeMgr) GetScheme() *runtime.Scheme {
-	return nil
-}
-
-func (m *fakeMgr) GetClient() client.Client {
-	return nil
-}
-
-func (m *fakeMgr) GetFieldIndexer() client.FieldIndexer {
-	return nil
-}
-
-func (m *fakeMgr) GetCache() cache.Cache {
-	return nil
-}
-
-func (m *fakeMgr) GetEventRecorderFor(name string) record.EventRecorder {
-	return nil
-}
-
-func (m *fakeMgr) GetRESTMapper() meta.RESTMapper {
-	return nil
-}
-
-func (m *fakeMgr) GetAPIReader() client.Reader {
-	return nil
-}
-
-func (m *fakeMgr) GetWebhookServer() *webhook.Server {
-	return nil
-}
-
-func (m *fakeMgr) AddHealthzCheck(string, healthz.Checker) error {
-	return nil
-}
-
-func (m *fakeMgr) AddReadyzCheck(string, healthz.Checker) error {
-	return nil
-}
-
-var _ Discovery = &fakeClient{}
-
-func newDiscoveryFactory(notFound bool, kinds ...string) func(*rest.Config) (Discovery, error) {
-	return func(*rest.Config) (Discovery, error) {
-		return &fakeClient{notFound: notFound, kinds: kinds}, nil
-	}
-}
-
-type fakeClient struct {
-	notFound bool
-	kinds    []string
-}
-
-func (c *fakeClient) ServerResourcesForGroupVersion(s string) (*metav1.APIResourceList, error) {
-	if c.notFound {
-		return &metav1.APIResourceList{GroupVersion: s}, nil
-	}
-	rsrs := make([]metav1.APIResource, len(c.kinds))
-	for _, k := range c.kinds {
-		rsrs = append(rsrs, metav1.APIResource{Kind: k})
-	}
-	return &metav1.APIResourceList{GroupVersion: s, APIResources: rsrs}, nil
-}
-
-func newChange(kind string, r ...*Registrar) map[schema.GroupVersionKind]vitals {
-	rs := make(map[*Registrar]bool)
-	for _, v := range r {
-		rs[v] = true
-	}
-	gvk := makeGvk(kind)
-	return map[schema.GroupVersionKind]vitals{gvk: {gvk: gvk, registrars: rs}}
-}
-
-func makeGvk(k string) schema.GroupVersionKind {
-	return schema.GroupVersionKind{Kind: k}
-}
-
-func waitForWatchManagerStart(wm *Manager) bool {
-	for i := 0; i < 10; i++ {
-		if wm.started.Load().(bool) == true {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+func (f *fakeCacheInformer) HasSynced() bool {
 	return false
 }
 
-func TestRegistrar(t *testing.T) {
-	wm, err := newForTest(newDiscoveryFactory(false, "FooCRD"))
+func (f *fakeCacheInformer) totalHandlers() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var total int
+	for _, v := range f.handlers {
+		total += v
+	}
+
+	return total
+}
+
+type fakeRemovableCache struct {
+	mu            sync.Mutex
+	informer      cache.Informer
+	items         []unstructured.Unstructured
+	removeCounter int
+}
+
+func (f *fakeRemovableCache) GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error) {
+	return f.informer, nil
+}
+
+func (f *fakeRemovableCache) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+	switch v := list.(type) {
+	case *unstructured.UnstructuredList:
+		v.Items = f.items
+	default:
+		return fmt.Errorf("unexpected list type: %T. Needed unstructured.UnstructuredList", list)
+	}
+	return nil
+}
+
+func (f *fakeRemovableCache) Remove(obj runtime.Object) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removeCounter++
+	return nil
+}
+
+func (f *fakeRemovableCache) removeCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.removeCounter
+}
+
+type funcCache struct {
+	ListFunc                   func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error
+	GetInformerNonBlockingFunc func(obj runtime.Object) (cache.Informer, error)
+}
+
+func (f *funcCache) GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error) {
+	if f.GetInformerNonBlockingFunc != nil {
+		return f.GetInformerNonBlockingFunc(obj)
+	}
+	return &fakeCacheInformer{}, nil
+}
+
+func (f *funcCache) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+	if f.ListFunc != nil {
+		return f.ListFunc(ctx, list, opts...)
+	}
+	return errors.New("ListFunc not initialized")
+}
+
+func (f *funcCache) Remove(obj runtime.Object) error {
+	return nil
+}
+
+func setupWatchManager(c RemovableCache) (*Manager, context.CancelFunc, error) {
+	wm, err := New(c)
 	if err != nil {
-		t.Fatalf("Error creating Manager: %s", err)
+		return nil, nil, err
 	}
-	defer wm.close()
-	reg, err := wm.NewRegistrar("foo", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	grp, ctx := errgroup.WithContext(ctx)
+	grp.Go(func() error {
+		return wm.Start(ctx.Done())
+	})
+
+	shutdown := func() {
+		cancel()
+		_ = grp.Wait()
+	}
+	return wm, shutdown, nil
+}
+
+// Verifies that redundant calls to AddWatch (even across registrars) will be idempotent
+// and only register a single event handler on the respective informer.
+func TestRegistrar_AddWatch_Idempotent(t *testing.T) {
+	informer := &fakeCacheInformer{}
+	c := &fakeRemovableCache{informer: informer}
+	wm, cancel, err := setupWatchManager(c)
 	if err != nil {
-		t.Fatalf("Error setting up registrar: %s", err)
+		t.Errorf("creating watch manager: %v", err)
+		return
 	}
-	if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
-		t.Fatalf("Error adding watch: %s", err)
-	}
+	defer cancel()
 
-	t.Run("Single Add Watch", func(t *testing.T) {
-		expectedAdded := newChange("FooCRD", reg)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if len(removed) != 0 {
-			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if len(changed) != 0 {
-			t.Errorf("changed = %s, wanted empty map", spew.Sdump(changed))
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager not restarted on first add")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	t.Run("Second add watch does nothing", func(t *testing.T) {
-		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
-			t.Fatalf("Error adding second watch: %s", err)
-		}
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if len(added) != 0 {
-			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
-		}
-		if len(removed) != 0 {
-			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if len(changed) != 0 {
-			t.Errorf("changed = %s, wanted empty map", spew.Sdump(changed))
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == true {
-			t.Errorf("Manager restarted, wanted no op")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	reg2, err := wm.NewRegistrar("bar", nil)
+	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent, 1))
 	if err != nil {
-		t.Fatalf("Error setting up 2nd registrar: %s", err)
+		t.Errorf("creating registrar: %v", err)
+		return
 	}
-	t.Run("New registrar makes for a restart", func(t *testing.T) {
-		if err := reg2.AddWatch(makeGvk("FooCRD")); err != nil {
-			t.Fatalf("Error adding watch: %s", err)
-		}
-		expectedChanged := newChange("FooCRD", reg, reg2)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if len(added) != 0 {
-			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
-		}
-		if len(removed) != 0 {
-			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager not restarted")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	t.Run("First remove makes for a change", func(t *testing.T) {
-		if err := reg2.RemoveWatch(makeGvk("FooCRD")); err != nil {
-			t.Fatalf("Error removing watch: %s", err)
-		}
-		expectedChanged := newChange("FooCRD", reg)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if len(added) != 0 {
-			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
-		}
-		if len(removed) != 0 {
-			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if diff := cmp.Diff(changed, expectedChanged, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager not restarted")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	t.Run("Second remove makes for a remove", func(t *testing.T) {
-		if err := reg.RemoveWatch(makeGvk("FooCRD")); err != nil {
-			t.Fatalf("Error removing watch: %s", err)
-		}
-		expectedRemoved := newChange("FooCRD", reg)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if len(added) != 0 {
-			t.Errorf("added = %s, wanted empty map", spew.Sdump(added))
-		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if len(changed) != 0 {
-			t.Errorf("changed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager not restarted")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	t.Run("Single Add Waits For CRD Available", func(t *testing.T) {
-		if err := reg.AddWatch(makeGvk("FooCRD")); err != nil {
-			t.Fatalf("Error adding watch: %s", err)
-		}
-		wm.newDiscovery = newDiscoveryFactory(true)
-		expectedAdded := newChange("FooCRD", reg)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if diff := cmp.Diff(added, expectedAdded, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if len(removed) != 0 {
-			t.Errorf("removed = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if len(changed) != 0 {
-			t.Errorf("changed = %s, wanted empty map", spew.Sdump(changed))
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == true {
-			t.Errorf("Manager should not have restarted while CRD is pending")
-		}
-
-		wm.newDiscovery = newDiscoveryFactory(false, "FooCRD")
-		b, err = wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager should have updated now that CRD is found")
-		}
-		if waitForWatchManagerStart(wm) == false {
-			t.Errorf("Watch manager was not set to started")
-		}
-	})
-
-	t.Run("Replace works", func(t *testing.T) {
-		if err := reg.ReplaceWatch([]schema.GroupVersionKind{}); err != nil {
-			t.Fatalf("Error replacing watch: %s", err)
-		}
-		expectedRemoved := newChange("FooCRD", reg)
-		managedKinds, err := wm.managedKinds.Get()
-		if err != nil {
-			t.Errorf("Could not get managedKinds: %s", err)
-		}
-		added, removed, changed, err := wm.gatherChanges(managedKinds)
-		if len(added) != 0 {
-			t.Errorf("added = %s, wanted empty map", spew.Sdump(removed))
-		}
-		if diff := cmp.Diff(removed, expectedRemoved, cmp.AllowUnexported(vitals{})); diff != "" {
-			t.Error(diff)
-		}
-		if len(changed) != 0 {
-			t.Errorf("changed = %s, wanted empty map", spew.Sdump(changed))
-		}
-		if err != nil {
-			t.Errorf("err = %s, want nil", err)
-		}
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager should have updated now that CRD is found")
-		}
-	})
-
-	t.Run("Missing existing resources dumped on restart", func(t *testing.T) {
-		if err := reg.ReplaceWatch([]schema.GroupVersionKind{makeGvk("initialCRD"), makeGvk("secondCRD")}); err != nil {
-			t.Fatalf("Error replacing watch: %s", err)
-		}
-		wm.newDiscovery = newDiscoveryFactory(false, "initialCRD", "secondCRD")
-		b, err := wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager should have updated for new CRDs")
-		}
-		if err := reg.ReplaceWatch([]schema.GroupVersionKind{makeGvk("initialCRD")}); err != nil {
-			t.Fatalf("Error replacing watch: %s", err)
-		}
-		wm.newDiscovery = newDiscoveryFactory(true, "initialCRD")
-		b, err = wm.updateManager()
-		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
-		}
-		if b == false {
-			t.Errorf("Manager should have updated for removed CRD")
-		}
-		if len(wm.watchedKinds) != 0 {
-			t.Errorf("Manager should be watching zero kinds, watching: %v", wm.watchedKinds)
-		}
-	})
-
-	if waitForWatchManagerStart(wm) == false {
-		t.Errorf("Watch manager was not set to started")
+	r2, err := wm.NewRegistrar("r2", make(chan event.GenericEvent, 1))
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
 	}
 
-	t.Run("Manager restarts when not started", func(t *testing.T) {
-		wm.started.Store(false)
-		b, err := wm.updateManager()
+	gvk := schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Pod",
+	}
+
+	for _, r := range []*Registrar{r1, r2} {
+		if err := r.AddWatch(gvk); err != nil {
+			t.Errorf("setting initial watch: %v", err)
+			return
+		}
+		if err := r.AddWatch(gvk); err != nil {
+			t.Errorf("setting redundant watch: %v", err)
+			return
+		}
+	}
+	managed := wm.managedKinds.Get()
+	expected := vitalsByGVK{
+		gvk: vitals{
+			gvk:        gvk,
+			registrars: map[*Registrar]bool{r1: true, r2: true},
+		},
+	}
+	if !reflect.DeepEqual(expected, managed) {
+		t.Errorf("unexpected manged set: %+v", expected)
+	}
+
+	if total := informer.totalHandlers(); total != 1 {
+		t.Errorf("unexpected handler count. got: %d, expected: 1", total)
+	}
+}
+
+func TestRegistrar_RemoveWatch_Idempotent(t *testing.T) {
+	informer := &fakeCacheInformer{}
+	c := &fakeRemovableCache{informer: informer}
+	wm, cancel, err := setupWatchManager(c)
+	if err != nil {
+		t.Errorf("creating watch manager: %v", err)
+		return
+	}
+	defer cancel()
+
+	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent, 1))
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+	r2, err := wm.NewRegistrar("r2", make(chan event.GenericEvent, 1))
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+
+	gvk := schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Pod",
+	}
+
+	for _, r := range []*Registrar{r1, r2} {
+		if err := r.AddWatch(gvk); err != nil {
+			t.Errorf("setting initial watch: %v", err)
+			return
+		}
+	}
+	managed := wm.GetManagedGVK()
+	expected := []schema.GroupVersionKind{gvk}
+	if !reflect.DeepEqual(expected, managed) {
+		t.Errorf("unexpected managed set: %+v", expected)
+		return
+	}
+
+	if err := r1.RemoveWatch(gvk); err != nil {
+		t.Errorf("removing first watch: %v", err)
+		return
+	}
+
+	// Should still be watching this kind (reference count > 0).
+	managed = wm.GetManagedGVK()
+	if !reflect.DeepEqual(expected, managed) {
+		t.Errorf("unexpected managed set after removing first registrar: %+v", expected)
+	}
+
+	// The informer should not have been removed due to remaining watch.
+	if c.removeCount() != 0 {
+		t.Errorf("informer was removed before last watch was removed")
+		return
+	}
+
+	if err := r2.RemoveWatch(gvk); err != nil {
+		t.Errorf("removing second watch: %v", err)
+		return
+	}
+
+	// Should no longer be watching.
+	managed = wm.GetManagedGVK()
+	if len(managed) > 0 {
+		t.Errorf("unexpected manged set after removing last registrar: %+v", expected)
+		return
+	}
+
+	// The informer should have been removed this time.
+	if c.removeCount() != 1 {
+		t.Errorf("informer was not removed after last watch was removed")
+		return
+	}
+
+	// Extra removes are fine.
+	if err := r2.RemoveWatch(gvk); err != nil {
+		t.Errorf("redundant remove: %v", err)
+		return
+	}
+	if c.removeCount() != 1 {
+		t.Errorf("informer should not have been removed twice")
+		return
+	}
+}
+
+// Verify that existing items are replayed when joining an existing watched resource.
+func TestRegistrar_Replay(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	gvk := schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Pod",
+	}
+	informer := &fakeCacheInformer{}
+	resources := generateTestResources(gvk, 10)
+	c := &fakeRemovableCache{informer: informer, items: resources}
+	wm, cancel, err := setupWatchManager(c)
+	if err != nil {
+		t.Errorf("creating watch manager: %v", err)
+		return
+	}
+	defer cancel()
+
+	const count = 4
+	type tuple struct {
+		r *Registrar
+		e chan event.GenericEvent
+	}
+
+	registrars := make([]tuple, count)
+	for i := 0; i < count; i++ {
+		e := make(chan event.GenericEvent, len(resources))
+		r, err := wm.NewRegistrar(fmt.Sprintf("r%d", i), e)
+		registrars[i] = tuple{r: r, e: e}
 		if err != nil {
-			t.Errorf("Could not update manager: %s", err)
+			t.Fatalf("creating registrar: %v", err)
 		}
-		if b == false {
-			t.Errorf("Manager not restarted")
+	}
+
+	for _, entry := range registrars {
+		if err := entry.r.AddWatch(gvk); err != nil {
+			t.Errorf("setting initial watch: %v", err)
+			return
 		}
+	}
+
+	for i, entry := range registrars {
+		if i == 0 {
+			// Separate check for the first watcher below
+			continue
+		}
+		// Expect to get events on the latter watchers via replay
+		for i := range resources {
+			select {
+			case <-ctx.Done():
+				t.Errorf("timeout waiting for replayed resources [%s]", entry.r.parentName)
+				return
+			case event, ok := <-entry.e:
+				if !ok {
+					t.Errorf("channel closed while waiting for resources [%s]", entry.r.parentName)
+					return
+				}
+				g.Expect(event.Meta.GetName()).To(gomega.Equal(resources[i].GetName()), entry.r.parentName)
+			}
+		}
+	}
+
+	// Expect no events on the first watcher (we're pretending these were created after the fact
+	// and our fakes don't actually call event handlers)
+	select {
+	case event := <-registrars[0].e:
+		t.Errorf("received unexpected event from first watcher: %v", event)
+		return
+	case <-time.After(50 * time.Millisecond):
+		// Success
+	}
+}
+
+// Verify that event replay can retry upon error
+func TestRegistrar_Replay_Retry(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	gvk := schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Pod",
+	}
+	informer := &fakeCacheInformer{}
+	resources := generateTestResources(gvk, 10)
+	errCount := 3
+	c := &funcCache{
+		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+			if errCount > 0 {
+				errCount--
+				return fmt.Errorf("failing %d more times", errCount)
+			}
+			switch v := list.(type) {
+			case *unstructured.UnstructuredList:
+				v.Items = resources
+			default:
+				return fmt.Errorf("unexpected list type: %T. Needed unstructured.UnstructuredList", list)
+			}
+			return nil
+		},
+		GetInformerNonBlockingFunc: func(obj runtime.Object) (cache.Informer, error) {
+			return informer, nil
+		},
+	}
+	wm, cancel, err := setupWatchManager(c)
+	if err != nil {
+		t.Errorf("creating watch manager: %v", err)
+		return
+	}
+	defer cancel()
+
+	e1 := make(chan event.GenericEvent, 1)
+	r1, err := wm.NewRegistrar("r1", e1)
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+	e2 := make(chan event.GenericEvent, len(resources))
+	r2, err := wm.NewRegistrar("r2", e2)
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+
+	for _, r := range []*Registrar{r1, r2} {
+		if err := r.AddWatch(gvk); err != nil {
+			t.Errorf("setting initial watch: %v", err)
+			return
+		}
+	}
+
+	// Expect to get events on the second watch via replay, even after some failures.
+	for i := range resources {
+		select {
+		case <-ctx.Done():
+			t.Errorf("timeout waiting for replayed resources")
+			return
+		case event, ok := <-e2:
+			if !ok {
+				t.Errorf("channel closed while waiting for resources")
+				return
+			}
+			g.Expect(event.Meta.GetName()).To(gomega.Equal(resources[i].GetName()))
+		}
+	}
+
+	// Expect no events on the first watcher (we're pretending these were created after the fact
+	// and our fakes don't actually call event handlers)
+	select {
+	case event := <-e1:
+		t.Errorf("received unexpected event from first watcher: %v", event)
+		return
+	case <-time.After(50 * time.Millisecond):
+		// Success
+	}
+}
+
+// Verifies that replay happens asynchronously, can be cancelled.
+func TestRegistrar_Replay_Async(t *testing.T) {
+	listCalled := make(chan struct{})
+	listDone := make(chan struct{})
+	c := &funcCache{
+		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+			listCalled <- struct{}{}
+
+			// Block until we're cancelled.
+			<-ctx.Done()
+			listDone <- struct{}{}
+			return nil
+		},
+	}
+
+	// Setup and start watch manager
+	wm, err := New(c)
+	if err != nil {
+		t.Fatalf("creating watch manager: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	grp, ctx := errgroup.WithContext(ctx)
+	grp.Go(func() error {
+		return wm.Start(ctx.Done())
 	})
+
+	// "Primary" watcher. Doesn't trigger replay.
+	e1 := make(chan event.GenericEvent)
+	r1, err := wm.NewRegistrar("r1", e1)
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+
+	// When this watcher adds its watch, replay will be triggered.
+	e2 := make(chan event.GenericEvent)
+	r2, err := wm.NewRegistrar("r2", e2)
+	if err != nil {
+		t.Errorf("creating registrar: %v", err)
+		return
+	}
+
+	gvk := schema.GroupVersionKind{
+		Version: "v1",
+		Kind:    "Pod",
+	}
+	for _, r := range []*Registrar{r1, r2} {
+		if err := r.AddWatch(gvk); err != nil {
+			t.Errorf("setting initial watch: %v", err)
+			return
+		}
+	}
+
+	// Ensure list was called (and we didn't block in AddWatch)
+	select {
+	case <-listCalled:
+	// Good.
+	case <-time.After(50 * time.Millisecond):
+		t.Fatalf("list was not called by replay as expected")
+	}
+
+	// Ensure we can cancel a pending replay
+	if err := r2.RemoveWatch(gvk); err != nil {
+		t.Errorf("removing watch: %v", err)
+	}
+
+	select {
+	case <-listDone:
+	// Good.
+	case <-time.After(50 * time.Millisecond):
+		t.Fatalf("replay was not cancelled")
+	}
+
+	// [Scenario 2] - Verify that pending replays are cancelled during watch manager shutdown.
+	if err := r2.AddWatch(gvk); err != nil {
+		t.Errorf("adding watch: %v", err)
+	}
+	select {
+	case <-listCalled:
+	// Good.
+	case <-time.After(50 * time.Millisecond):
+		t.Fatalf("list was not called by replay as expected")
+	}
+
+	// Shutdown watch manager and expect replays to cancel.
+	cancel()
+	select {
+	case <-listDone:
+	// Good.
+	case <-time.After(50 * time.Millisecond):
+		t.Fatalf("replay was not cancelled")
+	}
+
+	_ = grp.Wait()
+}
+
+// Verifies that registrar names must be unique.
+func TestRegistrar_Duplicates_Rejected(t *testing.T) {
+	g := gomega.NewWithT(t)
+	informer := &fakeCacheInformer{}
+	c := &fakeRemovableCache{informer: informer}
+	wm, cancel, err := setupWatchManager(c)
+	if err != nil {
+		t.Errorf("creating watch manager: %v", err)
+		return
+	}
+	defer cancel()
+
+	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
+	g.Expect(err).To(gomega.HaveOccurred(), "expected duplicate error")
+}
+
+// Verify ReplaceWatch replaces the set of watched resources for a registrar. New watches will be added,
+// unneeded watches will be removed, and watches that haven't changed will remain unchanged.
+func TestRegistrar_ReplaceWatch(t *testing.T) {
+	g := gomega.NewWithT(t)
+	var mu sync.Mutex
+	listCalls := make(map[schema.GroupVersionKind]int)
+	getInformerCalls := make(map[schema.GroupVersionKind]int)
+	c := &funcCache{
+		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+			mu.Lock()
+			defer mu.Unlock()
+			gvk := list.GetObjectKind().GroupVersionKind()
+			gvk.Kind = strings.TrimSuffix(gvk.Kind, "List")
+			listCalls[gvk]++
+			return nil
+		},
+		GetInformerNonBlockingFunc: func(obj runtime.Object) (cache.Informer, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			gvk := obj.GetObjectKind().GroupVersionKind()
+			getInformerCalls[gvk]++
+			return &fakeCacheInformer{}, nil
+		},
+	}
+	wm, cancel, err := setupWatchManager(c)
+	if err != nil {
+		t.Errorf("creating watch manager: %v", err)
+		return
+	}
+	defer cancel()
+
+	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	r2, err := wm.NewRegistrar("r2", make(chan event.GenericEvent))
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	pod := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	configMap := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
+	service := schema.GroupVersionKind{Version: "v1", Kind: "Service"}
+	secret := schema.GroupVersionKind{Version: "v1", Kind: "Secret"}
+	err = r1.AddWatch(pod)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial pod watch")
+	err = r2.AddWatch(configMap)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial configmap watch")
+	err = r2.AddWatch(secret)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial secret watch")
+
+	// Check initial counters
+	func() {
+		mu.Lock()
+		defer mu.Unlock()
+		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "initial pod informer count")
+		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "initial configmap informer count")
+		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "initial secret informer count")
+		g.Expect(getInformerCalls[service]).To(gomega.Equal(0), "initial service informer count")
+		g.Expect(listCalls[pod]).To(gomega.Equal(0), "initial pod replay count")
+	}()
+
+	err = r2.ReplaceWatch([]schema.GroupVersionKind{pod, service, secret})
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "calling replaceWatch")
+
+	// Check final counters
+	func() {
+		mu.Lock()
+		defer mu.Unlock()
+		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "final pod informer count")
+		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "final configmap informer count")
+		g.Expect(getInformerCalls[service]).To(gomega.Equal(1), "final service informer count")
+		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "final secret informer count")
+	}()
+	g.Eventually(func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return listCalls[pod]
+	}, 5*time.Second).Should(gomega.Equal(1), "final pod replay count")
+}
+
+func generateTestResources(gvk schema.GroupVersionKind, n int) []unstructured.Unstructured {
+	if n == 0 {
+		return nil
+	}
+	out := make([]unstructured.Unstructured, n)
+	for i := 0; i < n; i++ {
+		out[i].SetGroupVersionKind(gvk)
+		out[i].SetName(fmt.Sprintf("%s-%d", gvk.Kind, i))
+	}
+	return out
 }
