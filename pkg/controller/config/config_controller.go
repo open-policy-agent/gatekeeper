@@ -156,15 +156,13 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 	}
 
-	if exists {
-		// Actively remove config finalizer. This should automatically remove
-		// the finalizer over time even if state teardown didn't work correctly
-		// after a deprecation period, all finalizer code can be removed.
-		if hasFinalizer(instance) {
-			removeFinalizer(instance)
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
+	// Actively remove config finalizer. This should automatically remove
+	// the finalizer over time even if state teardown didn't work correctly
+	// after a deprecation period, all finalizer code can be removed.
+	if exists && hasFinalizer(instance) {
+		removeFinalizer(instance)
+		if err := r.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -197,12 +195,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	if exists {
-		log.Info("updating config resource", "obj", instance)
-		if err := r.Update(context.Background(), instance); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
 	r.watched.Replace(newSyncOnly)
 	return reconcile.Result{}, nil
 }
