@@ -32,6 +32,25 @@ In addition to the `admission` scenario, Gatekeeper's audit functionality allows
 
 Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
+## Admission Webhook Fail-Open Status
+
+Currently Gatekeeper is defaulting to using `failurePolicy​: ​Ignore` for admission request webhook errors. The impact of
+this is that when the webhook is down, or otherwise unreachable, constraints will not be
+enforced. Audit is expected to pick up any slack in enforcement by highlighting invalid
+resources that made it into the cluster.
+
+The reason for fail-open is because the webhook server currently only has one instance, which risks downtime
+during actions like upgrades. If we were to fail closed, this downtime would lead to
+downtime in the cluster's control plane. We are currently working on addressing issues
+that may cause multi-pod deployments of Gatekeeper to not work as expected. Once
+we can improve availability by running in multiple pods, we will likely make
+that setup the default and change our default webhook behavior to fail-closed (`failurePolicy: Fail`).
+
+If desired, the webhook can be set to fail-closed by modifying the ValidatingWebhookConfiguration,
+though this may have uptime impact on your cluster's control plane. In the interim,
+it is best to avoid policies that assume 100% enforcement during request
+time (e.g. mimicking RBAC-like behavior by validating the user making the request).
+
 ## Installation Instructions
 
 ### Installation

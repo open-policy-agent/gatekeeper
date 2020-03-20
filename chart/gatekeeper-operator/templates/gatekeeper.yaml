@@ -466,7 +466,7 @@ spec:
         release: '{{ .Release.Name }}'
       {{- if .Values.podAnnotations }}
       annotations:
-        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       {{- end }}
     spec:
       containers:
@@ -514,6 +514,9 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000

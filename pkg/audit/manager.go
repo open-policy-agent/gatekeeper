@@ -38,8 +38,8 @@ const (
 )
 
 var (
-	auditInterval             = flag.Int("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
-	constraintViolationsLimit = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
+	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emptyAuditResults         []auditResult
 )
@@ -432,7 +432,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
-		if len(statusViolations) < *constraintViolationsLimit {
+		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			msg := ar.message
 			if len(msg) > msgSize {
 				msg = truncateString(msg, msgSize)
