@@ -53,7 +53,7 @@ test_input_violations_cpu_scale {
     count(results) == 1
 }
 test_input_violations_cpu_decimal {
-    input := {"review": review([ctr("a", "1", "2", "1", "0.5")]), "parameters": {"ratio": "10"}}
+    input := {"review": review([ctr("a", "1", "2", "1", "0.5")]), "parameters": {"ratio": "2"}}
     results := violation with input as input
     trace(sprintf("results - <%v>", [results]))
     count(results) == 1
