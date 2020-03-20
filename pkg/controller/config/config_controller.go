@@ -67,11 +67,6 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	// Wipe cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
-	if _, err := a.Opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
-		return err
-	}
-
 	return add(mgr, r)
 }
 
