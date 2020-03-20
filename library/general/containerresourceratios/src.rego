@@ -206,13 +206,9 @@ general_violation[{"msg": msg, "field": field}] {
 general_violation[{"msg": msg, "field": field}] {
   container := input.review.object.spec[field][_]
   cpu_limits_orig := container.resources.limits.cpu
-  trace(sprintf("cpu limits before canon - <%v>", [cpu_limits_orig]))
   cpu_limits := canonify_cpu(cpu_limits_orig)
-  trace(sprintf("cpu limits after canon - <%v>", [cpu_limits]))
   cpu_requests_orig := container.resources.requests.cpu
-  trace(sprintf("cpu requests before canon - <%v>", [cpu_requests_orig]))
   cpu_requests := canonify_cpu(cpu_requests_orig)
-  trace(sprintf("cpu requests after canon - <%v>", [cpu_requests]))
   cpu_ratio := input.parameters.ratio
   cpu_calc_ratio := cpu_limits / cpu_requests
   to_number(cpu_ratio) < to_number(cpu_calc_ratio)
@@ -223,12 +219,8 @@ general_violation[{"msg": msg, "field": field}] {
   container := input.review.object.spec[field][_]
   mem_limits_orig := container.resources.limits.memory
   mem_requests_orig := container.resources.requests.memory
-  trace(sprintf("mem limits before canon - <%v>", [mem_limits_orig]))
   mem_limits := canonify_mem(mem_limits_orig)
-  trace(sprintf("mem limits after canon - <%v>", [mem_limits]))
-  trace(sprintf("mem requests before canon - <%v>", [mem_requests_orig]))
   mem_requests := canonify_mem(mem_requests_orig)
-  trace(sprintf("mem requests after canon - <%v>", [mem_requests]))
   mem_ratio := input.parameters.ratio
   mem_calc_ratio := mem_limits / mem_requests
   to_number(mem_ratio) < to_number(mem_calc_ratio)
