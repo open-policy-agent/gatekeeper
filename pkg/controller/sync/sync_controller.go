@@ -17,18 +17,16 @@ package sync
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -39,56 +37,53 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	Opa *opa.Client
+	Opa    OpaDataClient
+	Events <-chan event.GenericEvent
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind, cs *watch.ControllerSwitch) error {
-	r := newReconciler(mgr, gvk, a.Opa, cs)
-	return add(mgr, r, gvk)
+func (a *Adder) Add(mgr manager.Manager) error {
+	r := newReconciler(mgr, a.Opa)
+	return add(mgr, r, a.Events)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, gvk schema.GroupVersionKind, opa *opa.Client, cs *watch.ControllerSwitch) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opa OpaDataClient) reconcile.Reconciler {
 	return &ReconcileSync{
-		Client: mgr.GetClient(),
-		cs:     cs,
+		reader: mgr.GetCache(),
 		scheme: mgr.GetScheme(),
 		opa:    opa,
-		log:    log.WithValues("kind", gvk.Kind, "apiVersion", gvk.GroupVersion().String()),
-		gvk:    gvk,
+		log:    log,
 	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKind) error {
+func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
-	c, err := controller.New(fmt.Sprintf("%s-sync-controller", gvk.String()), mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("sync-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to the provided resource
-	instance := unstructured.Unstructured{}
-	instance.SetGroupVersionKind(gvk)
-	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.Watch(
+		&source.Channel{
+			Source:         events,
+			DestBufferSize: 1024,
+		},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+	)
 }
 
 var _ reconcile.Reconciler = &ReconcileSync{}
 
 // ReconcileSync reconciles an arbitrary object described by Kind
 type ReconcileSync struct {
-	client.Client
-	cs     *watch.ControllerSwitch
+	reader client.Reader
+
 	scheme *runtime.Scheme
-	opa    *opa.Client
-	gvk    schema.GroupVersionKind
+	opa    OpaDataClient
 	log    logr.Logger
 }
 
@@ -97,20 +92,21 @@ type ReconcileSync struct {
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	enabled := r.cs.Enter()
-	defer r.cs.Exit()
-	if !enabled {
-		r.log.Info("ignoring request, sync controller disabled", "request", request)
+	gvk, unpackedRequest, err := util.UnpackRequest(request)
+	if err != nil {
+		// Unrecoverable, do not retry.
+		// TODO(OREN) add metric
+		log.Error(err, "unpacking request", "request", request)
 		return reconcile.Result{}, nil
 	}
+
 	instance := &unstructured.Unstructured{}
-	instance.SetGroupVersionKind(r.gvk)
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
+	instance.SetGroupVersionKind(gvk)
+	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
 			// This is a deletion; remove the data
-			instance.SetNamespace(request.Namespace)
-			instance.SetName(request.Name)
+			instance.SetNamespace(unpackedRequest.Namespace)
+			instance.SetName(unpackedRequest.Name)
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -118,11 +114,6 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
-	}
-	// For some reason 'Status' objects corresponding to rejection messages are being pushed
-	if instance.GroupVersionKind() != r.gvk {
-		r.log.Info("ignoring unexpected data", "data", instance)
-		return reconcile.Result{}, nil
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {

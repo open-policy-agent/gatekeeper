@@ -129,7 +129,7 @@ fmt:
 
 # Run go vet against code
 vet:
-	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
+	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/... ./third_party/...
 	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
