@@ -553,7 +553,7 @@ func (ucloop *updateConstraintLoop) update() {
 					}
 				}
 				if !failure {
-					delete(ucloop.uc, latestItem.GetSelfLink())
+					delete(ucloop.uc, item.GetSelfLink())
 				}
 			}
 		}
