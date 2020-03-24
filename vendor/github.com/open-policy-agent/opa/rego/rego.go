@@ -48,15 +48,26 @@ type PartialQueries struct {
 // PartialResult represents the result of partial evaluation. The result can be
 // used to generate a new query that can be run when inputs are known.
 type PartialResult struct {
-	compiler *ast.Compiler
-	store    storage.Store
-	body     ast.Body
+	compiler     *ast.Compiler
+	store        storage.Store
+	body         ast.Body
+	builtinDecls map[string]*ast.Builtin
+	builtinFuncs map[string]*topdown.Builtin
 }
 
 // Rego returns an object that can be evaluated to produce a query result.
 func (pr PartialResult) Rego(options ...func(*Rego)) *Rego {
 	options = append(options, Compiler(pr.compiler), Store(pr.store), ParsedQuery(pr.body))
-	return New(options...)
+	r := New(options...)
+
+	// Propagate any custom builtins.
+	for k, v := range pr.builtinDecls {
+		r.builtinDecls[k] = v
+	}
+	for k, v := range pr.builtinFuncs {
+		r.builtinFuncs[k] = v
+	}
+	return r
 }
 
 // preparedQuery is a wrapper around a Rego object which has pre-processed
@@ -829,6 +840,7 @@ func New(options ...func(r *Rego)) *Rego {
 		compiledQueries: map[queryType]compiledQuery{},
 		builtinDecls:    map[string]*ast.Builtin{},
 		builtinFuncs:    map[string]*topdown.Builtin{},
+		bundles:         map[string]*bundle.Bundle{},
 	}
 
 	for _, option := range options {
@@ -864,10 +876,6 @@ func New(options ...func(r *Rego)) *Rego {
 
 	if r.partialNamespace == "" {
 		r.partialNamespace = defaultPartialNamespace
-	}
-
-	if r.bundles == nil {
-		r.bundles = map[string]*bundle.Bundle{}
 	}
 
 	return r
@@ -930,9 +938,11 @@ func (r *Rego) PartialResult(ctx context.Context) (PartialResult, error) {
 	}
 
 	pr := PartialResult{
-		compiler: pq.r.compiler,
-		store:    pq.r.store,
-		body:     pq.r.parsedQuery,
+		compiler:     pq.r.compiler,
+		store:        pq.r.store,
+		body:         pq.r.parsedQuery,
+		builtinDecls: pq.r.builtinDecls,
+		builtinFuncs: pq.r.builtinFuncs,
 	}
 
 	return pr, nil
@@ -1649,9 +1659,11 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 	}
 
 	result := PartialResult{
-		compiler: r.compiler,
-		store:    r.store,
-		body:     ast.MustParseBody(fmt.Sprintf("data.%v.__result__", ectx.partialNamespace)),
+		compiler:     r.compiler,
+		store:        r.store,
+		body:         ast.MustParseBody(fmt.Sprintf("data.%v.__result__", ectx.partialNamespace)),
+		builtinDecls: r.builtinDecls,
+		builtinFuncs: r.builtinFuncs,
 	}
 
 	return result, nil
@@ -1698,7 +1710,7 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithIndexing(ectx.indexing)
 
 	for i := range ectx.tracers {
-		q = q.WithTracer(r.tracers[i])
+		q = q.WithTracer(ectx.tracers[i])
 	}
 
 	if ectx.parsedInput != nil {
@@ -1934,7 +1946,7 @@ func iteration(x interface{}) bool {
 		return stopped
 	})
 
-	ast.Walk(vis, x)
+	vis.Walk(x)
 
 	return stopped
 }

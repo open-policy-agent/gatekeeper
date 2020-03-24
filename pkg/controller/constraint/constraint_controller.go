@@ -169,6 +169,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		log.Error(err, "unpacking request", "request", request)
 		return reconcile.Result{}, nil
 	}
+
 	// Sanity - make sure it is a constraint resource.
 	if gvk.Group != constraintsGroup {
 		// Unrecoverable, do not retry.
@@ -176,17 +177,21 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
+	deleted := false
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
-		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
-			return reconcile.Result{}, nil
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
 		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		deleted = true
+		instance = &unstructured.Unstructured{}
+		instance.SetGroupVersionKind(gvk)
+		instance.SetNamespace(unpackedRequest.NamespacedName.Namespace)
+		instance.SetName(unpackedRequest.NamespacedName.Name)
 	}
+
+	deleted = deleted || !instance.GetDeletionTimestamp().IsZero()
 
 	constraintKey := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
@@ -201,20 +206,21 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}()
 
-	if instance.GetDeletionTimestamp().IsZero() {
-		if !HasFinalizer(instance) {
-			status, _, _ := unstructured.NestedFieldCopy(instance.Object, "status")
-			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
-			if err := r.writer.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
-			}
+	if HasFinalizer(instance) {
+		status, _, _ := unstructured.NestedFieldCopy(instance.Object, "status")
+		RemoveFinalizer(instance)
+		if err := r.writer.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{Requeue: true}, nil
+		}
 
-			if status != nil {
-				if err := unstructured.SetNestedField(instance.Object, status, "status"); err != nil {
-					log.Error(err, "error preserving constraint status")
-				}
+		if status != nil {
+			if err := unstructured.SetNestedField(instance.Object, status, "status"); err != nil {
+				log.Error(err, "error preserving constraint status")
 			}
 		}
+	}
+
+	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
 		status, err := csutil.GetHAStatus(instance)
 		if err != nil {
@@ -242,6 +248,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 			logAddition(r.log, instance, enforcementAction)
 		}
+
 		status.Enforced = true
 		if err = csutil.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
@@ -249,6 +256,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		if err = r.statusClient.Status().Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
+
 		// adding constraint to cache and sending metrics
 		r.constraintsCache.addConstraintKey(constraintKey, tags{
 			enforcementAction: enforcementAction,
@@ -257,22 +265,14 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		reportMetrics = true
 	} else {
 		// Handle deletion
-		if HasFinalizer(instance) {
-			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
-				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
-					logRemoval(r.log, instance, enforcementAction)
-					return reconcile.Result{}, err
-				}
+		if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
+			if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
+				return reconcile.Result{}, err
 			}
-			logRemoval(r.log, instance, enforcementAction)
-			RemoveFinalizer(instance)
-			if err := r.writer.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
-			}
-			// removing constraint entry from cache
-			r.constraintsCache.deleteConstraintKey(constraintKey)
-			reportMetrics = true
 		}
+		logRemoval(r.log, instance, enforcementAction)
+		r.constraintsCache.deleteConstraintKey(constraintKey)
+		reportMetrics = true
 	}
 	return reconcile.Result{}, nil
 }

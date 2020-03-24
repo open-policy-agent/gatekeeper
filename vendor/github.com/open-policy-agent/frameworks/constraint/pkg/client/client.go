@@ -71,7 +71,7 @@ type Client struct {
 	backend           *Backend
 	targets           map[string]TargetHandler
 	constraintsMux    sync.RWMutex
-	templates         map[string]*templateEntry
+	templates         map[templateKey]*templateEntry
 	constraints       map[schema.GroupKind]map[string]*unstructured.Unstructured
 	allowedDataFields []string
 }
@@ -164,18 +164,42 @@ func (c *Client) validateTargets(templ *templates.ConstraintTemplate) (*template
 	return targetSpec, targetHandler, nil
 }
 
+type templateKey string
+
 type keyableArtifact interface {
-	// crd is the CustomResourceDefinition created from the CT.
-	CRD() *apiextensions.CustomResourceDefinition
+	Key() templateKey
 }
 
 var _ keyableArtifact = &basicCTArtifacts{}
 
+func templateKeyFromConstraint(t *unstructured.Unstructured) templateKey {
+	return templateKey(strings.ToLower(t.GetKind()))
+}
+
+// rawCTArtifacts have no processing and are only useful for looking things up
+// from the cache
+type rawCTArtifacts struct {
+	// template is the template itself
+	template *templates.ConstraintTemplate
+}
+
+func (a *rawCTArtifacts) Key() templateKey {
+	return templateKey(a.template.GetName())
+}
+
+// createRawTemplateArtifactss creates the "free" artifacts for a template, avoiding more
+// complex tasks like rewriting Rego. Provides minimal validation.
+func (c *Client) createRawTemplateArtifacts(templ *templates.ConstraintTemplate) (*rawCTArtifacts, error) {
+	if templ.ObjectMeta.Name == "" {
+		return nil, errors.New("Template has no name")
+	}
+	return &rawCTArtifacts{template: templ}, nil
+}
+
 // basicCTArtifacts are the artifacts created by processing a constraint template
 // that require little compute effort
 type basicCTArtifacts struct {
-	// template is the template itself
-	template *templates.ConstraintTemplate
+	rawCTArtifacts
 
 	// namePrefix is the name prefix by which the modules will be identified during create / delete
 	// calls to the drivers.Driver interface.
@@ -208,10 +232,11 @@ type ctArtifacts struct {
 }
 
 // createBasicTemplateArtifacts creates the low-cost artifacts for a template, avoiding more
-// complex tasks like rewriting Rego. Useful for basic lookup tasks
+// complex tasks like rewriting Rego.
 func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplate) (*basicCTArtifacts, error) {
-	if templ.ObjectMeta.Name == "" {
-		return nil, errors.New("Template has no name")
+	rawArtifacts, err := c.createRawTemplateArtifacts(templ)
+	if err != nil {
+		return nil, err
 	}
 	if templ.ObjectMeta.Name != strings.ToLower(templ.Spec.CRD.Spec.Names.Kind) {
 		return nil, fmt.Errorf("Template's name %s is not equal to the lowercase of CRD's Kind: %s", templ.ObjectMeta.Name, strings.ToLower(templ.Spec.CRD.Spec.Names.Kind))
@@ -237,7 +262,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 	entryPointPath := createTemplatePath(targetHandler.GetName(), templ.Spec.CRD.Spec.Names.Kind)
 
 	return &basicCTArtifacts{
-		template:      templ,
+		rawCTArtifacts:      *rawArtifacts,
 		gk:            schema.GroupKind{Group: crd.Spec.Group, Kind: crd.Spec.Names.Kind},
 		crd:           crd,
 		targetHandler: targetHandler,
@@ -358,7 +383,7 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 
 	cpy := templ.DeepCopy()
 	cpy.Status = templates.ConstraintTemplateStatus{}
-	c.templates[c.templatesMapKey(artifacts)] = &templateEntry{
+	c.templates[artifacts.Key()] = &templateEntry{
 		template: cpy,
 		CRD:      artifacts.crd,
 		Targets:  []string{artifacts.targetHandler.GetName()},
@@ -375,13 +400,23 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 
-	artifacts, err := c.createBasicTemplateArtifacts(templ)
+	rawArtifacts, err := c.createRawTemplateArtifacts(templ)
 	if err != nil {
 		return resp, err
 	}
 
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
+
+	template, err := c.getTemplateNoLock(ctx, rawArtifacts)
+	if err != nil {
+		if IsMissingTemplateError(err) {
+			return resp, nil
+		}
+		return resp, err
+	}
+
+	artifacts, err := c.createBasicTemplateArtifacts(template)
 
 	if _, err := c.backend.driver.DeleteModules(ctx, artifacts.namePrefix); err != nil {
 		return resp, err
@@ -398,7 +433,7 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 	if _, err := c.backend.driver.DeleteData(ctx, constraintRoot); err != nil {
 		return resp, err
 	}
-	delete(c.templates, c.templatesMapKey(artifacts))
+	delete(c.templates, artifacts.Key())
 	resp.Handled[artifacts.targetHandler.GetName()] = true
 	return resp, nil
 }
@@ -406,26 +441,23 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 // GetTemplate gets the currently recognized template.
 func (c *Client) GetTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*templates.ConstraintTemplate, error) {
 
-	artifacts, err := c.createBasicTemplateArtifacts(templ)
+	artifacts, err := c.createRawTemplateArtifacts(templ)
 	if err != nil {
 		return nil, err
 	}
 
 	c.constraintsMux.Lock()
 	defer c.constraintsMux.Unlock()
+	return c.getTemplateNoLock(ctx, artifacts)
+}
 
-	t, ok := c.templates[c.templatesMapKey(artifacts)]
+func (c *Client) getTemplateNoLock(ctx context.Context, artifacts keyableArtifact) (*templates.ConstraintTemplate, error) {
+	t, ok := c.templates[artifacts.Key()]
 	if !ok {
-		return nil, NewMissingTemplateError(c.templatesMapKey(artifacts))
+		return nil, NewMissingTemplateError(string(artifacts.Key()))
 	}
 	ret := t.template.DeepCopy()
 	return ret, nil
-}
-
-// templatesMapKey returns the key for where we will track the constraint template in
-// the templates map.
-func (c *Client) templatesMapKey(artifacts keyableArtifact) string {
-	return artifacts.CRD().Spec.Names.Kind
 }
 
 // createConstraintSubPath returns the key where we will store the constraint
@@ -482,7 +514,7 @@ func (c *Client) getTemplateEntry(constraint *unstructured.Unstructured, lock bo
 		c.constraintsMux.RLock()
 		defer c.constraintsMux.RUnlock()
 	}
-	entry, ok := c.templates[kind]
+	entry, ok := c.templates[templateKeyFromConstraint(constraint)]
 	if !ok {
 		return nil, NewUnrecognizedConstraintError(kind)
 	}
@@ -697,7 +729,7 @@ func (c *Client) Reset(ctx context.Context) error {
 			}
 		}
 	}
-	c.templates = make(map[string]*templateEntry)
+	c.templates = make(map[templateKey]*templateEntry)
 	c.constraints = make(map[schema.GroupKind]map[string]*unstructured.Unstructured)
 	return nil
 }
