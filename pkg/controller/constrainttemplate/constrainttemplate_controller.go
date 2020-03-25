@@ -220,9 +220,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		ctUnversioned, err := r.opa.GetTemplate(context.TODO(), ctRef)
 		if err != nil {
 			log.Info("missing constraint template in OPA cache, no deletion necessary")
-			ct.SetName(request.Namespace)
-			ct.SetName(request.Name)
-			logAction(ct, deletedAction)
+			logAction(ctRef, deletedAction)
 			r.metrics.registry.remove(request.NamespacedName)
 			return reconcile.Result{}, nil
 		}
@@ -314,7 +312,7 @@ func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(code, message string
 	status := util.GetCTHAStatus(ct)
 	status.Errors = []*v1beta1.CreateCRDError{}
 	createErr := &v1beta1.CreateCRDError{
-		Code: code,
+		Code:    code,
 		Message: fmt.Sprintf("%s: %s", message, err),
 	}
 	status.Errors = append(status.Errors, createErr)
