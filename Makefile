@@ -9,6 +9,7 @@ VERSION := v3.1.0-beta.7
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.6.0
 KUSTOMIZE_VERSION=3.0.2
+HELM_VERSION=v2.15.2
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -86,7 +87,7 @@ e2e-helm-deploy:
 	# Download and install helm
 	rm -rf .staging/helm
 	mkdir -p .staging/helm
-	curl https://get.helm.sh/helm-v2.15.2-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
+	curl https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
