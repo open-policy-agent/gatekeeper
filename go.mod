@@ -13,7 +13,7 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200304180616-c46b44c53e49
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200325031139-1a8f361c3e49
 	github.com/open-policy-agent/opa v0.17.2
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0
@@ -29,5 +29,3 @@ require (
 	sigs.k8s.io/controller-runtime v0.5.0
 	sigs.k8s.io/controller-tools v0.2.4 // indirect
 )
-
-replace github.com/open-policy-agent/frameworks/constraint => github.com/maxsmythe/frameworks/constraint v0.0.0-20200323235719-2b4fead1eabc
