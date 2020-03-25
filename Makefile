@@ -219,11 +219,4 @@ endif
 
 .PHONY: vendor
 vendor:
-	$(eval $@_TMP := $(shell mktemp -d))
-	$(eval $@_CACHE := ${$@_TMP}/pkg/mod/cache/download)
-	GO111MODULE=on go mod download
-	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
-	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
-	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
-	mkdir -p vendor/${FRAMEWORK_PACKAGE}/deploy
-	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/deploy/* vendor/${FRAMEWORK_PACKAGE}/deploy/.
+	go mod vendor
