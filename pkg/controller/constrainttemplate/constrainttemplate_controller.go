@@ -32,7 +32,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -141,7 +140,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to ConstraintTemplate CRDs
+	// Watch for changes to Constraint CRDs
 	err = c.Watch(
 		&source.Kind{Type: &apiextensionsv1beta1.CustomResourceDefinition{}},
 		&handler.EnqueueRequestForOwner{
@@ -196,21 +195,10 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 			return reconcile.Result{}, err
 		}
 		deleted = true
-		ctRef := &templates.ConstraintTemplate{}
-		ctRef.SetNamespace(request.Namespace)
-		ctRef.SetName(request.Name)
-		ctUnversioned, err := r.opa.GetTemplate(context.TODO(), ctRef)
-		if err != nil {
-			log.Info("missing constraint template in OPA cache, no deletion necessary")
-			ct.SetName(request.Namespace)
-			ct.SetName(request.Name)
-			logAction(ct, deletedAction)
-			r.metrics.registry.remove(request.NamespacedName)
-			return reconcile.Result{}, nil
-		}
-		if err := r.scheme.Convert(ctUnversioned, ct, context.TODO()); err != nil {
-			return reconcile.Result{}, err
-		}
+		// be sure we are using a blank constraint template so that
+		// we know finalizer removal code won't break (can be removed once that
+		// code is removed)
+		ct = &v1beta1.ConstraintTemplate{}
 	}
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
@@ -226,7 +214,19 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 
 	if deleted {
-		result, err := r.handleDelete(ct)
+		ctRef := &templates.ConstraintTemplate{}
+		ctRef.SetNamespace(request.Namespace)
+		ctRef.SetName(request.Name)
+		ctUnversioned, err := r.opa.GetTemplate(context.TODO(), ctRef)
+		if err != nil {
+			log.Info("missing constraint template in OPA cache, no deletion necessary")
+			ct.SetName(request.Namespace)
+			ct.SetName(request.Name)
+			logAction(ct, deletedAction)
+			r.metrics.registry.remove(request.NamespacedName)
+			return reconcile.Result{}, nil
+		}
+		result, err := r.handleDelete(ctUnversioned)
 		if err != nil {
 			logError(request.NamespacedName.Name)
 			r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
@@ -239,14 +239,14 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 
 	status := util.GetCTHAStatus(ct)
 	status.Errors = nil
-	versionless := &templates.ConstraintTemplate{}
-	if err := r.scheme.Convert(ct, versionless, nil); err != nil {
+	unversionedCT := &templates.ConstraintTemplate{}
+	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		logError(request.NamespacedName.Name)
 		return reconcile.Result{}, err
 	}
-	crd, err := r.opa.CreateCRD(context.Background(), versionless)
+	unversionedProposedCRD, err := r.opa.CreateCRD(context.Background(), unversionedCT)
 	if err != nil {
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		var createErr *v1beta1.CreateCRDError
@@ -270,25 +270,28 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	util.SetCTHAStatus(ct, status)
 
-	name := crd.GetName()
-	namespace := crd.GetNamespace()
+	proposedCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
+	if err := r.scheme.Convert(unversionedProposedCRD, proposedCRD, nil); err != nil {
+		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
+		log.Error(err, "conversion error")
+		logError(request.NamespacedName.Name)
+		err := r.reportErrorOnCTStatus("conversion_error", "Could not convert from unversioned resource", ct, err)
+		return reconcile.Result{}, err
+	}
+
+	name := unversionedProposedCRD.GetName()
+	namespace := unversionedProposedCRD.GetNamespace()
 	// Check if the constraint CRD already exists
 	action := updatedAction
-	unversionedCRD := &apiextensions.CustomResourceDefinition{}
-	found := &apiextensionsv1beta1.CustomResourceDefinition{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, found)
+	currentCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, currentCRD)
 	switch {
 	case err == nil:
-		if err := r.scheme.Convert(found, unversionedCRD, nil); err != nil {
-			r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-			log.Error(err, "conversion error")
-			logError(request.NamespacedName.Name)
-			return reconcile.Result{}, err
-		}
+		break
 
 	case errors.IsNotFound(err):
 		action = createdAction
-		unversionedCRD = nil
+		currentCRD = nil
 
 	default:
 		logError(request.NamespacedName.Name)
@@ -296,7 +299,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	result, err := r.handleUpdate(ct, crd, unversionedCRD)
+	result, err := r.handleUpdate(ct, unversionedCT, proposedCRD, currentCRD)
 	if err != nil {
 		logError(request.NamespacedName.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
@@ -307,34 +310,39 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	return result, err
 }
 
+func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(code, message string, ct *v1beta1.ConstraintTemplate, err error) error {
+	status := util.GetCTHAStatus(ct)
+	status.Errors = []*v1beta1.CreateCRDError{}
+	createErr := &v1beta1.CreateCRDError{
+		Code: code,
+		Message: fmt.Sprintf("%s: %s", message, err),
+	}
+	status.Errors = append(status.Errors, createErr)
+	util.SetCTHAStatus(ct, status)
+	if err2 := r.Status().Update(context.Background(), ct); err2 != nil {
+		return errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
+	}
+	return err
+}
+
 func (r *ReconcileConstraintTemplate) handleUpdate(
-	instance *v1beta1.ConstraintTemplate,
-	proposedCRD, existingCRD *apiextensions.CustomResourceDefinition) (reconcile.Result, error) {
+	ct *v1beta1.ConstraintTemplate,
+	unversionedCT *templates.ConstraintTemplate,
+	proposedCRD, currentCRD *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
-	log := log.WithValues("name", instance.GetName(), "crdName", name)
+	log := log.WithValues("name", ct.GetName(), "crdName", name)
 
 	log.Info("loading code into OPA")
-	versionless := &templates.ConstraintTemplate{}
-	if err := r.scheme.Convert(instance, versionless, nil); err != nil {
-		log.Error(err, "conversion error")
-		return reconcile.Result{}, err
-	}
 	beginCompile := time.Now()
 
 	// It's important that opa.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(context.Background(), versionless); err != nil {
+	if _, err := r.opa.AddTemplate(context.Background(), unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
-		updateErr := &v1beta1.CreateCRDError{Code: "update_error", Message: fmt.Sprintf("Could not update CRD: %s", err)}
-		status := util.GetCTHAStatus(instance)
-		status.Errors = append(status.Errors, updateErr)
-		util.SetCTHAStatus(instance, status)
-		if err2 := r.Status().Update(context.Background(), instance); err2 != nil {
-			err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
-		}
+		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", ct, err)
 		return reconcile.Result{}, err
 	}
 
@@ -342,51 +350,39 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
 
-	var newCRD *apiextensions.CustomResourceDefinition
-	if existingCRD == nil {
+	var newCRD *apiextensionsv1beta1.CustomResourceDefinition
+	if currentCRD == nil {
 		newCRD = proposedCRD.DeepCopy()
 	} else {
-		newCRD = existingCRD.DeepCopy()
+		newCRD = currentCRD.DeepCopy()
 		newCRD.Spec = proposedCRD.Spec
 	}
 
-	if err := controllerutil.SetControllerReference(instance, newCRD, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(ct, newCRD, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	newCRDv1beta1 := &apiextensionsv1beta1.CustomResourceDefinition{}
-	if err := r.scheme.Convert(newCRD, newCRDv1beta1, nil); err != nil {
-		log.Error(err, "conversion error")
-		return reconcile.Result{}, err
-	}
-
-	if existingCRD == nil {
+	if currentCRD == nil {
 		log.Info("creating crd")
-		if err := r.Create(context.TODO(), newCRDv1beta1); err != nil {
-			status := util.GetCTHAStatus(instance)
-			status.Errors = []*v1beta1.CreateCRDError{}
-			createErr := &v1beta1.CreateCRDError{Code: "create_error", Message: fmt.Sprintf("Could not create CRD: %s", err)}
-			status.Errors = append(status.Errors, createErr)
-			util.SetCTHAStatus(instance, status)
-			if err2 := r.Status().Update(context.Background(), instance); err2 != nil {
-				err = errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
-			}
+		if err := r.Create(context.TODO(), newCRD); err != nil {
+			err := r.reportErrorOnCTStatus("create_error", "Could not create CRD", ct, err)
 			return reconcile.Result{}, err
 		}
-	} else if !reflect.DeepEqual(newCRD, existingCRD) {
+	} else if !reflect.DeepEqual(newCRD, currentCRD) {
 		log.Info("updating crd")
-		if err := r.Update(context.Background(), newCRDv1beta1); err != nil {
+		if err := r.Update(context.Background(), newCRD); err != nil {
+			err := r.reportErrorOnCTStatus("update_error", "Could not update CRD", ct, err)
 			return reconcile.Result{}, err
 		}
 	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
 	log.Info("making sure constraint is in watcher registry")
-	if err := r.watcher.AddWatch(makeGvk(instance.Spec.CRD.Spec.Names.Kind)); err != nil {
+	if err := r.watcher.AddWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	instance.Status.Created = true
-	if err := r.Status().Update(context.Background(), instance); err != nil {
+	ct.Status.Created = true
+	if err := r.Status().Update(context.Background(), ct); err != nil {
 		log.Error(err, "update error")
 		return reconcile.Result{Requeue: true}, nil
 	}
@@ -394,20 +390,15 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 }
 
 func (r *ReconcileConstraintTemplate) handleDelete(
-	ct *v1beta1.ConstraintTemplate) (reconcile.Result, error) {
+	ct *templates.ConstraintTemplate) (reconcile.Result, error) {
 	log := log.WithValues("name", ct.GetName())
 	log.Info("removing from watcher registry")
 	if err := r.watcher.RemoveWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		return reconcile.Result{}, err
 	}
-	versionless := &templates.ConstraintTemplate{}
-	if err := r.scheme.Convert(ct, versionless, nil); err != nil {
-		log.Error(err, "conversion error")
-		return reconcile.Result{}, err
-	}
 	// removing the template from the OPA cache must go last as we are relying
 	// on that cache to derive the Kind to remove from the watch
-	if _, err := r.opa.RemoveTemplate(context.Background(), versionless); err != nil {
+	if _, err := r.opa.RemoveTemplate(context.Background(), ct); err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
@@ -421,7 +412,11 @@ const (
 	deletedAction = action("deleted")
 )
 
-func logAction(template *v1beta1.ConstraintTemplate, a action) {
+type namedObj interface {
+	GetName() string
+}
+
+func logAction(template namedObj, a action) {
 	log.Info(
 		fmt.Sprintf("template was %s", string(a)),
 		logging.EventType, fmt.Sprintf("template_%s", string(a)),

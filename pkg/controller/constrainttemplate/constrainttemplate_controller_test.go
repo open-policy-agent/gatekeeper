@@ -228,7 +228,6 @@ violation[{"msg": "denied!"}] {
 			}
 			return errors.New("Not established")
 		}, timeout, time.Second).Should(gomega.BeNil())
-		time.Sleep(20 * time.Second)
 		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
 		// we need a longer timeout because deleting the CRD interrupts the watch
 		constraintEnforced(c, g, 50*timeout)
