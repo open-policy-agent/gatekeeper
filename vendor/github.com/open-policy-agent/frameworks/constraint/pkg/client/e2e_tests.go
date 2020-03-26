@@ -19,6 +19,11 @@ import (
 
 var ctx = context.Background()
 
+const (
+	denied    = "DENIED"
+	rejection = "REJECTION"
+)
+
 func newConstraintTemplate(name, rego string, libs ...string) *templates.ConstraintTemplate {
 	return &templates.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(name)},
@@ -124,7 +129,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 		}
-		if rsps.Results()[0].Msg != "DENIED" {
+		if rsps.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
 		if rsps.Results()[0].EnforcementAction != "deny" {
@@ -164,7 +169,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 			if !reflect.DeepEqual(r.Constraint, cstr) {
 				return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 			}
-			if r.Msg != "DENIED" {
+			if r.Msg != denied {
 				return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 			}
 		}
@@ -197,7 +202,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 		}
-		if rsps.Results()[0].Msg != "DENIED" {
+		if rsps.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
 		if !reflect.DeepEqual(rsps.Results()[0].Resource, obj) {
@@ -257,11 +262,11 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if len(rsps.Results()) != 2 {
 			return e("Bad number of results", rsps)
 		}
-		if rsps.Results()[0].Msg != "REJECTION" && rsps.Results()[1].Msg != "REJECTION" {
+		if rsps.Results()[0].Msg != rejection && rsps.Results()[1].Msg != rejection {
 			return e(fmt.Sprintf("res.Msg = %s; wanted at least one REJECTION", rsps.Results()[0].Msg), rsps)
 		}
 		for _, r := range rsps.Results() {
-			if r.Msg == "REJECTION" && !reflect.DeepEqual(r.Constraint, u) {
+			if r.Msg == rejection && !reflect.DeepEqual(r.Constraint, u) {
 				return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(r.Constraint), spew.Sdump(u)), rsps)
 			}
 		}
@@ -299,7 +304,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 			if !reflect.DeepEqual(r.Constraint, cstr) {
 				return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 			}
-			if r.Msg != "DENIED" {
+			if r.Msg != denied {
 				return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 			}
 		}
@@ -320,7 +325,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if !reflect.DeepEqual(rsps2.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps2.Results()[0].Constraint), spew.Sdump(cstr)), rsps2)
 		}
-		if rsps2.Results()[0].Msg != "DENIED" {
+		if rsps2.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps2.Results()[0].Msg), rsps2)
 		}
 		if !reflect.DeepEqual(rsps2.Results()[0].Resource, obj) {
@@ -355,7 +360,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 		}
-		if rsps.Results()[0].Msg != "DENIED" {
+		if rsps.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
 		if !reflect.DeepEqual(rsps.Results()[0].Resource, obj) {
@@ -402,7 +407,7 @@ func addDenyAllE2ETests(nameSuffix string, rego string, libs ...string) {
 		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 		}
-		if rsps.Results()[0].Msg != "DENIED" {
+		if rsps.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
 		if !reflect.DeepEqual(rsps.Results()[0].Resource, obj) {
@@ -610,7 +615,7 @@ violation[{"msg": "DENIED", "details": {}}] {
 		if !reflect.DeepEqual(rsps.Results()[0].Constraint, cstr) {
 			return e(fmt.Sprintf("Constraint %s != %s", spew.Sdump(rsps.Results()[0].Constraint), spew.Sdump(cstr)), rsps)
 		}
-		if rsps.Results()[0].Msg != "DENIED" {
+		if rsps.Results()[0].Msg != denied {
 			return e(fmt.Sprintf("res.Msg = %s; wanted DENIED", rsps.Results()[0].Msg), rsps)
 		}
 

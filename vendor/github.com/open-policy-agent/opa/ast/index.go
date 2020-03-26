@@ -223,6 +223,12 @@ func (i *refindices) Update(rule *Rule, expr *Expr) {
 		return
 	}
 
+	if len(expr.With) > 0 {
+		// NOTE(tsandall): In the future, we may need to consider expressions
+		// that have with statements applied to them.
+		return
+	}
+
 	op := expr.Operator()
 
 	if op.Equal(Equality.Ref()) || op.Equal(Equal.Ref()) {
@@ -689,7 +695,7 @@ func eqOperandsToRefAndValue(isVirtual func(Ref) bool, a, b *Term) (Ref, Value, 
 			}
 			return stop
 		})
-		Walk(vis, b)
+		vis.Walk(b)
 		if !stop {
 			return ref, b, true
 		}

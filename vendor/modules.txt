@@ -140,7 +140,8 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20200304180616-c46b44c53e49
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20200325031139-1a8f361c3e49
+github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1
 github.com/open-policy-agent/frameworks/constraint/pkg/client
@@ -151,7 +152,7 @@ github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints
 github.com/open-policy-agent/frameworks/constraint/pkg/core/templates
 github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter
 github.com/open-policy-agent/frameworks/constraint/pkg/types
-# github.com/open-policy-agent/opa v0.16.2
+# github.com/open-policy-agent/opa v0.17.2
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/bundle
 github.com/open-policy-agent/opa/format

@@ -9,6 +9,7 @@ VERSION := v3.1.0-beta.7
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.6.0
 KUSTOMIZE_VERSION=3.0.2
+HELM_VERSION=v2.15.2
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -84,12 +85,13 @@ e2e-helm-deploy:
 	# tiller needs enough permissions to create CRDs
 	kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
 	# Download and install helm
-	curl https://raw.githubusercontent.com/helm/helm/master/scripts/get > get_helm.sh
-	chmod 700 get_helm.sh
-	./get_helm.sh
-	helm init --wait --history-max=5
+	rm -rf .staging/helm
+	mkdir -p .staging/helm
+	curl https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
+	cd .staging/helm && tar -xvf helmbin.tar.gz
+	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	./.staging/helm/linux-amd64/helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
 
 # Build manager binary
 manager: generate fmt vet
@@ -218,11 +220,4 @@ endif
 
 .PHONY: vendor
 vendor:
-	$(eval $@_TMP := $(shell mktemp -d))
-	$(eval $@_CACHE := ${$@_TMP}/pkg/mod/cache/download)
-	GO111MODULE=on go mod download
-	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
-	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
-	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
-	mkdir -p vendor/${FRAMEWORK_PACKAGE}/deploy
-	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/deploy/* vendor/${FRAMEWORK_PACKAGE}/deploy/.
+	go mod vendor

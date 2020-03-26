@@ -13,6 +13,6 @@ sed -i -E "s/HELMSUBST_DEPLOYMENT_POD_SCHEDULING/\
 \n{{ toYaml .Values.tolerations | indent 8 }}/" templates/gatekeeper.yaml
 sed -i "s/HELMSUBST_DEPLOYMENT_REPLICAS/{{ .Values.replicas }}/g" templates/gatekeeper.yaml
 sed -i -E "s/HELMSUBST_ANNOTATIONS/\
-\n{{- toYaml .Values.podAnnotations | nindent 8 }}/" templates/gatekeeper.yaml
+\n{{- toYaml .Values.podAnnotations | trim | nindent 8 }}/" templates/gatekeeper.yaml
 rm ./helm-modifications/_temp.yaml
 echo "Helm template created under '$PWD/templates'"

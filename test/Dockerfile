@@ -6,7 +6,7 @@ RUN apt-get update &&\
 
 # Install kubebuilder
 WORKDIR /scratch
-ENV version=2.0.1
+ENV version=2.3.0
 ENV arch=amd64
 RUN curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${version}/kubebuilder_${version}_linux_${arch}.tar.gz" &&\
     tar -zxvf kubebuilder_${version}_linux_${arch}.tar.gz &&\
