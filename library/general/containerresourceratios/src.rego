@@ -210,8 +210,7 @@ general_violation[{"msg": msg, "field": field}] {
   cpu_requests_orig := container.resources.requests.cpu
   cpu_requests := canonify_cpu(cpu_requests_orig)
   cpu_ratio := input.parameters.ratio
-  cpu_calc_ratio := cpu_limits / cpu_requests
-  to_number(cpu_ratio) < to_number(cpu_calc_ratio)
+  to_number(cpu_limits) > to_number(cpu_ratio) * to_number(cpu_requests)  
   msg := sprintf("container <%v> cpu limit <%v> is higher than the maximum allowed ratio of <%v>", [container.name, cpu_limits_orig, cpu_ratio])
 }
 
@@ -222,7 +221,6 @@ general_violation[{"msg": msg, "field": field}] {
   mem_limits := canonify_mem(mem_limits_orig)
   mem_requests := canonify_mem(mem_requests_orig)
   mem_ratio := input.parameters.ratio
-  mem_calc_ratio := mem_limits / mem_requests
-  to_number(mem_ratio) < to_number(mem_calc_ratio)
-  msg := sprintf("container <%v> memory limit <%v> is higher than the maximum allowed of <%v>", [container.name, mem_limits_orig, mem_ratio])
+  to_number(mem_limits) > to_number(mem_ratio) * to_number(mem_requests)
+  msg := sprintf("container <%v> memory limit <%v> is higher than the maximum allowed ratio of <%v>", [container.name, mem_limits_orig, mem_ratio])
 }
