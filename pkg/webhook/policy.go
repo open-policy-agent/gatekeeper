@@ -58,7 +58,7 @@ var (
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
