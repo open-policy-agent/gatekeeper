@@ -41,6 +41,10 @@ func init() {
 
 var log = logf.Log.WithName("webhook")
 
+const (
+	serviceAccountName = "gatekeeper-admin"
+)
+
 var (
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
@@ -210,13 +214,8 @@ func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, er
 }
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", util.GetNamespace())
-	for _, g := range user.Groups {
-		if g == saGroup {
-			return true
-		}
-	}
-	return false
+	sa := fmt.Sprintf("system:serviceaccounts:%s:%s", util.GetNamespace(), serviceAccountName)
+	return user.Username == sa
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
