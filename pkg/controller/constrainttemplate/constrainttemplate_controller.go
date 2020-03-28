@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -58,16 +59,23 @@ const (
 
 var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 
+var gvkConstraintTemplate = schema.GroupVersionKind{
+	Group:   v1beta1.SchemeGroupVersion.Group,
+	Version: v1beta1.SchemeGroupVersion.Version,
+	Kind:    "ConstraintTemplate",
+}
+
 type Adder struct {
 	Opa              *opa.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
+	Tracker          *readiness.Tracker
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker)
 	if err != nil {
 		return err
 	}
@@ -86,8 +94,12 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 	a.ControllerSwitch = cs
 }
 
+func (a *Adder) InjectTracker(t *readiness.Tracker) {
+	a.Tracker = t
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (reconcile.Reconciler, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -100,15 +112,14 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 		WatchManager:     wm,
 		ControllerSwitch: cs,
 		Events:           events,
+		Tracker:          tracker,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := constraintAdder.Add(mgr); err != nil {
 		return nil, fmt.Errorf("registering constraint controller: %w", err)
 	}
 
-	w, err := wm.NewRegistrar(
-		ctrlName,
-		events)
+	w, err := wm.NewRegistrar(ctrlName, events)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +134,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 		watcher: w,
 		cs:      cs,
 		metrics: r,
+		tracker: tracker,
 	}, nil
 }
 
@@ -165,6 +177,7 @@ type ReconcileConstraintTemplate struct {
 	opa     *opa.Client
 	cs      *watch.ControllerSwitch
 	metrics *reporter
+	tracker *readiness.Tracker
 }
 
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
@@ -246,6 +259,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	unversionedProposedCRD, err := r.opa.CreateCRD(context.Background(), unversionedCT)
 	if err != nil {
+		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
@@ -270,6 +284,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 
 	proposedCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := r.scheme.Convert(unversionedProposedCRD, proposedCRD, nil); err != nil {
+		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		logError(request.NamespacedName.Name)
@@ -341,12 +356,18 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
 		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", ct, err)
+		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
 
 	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
+
+	// Mark for readiness tracking
+	t := r.tracker.For(gvkConstraintTemplate)
+	t.Observe(unversionedCT)
+	log.Info("[readiness] observed ConstraintTemplate", "name", unversionedCT.GetName())
 
 	var newCRD *apiextensionsv1beta1.CustomResourceDefinition
 	if currentCRD == nil {
@@ -391,9 +412,12 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	ct *templates.ConstraintTemplate) (reconcile.Result, error) {
 	log := log.WithValues("name", ct.GetName())
 	log.Info("removing from watcher registry")
-	if err := r.watcher.RemoveWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
+	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)
+	if err := r.watcher.RemoveWatch(gvk); err != nil {
 		return reconcile.Result{}, err
 	}
+	r.tracker.CancelTemplate(ct)
+
 	// removing the template from the OPA cache must go last as we are relying
 	// on that cache to derive the Kind to remove from the watch
 	if _, err := r.opa.RemoveTemplate(context.Background(), ct); err != nil {

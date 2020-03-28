@@ -18,9 +18,13 @@ package config
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -58,12 +62,13 @@ type Adder struct {
 	Opa              *opa.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
+	Tracker          *readiness.Tracker
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker)
 	if err != nil {
 		return err
 	}
@@ -83,8 +88,12 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 	a.ControllerSwitch = cs
 }
 
+func (a *Adder) InjectTracker(t *readiness.Tracker) {
+	a.Tracker = t
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
@@ -96,6 +105,7 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		Opa:          filteredOpa,
 		Events:       events,
 		MetricsCache: syncMetricsCache,
+		Tracker: tracker,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -118,6 +128,8 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		watcher:          w,
 		watched:          watchSet,
 		syncMetricsCache: syncMetricsCache,
+		tracker:      tracker,
+		once:         &sync.Once{},
 	}, nil
 }
 
@@ -152,6 +164,8 @@ type ReconcileConfig struct {
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
 	watched          *watch.Set
+	tracker *readiness.Tracker
+	once    *sync.Once
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -179,7 +193,8 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 	exists := true
 	instance := &configv1alpha1.Config{}
-	err := r.reader.Get(context.TODO(), request.NamespacedName, instance)
+	ctx := context.Background()
+	err := r.reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
@@ -209,6 +224,15 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 			newSyncOnly.Add(gvk)
 		}
 	}
+
+	// Readiness - set expectations once.
+	r.once.Do(func() {
+		r.setDataExpectations(ctx, instance, newSyncOnly)
+	})
+
+	// Remove expectations for resources we no longer watch.
+	diff := r.watched.Difference(newSyncOnly)
+	r.removeStaleExpectations(diff)
 
 	// If the watch set has not changed, we're done here.
 	if r.watched.Equals(newSyncOnly) {
@@ -284,6 +308,43 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		}
 	}
 	return nil
+}
+
+// setDataExpectations sets expectations for the initial cached data set, based on the provided watch set.
+// Resources that cannot be listed will not be tracked.
+func (r *ReconcileConfig) setDataExpectations(ctx context.Context, instance *configv1alpha1.Config, w *watch.Set) {
+	for _, gvk := range w.Items() {
+		u := &unstructured.UnstructuredList{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   gvk.Group,
+			Version: gvk.Version,
+			Kind:    gvk.Kind + "List",
+		})
+		err := r.reader.List(ctx, u)
+		if err != nil {
+			log.Error(err, "listing data", "gvk", gvk)
+			r.tracker.ForData(gvk).ExpectationsDone()
+			continue
+		}
+
+		dt := r.tracker.ForData(gvk)
+		for i := range u.Items {
+			item := &u.Items[i]
+			dt.Expect(item)
+			log.V(1).Info("[readiness] expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
+		}
+		dt.ExpectationsDone()
+	}
+	configGVK := configv1alpha1.GroupVersion.WithKind("Config")
+	r.tracker.For(configGVK).Observe(instance)
+	log.V(1).Info("[readiness] observed Config", "gvk", configGVK, "name", instance.GetName())
+}
+
+// removeStaleExpectations stops tracking data for any resources that are no longer watched.
+func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
+	for _, gvk := range stale.Items() {
+		r.tracker.CancelData(gvk)
+	}
 }
 
 func containsString(s string, items []string) bool {

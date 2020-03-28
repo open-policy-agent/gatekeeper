@@ -31,6 +31,7 @@ import (
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -114,15 +115,14 @@ func main() {
 
 	switch *logLevel {
 	case "DEBUG":
-		ctrl.SetLogger(crzap.Logger(true))
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(true)))
 	case "WARNING", "ERROR":
 		setLoggerForProduction()
 	case "INFO":
 		fallthrough
 	default:
-		ctrl.SetLogger(crzap.Logger(false))
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false)))
 	}
-	ctrl.SetLogger(crzap.Logger(true))
 
 	// set default if --operation is not provided
 	if len(operations) == 0 {
@@ -256,12 +256,25 @@ func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinishe
 		os.Exit(1)
 	}
 
+	tracker, err := readiness.SetupTracker(mgr, wm)
+	if err != nil {
+		setupLog.Error(err, "unable to register readiness tracker")
+		os.Exit(1)
+	}
+
 	// Setup all Controllers
 	setupLog.Info("setting up controller")
-	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
+	opts := controller.Dependencies{
+		Opa:              client,
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+	}
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
+
 	if operations["webhook"] {
 		setupLog.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, client); err != nil {

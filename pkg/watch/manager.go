@@ -88,6 +88,15 @@ func (wm *Manager) NewRegistrar(parent string, events chan<- event.GenericEvent)
 	return wm.managedKinds.NewRegistrar(parent, events)
 }
 
+func (wm *Manager) newSyncRegistrar(parent string, events chan<- event.GenericEvent) (*Registrar, error) {
+	return wm.managedKinds.NewSyncRegistrar(parent, events)
+}
+
+// RemoveRegistrar removes a registrar and all its watches.
+func (wm *Manager) RemoveRegistrar(parentName string) error {
+	return wm.managedKinds.RemoveRegistrar(parentName)
+}
+
 // Start runs the watch manager, processing events received from dynamic informers and distributing them
 // to registrars.
 func (wm *Manager) Start(done <-chan struct{}) error {
@@ -177,6 +186,11 @@ func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
 
 		// First watcher gets a fresh informer, register for events.
 		informer.AddEventHandler(wm)
+
+		// Special case for sync watchers - replay initial set only.
+		if r.initialPopulation != nil {
+			wm.requestReplay(r, gvk)
+		}
 	}
 
 	// Mark it as watched.

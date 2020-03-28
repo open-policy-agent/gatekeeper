@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
@@ -137,7 +138,9 @@ violation[{"msg": "denied!"}] {
 	}
 
 	cs := watch.NewSwitch()
-	rec, _ := newReconciler(mgr, opa, wm, cs)
+	tracker, err := readiness.SetupTracker(mgr, wm)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)

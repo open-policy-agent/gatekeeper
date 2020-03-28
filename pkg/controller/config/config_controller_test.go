@@ -27,6 +27,11 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -45,11 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 )
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
@@ -126,7 +126,9 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	rec, _ := newReconciler(mgr, opa, wm, cs)
+	tracker, err := readiness.SetupTracker(mgr, wm)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -215,7 +217,9 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
-	rec, _ := newReconciler(mgr, opa, wm, cs)
+	tracker, err := readiness.SetupTracker(mgr, wm)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
@@ -230,7 +234,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
-	err := c.Create(context.TODO(), instance)
+	err = c.Create(context.TODO(), instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	defer func() {
