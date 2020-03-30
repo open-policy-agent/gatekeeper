@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-test-deployment
+  labels:
+    app: opa-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opa-test
+  template:
+    metadata:
+      labels:
+        app: opa-test
+    spec:
+      containers:
+      - name: opa-test
+        image: openpolicyagent/opa:0.9.2
+        args:
+            - "run"
+            - "--server"
+            - "--addr=localhost:8080"
