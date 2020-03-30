@@ -38,5 +38,5 @@ decisions
 
 * [Finalizers in OPA Gatekeeper](https://docs.google.com/document/d/1lZZsHACi4LnPF4bBvjfg0qpbYGChkZd6mhaaRnvkx6M/view#)
    * This doc discusses the impact the existence of finalizers has on running
-     OPA Gatekeeper. It's points have either been addressed or are on track
+     OPA Gatekeeper. Its points have either been addressed or are on track
      to being addressed.
