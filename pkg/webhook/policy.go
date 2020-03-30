@@ -60,7 +60,11 @@ var (
 
 // AddPolicyWebhook registers the policy webhook server with the manager
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient()}}
+	reporter, err := newStatsReporter()
+	if err != nil {
+		return err
+	}
+	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 
 	if !*disableCertRotation {
@@ -99,11 +103,6 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	log := log.WithValues("hookType", "validation")
 
 	var timeStart = time.Now()
-	reporter, err := newStatsReporter()
-	if err != nil {
-		log.Error(err, "StatsReporter could not start")
-	}
-	h.reporter = reporter
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
