@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{- include "gatekeeper-operator.labels" . | nindent 4 }}
+  name: gatekeeper-webhook-service
+spec:
+  ports:
+  - port: 443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  {{- if .Values.prometheus.serviceMonitor.enabled }}
+  - protocol: TCP
+    port: 8888
+    name: metrics
+    targetPort: 8888
+  {{- end }}
+  selector: {{- include "gatekeeper-operator.matchLabels" . | nindent 4 }}

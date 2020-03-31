@@ -1,10 +1,16 @@
-apiVersion: v1
-description: A Helm chart for Gatekeeper
+apiVersion: v2
 name: gatekeeper-operator
+description: The Gatekeeper OpenPolicyAgent for Kubernetes.
+type: application
+version: 1.0.1
+appVersion: 3.1.0-beta.7
 keywords:
-  - open policy agent
-version: v3.1.0-beta.7
+  - gatekeeper
+  - openpolicyagent
 home: https://github.com/open-policy-agent/gatekeeper
+icon: https://d33wubrfki0l68.cloudfront.net/a5bf5cefceefdba8ab3a9297fddab246355169a2/4a6f4/img/logo-white.png
 sources:
-  - https://github.com/open-policy-agent/gatekeeper.git
-appVersion: v3.1.0-beta.7
+  - https://github.com/open-policy-agent/gatekeeper
+maintainers:
+  - name: cellebyte
+    url: https://github.com/Cellebyte

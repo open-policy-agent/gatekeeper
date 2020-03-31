@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app: gatekeeper
+    app.kubernetes.io/name: gatekeeper
+    gatekeeper.sh/system: "yes"
+    admission.gatekeeper.sh/ignore: no-self-managing
+  name: default
