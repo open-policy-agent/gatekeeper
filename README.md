@@ -432,7 +432,7 @@ spec:
         package k8sdenyall
 
         violation[{"msg": msg}] {
-          msg := sprintf("REVIEW OBJECT: %v", input.review)
+          msg := sprintf("REVIEW OBJECT: %v", [input.review])
         }
 ```
 
@@ -440,7 +440,7 @@ Example constraint:
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sAllowedRepos
+kind: K8sDenyAll
 metadata:
   name: deny-all-namespaces
 spec:
