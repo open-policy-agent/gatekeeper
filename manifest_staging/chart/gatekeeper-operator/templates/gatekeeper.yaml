@@ -469,13 +469,11 @@ spec:
     spec:
       containers:
       - args:
-        - --audit-interval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
         - --log-level={{ .Values.logLevel }}
-        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-        - --audit-from-cache={{ .Values.auditFromCache }}
         - --exempt-namespace=gatekeeper-system
+        - --operation=webhook
         command:
         - /manager
         env:
@@ -536,6 +534,76 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  labels:
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  containers:
+  - args:
+    - --audit-interval={{ .Values.auditInterval }}
+    - --log-level={{ .Values.logLevel }}
+    - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+    - --audit-from-cache={{ .Values.auditFromCache }}
+    - --operation=audit
+    - --logtostderr
+    command:
+    - /manager
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.namespace
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+            fieldPath: metadata.name
+    image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+    imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 9090
+    name: audit
+    ports:
+    - containerPort: 8888
+      name: metrics
+      protocol: TCP
+    - containerPort: 9090
+      name: healthz
+      protocol: TCP
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 9090
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - all
+      runAsGroup: 999
+      runAsNonRoot: true
+      runAsUser: 1000
+  nodeSelector: 
+{{ toYaml .Values.nodeSelector | indent 4 }}
+    affinity:
+{{ toYaml .Values.affinity | indent 4 }}
+    tolerations:
+{{ toYaml .Values.tolerations | indent 4 }}
+  serviceAccountName: gatekeeper-admin
+  terminationGracePeriodSeconds: 60
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
