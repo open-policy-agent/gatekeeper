@@ -52,8 +52,9 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme     = runtime.NewScheme()
+	setupLog   = ctrl.Log.WithName("setup")
+	operations = newOperationSet()
 )
 
 var (
@@ -71,6 +72,28 @@ func init() {
 
 	_ = configv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+	flag.Var(operations, "operation", "The operation to be performed by this component. e.g. audit, webhook This flag can be declared more than once. Omitting will default to supporting all components.")
+}
+
+type opSet map[string]bool
+
+var _ flag.Value = opSet{}
+
+func newOperationSet() opSet {
+	return make(map[string]bool)
+}
+
+func (l opSet) String() string {
+	contents := make([]string, 0)
+	for k := range l {
+		contents = append(contents, k)
+	}
+	return fmt.Sprintf("%s", contents)
+}
+
+func (l opSet) Set(s string) error {
+	l[s] = true
+	return nil
 }
 
 func main() {
@@ -87,6 +110,12 @@ func main() {
 		ctrl.SetLogger(crzap.Logger(false))
 	}
 	ctrl.SetLogger(crzap.Logger(true))
+
+	// set default if --operation is not provided
+	if len(operations) == 0 {
+		operations["audit"] = true
+		operations["webhook"] = true
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		NewCache:               dynamiccache.New,
@@ -144,17 +173,19 @@ func main() {
 		setupLog.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
-
-	setupLog.Info("setting up webhooks")
-	if err := webhook.AddToManager(mgr, client); err != nil {
-		setupLog.Error(err, "unable to register webhooks to the manager")
-		os.Exit(1)
+	if operations["webhook"] {
+		setupLog.Info("setting up webhooks")
+		if err := webhook.AddToManager(mgr, client); err != nil {
+			setupLog.Error(err, "unable to register webhooks to the manager")
+			os.Exit(1)
+		}
 	}
-
-	setupLog.Info("setting up audit")
-	if err := audit.AddToManager(mgr, client); err != nil {
-		setupLog.Error(err, "unable to register audit to the manager")
-		os.Exit(1)
+	if operations["audit"] {
+		setupLog.Info("setting up audit")
+		if err := audit.AddToManager(mgr, client); err != nil {
+			setupLog.Error(err, "unable to register audit to the manager")
+			os.Exit(1)
+		}
 	}
 
 	setupLog.Info("setting up upgrade")
