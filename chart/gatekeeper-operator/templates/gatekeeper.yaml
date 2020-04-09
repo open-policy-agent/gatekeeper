@@ -457,6 +457,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
@@ -464,16 +466,13 @@ spec:
         gatekeeper.sh/system: "yes"
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
-      {{- if .Values.podAnnotations }}
-      annotations:
-        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
-      {{- end }}
     spec:
       containers:
       - args:
         - --audit-interval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
+        - --log-level={{ .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --exempt-namespace=gatekeeper-system

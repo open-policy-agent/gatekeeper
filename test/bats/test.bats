@@ -104,6 +104,12 @@ teardown() {
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/opa.yaml
   assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_deployment.yaml
+  assert_success
+
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get deploy opa-test-deployment -o yaml | grep unavailableReplicas"
+
 }
 
 @test "unique labels test" {

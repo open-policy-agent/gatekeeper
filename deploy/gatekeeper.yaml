@@ -308,7 +308,6 @@ spec:
     spec:
       containers:
       - args:
-        - --audit-interval=30
         - --port=8443
         - --logtostderr
         - --exempt-namespace=gatekeeper-system
@@ -324,7 +323,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
