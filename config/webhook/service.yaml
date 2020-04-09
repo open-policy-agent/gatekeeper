@@ -10,3 +10,4 @@ spec:
       targetPort: 8443
   selector:
     control-plane: controller-manager
+    operation: webhook
