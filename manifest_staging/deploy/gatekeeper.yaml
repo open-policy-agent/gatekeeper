@@ -283,6 +283,7 @@ spec:
   selector:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
+    operation: webhook
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -290,6 +291,7 @@ metadata:
   labels:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
+    operation: webhook
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
@@ -298,6 +300,7 @@ spec:
     matchLabels:
       control-plane: controller-manager
       gatekeeper.sh/system: "yes"
+      operation: webhook
   template:
     metadata:
       annotations:
@@ -305,6 +308,7 @@ spec:
       labels:
         control-plane: controller-manager
         gatekeeper.sh/system: "yes"
+        operation: webhook
     spec:
       containers:
       - args:
@@ -372,8 +376,8 @@ spec:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
 ---
-kind: Pod
 apiVersion: v1
+kind: Pod
 metadata:
   labels:
     control-plane: controller-manager
@@ -383,7 +387,6 @@ metadata:
 spec:
   containers:
   - args:
-    - --audit-interval=30
     - --operation=audit
     - --logtostderr
     command:
@@ -397,8 +400,8 @@ spec:
     - name: POD_NAME
       valueFrom:
         fieldRef:
-            fieldPath: metadata.name
-    image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.7
+          fieldPath: metadata.name
+    image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
     imagePullPolicy: Always
     livenessProbe:
       httpGet:

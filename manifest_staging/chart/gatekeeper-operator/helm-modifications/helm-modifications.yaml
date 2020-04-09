@@ -51,14 +51,33 @@ spec:
       containers:
         - name: manager
           args:
-            - --audit-interval={{ .Values.auditInterval }}
             - --port=8443
             - --logtostderr
             - --log-level={{ .Values.logLevel }}
-            - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-            - --audit-from-cache={{ .Values.auditFromCache }}
             - --exempt-namespace=gatekeeper-system
+            - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  annotations: HELMSUBST_POD_ANNOTATIONS
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  containers:
+  - args:
+    - --audit-interval={{ .Values.auditInterval }}
+    - --log-level={{ .Values.logLevel }}
+    - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+    - --audit-from-cache={{ .Values.auditFromCache }}
+    - --operation=audit
+    - --logtostderr
+    name: audit
+    imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+    image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+    resources: HELMSUBST_POD_CONTAINER_RESOURCES
+  nodeSelector: HELMSUBST_POD_SCHEDULING
