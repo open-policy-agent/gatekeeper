@@ -598,9 +598,9 @@ spec:
       runAsUser: 1000
   nodeSelector: 
 {{ toYaml .Values.nodeSelector | indent 4 }}
-    affinity:
+  affinity:
 {{ toYaml .Values.affinity | indent 4 }}
-    tolerations:
+  tolerations:
 {{ toYaml .Values.tolerations | indent 4 }}
   serviceAccountName: gatekeeper-admin
   terminationGracePeriodSeconds: 60
