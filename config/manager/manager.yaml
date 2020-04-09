@@ -90,6 +90,8 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: audit
   namespace: system
+  annotations:
+    container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
 spec:
   containers:
   - args:

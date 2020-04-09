@@ -23,6 +23,6 @@ sed -i "s/HELMSUBST_DEPLOYMENT_REPLICAS/{{ .Values.replicas }}/g" templates/gate
 sed -i -E "s/HELMSUBST_ANNOTATIONS/\
 \n{{- toYaml .Values.podAnnotations | trim | nindent 8 }}/" templates/gatekeeper.yaml
 sed -i -E "s/HELMSUBST_POD_ANNOTATIONS/\
-\n{{- toYaml .Values.podAnnotations | trim | nindent 2 }}/" templates/gatekeeper.yaml
+\n{{- toYaml .Values.podAnnotations | trim | nindent 4 }}/" templates/gatekeeper.yaml
 rm ./helm-modifications/_temp.yaml
 echo "Helm template created under '$PWD/templates'"
