@@ -431,6 +431,7 @@ spec:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
+    operation: webhook
     release: '{{ .Release.Name }}'
 ---
 apiVersion: apps/v1
@@ -442,6 +443,7 @@ metadata:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
+    operation: webhook
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
@@ -454,6 +456,7 @@ spec:
       control-plane: controller-manager
       gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
+      operation: webhook
       release: '{{ .Release.Name }}'
   template:
     metadata:
@@ -465,6 +468,7 @@ spec:
         control-plane: controller-manager
         gatekeeper.sh/system: "yes"
         heritage: '{{ .Release.Service }}'
+        operation: webhook
         release: '{{ .Release.Name }}'
     spec:
       containers:
@@ -535,14 +539,16 @@ spec:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
 ---
-kind: Pod
 apiVersion: v1
+kind: Pod
 metadata:
+  annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 2 }}
   labels:
-    control-plane: controller-manager
-    gatekeeper.sh/system: "yes"
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-audit
@@ -567,7 +573,7 @@ spec:
     - name: POD_NAME
       valueFrom:
         fieldRef:
-            fieldPath: metadata.name
+          fieldPath: metadata.name
     image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
     imagePullPolicy: '{{ .Values.image.pullPolicy }}'
     livenessProbe:
@@ -586,7 +592,7 @@ spec:
       httpGet:
         path: /readyz
         port: 9090
-    resources:
+    resources: 
 {{ toYaml .Values.resources | indent 6 }}
     securityContext:
       allowPrivilegeEscalation: false
