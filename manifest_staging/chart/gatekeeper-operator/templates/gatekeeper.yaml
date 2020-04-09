@@ -543,7 +543,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   annotations: 
-{{- toYaml .Values.podAnnotations | trim | nindent 2 }}
+{{- toYaml .Values.podAnnotations | trim | nindent 4 }}
   labels:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
