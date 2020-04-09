@@ -379,6 +379,8 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
+  annotations:
+    container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
   labels:
     control-plane: controller-manager
     gatekeeper.sh/system: "yes"

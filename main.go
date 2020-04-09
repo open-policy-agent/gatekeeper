@@ -72,7 +72,7 @@ func init() {
 
 	_ = configv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
-	flag.Var(operations, "operation", "The operation to be performed by this component. e.g. audit, webhook This flag can be declared more than once. Omitting will default to supporting all components.")
+	flag.Var(operations, "operation", "The operation to be performed by this instance. e.g. audit, webhook. This flag can be declared more than once. Omitting will default to supporting all operations.")
 }
 
 type opSet map[string]bool
