@@ -580,7 +580,7 @@ spec:
       httpGet:
         path: /healthz
         port: 9090
-    name: audit
+    name: auditcontainer
     ports:
     - containerPort: 8888
       name: metrics

@@ -5,4 +5,4 @@ metadata:
   namespace: system
 spec:
   containers:
-  - name: audit
+  - name: auditcontainer
