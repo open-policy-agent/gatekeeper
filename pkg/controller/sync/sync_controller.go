@@ -17,9 +17,13 @@ package sync
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,25 +41,42 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	Opa    OpaDataClient
-	Events <-chan event.GenericEvent
+	Opa       OpaDataClient
+	Events    <-chan event.GenericEvent
+	SyncCache *SyncCache
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.Opa)
+	reporter, err := NewStatsReporter()
+	if err != nil {
+		log.Error(err, "Sync metrics reporter could not start")
+		return err
+	}
+
+	r, err := newReconciler(mgr, a.Opa, *reporter, a.SyncCache)
+	if err != nil {
+		return err
+	}
 	return add(mgr, r, a.Events)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa OpaDataClient) reconcile.Reconciler {
+func newReconciler(
+	mgr manager.Manager,
+	opa OpaDataClient,
+	reporter Reporter,
+	syncCache *SyncCache) (reconcile.Reconciler, error) {
+
 	return &ReconcileSync{
-		reader: mgr.GetCache(),
-		scheme: mgr.GetScheme(),
-		opa:    opa,
-		log:    log,
-	}
+		reader:    mgr.GetCache(),
+		scheme:    mgr.GetScheme(),
+		opa:       opa,
+		log:       log,
+		reporter:  reporter,
+		syncCache: syncCache,
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -78,13 +99,26 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileSync{}
 
+type SyncCache struct {
+	mux        sync.RWMutex
+	Cache      map[string]tags
+	KnownKinds map[string]bool
+}
+
+type tags struct {
+	kind   string
+	status metrics.Status
+}
+
 // ReconcileSync reconciles an arbitrary object described by Kind
 type ReconcileSync struct {
 	reader client.Reader
 
-	scheme *runtime.Scheme
-	opa    OpaDataClient
-	log    logr.Logger
+	scheme    *runtime.Scheme
+	opa       OpaDataClient
+	log       logr.Logger
+	reporter  Reporter
+	syncCache *SyncCache
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -92,6 +126,7 @@ type ReconcileSync struct {
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	timeStart := time.Now()
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
@@ -100,33 +135,132 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
+	reportMetrics := false
+	defer func() {
+		if reportMetrics {
+			if err := r.reporter.reportSyncDuration(time.Since(timeStart)); err != nil {
+				log.Error(err, "failed to report sync duration")
+			}
+
+			r.syncCache.ReportSync(&r.reporter)
+
+			if err := r.reporter.reportLastSync(); err != nil {
+				log.Error(err, "failed to report last sync timestamp")
+			}
+		}
+	}()
+
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
-	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
+
+	err = r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
+			syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
+
+			r.syncCache.deleteCache(syncKey)
+			reportMetrics = true
+
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 
+	syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
 	if !instance.GetDeletionTimestamp().IsZero() {
 		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
+
+		r.syncCache.deleteCache(syncKey)
+		reportMetrics = true
+
 		return reconcile.Result{}, nil
 	}
 
 	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
+		r.syncCache.addCache(syncKey, tags{
+			kind:   instance.GetKind(),
+			status: metrics.ErrorStatus,
+		})
+		reportMetrics = true
+
 		return reconcile.Result{}, err
 	}
 
+	r.syncCache.addCache(syncKey, tags{
+		kind:   instance.GetKind(),
+		status: metrics.ActiveStatus,
+	})
+
+	r.syncCache.addKind(instance.GetKind())
+
+	reportMetrics = true
+
 	return reconcile.Result{}, nil
+}
+
+func NewSyncCache() *SyncCache {
+	return &SyncCache{
+		Cache:      make(map[string]tags),
+		KnownKinds: make(map[string]bool),
+	}
+}
+
+func (c *SyncCache) addKind(key string) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.KnownKinds[key] = true
+}
+
+func (c *SyncCache) addCache(key string, t tags) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	c.Cache[key] = tags{
+		kind:   t.kind,
+		status: t.status,
+	}
+}
+
+func (c *SyncCache) deleteCache(key string) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	delete(c.Cache, key)
+}
+
+func (c *SyncCache) ReportSync(reporter *Reporter) {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	totals := make(map[tags]int)
+	for _, v := range c.Cache {
+		totals[v]++
+	}
+
+	for kind := range c.KnownKinds {
+		for _, status := range metrics.AllStatuses {
+			if err := reporter.reportSync(
+				tags{
+					kind:   kind,
+					status: status,
+				},
+				int64(totals[tags{
+					kind:   kind,
+					status: status,
+				}])); err != nil {
+				log.Error(err, "failed to report sync")
+			}
+		}
+	}
 }

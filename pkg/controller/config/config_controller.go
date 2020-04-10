@@ -86,13 +86,15 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
+	syncCache := syncc.NewSyncCache()
 
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	syncAdder := syncc.Adder{
-		Opa:    filteredOpa,
-		Events: events,
+		Opa:       filteredOpa,
+		Events:    events,
+		SyncCache: syncCache,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -114,6 +116,7 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		cs:           cs,
 		watcher:      w,
 		watched:      watchSet,
+		syncCache:    syncCache,
 	}, nil
 }
 
@@ -142,11 +145,13 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme  *runtime.Scheme
-	opa     syncc.OpaDataClient
-	cs      *watch.ControllerSwitch
-	watcher *watch.Registrar
-	watched *watch.Set
+	scheme       *runtime.Scheme
+	opa          syncc.OpaDataClient
+	syncReporter *syncc.Reporter
+	syncCache    *syncc.SyncCache
+	cs           *watch.ControllerSwitch
+	watcher      *watch.Registrar
+	watched      *watch.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -179,6 +184,18 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
 			exists = false
+
+			// removing all items from the sync cache
+			// before sending the metric
+			for k := range r.syncCache.Cache {
+				delete(r.syncCache.Cache, k)
+			}
+			r.syncReporter, err = syncc.NewStatsReporter()
+			if err != nil {
+				log.Error(err, "Sync metrics reporter could not start")
+				return reconcile.Result{}, err
+			}
+			defer r.syncCache.ReportSync(r.syncReporter)
 		} else {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
