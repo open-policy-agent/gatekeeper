@@ -13,12 +13,12 @@ metadata:
   namespace: system
   labels:
     control-plane: controller-manager
-    operation: webhook
+    gatekeeper.sh/operation: webhook
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      operation: webhook
+      gatekeeper.sh/operation: webhook
   replicas: 1
   template:
     metadata:
@@ -26,7 +26,7 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
         control-plane: controller-manager
-        operation: webhook
+        gatekeeper.sh/operation: webhook
     spec:
       serviceAccountName: admin
       containers:
@@ -87,7 +87,6 @@ kind: Pod
 metadata:
   labels:
     control-plane: controller-manager
-    gatekeeper.sh/system: "yes"
   name: audit
   namespace: system
   annotations:
