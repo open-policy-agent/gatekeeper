@@ -429,9 +429,9 @@ spec:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
-    operation: webhook
     release: '{{ .Release.Name }}'
 ---
 apiVersion: apps/v1
@@ -441,9 +441,9 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
-    operation: webhook
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
@@ -454,9 +454,9 @@ spec:
       app: '{{ template "gatekeeper-operator.name" . }}'
       chart: '{{ template "gatekeeper-operator.name" . }}'
       control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
-      operation: webhook
       release: '{{ .Release.Name }}'
   template:
     metadata:
@@ -466,9 +466,9 @@ spec:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
         control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
         gatekeeper.sh/system: "yes"
         heritage: '{{ .Release.Service }}'
-        operation: webhook
         release: '{{ .Release.Name }}'
     spec:
       containers:
