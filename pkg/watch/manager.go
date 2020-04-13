@@ -44,7 +44,7 @@ type Manager struct {
 	started bool
 	// managedKinds stores the kinds that should be managed, mapping CRD Kind to CRD Name
 	managedKinds *recordKeeper
-	watchedMux   sync.Mutex
+	watchedMux   sync.RWMutex
 	// watchedKinds are the kinds that have a currently running constraint controller
 	watchedKinds vitalsByGVK
 	metrics      *reporter
@@ -319,8 +319,8 @@ func (wm *Manager) distributeEvent(stop <-chan struct{}, obj interface{}) {
 	// Critical lock section
 	var watchers []chan<- event.GenericEvent
 	func() {
-		wm.watchedMux.Lock()
-		defer wm.watchedMux.Unlock()
+		wm.watchedMux.RLock()
+		defer wm.watchedMux.RUnlock()
 
 		r, ok := wm.watchedKinds[gvk]
 		if !ok {
