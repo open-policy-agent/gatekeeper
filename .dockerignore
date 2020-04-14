@@ -1,1 +1,17 @@
-.git
+# Ignore everything
+**
+
+# Allow files and directories
+!pkg/
+!third_party/
+!vendor/
+!main.go
+!api/
+!go.mod
+
+# Ignore unnecessary files inside allowed directories
+# This should go after the allowed directories
+**/*~
+**/*.log
+**/.DS_Store
+**/Thumbs.db

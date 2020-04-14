@@ -9,10 +9,11 @@ RUN apk add --no-cache git
 
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 
+COPY . .
+
 RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
     export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
     GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3); export GOARM=${GOARM:1} && \
-    git clone https://github.com/open-policy-agent/gatekeeper.git . && \
     go build -mod vendor -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
