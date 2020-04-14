@@ -282,6 +282,7 @@ spec:
     targetPort: 8443
   selector:
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
 ---
 apiVersion: apps/v1
@@ -289,6 +290,7 @@ kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
@@ -297,6 +299,7 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
   template:
     metadata:
@@ -304,6 +307,7 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
         control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
         gatekeeper.sh/system: "yes"
     spec:
       containers:
@@ -311,6 +315,7 @@ spec:
         - --port=8443
         - --logtostderr
         - --exempt-namespace=gatekeeper-system
+        - --operation=webhook
         command:
         - /manager
         env:
@@ -370,6 +375,69 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+  labels:
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  containers:
+  - args:
+    - --operation=audit
+    - --logtostderr
+    command:
+    - /manager
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.namespace
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
+    imagePullPolicy: Always
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 9090
+    name: auditcontainer
+    ports:
+    - containerPort: 8888
+      name: metrics
+      protocol: TCP
+    - containerPort: 9090
+      name: healthz
+      protocol: TCP
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 9090
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - all
+      runAsGroup: 999
+      runAsNonRoot: true
+      runAsUser: 1000
+  serviceAccountName: gatekeeper-admin
+  terminationGracePeriodSeconds: 60
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration

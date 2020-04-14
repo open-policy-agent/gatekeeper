@@ -409,6 +409,49 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
 
+#### Viewing the Request Object
+
+A simple way to view the request object is to use a constraint/template that
+denies all requests and outputs the request object as its rejection message.
+
+Example template:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyall
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyAll
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyall
+
+        violation[{"msg": msg}] {
+          msg := sprintf("REVIEW OBJECT: %v", [input.review])
+        }
+```
+
+Example constraint:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyAll
+metadata:
+  name: deny-all-namespaces
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+```
+
+#### Tracing
+
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
    * Cached data and existing rules at the time of the request
