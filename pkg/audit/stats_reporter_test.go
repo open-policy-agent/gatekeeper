@@ -11,6 +11,7 @@ func TestReportTotalViolations(t *testing.T) {
 	const expectedValue int64 = 10
 	const expectedRowLength = 1
 	expectedTags := map[string]string{
+		"constraint":         "foo",
 		"enforcement_action": "deny",
 	}
 
@@ -18,7 +19,7 @@ func TestReportTotalViolations(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportTotalViolations("deny", expectedValue)
+	err = r.reportTotalViolations("foo", "deny", expectedValue)
 	if err != nil {
 		t.Errorf("ReportTotalViolations error %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -23,6 +22,7 @@ var (
 	lastRunTimeM   = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
+	constraintKey        = tag.MustNewKey("constraint")
 )
 
 func init() {
@@ -37,7 +37,7 @@ func register() error {
 			Name:        violationsMetricName,
 			Measure:     violationsM,
 			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{enforcementActionKey},
+			TagKeys:     []tag.Key{constraintKey, enforcementActionKey},
 		},
 		{
 			Name:        auditDurationMetricName,
@@ -54,10 +54,12 @@ func register() error {
 	return view.Register(views...)
 }
 
-func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {
+func (r *reporter) reportTotalViolations(constraint, enforcementAction string, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(enforcementActionKey, string(enforcementAction)))
+		tag.Insert(constraintKey, constraint),
+		tag.Insert(enforcementActionKey, enforcementAction),
+	)
 	if err != nil {
 		return err
 	}

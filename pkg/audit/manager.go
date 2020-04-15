@@ -12,7 +12,6 @@ import (
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -171,13 +170,22 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Audit discovery client results", "violations", len(res))
 	}
 
-	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := am.getUpdateListsFromAuditResponses(res)
+	updateLists, err := am.getUpdateListsFromAuditResponses(res)
 	if err != nil {
 		return err
 	}
-	for k, v := range totalViolationsPerEnforcementAction {
-		if err := am.reporter.reportTotalViolations(k, v); err != nil {
-			am.log.Error(err, "failed to report total violations")
+
+	for _, auditResults := range updateLists {
+		totalViolationsPerEnforcementAction := make(map[string]int64)
+		for _, auditResult := range auditResults {
+			totalViolationsPerEnforcementAction[auditResult.enforcementAction]++
+		}
+
+		for enforcementAction, v := range totalViolationsPerEnforcementAction {
+			err := am.reporter.reportTotalViolations(auditResults[0].cname, enforcementAction, v)
+			if err != nil {
+				am.log.Error(err, "failed to report total violations")
+			}
 		}
 	}
 	// get all constraint kinds
@@ -188,7 +196,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 	// update constraints for each kind
-	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
+	return am.writeAuditResults(ctx, rs, updateLists, timestamp)
 }
 
 // Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
@@ -334,15 +342,9 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	return ret, nil
 }
 
-func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
+func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, error) {
 	updateLists := make(map[string][]auditResult)
 	totalViolationsPerConstraint := make(map[string]int64)
-	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
-	// resetting total violations per enforcement action
-	for _, action := range util.KnownEnforcementActions {
-		totalViolationsPerEnforcementAction[action] = 0
-	}
-
 	for _, r := range res {
 		selfLink := r.Constraint.GetSelfLink()
 		totalViolationsPerConstraint[selfLink]++
@@ -354,7 +356,7 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 		message := r.Msg
 		resource, ok := r.Resource.(*unstructured.Unstructured)
 		if !ok {
-			return nil, nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
+			return nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
 		}
 		rname := resource.GetName()
 		rkind := resource.GetKind()
@@ -372,8 +374,6 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 			constraint:        r.Constraint,
 		}
 		updateLists[selfLink] = append(updateLists[selfLink], result)
-		ea := util.EnforcementAction(enforcementAction)
-		totalViolationsPerEnforcementAction[ea]++
 		logViolation(am.log, r.Constraint, r.EnforcementAction, result)
 	}
 	// log constraints with violations
@@ -381,10 +381,15 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 		ar := updateLists[link][0]
 		logConstraint(am.log, ar.constraint, ar.enforcementAction, totalViolationsPerConstraint[link])
 	}
-	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
+	return updateLists, nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
+func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string) error {
+	totalViolations := make(map[string]int64)
+	for link, auditResults := range updateLists {
+		totalViolations[link] = int64(len(auditResults))
+	}
+
 	// get constraints for each Kind
 	for _, constraintGvk := range resourceList {
 		am.log.Info("constraint", "resource kind", constraintGvk.Kind)
