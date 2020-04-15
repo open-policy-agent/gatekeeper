@@ -9,8 +9,12 @@ RUN apk add --no-cache git
 
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 
-# When using COPY with more than one source file, the destination must be a directory and end with a / or a \
-COPY pkg third_party vendor main.go api go.mod ./
+COPY pkg/ pkg/	
+COPY third_party/ third_party/	
+COPY vendor/ vendor/	
+COPY main.go main.go	
+COPY api/ api/	
+COPY go.mod .
 
 RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
     export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
