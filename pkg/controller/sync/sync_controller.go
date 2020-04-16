@@ -41,9 +41,9 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	Opa       OpaDataClient
-	Events    <-chan event.GenericEvent
-	SyncCache *SyncCache
+	Opa          OpaDataClient
+	Events       <-chan event.GenericEvent
+	MetricsCache *MetricsCache
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -55,7 +55,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r, err := newReconciler(mgr, a.Opa, *reporter, a.SyncCache)
+	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache)
 	if err != nil {
 		return err
 	}
@@ -67,15 +67,15 @@ func newReconciler(
 	mgr manager.Manager,
 	opa OpaDataClient,
 	reporter Reporter,
-	syncCache *SyncCache) (reconcile.Reconciler, error) {
+	metricsCache *MetricsCache) (reconcile.Reconciler, error) {
 
 	return &ReconcileSync{
-		reader:    mgr.GetCache(),
-		scheme:    mgr.GetScheme(),
-		opa:       opa,
-		log:       log,
-		reporter:  reporter,
-		syncCache: syncCache,
+		reader:       mgr.GetCache(),
+		scheme:       mgr.GetScheme(),
+		opa:          opa,
+		log:          log,
+		reporter:     reporter,
+		metricsCache: metricsCache,
 	}, nil
 }
 
@@ -99,7 +99,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileSync{}
 
-type SyncCache struct {
+type MetricsCache struct {
 	mux        sync.RWMutex
 	Cache      map[string]tags
 	KnownKinds map[string]bool
@@ -114,11 +114,11 @@ type tags struct {
 type ReconcileSync struct {
 	reader client.Reader
 
-	scheme    *runtime.Scheme
-	opa       OpaDataClient
-	log       logr.Logger
-	reporter  Reporter
-	syncCache *SyncCache
+	scheme       *runtime.Scheme
+	opa          OpaDataClient
+	log          logr.Logger
+	reporter     Reporter
+	metricsCache *MetricsCache
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -142,7 +142,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.syncCache.ReportSync(&r.reporter)
+			r.metricsCache.ReportSync(&r.reporter)
 
 			if err := r.reporter.reportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
@@ -164,7 +164,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 				return reconcile.Result{}, err
 			}
 
-			r.syncCache.deleteCache(syncKey)
+			r.metricsCache.deleteCache(syncKey)
 			reportMetrics = true
 
 			return reconcile.Result{}, nil
@@ -179,7 +179,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, err
 		}
 
-		r.syncCache.deleteCache(syncKey)
+		r.metricsCache.deleteCache(syncKey)
 		reportMetrics = true
 
 		return reconcile.Result{}, nil
@@ -187,7 +187,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
-		r.syncCache.addCache(syncKey, tags{
+		r.metricsCache.addCache(syncKey, tags{
 			kind:   instance.GetKind(),
 			status: metrics.ErrorStatus,
 		})
@@ -196,33 +196,33 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	r.syncCache.addCache(syncKey, tags{
+	r.metricsCache.addCache(syncKey, tags{
 		kind:   instance.GetKind(),
 		status: metrics.ActiveStatus,
 	})
 
-	r.syncCache.addKind(instance.GetKind())
+	r.metricsCache.addKind(instance.GetKind())
 
 	reportMetrics = true
 
 	return reconcile.Result{}, nil
 }
 
-func NewSyncCache() *SyncCache {
-	return &SyncCache{
+func NewMetricsCache() *MetricsCache {
+	return &MetricsCache{
 		Cache:      make(map[string]tags),
 		KnownKinds: make(map[string]bool),
 	}
 }
 
-func (c *SyncCache) addKind(key string) {
+func (c *MetricsCache) addKind(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
 	c.KnownKinds[key] = true
 }
 
-func (c *SyncCache) addCache(key string, t tags) {
+func (c *MetricsCache) addCache(key string, t tags) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -232,14 +232,14 @@ func (c *SyncCache) addCache(key string, t tags) {
 	}
 }
 
-func (c *SyncCache) deleteCache(key string) {
+func (c *MetricsCache) deleteCache(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
 	delete(c.Cache, key)
 }
 
-func (c *SyncCache) ReportSync(reporter *Reporter) {
+func (c *MetricsCache) ReportSync(reporter *Reporter) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 

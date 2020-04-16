@@ -86,15 +86,15 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
-	syncCache := syncc.NewSyncCache()
+	syncMetricsCache := syncc.NewMetricsCache()
 
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	syncAdder := syncc.Adder{
-		Opa:       filteredOpa,
-		Events:    events,
-		SyncCache: syncCache,
+		Opa:          filteredOpa,
+		Events:       events,
+		MetricsCache: syncMetricsCache,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -108,15 +108,15 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		return nil, err
 	}
 	return &ReconcileConfig{
-		reader:       mgr.GetCache(),
-		writer:       mgr.GetClient(),
-		statusClient: mgr.GetClient(),
-		scheme:       mgr.GetScheme(),
-		opa:          filteredOpa,
-		cs:           cs,
-		watcher:      w,
-		watched:      watchSet,
-		syncCache:    syncCache,
+		reader:           mgr.GetCache(),
+		writer:           mgr.GetClient(),
+		statusClient:     mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		opa:              filteredOpa,
+		cs:               cs,
+		watcher:          w,
+		watched:          watchSet,
+		syncMetricsCache: syncMetricsCache,
 	}, nil
 }
 
@@ -145,13 +145,13 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme       *runtime.Scheme
-	opa          syncc.OpaDataClient
-	syncReporter *syncc.Reporter
-	syncCache    *syncc.SyncCache
-	cs           *watch.ControllerSwitch
-	watcher      *watch.Registrar
-	watched      *watch.Set
+	scheme           *runtime.Scheme
+	opa              syncc.OpaDataClient
+	syncReporter     *syncc.Reporter
+	syncMetricsCache *syncc.MetricsCache
+	cs               *watch.ControllerSwitch
+	watcher          *watch.Registrar
+	watched          *watch.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -187,15 +187,15 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 			// removing all items from the sync cache
 			// before sending the metric
-			for k := range r.syncCache.Cache {
-				delete(r.syncCache.Cache, k)
+			for k := range r.syncMetricsCache.Cache {
+				delete(r.syncMetricsCache.Cache, k)
 			}
 			r.syncReporter, err = syncc.NewStatsReporter()
 			if err != nil {
 				log.Error(err, "Sync metrics reporter could not start")
 				return reconcile.Result{}, err
 			}
-			defer r.syncCache.ReportSync(r.syncReporter)
+			defer r.syncMetricsCache.ReportSync(r.syncReporter)
 		} else {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
