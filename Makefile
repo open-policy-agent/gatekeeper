@@ -39,7 +39,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n  namespace: system\
 \nspec:\
 \n  template:\
-\n    spec:
+\n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
 \n        name: auditcontainer"
