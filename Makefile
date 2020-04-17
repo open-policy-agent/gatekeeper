@@ -33,14 +33,16 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        name: manager\
 \n---\
 \napiVersion: v1\
-\nkind: Pod\
+\nkind: Deployment\
 \nmetadata:\
 \n  name: audit\
 \n  namespace: system\
 \nspec:\
-\n  containers:\
-\n  - image: <your image file>\
-\n    name: auditcontainer"
+\n  template:\
+\n    spec:
+\n      containers:\
+\n      - image: <your image file>\
+\n        name: auditcontainer"
 
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
