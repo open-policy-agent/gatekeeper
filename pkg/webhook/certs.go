@@ -89,12 +89,11 @@ func (cr *certRotator) Start(stop <-chan (struct{})) error {
 	// can be bootstrapped, otherwise manager exits before a cert can be written
 	crLog.Info("starting cert rotator controller")
 	defer crLog.Info("stopping cert rotator controller")
-	if restart, err := cr.refreshCertIfNeeded(); err != nil {
+	if refreshed, err := cr.refreshCertIfNeeded(); err != nil {
 		crLog.Error(err, "could not refresh cert on startup")
 		return errors.Wrap(err, "could not refresh cert on startup")
-	} else if restart {
-		crLog.Info("certs refreshed, restarting server")
-		return nil
+	} else if refreshed {
+		crLog.Info("certs refreshed on startup")
 	}
 	ticker := time.NewTicker(rotationCheckFrequency)
 
@@ -102,11 +101,10 @@ tickerLoop:
 	for {
 		select {
 		case <-ticker.C:
-			if restart, err := cr.refreshCertIfNeeded(); err != nil {
+			if refreshed, err := cr.refreshCertIfNeeded(); err != nil {
 				crLog.Error(err, "error rotating certs")
-			} else if restart {
-				crLog.Info("certs refreshed, restarting server")
-				break tickerLoop
+			} else if refreshed {
+				crLog.Info("certs refreshed")
 			}
 		case <-stop:
 			break tickerLoop
