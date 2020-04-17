@@ -32,7 +32,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      - image: <your image file>\
 \n        name: manager\
 \n---\
-\napiVersion: v1\
+\napiVersion: apps/v1\
 \nkind: Deployment\
 \nmetadata:\
 \n  name: audit\
