@@ -51,6 +51,9 @@ mem_multiple("M") = 1000000 { true }
 # 10 ** 3
 mem_multiple("K") = 1000 { true }
 
+# 10 ** -3
+mem_multiple("m") = 0.001 { true }
+
 # 10 ** 0
 mem_multiple("") = 1 { true }
 
@@ -210,7 +213,7 @@ general_violation[{"msg": msg, "field": field}] {
   cpu_requests_orig := container.resources.requests.cpu
   cpu_requests := canonify_cpu(cpu_requests_orig)
   cpu_ratio := input.parameters.ratio
-  to_number(cpu_limits) > to_number(cpu_ratio) * to_number(cpu_requests)  
+  to_number(cpu_limits) > to_number(cpu_ratio) * to_number(cpu_requests)
   msg := sprintf("container <%v> cpu limit <%v> is higher than the maximum allowed ratio of <%v>", [container.name, cpu_limits_orig, cpu_ratio])
 }
 

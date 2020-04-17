@@ -44,6 +44,9 @@ mem_multiple("M") = 1000000 { true }
 # 10 ** 3
 mem_multiple("K") = 1000 { true }
 
+# 10 ** -3
+mem_multiple("m") = 0.001 { true }
+
 # 10 ** 0
 mem_multiple("") = 1 { true }
 
