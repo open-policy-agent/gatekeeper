@@ -93,13 +93,14 @@ metadata:
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: audit-controller
       gatekeeper.sh/operation: audit
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
     spec:
