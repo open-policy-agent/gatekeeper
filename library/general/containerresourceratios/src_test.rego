@@ -159,7 +159,7 @@ test_input_violations_mem_K {
     count(results) == 1
 }
 test_input_violations_mem_m {
-    input := {"review": review([ctr("a", "1000000m", "2", "1", "2")]), "parameters": {"ratio": "4"}}
+    input := {"review": review([ctr("a", "1", "2", "1m", "2")]), "parameters": {"ratio": "4"}}
     results := violation with input as input
     count(results) == 1
 }
