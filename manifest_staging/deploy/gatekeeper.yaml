@@ -298,7 +298,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: audit-controller
       gatekeeper.sh/operation: audit
       gatekeeper.sh/system: "yes"
   template:
@@ -306,7 +306,8 @@ spec:
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
-        control-plane: controller-manager
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
         gatekeeper.sh/system: "yes"
     spec:
       containers:
