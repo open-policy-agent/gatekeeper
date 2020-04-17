@@ -492,3 +492,30 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	return reconcile.Result{}, nil
 }
+
+// EnsureValidCerts ensure the certs are created and valid.
+func EnsureValidCerts(c client.Client, valid chan struct{}) {
+	defer close(valid)
+	checkFn := func() (bool, error) {
+		secret := &corev1.Secret{}
+		if err := c.Get(context.Background(), secretKey, secret); err != nil {
+			crLog.Error(err, "while retrieving secret")
+			return false, nil
+		}
+		if secret.Data == nil{
+			return false, nil
+		}
+		if validCACert(secret.Data[caCertName], secret.Data[caKeyName]) && validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]){
+			return true, nil
+		}
+		return false, nil
+	}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 500 * time.Millisecond,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, checkFn); err != nil {
+		log.Error(err, "max retries for checking certs validity")
+	}
+}
