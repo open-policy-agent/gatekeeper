@@ -241,12 +241,18 @@ func main() {
 	templatesCleaned := make(chan struct{})
 	go constrainttemplate.TearDownState(cli, templatesCleaned)
 
+	// Make sure certs are generated and valid.
+	certsValid := make(chan struct{})
+	go webhook.EnsureValidCerts(cli, certsValid)
+
 	<-syncCleaned
 	<-templatesCleaned
 	setupLog.Info("state cleaned")
+
+	<-certsValid
+	setupLog.Info("valid certs created")
+
 	if hadError {
-		/// give the cert manager time to generate the cert
-		time.Sleep(5 * time.Second)
 		os.Exit(1)
 	}
 }
