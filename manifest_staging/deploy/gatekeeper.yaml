@@ -290,6 +290,83 @@ kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper.sh/operation: audit
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: audit-controller
+      gatekeeper.sh/operation: audit
+      gatekeeper.sh/system: "yes"
+  template:
+    metadata:
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+      labels:
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
+        gatekeeper.sh/system: "yes"
+    spec:
+      containers:
+      - args:
+        - --operation=audit
+        - --logtostderr
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+        name: auditcontainer
+        ports:
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
     gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
   name: gatekeeper-controller-manager
@@ -375,69 +452,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
----
-apiVersion: v1
-kind: Pod
-metadata:
-  annotations:
-    container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
-  labels:
-    control-plane: controller-manager
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-audit
-  namespace: gatekeeper-system
-spec:
-  containers:
-  - args:
-    - --operation=audit
-    - --logtostderr
-    command:
-    - /manager
-    env:
-    - name: POD_NAMESPACE
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.namespace
-    - name: POD_NAME
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
-    image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
-    imagePullPolicy: Always
-    livenessProbe:
-      httpGet:
-        path: /healthz
-        port: 9090
-    name: auditcontainer
-    ports:
-    - containerPort: 8888
-      name: metrics
-      protocol: TCP
-    - containerPort: 9090
-      name: healthz
-      protocol: TCP
-    readinessProbe:
-      httpGet:
-        path: /readyz
-        port: 9090
-    resources:
-      limits:
-        cpu: 1000m
-        memory: 512Mi
-      requests:
-        cpu: 100m
-        memory: 256Mi
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-        - all
-      runAsGroup: 999
-      runAsNonRoot: true
-      runAsUser: 1000
-  serviceAccountName: gatekeeper-admin
-  terminationGracePeriodSeconds: 60
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
