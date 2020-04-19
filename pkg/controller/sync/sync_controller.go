@@ -154,40 +154,35 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	instance.SetGroupVersionKind(gvk)
 
 	err = r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance)
+	syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-
-			r.metricsCache.deleteCache(syncKey)
+			r.metricsCache.DeleteObject(syncKey)
 			reportMetrics = true
-
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 
-	syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
 	if !instance.GetDeletionTimestamp().IsZero() {
 		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
-
-		r.metricsCache.deleteCache(syncKey)
+		r.metricsCache.DeleteObject(syncKey)
 		reportMetrics = true
-
 		return reconcile.Result{}, nil
 	}
 
 	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
-		r.metricsCache.addCache(syncKey, tags{
+		r.metricsCache.addObject(syncKey, tags{
 			kind:   instance.GetKind(),
 			status: metrics.ErrorStatus,
 		})
@@ -196,7 +191,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	r.metricsCache.addCache(syncKey, tags{
+	r.metricsCache.addObject(syncKey, tags{
 		kind:   instance.GetKind(),
 		status: metrics.ActiveStatus,
 	})
@@ -215,6 +210,8 @@ func NewMetricsCache() *MetricsCache {
 	}
 }
 
+// need to know encountered kinds to reset metrics for that kind
+// this is a known memory leak
 func (c *MetricsCache) addKind(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -222,7 +219,7 @@ func (c *MetricsCache) addKind(key string) {
 	c.KnownKinds[key] = true
 }
 
-func (c *MetricsCache) addCache(key string, t tags) {
+func (c *MetricsCache) addObject(key string, t tags) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -232,7 +229,7 @@ func (c *MetricsCache) addCache(key string, t tags) {
 	}
 }
 
-func (c *MetricsCache) deleteCache(key string) {
+func (c *MetricsCache) DeleteObject(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 

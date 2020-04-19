@@ -58,7 +58,7 @@ func register() error {
 }
 
 type Reporter struct {
-	ctx context.Context
+	Ctx context.Context
 	now func() float64
 }
 
@@ -70,7 +70,7 @@ func NewStatsReporter() (*Reporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reporter{ctx: ctx, now: now}, nil
+	return &Reporter{Ctx: ctx, now: now}, nil
 }
 
 func (r *Reporter) report(ctx context.Context, m stats.Measurement) error {
@@ -79,7 +79,7 @@ func (r *Reporter) report(ctx context.Context, m stats.Measurement) error {
 
 func (r *Reporter) reportSyncDuration(d time.Duration) error {
 	ctx, err := tag.New(
-		r.ctx,
+		r.Ctx,
 	)
 	if err != nil {
 		return err
@@ -89,12 +89,12 @@ func (r *Reporter) reportSyncDuration(d time.Duration) error {
 }
 
 func (r *Reporter) reportLastSync() error {
-	return metrics.Record(r.ctx, lastRunSyncM.M(r.now()))
+	return metrics.Record(r.Ctx, lastRunSyncM.M(r.now()))
 }
 
 func (r *Reporter) reportSync(t tags, v int64) error {
 	ctx, err := tag.New(
-		r.ctx,
+		r.Ctx,
 		tag.Insert(kindKey, string(t.kind)),
 		tag.Insert(statusKey, string(t.status)))
 	if err != nil {

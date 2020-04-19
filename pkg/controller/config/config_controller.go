@@ -147,7 +147,6 @@ type ReconcileConfig struct {
 
 	scheme           *runtime.Scheme
 	opa              syncc.OpaDataClient
-	syncReporter     *syncc.Reporter
 	syncMetricsCache *syncc.MetricsCache
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
@@ -185,17 +184,11 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		if errors.IsNotFound(err) {
 			exists = false
 
-			// removing all items from the sync cache
-			// before sending the metric
+			// removing all items from the sync cache before sending the metric
 			for k := range r.syncMetricsCache.Cache {
-				delete(r.syncMetricsCache.Cache, k)
+				r.syncMetricsCache.DeleteObject(k)
 			}
-			r.syncReporter, err = syncc.NewStatsReporter()
-			if err != nil {
-				log.Error(err, "Sync metrics reporter could not start")
-				return reconcile.Result{}, err
-			}
-			defer r.syncMetricsCache.ReportSync(r.syncReporter)
+			r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 		} else {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
@@ -235,7 +228,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	r.watched.Replace(newSyncOnly)
 
 	// *Note the following steps are not transactional with respect to admission control*
-
 	// Wipe all data to avoid stale state
 	if _, err := r.opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
 		return reconcile.Result{}, err
