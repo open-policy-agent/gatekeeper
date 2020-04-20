@@ -26,44 +26,49 @@ canonify_cpu(orig) = new {
   new := to_number(orig) * 1000
 }
 
+# 10 ** 21
+mem_multiple("E") = 1000000000000000000000 { true }
+
 # 10 ** 18
-mem_multiple("E") = 1000000000000000000 { true }
+mem_multiple("P") = 1000000000000000000 { true }
 
 # 10 ** 15
-mem_multiple("P") = 1000000000000000 { true }
+mem_multiple("T") = 1000000000000000 { true }
 
 # 10 ** 12
-mem_multiple("T") = 1000000000000 { true }
+mem_multiple("G") = 1000000000000 { true }
 
 # 10 ** 9
-mem_multiple("G") = 1000000000 { true }
+mem_multiple("M") = 1000000000 { true }
 
 # 10 ** 6
-mem_multiple("M") = 1000000 { true }
+mem_multiple("K") = 1000000 { true }
 
 # 10 ** 3
-mem_multiple("K") = 1000 { true }
+mem_multiple("") = 1000 { true }
 
+# Kubernetes accepts millibyte precision when it probably shouldn't.
+# https://github.com/kubernetes/kubernetes/issues/28741
 # 10 ** 0
-mem_multiple("") = 1 { true }
+mem_multiple("m") = 1 { true }
 
-# 2 ** 10
-mem_multiple("Ki") = 1024 { true }
+# 1000 * 2 ** 10
+mem_multiple("Ki") = 1024000 { true }
 
-# 2 ** 20
-mem_multiple("Mi") = 1048576 { true }
+# 1000 * 2 ** 20
+mem_multiple("Mi") = 1048576000 { true }
 
-# 2 ** 30
-mem_multiple("Gi") = 1073741824 { true }
+# 1000 * 2 ** 30
+mem_multiple("Gi") = 1073741824000 { true }
 
-# 2 ** 40
-mem_multiple("Ti") = 1099511627776 { true }
+# 1000 * 2 ** 40
+mem_multiple("Ti") = 1099511627776000 { true }
 
-# 2 ** 50
-mem_multiple("Pi") = 1125899906842624 { true }
+# 1000 * 2 ** 50
+mem_multiple("Pi") = 1125899906842624000 { true }
 
-# 2 ** 60
-mem_multiple("Ei") = 1152921504606846976 { true }
+# 1000 * 2 ** 60
+mem_multiple("Ei") = 1152921504606846976000 { true }
 
 get_suffix(mem) = suffix {
   not is_string(mem)
@@ -107,7 +112,7 @@ get_suffix(mem) = suffix {
 
 canonify_mem(orig) = new {
   is_number(orig)
-  new := orig
+  new := orig * 1000
 }
 
 canonify_mem(orig) = new {
