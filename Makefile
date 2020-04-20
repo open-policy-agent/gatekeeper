@@ -32,15 +32,17 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      - image: <your image file>\
 \n        name: manager\
 \n---\
-\napiVersion: v1\
-\nkind: Pod\
+\napiVersion: apps/v1\
+\nkind: Deployment\
 \nmetadata:\
 \n  name: audit\
 \n  namespace: system\
 \nspec:\
-\n  containers:\
-\n  - image: <your image file>\
-\n    name: auditcontainer"
+\n  template:\
+\n    spec:\
+\n      containers:\
+\n      - image: <your image file>\
+\n        name: auditcontainer"
 
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
@@ -178,13 +180,23 @@ docker-push-release:  docker-tag-release
 docker-build: test
 	docker build --pull . -t ${IMG}
 
+# Build docker image with buildx
+# Experimental docker feature to build cross platform multi-architecture docker images
+# https://docs.docker.com/buildx/working-with-buildx/
+docker-buildx:
+	export DOCKER_CLI_EXPERIMENTAL=enabled
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder;\
+	fi
+	docker buildx build -t ${IMG} --platform "linux/amd64,linux/arm64,linux/arm/v7" . --push
+
 # Update manager_image_patch.yaml with image tag
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
 	@test -s ./config/overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
 ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
-	@sed -i '/^    name: auditcontainer/a \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
+	@sed -i '/^        name: auditcontainer/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
 
