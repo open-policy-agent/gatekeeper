@@ -7,21 +7,20 @@ package topdown
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/url"
-	"strconv"
-
-	"github.com/open-policy-agent/opa/internal/version"
-
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/internal/version"
 	"github.com/open-policy-agent/opa/topdown/builtins"
 )
 
@@ -38,12 +37,17 @@ var allowedKeyNames = [...]string{
 	"headers",
 	"raw_body",
 	"tls_use_system_certs",
+	"tls_ca_cert",
 	"tls_ca_cert_file",
 	"tls_ca_cert_env_variable",
-	"tls_client_cert_env_variable",
-	"tls_client_key_env_variable",
+	"tls_client_cert",
 	"tls_client_cert_file",
+	"tls_client_cert_env_variable",
+	"tls_client_key",
 	"tls_client_key_file",
+	"tls_client_key_env_variable",
+	"tls_insecure_skip_verify",
+	"tls_server_name",
 	"timeout",
 }
 var allowedKeys = ast.NewSet()
@@ -133,37 +137,47 @@ func validateHTTPRequestOperand(term *ast.Term, pos int) (ast.Object, error) {
 
 }
 
-// Adds custom headers to a new HTTP request.
-func addHeaders(req *http.Request, headers map[string]interface{}) (bool, error) {
+// canonicalizeHeaders returns a copy of the headers where the keys are in
+// canonical HTTP form.
+func canonicalizeHeaders(headers map[string]interface{}) map[string]interface{} {
+	canonicalized := map[string]interface{}{}
+
 	for k, v := range headers {
-		// Type assertion
-		header, ok := v.(string)
-		if ok {
-			req.Header.Add(k, header)
-		} else {
-			return false, fmt.Errorf("invalid type for headers value")
-		}
+		canonicalized[http.CanonicalHeaderKey(k)] = v
 	}
-	return true, nil
+
+	return canonicalized
 }
 
 func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) {
 	var url string
 	var method string
-	var tlsCaCertEnvVar []byte
+
+	// Additional CA certificates loading options.
+	var tlsCaCert []byte
+	var tlsCaCertEnvVar string
 	var tlsCaCertFile string
-	var tlsClientKeyEnvVar []byte
-	var tlsClientCertEnvVar []byte
+
+	// Client TLS certificate and key options. Each input source
+	// comes in a matched pair.
+	var tlsClientCert []byte
+	var tlsClientKey []byte
+
+	var tlsClientCertEnvVar string
+	var tlsClientKeyEnvVar string
+
 	var tlsClientCertFile string
 	var tlsClientKeyFile string
+
+	var tlsServerName string
 	var body *bytes.Buffer
 	var rawBody *bytes.Buffer
 	var enableRedirect bool
 	var forceJSONDecode bool
 	var tlsUseSystemCerts bool
 	var tlsConfig tls.Config
-	var clientCerts []tls.Certificate
 	var customHeaders map[string]interface{}
+	var tlsInsecureSkipVerify bool
 	var timeout = defaultHTTPRequestTimeout
 
 	for _, val := range obj.Keys() {
@@ -171,15 +185,38 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		if err != nil {
 			return nil, err
 		}
+
 		key = key.(string)
+
+		var strVal string
+
+		if s, ok := obj.Get(val).Value.(ast.String); ok {
+			strVal = string(s)
+		} else {
+			// Most parameters are strings, so consolidate the type checking.
+			switch key {
+			case "method",
+				"url",
+				"raw_body",
+				"tls_ca_cert",
+				"tls_ca_cert_file",
+				"tls_ca_cert_env_variable",
+				"tls_client_cert",
+				"tls_client_cert_file",
+				"tls_client_cert_env_variable",
+				"tls_client_key",
+				"tls_client_key_file",
+				"tls_client_key_env_variable",
+				"tls_server_name":
+				return nil, fmt.Errorf("%q must be a string", key)
+			}
+		}
 
 		switch key {
 		case "method":
-			method = obj.Get(val).String()
-			method = strings.ToUpper(strings.Trim(method, "\""))
+			method = strings.ToUpper(strings.Trim(strVal, "\""))
 		case "url":
-			url = obj.Get(val).String()
-			url = strings.Trim(url, "\"")
+			url = strings.Trim(strVal, "\"")
 		case "enable_redirect":
 			enableRedirect, err = strconv.ParseBool(obj.Get(val).String())
 			if err != nil {
@@ -203,37 +240,32 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 			}
 			body = bytes.NewBuffer(bodyValBytes)
 		case "raw_body":
-			s, ok := obj.Get(val).Value.(ast.String)
-			if !ok {
-				return nil, fmt.Errorf("raw_body must be a string")
-			}
-			rawBody = bytes.NewBuffer([]byte(s))
+			rawBody = bytes.NewBuffer([]byte(strVal))
 		case "tls_use_system_certs":
 			tlsUseSystemCerts, err = strconv.ParseBool(obj.Get(val).String())
 			if err != nil {
 				return nil, err
 			}
+		case "tls_ca_cert":
+			tlsCaCert = bytes.Trim([]byte(strVal), "\"")
 		case "tls_ca_cert_file":
-			tlsCaCertFile = obj.Get(val).String()
-			tlsCaCertFile = strings.Trim(tlsCaCertFile, "\"")
+			tlsCaCertFile = strings.Trim(strVal, "\"")
 		case "tls_ca_cert_env_variable":
-			caCertEnv := obj.Get(val).String()
-			caCertEnv = strings.Trim(caCertEnv, "\"")
-			tlsCaCertEnvVar = []byte(os.Getenv(caCertEnv))
-		case "tls_client_cert_env_variable":
-			clientCertEnv := obj.Get(val).String()
-			clientCertEnv = strings.Trim(clientCertEnv, "\"")
-			tlsClientCertEnvVar = []byte(os.Getenv(clientCertEnv))
-		case "tls_client_key_env_variable":
-			clientKeyEnv := obj.Get(val).String()
-			clientKeyEnv = strings.Trim(clientKeyEnv, "\"")
-			tlsClientKeyEnvVar = []byte(os.Getenv(clientKeyEnv))
+			tlsCaCertEnvVar = strings.Trim(strVal, "\"")
+		case "tls_client_cert":
+			tlsClientCert = bytes.Trim([]byte(strVal), "\"")
 		case "tls_client_cert_file":
-			tlsClientCertFile = obj.Get(val).String()
-			tlsClientCertFile = strings.Trim(tlsClientCertFile, "\"")
+			tlsClientCertFile = strings.Trim(strVal, "\"")
+		case "tls_client_cert_env_variable":
+			tlsClientCertEnvVar = strings.Trim(strVal, "\"")
+		case "tls_client_key":
+			tlsClientKey = bytes.Trim([]byte(strVal), "\"")
 		case "tls_client_key_file":
-			tlsClientKeyFile = obj.Get(val).String()
-			tlsClientKeyFile = strings.Trim(tlsClientKeyFile, "\"")
+			tlsClientKeyFile = strings.Trim(strVal, "\"")
+		case "tls_client_key_env_variable":
+			tlsClientKeyEnvVar = strings.Trim(strVal, "\"")
+		case "tls_server_name":
+			tlsServerName = strings.Trim(strVal, "\"")
 		case "headers":
 			headersVal := obj.Get(val).Value
 			headersValInterface, err := ast.JSON(headersVal)
@@ -245,6 +277,11 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 			if !ok {
 				return nil, fmt.Errorf("invalid type for headers key")
 			}
+		case "tls_insecure_skip_verify":
+			tlsInsecureSkipVerify, err = strconv.ParseBool(obj.Get(val).String())
+			if err != nil {
+				return nil, err
+			}
 		case "timeout":
 			timeout, err = parseTimeout(obj.Get(val).Value)
 			if err != nil {
@@ -255,39 +292,90 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		}
 	}
 
+	isTLS := false
 	client := &http.Client{
 		Timeout: timeout,
 	}
 
+	if tlsInsecureSkipVerify {
+		isTLS = true
+		tlsConfig.InsecureSkipVerify = tlsInsecureSkipVerify
+	}
+
+	if len(tlsClientCert) > 0 && len(tlsClientKey) > 0 {
+		cert, err := tls.X509KeyPair(tlsClientCert, tlsClientKey)
+		if err != nil {
+			return nil, err
+		}
+
+		isTLS = true
+		tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+	}
+
 	if tlsClientCertFile != "" && tlsClientKeyFile != "" {
-		clientCertFromFile, err := tls.LoadX509KeyPair(tlsClientCertFile, tlsClientKeyFile)
+		cert, err := tls.LoadX509KeyPair(tlsClientCertFile, tlsClientKeyFile)
 		if err != nil {
 			return nil, err
 		}
-		clientCerts = append(clientCerts, clientCertFromFile)
-	}
 
-	if len(tlsClientCertEnvVar) > 0 && len(tlsClientKeyEnvVar) > 0 {
-		clientCertFromEnv, err := tls.X509KeyPair(tlsClientCertEnvVar, tlsClientKeyEnvVar)
-		if err != nil {
-			return nil, err
-		}
-		clientCerts = append(clientCerts, clientCertFromEnv)
-	}
-
-	isTLS := false
-	if len(clientCerts) > 0 {
 		isTLS = true
-		tlsConfig.Certificates = append(tlsConfig.Certificates, clientCerts...)
+		tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
 	}
 
-	if tlsUseSystemCerts || len(tlsCaCertFile) > 0 || len(tlsCaCertEnvVar) > 0 {
+	if tlsClientCertEnvVar != "" && tlsClientKeyEnvVar != "" {
+		cert, err := tls.X509KeyPair(
+			[]byte(os.Getenv(tlsClientCertEnvVar)),
+			[]byte(os.Getenv(tlsClientKeyEnvVar)))
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract public/private key pair from envvars %q, %q: %w",
+				tlsClientCertEnvVar, tlsClientKeyEnvVar, err)
+		}
+
 		isTLS = true
-		connRootCAs, err := createRootCAs(tlsCaCertFile, tlsCaCertEnvVar, tlsUseSystemCerts)
+		tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+	}
+
+	// Check the system certificates config first so that we
+	// load additional certificated into the correct pool.
+	if tlsUseSystemCerts {
+		pool, err := x509.SystemCertPool()
 		if err != nil {
 			return nil, err
 		}
-		tlsConfig.RootCAs = connRootCAs
+
+		isTLS = true
+		tlsConfig.RootCAs = pool
+	}
+
+	if len(tlsCaCert) != 0 {
+		tlsCaCert = bytes.Replace(tlsCaCert, []byte("\\n"), []byte("\n"), -1)
+		pool, err := addCACertsFromBytes(tlsConfig.RootCAs, []byte(tlsCaCert))
+		if err != nil {
+			return nil, err
+		}
+
+		isTLS = true
+		tlsConfig.RootCAs = pool
+	}
+
+	if tlsCaCertFile != "" {
+		pool, err := addCACertsFromFile(tlsConfig.RootCAs, tlsCaCertFile)
+		if err != nil {
+			return nil, err
+		}
+
+		isTLS = true
+		tlsConfig.RootCAs = pool
+	}
+
+	if tlsCaCertEnvVar != "" {
+		pool, err := addCACertsFromEnv(tlsConfig.RootCAs, tlsCaCertEnvVar)
+		if err != nil {
+			return nil, err
+		}
+
+		isTLS = true
+		tlsConfig.RootCAs = pool
 	}
 
 	if isTLS {
@@ -315,17 +403,45 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	req = req.WithContext(bctx.Context)
 
 	// Add custom headers
 	if len(customHeaders) != 0 {
-		if ok, err := addHeaders(req, customHeaders); !ok {
-			return nil, err
+		customHeaders = canonicalizeHeaders(customHeaders)
+
+		for k, v := range customHeaders {
+			header, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid type for headers value %q", v)
+			}
+
+			req.Header.Add(k, header)
 		}
+
 		// Don't overwrite or append to one that was set in the custom headers
 		if _, hasUA := customHeaders["User-Agent"]; !hasUA {
 			req.Header.Add("User-Agent", version.UserAgent)
 		}
+
+		// If the caller specifies the Host header, use it for the HTTP
+		// request host and the TLS server name.
+		if host, hasHost := customHeaders["Host"]; hasHost {
+			host := host.(string) // We already checked that it's a string.
+			req.Host = host
+
+			// Only default the ServerName if the caller has
+			// specified the host. If we don't specify anything,
+			// Go will default to the target hostname. This name
+			// is not the same as the default that Go populates
+			// `req.Host` with, which is why we don't just set
+			// this unconditionally.
+			tlsConfig.ServerName = host
+		}
+	}
+
+	if tlsServerName != "" {
+		tlsConfig.ServerName = tlsServerName
 	}
 
 	// execute the http request
@@ -354,11 +470,21 @@ func executeHTTPRequest(bctx BuiltinContext, obj ast.Object) (ast.Value, error) 
 		json.NewDecoder(&buf).Decode(&resultBody)
 	}
 
+	respHeaders := map[string]interface{}{}
+	for headerName, values := range resp.Header {
+		var respValues []interface{}
+		for _, v := range values {
+			respValues = append(respValues, v)
+		}
+		respHeaders[headerName] = respValues
+	}
+
 	result := make(map[string]interface{})
 	result["status"] = resp.Status
 	result["status_code"] = resp.StatusCode
 	result["body"] = resultBody
 	result["raw_body"] = string(resultRawBody)
+	result["headers"] = respHeaders
 
 	resultObj, err := ast.InterfaceToValue(result)
 	if err != nil {

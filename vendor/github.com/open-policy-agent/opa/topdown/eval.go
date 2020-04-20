@@ -332,7 +332,7 @@ func (e *eval) evalNot(iter evalIterator) error {
 	}
 
 	if !defined {
-		return e.next(iter)
+		return iter(e)
 	}
 
 	e.traceFail(expr)
@@ -480,7 +480,7 @@ func (e *eval) evalNotPartial(iter evalIterator) error {
 	// If partial evaluation produced no results, the expression is always undefined
 	// so it does not have to be saved.
 	if len(savedQueries) == 0 {
-		return e.next(iter)
+		return iter(e)
 	}
 
 	// Check if the partial evaluation result can be inlined in this query. If not,
@@ -502,7 +502,7 @@ func (e *eval) evalNotPartial(iter evalIterator) error {
 	//	(!A && !C) || (!A && !D) || (!B && !C) || (!B && !D)
 	return complementedCartesianProduct(savedQueries, 0, nil, func(q ast.Body) error {
 		return e.saveInlinedNegatedExprs(q, func() error {
-			return e.next(iter)
+			return iter(e)
 		})
 	})
 }
@@ -860,6 +860,7 @@ func (e *eval) biunifyComprehension(a, b *ast.Term, b1, b2 *bindings, swap bool,
 }
 
 func (e *eval) biunifyComprehensionPartial(a, b *ast.Term, b1, b2 *bindings, swap bool, iter unifyIterator) error {
+	cpyA := a.Copy()
 
 	// Capture bindings available to the comprehension. We will add expressions
 	// to the comprehension body that ensure the comprehension body is safe.
@@ -880,7 +881,7 @@ func (e *eval) biunifyComprehensionPartial(a, b *ast.Term, b1, b2 *bindings, swa
 	// queries returned by partial evaluation.
 	var body *ast.Body
 
-	switch a := a.Value.(type) {
+	switch a := cpyA.Value.(type) {
 	case *ast.ArrayComprehension:
 		body = &a.Body
 	case *ast.SetComprehension:
@@ -895,16 +896,16 @@ func (e *eval) biunifyComprehensionPartial(a, b *ast.Term, b1, b2 *bindings, swa
 		body.Append(e)
 	}
 
-	b1.Namespace(a, e.caller.bindings)
+	b1.Namespace(cpyA, e.caller.bindings)
 
 	// The other term might need to be plugged so include the bindings. The
 	// bindings for the comprehension term are saved (for compatibility) but
 	// the eventual plug operation on the comprehension will be a no-op.
 	if !swap {
-		return e.saveUnify(a, b, b1, b2, iter)
+		return e.saveUnify(cpyA, b, b1, b2, iter)
 	}
 
-	return e.saveUnify(b, a, b2, b1, iter)
+	return e.saveUnify(b, cpyA, b2, b1, iter)
 }
 
 func (e *eval) biunifyComprehensionArray(x *ast.ArrayComprehension, b *ast.Term, b1, b2 *bindings, iter unifyIterator) error {
@@ -976,6 +977,7 @@ func getSavePairs(x *ast.Term, b *bindings, result []savePair) []savePair {
 
 func (e *eval) saveExpr(expr *ast.Expr, b *bindings, iter unifyIterator) error {
 	expr.With = e.query[e.index].With
+	expr.Location = e.query[e.index].Location
 	e.saveStack.Push(expr, b, b)
 	e.traceSave(expr)
 	err := iter()
@@ -987,6 +989,7 @@ func (e *eval) saveUnify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) e
 	e.instr.startTimer(partialOpSaveUnify)
 	expr := ast.Equality.Expr(a, b)
 	expr.With = e.query[e.index].With
+	expr.Location = e.query[e.index].Location
 	pops := 0
 	if pairs := getSavePairs(a, b1, nil); len(pairs) > 0 {
 		pops += len(pairs)
@@ -1017,6 +1020,7 @@ func (e *eval) saveUnify(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) e
 func (e *eval) saveCall(declArgsLen int, terms []*ast.Term, iter unifyIterator) error {
 	expr := ast.NewExpr(terms)
 	expr.With = e.query[e.index].With
+	expr.Location = e.query[e.index].Location
 
 	// If call-site includes output value then partial eval must add vars in output
 	// position to the save set.
@@ -1042,7 +1046,7 @@ func (e *eval) saveCall(declArgsLen int, terms []*ast.Term, iter unifyIterator) 
 
 func (e *eval) saveInlinedNegatedExprs(exprs []*ast.Expr, iter unifyIterator) error {
 
-	// This function does not have include with statements on the exprs because
+	// This function does not include with statements on the exprs because
 	// they will have already been saved and therefore had their any relevant
 	// with statements set.
 	for _, expr := range exprs {
