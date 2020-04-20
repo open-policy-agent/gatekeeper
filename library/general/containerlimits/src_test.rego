@@ -25,6 +25,13 @@ test_input_violations_int {
     results := violation with input as input
     count(results) == 2
 }
+
+test_input_violations_mem_int_v_str {
+    input := {"review": review([ctr("a", 10, "4")]), "parameters": {"memory": "1000m", "cpu": "4"}}
+    results := violation with input as input
+    count(results) == 1
+}
+
 test_input_violations_str {
     input := {"review": review([ctr("a", "10", "20")]), "parameters": {"memory": "5", "cpu": "10"}}
     results := violation with input as input

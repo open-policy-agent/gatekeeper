@@ -36,6 +36,12 @@ test_input_violations_int {
     trace(sprintf("results - <%v>", [results]))
     count(results) == 2
 }
+test_input_violations_mem_int_v_str {
+    input := {"review": review([ctr("a", 1, "3", "1m", "1.5")]), "parameters": {"ratio": "2"}}
+    results := violation with input as input
+    trace(sprintf("results - <%v>", [results]))
+    count(results) == 1
+}
 test_input_violations_str {
     input := {"review": review([ctr("a", "10", "20", "2", "4")]), "parameters": {"ratio": "2"}}
     results := violation with input as input

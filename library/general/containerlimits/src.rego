@@ -112,7 +112,7 @@ get_suffix(mem) = suffix {
 
 canonify_mem(orig) = new {
   is_number(orig)
-  new := orig
+  new := orig * 1000
 }
 
 canonify_mem(orig) = new {

@@ -135,7 +135,7 @@ spec:
         
         canonify_mem(orig) = new {
           is_number(orig)
-          new := orig
+          new := orig * 1000
         }
         
         canonify_mem(orig) = new {
