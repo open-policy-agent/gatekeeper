@@ -101,13 +101,13 @@ var _ reconcile.Reconciler = &ReconcileSync{}
 
 type MetricsCache struct {
 	mux        sync.RWMutex
-	Cache      map[string]tags
+	Cache      map[string]Tags
 	KnownKinds map[string]bool
 }
 
-type tags struct {
-	kind   string
-	status metrics.Status
+type Tags struct {
+	Kind   string
+	Status metrics.Status
 }
 
 // ReconcileSync reconciles an arbitrary object described by Kind
@@ -135,6 +135,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
+	syncKey := strings.Join([]string{unpackedRequest.Namespace, unpackedRequest.Name}, "/")
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
@@ -153,9 +154,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 
-	err = r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance)
-	syncKey := strings.Join([]string{instance.GetNamespace(), instance.GetName()}, "/")
-	if err != nil {
+	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
@@ -182,18 +181,18 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
-		r.metricsCache.addObject(syncKey, tags{
-			kind:   instance.GetKind(),
-			status: metrics.ErrorStatus,
+		r.metricsCache.AddObject(syncKey, Tags{
+			Kind:   instance.GetKind(),
+			Status: metrics.ErrorStatus,
 		})
 		reportMetrics = true
 
 		return reconcile.Result{}, err
 	}
 
-	r.metricsCache.addObject(syncKey, tags{
-		kind:   instance.GetKind(),
-		status: metrics.ActiveStatus,
+	r.metricsCache.AddObject(syncKey, Tags{
+		Kind:   instance.GetKind(),
+		Status: metrics.ActiveStatus,
 	})
 
 	r.metricsCache.addKind(instance.GetKind())
@@ -205,7 +204,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 func NewMetricsCache() *MetricsCache {
 	return &MetricsCache{
-		Cache:      make(map[string]tags),
+		Cache:      make(map[string]Tags),
 		KnownKinds: make(map[string]bool),
 	}
 }
@@ -219,13 +218,17 @@ func (c *MetricsCache) addKind(key string) {
 	c.KnownKinds[key] = true
 }
 
-func (c *MetricsCache) addObject(key string, t tags) {
+func (c *MetricsCache) ResetCache() {
+	c.Cache = make(map[string]Tags)
+}
+
+func (c *MetricsCache) AddObject(key string, t Tags) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
-	c.Cache[key] = tags{
-		kind:   t.kind,
-		status: t.status,
+	c.Cache[key] = Tags{
+		Kind:   t.Kind,
+		Status: t.Status,
 	}
 }
 
@@ -240,7 +243,7 @@ func (c *MetricsCache) ReportSync(reporter *Reporter) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
-	totals := make(map[tags]int)
+	totals := make(map[Tags]int)
 	for _, v := range c.Cache {
 		totals[v]++
 	}
@@ -248,13 +251,13 @@ func (c *MetricsCache) ReportSync(reporter *Reporter) {
 	for kind := range c.KnownKinds {
 		for _, status := range metrics.AllStatuses {
 			if err := reporter.reportSync(
-				tags{
-					kind:   kind,
-					status: status,
+				Tags{
+					Kind:   kind,
+					Status: status,
 				},
-				int64(totals[tags{
-					kind:   kind,
-					status: status,
+				int64(totals[Tags{
+					Kind:   kind,
+					Status: status,
 				}])); err != nil {
 				log.Error(err, "failed to report sync")
 			}

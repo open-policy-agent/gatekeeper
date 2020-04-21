@@ -92,11 +92,11 @@ func (r *Reporter) reportLastSync() error {
 	return metrics.Record(r.Ctx, lastRunSyncM.M(r.now()))
 }
 
-func (r *Reporter) reportSync(t tags, v int64) error {
+func (r *Reporter) reportSync(t Tags, v int64) error {
 	ctx, err := tag.New(
 		r.Ctx,
-		tag.Insert(kindKey, string(t.kind)),
-		tag.Insert(statusKey, string(t.status)))
+		tag.Insert(kindKey, string(t.Kind)),
+		tag.Insert(statusKey, string(t.Status)))
 	if err != nil {
 		return err
 	}

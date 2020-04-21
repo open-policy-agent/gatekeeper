@@ -18,11 +18,13 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -183,12 +185,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		// if config is not found, we should remove cached data
 		if errors.IsNotFound(err) {
 			exists = false
-
-			// removing all items from the sync cache before sending the metric
-			for k := range r.syncMetricsCache.Cache {
-				r.syncMetricsCache.DeleteObject(k)
-			}
-			r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 		} else {
 			// Error reading the object - requeue the request.
 			return reconcile.Result{}, err
@@ -233,6 +229,10 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	// reset sync cache before sending the metric
+	r.syncMetricsCache.ResetCache()
+	r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+
 	// Important: dynamic watches update must happen *after* updating our watchSet.
 	// Otherwise the sync controller will drop events for the newly watched kinds.
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
@@ -265,10 +265,23 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		}
 
 		for i := range u.Items {
+			syncKey := strings.Join([]string{u.Items[i].GetNamespace(), u.Items[i].GetName()}, "/")
+
 			if _, err := r.opa.AddData(context.Background(), &u.Items[i]); err != nil {
+				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+					Kind:   u.Items[i].GetKind(),
+					Status: metrics.ErrorStatus,
+				})
 				return fmt.Errorf("adding data for %+v: %w", gvk, err)
 			}
+
+			r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+				Kind:   u.Items[i].GetKind(),
+				Status: metrics.ActiveStatus,
+			})
 		}
+
+		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 	}
 	return nil
 }

@@ -12,9 +12,9 @@ import (
 func TestReportSync(t *testing.T) {
 	const expectedValue int64 = 10
 	const expectedRowLength = 1
-	expectedTags := tags{
-		kind:   "Pod",
-		status: metrics.ActiveStatus,
+	expectedTags := Tags{
+		Kind:   "Pod",
+		Status: metrics.ActiveStatus,
 	}
 
 	r, err := NewStatsReporter()
@@ -30,13 +30,13 @@ func TestReportSync(t *testing.T) {
 	if !ok {
 		t.Error("reportSync should have aggregation LastValue()")
 	}
-	found := contains(row.Tags, expectedTags.kind)
+	found := contains(row.Tags, expectedTags.Kind)
 	if !found {
-		t.Errorf("reportSync tags does not match for %v", expectedTags.kind)
+		t.Errorf("reportSync tags does not match for %v", expectedTags.Kind)
 	}
-	found = contains(row.Tags, string(expectedTags.status))
+	found = contains(row.Tags, string(expectedTags.Status))
 	if !found {
-		t.Errorf("reportSync tags does not match for %v", expectedTags.status)
+		t.Errorf("reportSync tags does not match for %v", expectedTags.Status)
 	}
 	if int64(value.Value) != expectedValue {
 		t.Errorf("Metric: %v - Expected %v, got %v", syncMetricName, expectedValue, value.Value)
