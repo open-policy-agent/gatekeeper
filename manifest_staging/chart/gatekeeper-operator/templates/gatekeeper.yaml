@@ -122,6 +122,7 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     controller-tools.k8s.io: "1.0"
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: constrainttemplates.templates.gatekeeper.sh

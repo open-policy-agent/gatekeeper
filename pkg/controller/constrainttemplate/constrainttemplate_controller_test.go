@@ -16,6 +16,7 @@ limitations under the License.
 package constrainttemplate
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -274,8 +275,15 @@ anyrule[}}}//invalid//rego
 			}
 			if ct.Name == "invalidrego" {
 				status := util.GetCTHAStatus(ct)
-				if len(status.Errors) != 1 {
-					return errors.New("InvalidRego template should contain 1 parse error")
+				if len(status.Errors) == 0 {
+					j, err := json.Marshal(status)
+					var s string
+					if err != nil {
+						s = err.Error()
+					} else {
+						s = string(j)
+					}
+					return fmt.Errorf("InvalidRego template should contain an error: %s", s)
 				}
 				if status.Errors[0].Code != "rego_parse_error" {
 					return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)

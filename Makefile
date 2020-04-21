@@ -127,16 +127,12 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
-# TODO use kustomize for CRDs
-	kubectl apply -f config/crd/bases
-	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
 	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> manifest_staging/deploy/gatekeeper.yaml ; cat $${x} >> manifest_staging/deploy/gatekeeper.yaml ; done'
+	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
 	sh manifest_staging/chart/gatekeeper-operator/generate_helm_template.sh
 
 # Run go fmt against code
