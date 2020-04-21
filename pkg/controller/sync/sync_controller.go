@@ -215,6 +215,7 @@ func (c *MetricsCache) GetSyncKey(namespace string, name string) string {
 
 // need to know encountered kinds to reset metrics for that kind
 // this is a known memory leak
+// footprint should naturally reset on Pod upgrade b/c the container restarts
 func (c *MetricsCache) addKind(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()

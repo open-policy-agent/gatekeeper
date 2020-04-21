@@ -223,6 +223,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	r.watched.Replace(newSyncOnly)
 
 	// *Note the following steps are not transactional with respect to admission control*
+
 	// Wipe all data to avoid stale state
 	if _, err := r.opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
 		return reconcile.Result{}, err
@@ -263,9 +264,10 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
+		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
-			defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 
 			if _, err := r.opa.AddData(context.Background(), &u.Items[i]); err != nil {
 				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
