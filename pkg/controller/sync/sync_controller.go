@@ -123,7 +123,14 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	r.log.V(logging.DebugLevel).Info("data will be added", "data", instance)
+	r.log.V(logging.DebugLevel).Info(
+		"data will be added",
+		logging.ResourceAPIVersion, instance.GetAPIVersion(),
+		logging.ResourceKind, instance.GetKind(),
+		logging.ResourceNamespace, instance.GetNamespace(),
+		logging.ResourceName, instance.GetName(),
+	)
+
 	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
