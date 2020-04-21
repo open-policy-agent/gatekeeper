@@ -43,9 +43,16 @@ var log = logf.Log.WithName("webhook")
 
 const (
 	serviceAccountName = "gatekeeper-admin"
+	secretName         = "gatekeeper-webhook-server-cert"
+	vwhName            = "gatekeeper-validating-webhook-configuration"
+	serviceName        = "gatekeeper-webhook-service"
+	caName             = "gatekeeper-ca"
+	caOrganization     = "gatekeeper"
 )
 
 var (
+	// DNSName is <service name>.<namespace>.svc
+	dnsName                            = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
@@ -69,7 +76,15 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 
 	if !*disableCertRotation {
 		log.Info("cert rotation is enabled")
-		if err := AddRotator(mgr); err != nil {
+		if err := AddRotator(mgr, &certRotator{
+			secretKey: types.NamespacedName{
+				Namespace: util.GetNamespace(),
+				Name:      secretName,
+			},
+			caName:         caName,
+			caOrganization: caOrganization,
+			dnsName:        dnsName,
+		}, vwhName); err != nil {
 			return err
 		}
 	} else {

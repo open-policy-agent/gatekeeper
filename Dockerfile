@@ -1,23 +1,32 @@
-# Build the manager binary
-FROM golang:1.13.3 as builder
+FROM golang:1.13-alpine as builder
 
-# Copy in the go src
+ARG TARGETPLATFORM
+
+ENV GO111MODULE=on\
+    CGO_ENABLED=0
+
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
-COPY pkg/    pkg/
-COPY third_party/ third_party/
-COPY vendor/ vendor/
-COPY main.go main.go
-COPY api/ api/
+
+COPY pkg/ pkg/	
+COPY third_party/ third_party/	
+COPY vendor/ vendor/	
+COPY main.go main.go	
+COPY api/ api/	
 COPY go.mod .
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -mod vendor -a -o manager main.go
+RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
+    export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
+    GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3); export GOARM=${GOARM:1} && \
+    go build -mod vendor -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
+
 WORKDIR /
+
 COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
+
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
