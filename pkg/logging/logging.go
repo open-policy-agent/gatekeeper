@@ -13,6 +13,7 @@ const (
 	AuditID              = "audit_id"
 	ConstraintViolations = "constraint_violations"
 	ResourceKind         = "resource_kind"
+	ResourceAPIVersion   = "resource_api_version"
 	ResourceNamespace    = "resource_namespace"
 	ResourceName         = "resource_name"
 	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
