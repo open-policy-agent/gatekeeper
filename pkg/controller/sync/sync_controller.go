@@ -219,6 +219,9 @@ func (c *MetricsCache) addKind(key string) {
 }
 
 func (c *MetricsCache) ResetCache() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
 	c.Cache = make(map[string]Tags)
 }
 
