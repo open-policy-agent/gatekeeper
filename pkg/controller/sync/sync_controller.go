@@ -135,7 +135,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
-	syncKey := strings.Join([]string{unpackedRequest.Namespace, unpackedRequest.Name}, "/")
+	syncKey := r.metricsCache.GetSyncKey(unpackedRequest.Namespace, unpackedRequest.Name)
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
@@ -207,6 +207,10 @@ func NewMetricsCache() *MetricsCache {
 		Cache:      make(map[string]Tags),
 		KnownKinds: make(map[string]bool),
 	}
+}
+
+func (c *MetricsCache) GetSyncKey(namespace string, name string) string {
+	return strings.Join([]string{namespace, name}, "/")
 }
 
 // need to know encountered kinds to reset metrics for that kind

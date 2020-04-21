@@ -18,7 +18,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -265,7 +264,8 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		}
 
 		for i := range u.Items {
-			syncKey := strings.Join([]string{u.Items[i].GetNamespace(), u.Items[i].GetName()}, "/")
+			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
+			defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 
 			if _, err := r.opa.AddData(context.Background(), &u.Items[i]); err != nil {
 				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
@@ -280,8 +280,6 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 				Status: metrics.ActiveStatus,
 			})
 		}
-
-		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
 	}
 	return nil
 }
