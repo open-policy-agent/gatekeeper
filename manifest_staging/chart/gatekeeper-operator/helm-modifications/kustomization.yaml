@@ -3,7 +3,7 @@ commonLabels:
   chart: '{{ template "gatekeeper-operator.name" . }}'
   release: '{{ .Release.Name }}'
   heritage: '{{ .Release.Service }}'
-resources:
-  - _temp.yaml
+bases:
+  - ../../../../config/default
 patchesStrategicMerge:
   - helm-modifications.yaml

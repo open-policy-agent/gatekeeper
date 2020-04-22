@@ -36,8 +36,10 @@ var cfg *rest.Config
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
+			// Due to a bug in how the testenv loads CRDDirectoryPaths (files slice
+			// defined at too-wide a scope), this path needs to come first.
+			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
 			filepath.Join("..", "..", "..", "config", "crd", "bases"),
-			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}

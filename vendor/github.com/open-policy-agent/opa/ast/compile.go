@@ -1207,8 +1207,11 @@ func (vis *ruleArgLocalRewriter) Visit(x interface{}) Visitor {
 		// Scalars are no-ops. Comprehensions are handled above. Sets must not
 		// contain variables.
 		return nil
+	case Call:
+		vis.errs = append(vis.errs, NewError(CompileErr, t.Location, "rule arguments cannot contain calls"))
+		return nil
 	default:
-		// Recurse on refs, arrays, and calls. Any embedded
+		// Recurse on refs and arrays. Any embedded
 		// variables can be rewritten.
 		return vis
 	}
@@ -2074,7 +2077,7 @@ func outputVarsForExpr(expr *Expr, builtins map[string]*Builtin, arity func(Ref)
 		return outputVarsForExprBuiltin(expr, b, safe)
 	}
 
-	return outputVarsForExprCall(expr, builtins, arity, safe, terms)
+	return outputVarsForExprCall(expr, arity, safe, terms)
 }
 
 func outputVarsForExprBuiltin(expr *Expr, b *Builtin, safe VarSet) VarSet {
@@ -2127,7 +2130,7 @@ func outputVarsForExprEq(expr *Expr, safe VarSet) VarSet {
 	return output.Diff(safe)
 }
 
-func outputVarsForExprCall(expr *Expr, builtins map[string]*Builtin, arity func(Ref) int, safe VarSet, terms []*Term) VarSet {
+func outputVarsForExprCall(expr *Expr, arity func(Ref) int, safe VarSet, terms []*Term) VarSet {
 
 	output := outputVarsForExprRefs(expr, safe)
 
@@ -2963,6 +2966,17 @@ func (s localDeclaredVars) Occurrence(x Var) varOccurrence {
 	return s.vars[len(s.vars)-1].occurrence[x]
 }
 
+// GlobalOccurrence returns a flag that indicates whether x has occurred in the
+// global scope.
+func (s localDeclaredVars) GlobalOccurrence(x Var) (varOccurrence, bool) {
+	for i := len(s.vars) - 1; i >= 0; i-- {
+		if occ, ok := s.vars[i].occurrence[x]; ok {
+			return occ, true
+		}
+	}
+	return newVar, false
+}
+
 // rewriteLocalVars rewrites bodies to remove assignment/declaration
 // expressions. For example:
 //
@@ -3145,9 +3159,12 @@ func rewriteDeclaredVarsInTerm(g *localVarGenerator, stack *localDeclaredVars, t
 		}
 	case Ref:
 		if RootDocumentRefs.Contains(term) {
-			if gv, ok := stack.Declared(v[0].Value.(Var)); ok {
+			x := v[0].Value.(Var)
+			if occ, ok := stack.GlobalOccurrence(x); ok && occ != seenVar {
+				gv, _ := stack.Declared(x)
 				term.Value = gv
 			}
+
 			return true, errs
 		}
 		return false, errs
