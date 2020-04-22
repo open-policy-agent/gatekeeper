@@ -3,11 +3,12 @@ REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
+DEV_TAG ?= dev
 
 VERSION := v3.1.0-beta.8
 
 USE_LOCAL_IMG ?= false
-KIND_VERSION=0.6.0
+KIND_VERSION=0.7.0
 KUSTOMIZE_VERSION=3.0.2
 HELM_VERSION=v2.15.2
 
@@ -78,11 +79,13 @@ test-e2e:
 
 e2e-bootstrap:
 	# Download and install kind
-	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
+	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output ${GITHUB_WORKSPACE}/bin/kind && chmod +x ${GITHUB_WORKSPACE}/bin/kind
 	# Download and install kubectl
-	curl -LO https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
+	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
-	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 --output kustomize && chmod +x kustomize && sudo mv kustomize /usr/local/bin/
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/kustomize && chmod +x ${GITHUB_WORKSPACE}/bin/kustomize
+	# Download and install bats
+	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
@@ -132,7 +135,7 @@ deploy: patch-image manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
-	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
+	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
 	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> manifest_staging/deploy/gatekeeper.yaml ; cat $${x} >> manifest_staging/deploy/gatekeeper.yaml ; done'
 	sh manifest_staging/chart/gatekeeper-operator/generate_helm_template.sh
 
@@ -159,7 +162,7 @@ docker-login:
 
 # Tag for Dev
 docker-tag-dev:
-	@docker tag $(IMG) $(REPOSITORY):dev
+	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
 
 # Tag for Dev
 docker-tag-release:
@@ -168,7 +171,7 @@ docker-tag-release:
 
 # Push for Dev
 docker-push-dev:  docker-tag-dev
-	@docker push $(REPOSITORY):dev
+	@docker push $(REPOSITORY):$(DEV_TAG)
 
 # Push for Release
 docker-push-release:  docker-tag-release
@@ -209,10 +212,8 @@ target-template-source:
 docker-push:
 	docker push ${IMG}
 
-release:
-	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
-
 release-manifest:
+	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./manifest_staging/deploy/gatekeeper.yaml
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
