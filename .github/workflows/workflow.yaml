@@ -1,0 +1,165 @@
+name: build_test_release
+on: [push, pull_request]
+env:
+  GITHUB_REPO: open-policy-agent/gatekeeper
+  IMAGE_REPO: quay.io/open-policy-agent/gatekeeper
+
+jobs:
+  lint:
+    name: "Lint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set up Go 1.13
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: 1.13
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Install golangci-lint
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo ::add-path::$GITHUB_WORKSPACE/bin
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
+        env:
+          GOLANGCILINT_VERSION: 1.24.0
+
+      - name: Make lint
+        run: |
+          make lint
+
+  build_test:
+    name: "Build and Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up Go 1.13
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: 1.13
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo ::add-path::$GITHUB_WORKSPACE/bin
+          make e2e-bootstrap
+
+      - name: Run e2e
+        run: |
+          make e2e-build-load-image IMG=gatekeeper-e2e:latest
+          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+          make test-e2e
+          echo -e '\n\n======= manager logs =======\n\n'
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager
+
+  helm_build_test:
+    name: "[Helm] Build and Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up Go 1.13
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: 1.13
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo ::add-path::$GITHUB_WORKSPACE/bin
+          make e2e-bootstrap
+
+      - name: Run e2e
+        run: |
+          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest
+          make test-e2e
+          echo -e '\n\n======= manager logs =======\n\n'
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager
+
+  pre-release:
+    name: "Pre Release"
+    runs-on: "ubuntu-latest"
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
+    needs: [lint, build_test, helm_build_test]
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: make docker-push-dev
+        run: |
+          version_list=$(curl https://quay.io/v2/${{ env.GITHUB_REPO }}/tags/list)
+          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-login
+            make docker-build IMG=gatekeeper-e2e:latest
+            make docker-push-dev IMG=gatekeeper-e2e:latest DEV_TAG=${GITHUB_SHA::7}
+          fi
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      - uses: "marvinpinto/action-automatic-releases@v1.0.0"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: true
+          automatic_release_tag: latest
+          title: "Development Build"
+
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: "ubuntu-latest"
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
+    needs: [lint, build_test, helm_build_test]
+    timeout-minutes: 30
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Get tag
+        id: get_version
+        run: |
+          echo ::set-env name=TAG::${GITHUB_REF#refs/tags/}
+          echo $TAG
+
+      - name: Publish release
+        run: |
+          version_list=$(curl https://quay.io/v2/${{ env.GITHUB_REPO }}/tags/list)
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-login
+            make docker-build IMG=gatekeeper-e2e:latest
+            make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TAG}
+          fi
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo ::add-path::$GITHUB_WORKSPACE/bin
+          make e2e-bootstrap
+
+      - name: Verify release
+        run: |
+          make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
+
+      - name: Create GitHub release
+        uses: "marvinpinto/action-automatic-releases@v1.0.0"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
