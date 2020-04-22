@@ -277,12 +277,10 @@ anyrule[}}}//invalid//rego
 				status := util.GetCTHAStatus(ct)
 				if len(status.Errors) == 0 {
 					j, err := json.Marshal(status)
-					var s string
 					if err != nil {
-						s = err.Error()
-					} else {
-						s = string(j)
+						t.Fatal("could not parse JSON", err)
 					}
+					s := string(j)
 					return fmt.Errorf("InvalidRego template should contain an error: %s", s)
 				}
 				if status.Errors[0].Code != "rego_parse_error" {
