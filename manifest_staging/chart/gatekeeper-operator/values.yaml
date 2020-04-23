@@ -9,9 +9,12 @@ image:
   pullPolicy: IfNotPresent
 nodeSelector: {}
 tolerations: []
-podAnnotations: {
-  container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
-}
+podAnnotations:
+  {
+    container.seccomp.security.alpha.kubernetes.io/manager: runtime/default,
+    prometheus.io/port: "8888",
+    prometheus.io/scrape: "true",
+  }
 resources:
   limits:
     cpu: 1000m

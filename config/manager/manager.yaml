@@ -24,6 +24,8 @@ spec:
     metadata:
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+        prometheus.io/port: "8888"
+        prometheus.io/scrape: "true"
       labels:
         control-plane: controller-manager
         gatekeeper.sh/operation: webhook
@@ -103,6 +105,8 @@ spec:
         gatekeeper.sh/operation: audit
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+        prometheus.io/port: "8888"
+        prometheus.io/scrape: "true"
     spec:
       containers:
       - args:

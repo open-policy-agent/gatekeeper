@@ -461,7 +461,7 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
+      annotations:
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
@@ -510,7 +510,7 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
+        resources:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -520,7 +520,7 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-      nodeSelector: 
+      nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.affinity | indent 8 }}
@@ -555,7 +555,7 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
+      annotations:
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
@@ -606,7 +606,7 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
+        resources:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -620,7 +620,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector: 
+      nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.affinity | indent 8 }}
