@@ -490,6 +490,66 @@ type (
 	BuiltinDyn func(bctx BuiltinContext, terms []*ast.Term) (*ast.Term, error)
 )
 
+// RegisterBuiltin1 adds a built-in function globally inside the OPA runtime.
+func RegisterBuiltin1(decl *Function, impl Builtin1) {
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name: decl.Name,
+		Decl: decl.Decl,
+	})
+	topdown.RegisterBuiltinFunc(decl.Name, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
+		result, err := memoize(decl, bctx, terms, func() (*ast.Term, error) { return impl(bctx, terms[0]) })
+		return finishFunction(decl.Name, bctx, result, err, iter)
+	})
+}
+
+// RegisterBuiltin2 adds a built-in function globally inside the OPA runtime.
+func RegisterBuiltin2(decl *Function, impl Builtin2) {
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name: decl.Name,
+		Decl: decl.Decl,
+	})
+	topdown.RegisterBuiltinFunc(decl.Name, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
+		result, err := memoize(decl, bctx, terms, func() (*ast.Term, error) { return impl(bctx, terms[0], terms[1]) })
+		return finishFunction(decl.Name, bctx, result, err, iter)
+	})
+}
+
+// RegisterBuiltin3 adds a built-in function globally inside the OPA runtime.
+func RegisterBuiltin3(decl *Function, impl Builtin3) {
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name: decl.Name,
+		Decl: decl.Decl,
+	})
+	topdown.RegisterBuiltinFunc(decl.Name, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
+		result, err := memoize(decl, bctx, terms, func() (*ast.Term, error) { return impl(bctx, terms[0], terms[1], terms[2]) })
+		return finishFunction(decl.Name, bctx, result, err, iter)
+	})
+}
+
+// RegisterBuiltin4 adds a built-in function globally inside the OPA runtime.
+func RegisterBuiltin4(decl *Function, impl Builtin4) {
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name: decl.Name,
+		Decl: decl.Decl,
+	})
+	topdown.RegisterBuiltinFunc(decl.Name, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
+		result, err := memoize(decl, bctx, terms, func() (*ast.Term, error) { return impl(bctx, terms[0], terms[1], terms[2], terms[3]) })
+		return finishFunction(decl.Name, bctx, result, err, iter)
+	})
+}
+
+// RegisterBuiltinDyn adds a built-in function globally inside the OPA runtime.
+func RegisterBuiltinDyn(decl *Function, impl BuiltinDyn) {
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name: decl.Name,
+		Decl: decl.Decl,
+	})
+	topdown.RegisterBuiltinFunc(decl.Name, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
+		result, err := memoize(decl, bctx, terms, func() (*ast.Term, error) { return impl(bctx, terms) })
+		return finishFunction(decl.Name, bctx, result, err, iter)
+	})
+}
+
 // Function1 returns an option that adds a built-in function to the Rego object.
 func Function1(decl *Function, f Builtin1) func(*Rego) {
 	return newFunction(decl, func(bctx BuiltinContext, terms []*ast.Term, iter func(*ast.Term) error) error {
@@ -1434,7 +1494,7 @@ func (r *Rego) compileModules(ctx context.Context, txn storage.Transaction, m me
 			Ctx:          ctx,
 			Store:        r.store,
 			Txn:          txn,
-			Compiler:     r.compiler.WithPathConflictsCheck(storage.NonEmpty(ctx, r.store, txn)),
+			Compiler:     r.compilerForTxn(ctx, r.store, txn),
 			Metrics:      m,
 			Bundles:      r.bundles,
 			ExtraModules: r.parsedModules,
@@ -1634,7 +1694,13 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 	}
 
 	// Construct module for queries.
-	module := ast.MustParseModule("package " + ectx.partialNamespace)
+	id := fmt.Sprintf("__partialresult__%s__", ectx.partialNamespace)
+
+	module, err := ast.ParseModule(id, "package "+ectx.partialNamespace)
+	if err != nil {
+		return PartialResult{}, fmt.Errorf("bad partial namespace")
+	}
+
 	module.Rules = make([]*ast.Rule, len(pq.Queries))
 	for i, body := range pq.Queries {
 		module.Rules[i] = &ast.Rule{
@@ -1645,13 +1711,13 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 	}
 
 	// Update compiler with partial evaluation output.
-	r.compiler.Modules["__partialresult__"] = module
+	r.compiler.Modules[id] = module
 	for i, module := range pq.Support {
-		r.compiler.Modules[fmt.Sprintf("__partialsupport%d__", i)] = module
+		r.compiler.Modules[fmt.Sprintf("__partialsupport__%s__%d__", ectx.partialNamespace, i)] = module
 	}
 
 	r.metrics.Timer(metrics.RegoModuleCompile).Start()
-	r.compiler.Compile(r.compiler.Modules)
+	r.compilerForTxn(ctx, r.store, r.txn).Compile(r.compiler.Modules)
 	r.metrics.Timer(metrics.RegoModuleCompile).Stop()
 
 	if r.compiler.Failed() {
@@ -1687,13 +1753,6 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 	} else {
 		// Use input document as unknown if caller has not specified any.
 		unknowns = []*ast.Term{ast.NewTerm(ast.InputRootRef)}
-	}
-
-	// Check partial namespace to ensure it's valid.
-	if term, err := ast.ParseTerm(ectx.partialNamespace); err != nil {
-		return nil, err
-	} else if _, ok := term.Value.(ast.Var); !ok {
-		return nil, fmt.Errorf("bad partial namespace")
 	}
 
 	q := topdown.NewQuery(ectx.compiledQuery.query).
@@ -1886,6 +1945,12 @@ func (r *Rego) getTxn(ctx context.Context) (storage.Transaction, transactionClos
 	}
 
 	return txn, closer, nil
+}
+
+func (r *Rego) compilerForTxn(ctx context.Context, store storage.Store, txn storage.Transaction) *ast.Compiler {
+	// Update the compiler to have a valid path conflict check
+	// for the current context and transaction.
+	return r.compiler.WithPathConflictsCheck(storage.NonEmpty(ctx, store, txn))
 }
 
 func isTermVar(v ast.Var) bool {

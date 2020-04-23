@@ -23,6 +23,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -86,13 +87,15 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
+	syncMetricsCache := syncc.NewMetricsCache()
 
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	syncAdder := syncc.Adder{
-		Opa:    filteredOpa,
-		Events: events,
+		Opa:          filteredOpa,
+		Events:       events,
+		MetricsCache: syncMetricsCache,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -106,14 +109,15 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		return nil, err
 	}
 	return &ReconcileConfig{
-		reader:       mgr.GetCache(),
-		writer:       mgr.GetClient(),
-		statusClient: mgr.GetClient(),
-		scheme:       mgr.GetScheme(),
-		opa:          filteredOpa,
-		cs:           cs,
-		watcher:      w,
-		watched:      watchSet,
+		reader:           mgr.GetCache(),
+		writer:           mgr.GetClient(),
+		statusClient:     mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		opa:              filteredOpa,
+		cs:               cs,
+		watcher:          w,
+		watched:          watchSet,
+		syncMetricsCache: syncMetricsCache,
 	}, nil
 }
 
@@ -142,11 +146,12 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme  *runtime.Scheme
-	opa     syncc.OpaDataClient
-	cs      *watch.ControllerSwitch
-	watcher *watch.Registrar
-	watched *watch.Set
+	scheme           *runtime.Scheme
+	opa              syncc.OpaDataClient
+	syncMetricsCache *syncc.MetricsCache
+	cs               *watch.ControllerSwitch
+	watcher          *watch.Registrar
+	watched          *watch.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -224,6 +229,10 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	// reset sync cache before sending the metric
+	r.syncMetricsCache.ResetCache()
+	r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+
 	// Important: dynamic watches update must happen *after* updating our watchSet.
 	// Otherwise the sync controller will drop events for the newly watched kinds.
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
@@ -255,10 +264,23 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
+		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+
 		for i := range u.Items {
+			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
+
 			if _, err := r.opa.AddData(context.Background(), &u.Items[i]); err != nil {
+				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+					Kind:   u.Items[i].GetKind(),
+					Status: metrics.ErrorStatus,
+				})
 				return fmt.Errorf("adding data for %+v: %w", gvk, err)
 			}
+
+			r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
+				Kind:   u.Items[i].GetKind(),
+				Status: metrics.ActiveStatus,
+			})
 		}
 	}
 	return nil

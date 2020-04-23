@@ -14,7 +14,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,8 +32,6 @@ import (
 )
 
 const (
-	caName                 = "gatekeeper-ca"
-	service                = "gatekeeper-webhook-service"
 	certName               = "tls.crt"
 	keyName                = "tls.key"
 	caCertName             = "ca.crt"
@@ -45,43 +42,42 @@ const (
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-var (
-	secretKey = types.NamespacedName{
-		Namespace: util.GetNamespace(),
-		Name:      "gatekeeper-webhook-server-cert",
-	}
-	// DNSName is <service name>.<namespace>.svc
-	DNSName = fmt.Sprintf("%s.%s.svc", service, util.GetNamespace())
-	vwhGVK  = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
-	vwhKey  = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
-)
+var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 
 var _ manager.Runnable = &certRotator{}
 
-func AddRotator(mgr manager.Manager) error {
+func AddRotator(mgr manager.Manager, cr *certRotator, vwhName string) error {
 	// Use a new client so we are unaffected by the cache sync kill signal
 	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
 	if err != nil {
 		return err
 	}
-	rotator := &certRotator{client: cli}
-	if err = mgr.Add(rotator); err != nil {
+
+	cr.client = cli
+	if err = mgr.Add(cr); err != nil {
 		return err
 	}
 
+	vwhKey := types.NamespacedName{Name: vwhName}
 	reconciler := &ReconcileVWH{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		ctx:    context.Background(),
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		ctx:       context.Background(),
+		secretKey: cr.secretKey,
+		vwhKey:    vwhKey,
 	}
-	if err := addController(mgr, reconciler); err != nil {
+	if err := addController(mgr, reconciler, cr.secretKey, vwhKey); err != nil {
 		return err
 	}
 	return nil
 }
 
 type certRotator struct {
-	client client.Client
+	client         client.Client
+	secretKey      types.NamespacedName
+	caName         string
+	caOrganization string
+	dnsName        string
 }
 
 func (cr *certRotator) Start(stop <-chan (struct{})) error {
@@ -118,15 +114,15 @@ tickerLoop:
 // refreshCertIfNeeded returns whether the cert was refreshed and any errors
 func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
 	secret := &corev1.Secret{}
-	if err := cr.client.Get(context.Background(), secretKey, secret); err != nil {
+	if err := cr.client.Get(context.Background(), cr.secretKey, secret); err != nil {
 		return false, errors.Wrap(err, "acquiring secret to update certificates")
 	}
-	if secret.Data == nil || !validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
+	if secret.Data == nil || !cr.validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
 		crLog.Info("refreshing CA and server certs")
 		return cr.refreshCerts(true, secret)
 	}
 	// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)
-	if !validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
+	if !cr.validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
 		crLog.Info("refreshing server certs")
 		return cr.refreshCerts(false, secret)
 	}
@@ -138,7 +134,7 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 	var caArtifacts *KeyPairArtifacts
 	if refreshCA {
 		var err error
-		caArtifacts, err = createCACert()
+		caArtifacts, err = cr.createCACert()
 		if err != nil {
 			return false, err
 		}
@@ -149,7 +145,7 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 			return false, err
 		}
 	}
-	cert, key, err := createCertPEM(caArtifacts)
+	cert, key, err := cr.createCertPEM(caArtifacts)
 	if err != nil {
 		return false, err
 	}
@@ -252,7 +248,7 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 
 // createCACert creates the self-signed CA cert and private key that will
 // be used to sign the server certificate
-func createCACert() (*KeyPairArtifacts, error) {
+func (cr *certRotator) createCACert() (*KeyPairArtifacts, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
 	end := now.Add(certValidityDuration)
@@ -260,7 +256,7 @@ func createCACert() (*KeyPairArtifacts, error) {
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
 			CommonName:   caName,
-			Organization: []string{"gatekeeper"},
+			Organization: []string{cr.caOrganization},
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
@@ -290,14 +286,14 @@ func createCACert() (*KeyPairArtifacts, error) {
 
 // createCertPEM takes the results of createCACert and uses it to create the
 // PEM-encoded public certificate and private key, respectively
-func createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
+func (cr *certRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
 	end := now.Add(certValidityDuration)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: DNSName,
+			CommonName: cr.dnsName,
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
@@ -337,16 +333,16 @@ func lookaheadTime() time.Time {
 	return time.Now().Add(90 * 24 * time.Hour)
 }
 
-func validServerCert(caCert, cert, key []byte) bool {
-	valid, err := validCert(caCert, cert, key, DNSName, lookaheadTime())
+func (cr *certRotator) validServerCert(caCert, cert, key []byte) bool {
+	valid, err := validCert(caCert, cert, key, cr.dnsName, lookaheadTime())
 	if err != nil {
 		return false
 	}
 	return valid
 }
 
-func validCACert(cert, key []byte) bool {
-	valid, err := validCert(cert, cert, key, caName, lookaheadTime())
+func (cr *certRotator) validCACert(cert, key []byte) bool {
+	valid, err := validCert(cert, cert, key, cr.caName, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -399,20 +395,23 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 
 var _ handler.Mapper = &mapper{}
 
-type mapper struct{}
+type mapper struct {
+	secretKey types.NamespacedName
+	vwhKey    types.NamespacedName
+}
 
 func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
-	if object.Meta.GetNamespace() != vwhKey.Namespace {
+	if object.Meta.GetNamespace() != m.vwhKey.Namespace {
 		return nil
 	}
-	if object.Meta.GetName() != vwhKey.Name {
+	if object.Meta.GetName() != m.vwhKey.Name {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: secretKey}}
+	return []reconcile.Request{{NamespacedName: m.secretKey}}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func addController(mgr manager.Manager, r reconcile.Reconciler) error {
+func addController(mgr manager.Manager, r reconcile.Reconciler, secretKey, vwhKey types.NamespacedName) error {
 	// Create a new controller
 	c, err := controller.New(("validating-webhook-controller"), mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -427,7 +426,10 @@ func addController(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{}}
+	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
+		secretKey: secretKey,
+		vwhKey:    vwhKey,
+	}}
 	if err := c.Watch(&source.Kind{Type: vwh}, mapper); err != nil {
 		return err
 	}
@@ -440,15 +442,17 @@ var _ reconcile.Reconciler = &ReconcileVWH{}
 // ReconcileVWH reconciles a validatingwebhookconfiguration, making sure it
 // has the appropriate CA cert
 type ReconcileVWH struct {
-	client client.Client
-	scheme *runtime.Scheme
-	ctx    context.Context
+	client    client.Client
+	scheme    *runtime.Scheme
+	ctx       context.Context
+	secretKey types.NamespacedName
+	vwhKey    types.NamespacedName
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
 // object and makes sure the most recent CA cert is included
 func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if request.NamespacedName != secretKey {
+	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
 	}
 	secret := &corev1.Secret{}
@@ -464,7 +468,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.client.Get(r.ctx, vwhKey, vwh); err != nil {
+	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
