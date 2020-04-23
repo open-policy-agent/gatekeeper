@@ -45,14 +45,19 @@ spec:
       app: gatekeeper-operator
       release: RELEASE_NAME
   template:
+    metadata:
+      annotations: HELMSUBST_ANNOTATIONS
     spec:
       containers:
         - name: manager
           args:
-            - --auditInterval={{ .Values.auditInterval }}
+            - --audit-interval={{ .Values.auditInterval }}
             - --port=8443
             - --logtostderr
-            - --constraintViolationsLimit={{ .Values.constraintViolationsLimit }}
+            - --log-level={{ .Values.logLevel }}
+            - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+            - --audit-from-cache={{ .Values.auditFromCache }}
+            - --exempt-namespace=gatekeeper-system
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES

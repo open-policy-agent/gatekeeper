@@ -41,7 +41,18 @@ func init() {
 
 var log = logf.Log.WithName("webhook")
 
+const (
+	serviceAccountName = "gatekeeper-admin"
+	secretName         = "gatekeeper-webhook-server-cert"
+	vwhName            = "gatekeeper-validating-webhook-configuration"
+	serviceName        = "gatekeeper-webhook-service"
+	caName             = "gatekeeper-ca"
+	caOrganization     = "gatekeeper"
+)
+
 var (
+	// DNSName is <service name>.<namespace>.svc
+	dnsName                            = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
@@ -56,12 +67,24 @@ var (
 
 // AddPolicyWebhook registers the policy webhook server with the manager
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient()}}
+	reporter, err := newStatsReporter()
+	if err != nil {
+		return err
+	}
+	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 
 	if !*disableCertRotation {
 		log.Info("cert rotation is enabled")
-		if err := AddRotator(mgr); err != nil {
+		if err := AddRotator(mgr, &certRotator{
+			secretKey: types.NamespacedName{
+				Namespace: util.GetNamespace(),
+				Name:      secretName,
+			},
+			caName:         caName,
+			caOrganization: caOrganization,
+			dnsName:        dnsName,
+		}, vwhName); err != nil {
 			return err
 		}
 	} else {
@@ -95,11 +118,6 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	log := log.WithValues("hookType", "validation")
 
 	var timeStart = time.Now()
-	reporter, err := newStatsReporter()
-	if err != nil {
-		log.Error(err, "StatsReporter could not start")
-	}
-	h.reporter = reporter
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
@@ -210,13 +228,8 @@ func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, er
 }
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", util.GetNamespace())
-	for _, g := range user.Groups {
-		if g == saGroup {
-			return true
-		}
-	}
-	return false
+	sa := fmt.Sprintf("system:serviceaccounts:%s:%s", util.GetNamespace(), serviceAccountName)
+	return user.Username == sa
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
@@ -289,12 +302,12 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 		if gvk == trace.Kind {
 			traceEnabled = true
-			if trace.Dump == "All" {
+			if strings.EqualFold(trace.Dump, "All") {
 				dump = true
 			}
 		}
 	}
-	review := &target.SideloadNamespace{AdmissionRequest: &req.AdmissionRequest}
+	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {

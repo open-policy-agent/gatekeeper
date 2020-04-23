@@ -49,7 +49,7 @@ func (p *Probe) runTest(name string) func() error {
 			if err2 != nil {
 				dump = err2.Error()
 			}
-			return fmt.Errorf("Error: %s\n\nOPA Dump: %s\n", err, dump)
+			return fmt.Errorf("error: %s\n\nOPA Dump: %s\n", err, dump) //nolint:golint
 		}
 		return nil
 	}

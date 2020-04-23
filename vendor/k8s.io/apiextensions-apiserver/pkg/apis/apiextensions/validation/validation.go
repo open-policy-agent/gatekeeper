@@ -33,7 +33,8 @@ import (
 	"k8s.io/apiserver/pkg/util/webhook"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	apiservervalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	apiextensionsfeatures "k8s.io/apiextensions-apiserver/pkg/features"
@@ -317,8 +318,8 @@ func validateEnumStrings(fldPath *field.Path, value string, accepted []string, r
 // AcceptedConversionReviewVersions contains the list of ConversionReview versions the *prior* version of the API server understands.
 // 1.15: server understands v1beta1; accepted versions are ["v1beta1"]
 // 1.16: server understands v1, v1beta1; accepted versions are ["v1beta1"]
-// TODO(liggitt): 1.17: server understands v1, v1beta1; accepted versions are ["v1","v1beta1"]
-var acceptedConversionReviewVersions = sets.NewString(v1beta1.SchemeGroupVersion.Version)
+// 1.17+: server understands v1, v1beta1; accepted versions are ["v1","v1beta1"]
+var acceptedConversionReviewVersions = sets.NewString(apiextensionsv1.SchemeGroupVersion.Version, apiextensionsv1beta1.SchemeGroupVersion.Version)
 
 func isAcceptedConversionReviewVersion(v string) bool {
 	return acceptedConversionReviewVersions.Has(v)
@@ -792,6 +793,18 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("x-kubernetes-preserve-unknown-fields"), *schema.XPreserveUnknownFields, "must be true or undefined"))
 	}
 
+	if schema.XMapType != nil && schema.Type != "object" {
+		if len(schema.Type) == 0 {
+			allErrs = append(allErrs, field.Required(fldPath.Child("type"), "must be object if x-kubernetes-map-type is specified"))
+		} else {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("type"), schema.Type, "must be object if x-kubernetes-map-type is specified"))
+		}
+	}
+
+	if schema.XMapType != nil && *schema.XMapType != "atomic" && *schema.XMapType != "granular" {
+		allErrs = append(allErrs, field.NotSupported(fldPath.Child("x-kubernetes-map-type"), *schema.XMapType, []string{"atomic", "granular"}))
+	}
+
 	if schema.XListType != nil && schema.Type != "array" {
 		if len(schema.Type) == 0 {
 			allErrs = append(allErrs, field.Required(fldPath.Child("type"), "must be array if x-kubernetes-list-type is specified"))
@@ -806,8 +819,9 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("items").Child("x-kubernetes-list-type"), is.XListType, "must be atomic as item of a list with x-kubernetes-list-type=set"))
 			}
 		case "object":
-			// maps are granular, i.e. non-atomic in 1.16 (and get x-kubernetes-map-type in 1.17)
-			allErrs = append(allErrs, field.Invalid(fldPath.Child("items").Child("type"), is.Type, "must be a scalar or atomic type as item of a list with x-kubernetes-list-type=set"))
+			if is.XMapType == nil || *is.XMapType != "atomic" { // granular is the implicit default behaviour if unset, hence nil and != atomic are wrong
+				allErrs = append(allErrs, field.Invalid(fldPath.Child("items").Child("x-kubernetes-map-type"), is.XListType, "must be atomic as item of a list with x-kubernetes-list-type=set"))
+			}
 		}
 	}
 
@@ -845,7 +859,7 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 			for _, k := range schema.XListMapKeys {
 				if s, ok := schema.Items.Schema.Properties[k]; ok {
 					if s.Type == "array" || s.Type == "object" {
-						allErrs = append(allErrs, field.Invalid(fldPath.Child("items").Child("properties").Child(k).Child("type"), schema.Items.Schema.Type, "must be a scalar type if parent array's x-kubernetes-list-type is map"))
+						allErrs = append(allErrs, field.Invalid(fldPath.Child("items").Child("properties").Key(k).Child("type"), schema.Items.Schema.Type, "must be a scalar type if parent array's x-kubernetes-list-type is map"))
 					}
 				} else {
 					allErrs = append(allErrs, field.Invalid(fldPath.Child("x-kubernetes-list-map-keys"), schema.XListMapKeys, "entries must all be names of item properties"))
@@ -1022,7 +1036,7 @@ func allowedAtRootSchema(field string) bool {
 
 // requireOpenAPISchema returns true if the request group version requires a schema
 func requireOpenAPISchema(requestGV schema.GroupVersion, oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		// for backwards compatibility
 		return false
 	}
@@ -1050,10 +1064,7 @@ func allowDefaults(requestGV schema.GroupVersion, oldCRDSpec *apiextensions.Cust
 		// don't tighten validation on existing persisted data
 		return true
 	}
-	if !utilfeature.DefaultFeatureGate.Enabled(apiextensionsfeatures.CustomResourceDefaulting) {
-		return false
-	}
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		return false
 	}
 	return true
@@ -1172,7 +1183,7 @@ func schemaHasKubernetesExtensions(s *apiextensions.JSONSchemaProps) bool {
 
 // requireStructuralSchema returns true if schemas specified must be structural
 func requireStructuralSchema(requestGV schema.GroupVersion, oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		// for compatibility
 		return false
 	}
@@ -1254,7 +1265,7 @@ func hasNonAtomicSetType(schema *apiextensions.JSONSchemaProps) bool {
 			case "array":
 				return is.XListType != nil && *is.XListType != "atomic" // atomic is the implicit default behaviour if unset, hence != atomic is wrong
 			case "object":
-				return true // map types are always non-atomic in 1.16 (and can be configured with x-kubernetes-map-type in 1.17+)
+				return is.XMapType == nil || *is.XMapType != "atomic" // granular is the implicit default behaviour if unset, hence nil and != atomic are wrong
 			default:
 				return false // scalar types are always atomic
 			}
@@ -1265,7 +1276,7 @@ func hasNonAtomicSetType(schema *apiextensions.JSONSchemaProps) bool {
 
 // requireValidPropertyType returns true if valid openapi v3 types should be required for the given API version
 func requireValidPropertyType(requestGV schema.GroupVersion, oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		// for compatibility
 		return false
 	}
@@ -1280,7 +1291,7 @@ func requireValidPropertyType(requestGV schema.GroupVersion, oldCRDSpec *apiexte
 func validateAPIApproval(newCRD, oldCRD *apiextensions.CustomResourceDefinition, requestGV schema.GroupVersion) field.ErrorList {
 	// check to see if we need confirm API approval for kube group.
 
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		// no-op for compatibility with v1beta1
 		return nil
 	}
@@ -1306,19 +1317,19 @@ func validateAPIApproval(newCRD, oldCRD *apiextensions.CustomResourceDefinition,
 	// in v1, we require valid approval strings
 	switch newApprovalState {
 	case apihelpers.APIApprovalInvalid:
-		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(v1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[v1beta1.KubeAPIApprovedAnnotation], reason)}
+		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[apiextensionsv1beta1.KubeAPIApprovedAnnotation], reason)}
 	case apihelpers.APIApprovalMissing:
-		return field.ErrorList{field.Required(field.NewPath("metadata", "annotations").Key(v1beta1.KubeAPIApprovedAnnotation), reason)}
+		return field.ErrorList{field.Required(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), reason)}
 	case apihelpers.APIApproved, apihelpers.APIApprovalBypassed:
 		// success
 		return nil
 	default:
-		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(v1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[v1beta1.KubeAPIApprovedAnnotation], reason)}
+		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[apiextensionsv1beta1.KubeAPIApprovedAnnotation], reason)}
 	}
 }
 
 func validatePreserveUnknownFields(crd, oldCRD *apiextensions.CustomResourceDefinition, requestGV schema.GroupVersion) field.ErrorList {
-	if requestGV == v1beta1.SchemeGroupVersion {
+	if requestGV == apiextensionsv1beta1.SchemeGroupVersion {
 		// no-op for compatibility with v1beta1
 		return nil
 	}

@@ -27,37 +27,67 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-var c client.Client
+const timeout = time.Second * 15
 
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "denyall"}}
+// setupManager sets up a controller-runtime manager with registered watch manager.
+func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
+	t.Helper()
 
-var expectedRequestInvalidRego = reconcile.Request{NamespacedName: types.NamespacedName{Name: "invalidrego"}}
-
-const timeout = time.Second * 5
+	ctrl.SetLogger(zap.Logger(true))
+	metrics.Registry = prometheus.NewRegistry()
+	mgr, err := manager.New(cfg, manager.Options{
+		MetricsBindAddress: "0",
+		NewCache:           dynamiccache.New,
+		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
+			return apiutil.NewDynamicRESTMapper(c)
+		},
+	})
+	if err != nil {
+		t.Fatalf("setting up controller manager: %s", err)
+	}
+	c := mgr.GetCache()
+	dc, ok := c.(watch.RemovableCache)
+	if !ok {
+		t.Fatalf("expected dynamic cache, got: %T", c)
+	}
+	wm, err := watch.New(dc)
+	if err != nil {
+		t.Fatalf("could not create watch manager: %s", err)
+	}
+	if err := mgr.Add(wm); err != nil {
+		t.Fatalf("could not add watch manager to manager: %s", err)
+	}
+	return mgr, wm
+}
 
 func TestReconcile(t *testing.T) {
+	crdKey := types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}
 	g := gomega.NewGomegaWithT(t)
 	instance := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
@@ -83,19 +113,16 @@ violation[{"msg": "denied!"}] {
 		},
 	}
 
+	// Uncommenting the below enables logging of K8s internals like watch.
+	// klog.InitFlags(fs)
+	// fs.Parse([]string{"--alsologtostderr", "-v=10"})
+	// klog.SetOutput(os.Stderr)
+
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
-	ctrl.SetLogger(zap.Logger(true))
-	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	wm, err := watch.New(mgr.GetConfig())
-	if err != nil {
-		t.Fatalf("could not create watch manager: %s", err)
-	}
-	if err := mgr.Add(wm); err != nil {
-		t.Fatalf("could not add watch manager to manager: %s", err)
-	}
-	c = mgr.GetClient()
+	mgr, wm := setupManager(t)
+	c := mgr.GetClient()
+	ctx := context.Background()
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -109,9 +136,9 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	rec, _ := newReconciler(mgr, opa, wm)
-	recFn, requests := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+	cs := watch.NewSwitch()
+	rec, _ := newReconciler(mgr, opa, wm, cs)
+	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
 	once := sync.Once{}
@@ -124,116 +151,105 @@ violation[{"msg": "denied!"}] {
 
 	defer testMgrStopped()
 
-	// Create the ConstraintTemplate object and expect the CRD to be created
-	err = c.Create(context.TODO(), instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer func() {
-		err := c.Delete(context.TODO(), instance)
+	t.Run("CRD Gets Created", func(t *testing.T) {
+		err = c.Create(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}()
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	clientset := kubernetes.NewForConfigOrDie(cfg)
-	g.Eventually(func() error {
-		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
-		if err := c.Get(context.TODO(), types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}, crd); err != nil {
-			return err
-		}
-		rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
-		if err != nil {
-			return err
-		}
-		for _, r := range rs.APIResources {
-			if r.Kind == "DenyAll" {
-				return nil
+		clientset := kubernetes.NewForConfigOrDie(cfg)
+		g.Eventually(func() error {
+			crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+			if err := c.Get(ctx, crdKey, crd); err != nil {
+				return err
 			}
-		}
-		return errors.New("DenyAll not found")
-	}, timeout).Should(gomega.BeNil())
-
-	cstr := &unstructured.Unstructured{}
-	cstr.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "constraints.gatekeeper.sh",
-		Version: "v1beta1",
-		Kind:    "DenyAll",
+			rs, err := clientset.Discovery().ServerResourcesForGroupVersion("constraints.gatekeeper.sh/v1beta1")
+			if err != nil {
+				return err
+			}
+			for _, r := range rs.APIResources {
+				if r.Kind == "DenyAll" {
+					return nil
+				}
+			}
+			return errors.New("DenyAll not found")
+		}, timeout).Should(gomega.BeNil())
 	})
-	cstr.SetName("denyall")
-	kindSelector := `[{"apiGroups": ["*"], "kinds": ["*"]}]`
-	ks := make([]interface{}, 0)
-	err = json.Unmarshal([]byte(kindSelector), &ks)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	err = unstructured.SetNestedSlice(cstr.Object, ks, "spec", "match", "kinds")
-	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	dynamic := dynamic.NewForConfigOrDie(cfg)
-	cstrClient := dynamic.Resource(schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: "denyall"})
-	_, err = cstrClient.Create(cstr, metav1.CreateOptions{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer func() {
-		err = cstrClient.Delete(cstr.GetName(), &metav1.DeleteOptions{})
+	t.Run("Constraint is marked as enforced", func(t *testing.T) {
+		err = c.Create(ctx, newDenyAllCstr())
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}()
+		constraintEnforced(c, g, timeout)
+	})
 
-	g.Eventually(func() error {
-		o, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
-		if err != nil {
-			return err
+	t.Run("Constraint actually enforced", func(t *testing.T) {
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
 		}
-		status, err := util.GetHAStatus(o)
-		if err != nil {
-			return err
+		req := admissionv1beta1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
 		}
-		val, found, err := unstructured.NestedBool(status, "enforced")
-		if err != nil {
-			return err
+		resp, err := opa.Review(ctx, req)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if len(resp.Results()) != 1 {
+			fmt.Println(resp.TraceDump())
+			fmt.Println(opa.Dump(ctx))
 		}
-		if !found {
-			return errors.New("status not found")
-		}
-		if !val {
-			return errors.New("constraint not enforced")
-		}
-		return nil
-	}, timeout).Should(gomega.BeNil())
+		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
+	})
+	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
+		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
+		origUID := crd.GetUID()
+		crd.Spec = apiextensionsv1beta1.CustomResourceDefinitionSpec{}
+		g.Expect(c.Delete(ctx, crd)).NotTo(gomega.HaveOccurred())
 
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "testns",
-		},
-	}
-	req := admissionv1beta1.AdmissionRequest{
-		Kind: metav1.GroupVersionKind{
-			Group:   "",
-			Version: "v1",
-			Kind:    "Namespace",
-		},
-		Operation: "Create",
-		Name:      "FooNamespace",
-		Object:    runtime.RawExtension{Object: ns},
-	}
-	resp, err := opa.Review(context.TODO(), req)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	if len(resp.Results()) != 1 {
-		fmt.Println(resp.TraceDump())
-		fmt.Println(opa.Dump(context.TODO()))
-	}
-	g.Expect(len(resp.Results())).Should(gomega.Equal(1))
+		g.Eventually(func() error {
+			crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+			if err := c.Get(ctx, crdKey, crd); err != nil {
+				return err
+			}
+			if !crd.GetDeletionTimestamp().IsZero() {
+				return errors.New("Still deleting")
+			}
+			if crd.GetUID() == origUID {
+				return errors.New("Not yet deleted")
+			}
+			for _, cond := range crd.Status.Conditions {
+				if cond.Type == apiextensionsv1beta1.Established && cond.Status == apiextensionsv1beta1.ConditionTrue {
+					return nil
+				}
+			}
+			return errors.New("Not established")
+		}, timeout, time.Second).Should(gomega.BeNil())
+		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
+		// we need a longer timeout because deleting the CRD interrupts the watch
+		constraintEnforced(c, g, 50*timeout)
+	})
 
-	// Create template with invalid rego, should populate parse error in status
-	instanceInvalidRego := &v1beta1.ConstraintTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
-		Spec: v1beta1.ConstraintTemplateSpec{
-			CRD: v1beta1.CRD{
-				Spec: v1beta1.CRDSpec{
-					Names: v1beta1.Names{
-						Kind: "InvalidRego",
+	t.Run("Templates with Invalid Rego throw errors", func(t *testing.T) {
+		// Create template with invalid rego, should populate parse error in status
+		instanceInvalidRego := &v1beta1.ConstraintTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
+			Spec: v1beta1.ConstraintTemplateSpec{
+				CRD: v1beta1.CRD{
+					Spec: v1beta1.CRDSpec{
+						Names: v1beta1.Names{
+							Kind: "InvalidRego",
+						},
 					},
 				},
-			},
-			Targets: []v1beta1.Target{
-				{
-					Target: "admission.k8s.gatekeeper.sh",
-					Rego: `
+				Targets: []v1beta1.Target{
+					{
+						Target: "admission.k8s.gatekeeper.sh",
+						Rego: `
 package foo
 
 violation[{"msg": "hi"}] { 1 == 1 }
@@ -241,88 +257,104 @@ violation[{"msg": "hi"}] { 1 == 1 }
 anyrule[}}}//invalid//rego
 
 `},
+				},
 			},
-		},
-	}
+		}
 
-	err = c.Create(context.TODO(), instanceInvalidRego)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer func() {
-		err = c.Delete(context.TODO(), instanceInvalidRego)
+		err = c.Create(ctx, instanceInvalidRego)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}()
-	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestInvalidRego)))
+		defer func() {
+			err = c.Delete(ctx, instanceInvalidRego)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+		}()
 
-	g.Eventually(func() error {
-		ct := &v1beta1.ConstraintTemplate{}
-		if err := c.Get(context.TODO(), types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
-			return err
-		}
-		if ct.Name == "invalidrego" {
-			status := util.GetCTHAStatus(ct)
-			if len(status.Errors) != 1 {
-				return errors.New("InvalidRego template should contain 1 parse error")
+		g.Eventually(func() error {
+			ct := &v1beta1.ConstraintTemplate{}
+			if err := c.Get(ctx, types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
+				return err
 			}
-			if status.Errors[0].Code != "rego_parse_error" {
-				return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
+			if ct.Name == "invalidrego" {
+				status := util.GetCTHAStatus(ct)
+				if len(status.Errors) == 0 {
+					j, err := json.Marshal(status)
+					if err != nil {
+						t.Fatal("could not parse JSON", err)
+					}
+					s := string(j)
+					return fmt.Errorf("InvalidRego template should contain an error: %s", s)
+				}
+				if status.Errors[0].Code != "rego_parse_error" {
+					return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
+				}
+				return nil
+			}
+			return errors.New("InvalidRego not found")
+		}, timeout).Should(gomega.BeNil())
+	})
+
+	t.Run("Deleted constraint templates not enforced", func(t *testing.T) {
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testns",
+			},
+		}
+		req := admissionv1beta1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Namespace",
+			},
+			Operation: "Create",
+			Name:      "FooNamespace",
+			Object:    runtime.RawExtension{Object: ns},
+		}
+		resp, err := opa.Review(ctx, req)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if len(resp.Results()) != 1 {
+			fmt.Println(resp.TraceDump())
+			fmt.Println(opa.Dump(ctx))
+		}
+		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
+		g.Expect(c.Delete(ctx, instance.DeepCopy())).Should(gomega.BeNil())
+		g.Eventually(func() error {
+			resp, err := opa.Review(ctx, req)
+			if err != nil {
+				return err
+			}
+			if len(resp.Results()) != 0 {
+				dump, _ := opa.Dump(ctx)
+				return fmt.Errorf("Results not yet zero\nOPA DUMP:\n%s", dump)
 			}
 			return nil
-		}
-		return errors.New("InvalidRego not found")
-	}, timeout).Should(gomega.BeNil())
+		}, timeout).Should(gomega.BeNil())
+	})
+}
 
-	// Test finalizer removal
-	orig := &v1beta1.ConstraintTemplate{}
-	g.Expect(c.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, orig)).NotTo(gomega.HaveOccurred())
-	g.Expect(containsString(finalizerName, orig.GetFinalizers())).Should(gomega.BeTrue())
-
-	origCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(constraint.HasFinalizer(origCstr)).Should(gomega.BeTrue())
-
-	testMgrStopped()
-	if err := wm.Pause(); err != nil {
-		t.Fatalf("unable to pause watch manager: %s", err)
-	}
-	time.Sleep(5 * time.Second)
-	finished := make(chan struct{})
-	newCli, err := client.New(mgr.GetConfig(), client.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	TearDownState(newCli, finished)
-	<-finished
-
+func constraintEnforced(c client.Client, g *gomega.GomegaWithT, timeout time.Duration) {
 	g.Eventually(func() error {
-		obj := &v1beta1.ConstraintTemplate{}
-		if err := newCli.Get(context.TODO(), types.NamespacedName{Name: "denyall"}, obj); err != nil {
-			return err
-		}
-		if containsString(finalizerName, obj.GetFinalizers()) {
-			return errors.New("denyall constraint template still has finalizer")
-		}
-		if len(obj.Status.ByPod) != 0 {
-			return errors.New("denyall constraint template still has pod-specific status")
-		}
-		return nil
-	}, timeout).Should(gomega.BeNil())
-
-	g.Eventually(func() error {
-		cleanCstr, err := cstrClient.Get("denyall", metav1.GetOptions{TypeMeta: metav1.TypeMeta{Kind: "DenyAll", APIVersion: "constraints.gatekeeper.sh/v1beta1"}})
+		cstr := newDenyAllCstr()
+		err := c.Get(context.TODO(), types.NamespacedName{Name: "denyallconstraint"}, cstr)
 		if err != nil {
 			return err
 		}
-		if constraint.HasFinalizer(cleanCstr) {
-			return errors.New("denyall constraint still has finalizer")
-		}
-		s, exists, err := unstructured.NestedSlice(cleanCstr.Object, "status", "byPod")
+		status, err := constraintutil.GetHAStatus(cstr)
 		if err != nil {
-			return fmt.Errorf("unstructured access error: %v", err)
+			return err
 		}
-		if !exists {
-			return nil
-		}
-		if len(s) != 0 {
-			return fmt.Errorf("byPod status is not empty: %v", s)
+		if !status.Enforced {
+			return errors.New("constraint not enforced")
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
+}
+
+func newDenyAllCstr() *unstructured.Unstructured {
+	cstr := &unstructured.Unstructured{}
+	cstr.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "constraints.gatekeeper.sh",
+		Version: "v1beta1",
+		Kind:    "DenyAll",
+	})
+	cstr.SetName("denyallconstraint")
+	return cstr
 }

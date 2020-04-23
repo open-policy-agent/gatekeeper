@@ -22,15 +22,14 @@ spec:
 
         violation[{"msg": msg, "details": {}}] {
             metadata := input.review.object.metadata
-            not input_apparmor_allowed(metadata)
-            msg := sprintf("AppArmor profile is not allowed, pod: %v. Allowed profiles: %v", [input.review.object.metadata.name, input.parameters.allowedProfiles])
+            container := input_containers[_]
+            not input_apparmor_allowed(container, metadata)
+            msg := sprintf("AppArmor profile is not allowed, pod: %v, container: %v. Allowed profiles: %v", [input.review.object.metadata.name, container.name, input.parameters.allowedProfiles])
         }
 
-        input_apparmor_allowed(metadata) {
+        input_apparmor_allowed(container, metadata) {
             metadata.annotations[key] == input.parameters.allowedProfiles[_]
-            startswith(key, "container.apparmor.security.beta.kubernetes.io/")
-            [prefix, name] := split(key, "/")
-            name == input_containers[_].name
+            key == sprintf("container.apparmor.security.beta.kubernetes.io/%v", [container.name])
         }
 
         input_containers[c] {

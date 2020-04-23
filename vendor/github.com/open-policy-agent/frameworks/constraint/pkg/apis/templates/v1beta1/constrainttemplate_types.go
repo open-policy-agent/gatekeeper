@@ -39,7 +39,8 @@ type CRDSpec struct {
 }
 
 type Names struct {
-	Kind string `json:"kind,omitempty"`
+	Kind       string   `json:"kind,omitempty"`
+	ShortNames []string `json:"shortNames,omitempty"`
 }
 
 type Validation struct {
@@ -63,8 +64,9 @@ type CreateCRDError struct {
 // an individual controller
 type ByPodStatus struct {
 	// a unique identifier for the pod that wrote the status
-	ID     string            `json:"id,omitempty"`
-	Errors []*CreateCRDError `json:"errors,omitempty"`
+	ID                 string            `json:"id,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	Errors             []*CreateCRDError `json:"errors,omitempty"`
 }
 
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate

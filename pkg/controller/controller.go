@@ -16,6 +16,8 @@ limitations under the License.
 package controller
 
 import (
+	"context"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -24,6 +26,7 @@ import (
 type Injector interface {
 	InjectOpa(*opa.Client)
 	InjectWatchManager(*watch.Manager)
+	InjectControllerSwitch(*watch.ControllerSwitch)
 	Add(mgr manager.Manager) error
 }
 
@@ -35,10 +38,15 @@ var Injectors []Injector
 var AddToManagerFuncs []func(manager.Manager) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, client *opa.Client, wm *watch.Manager) error {
+func AddToManager(m manager.Manager, client *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch) error {
+	// Reset cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
+	if err := client.Reset(context.Background()); err != nil {
+		return err
+	}
 	for _, a := range Injectors {
 		a.InjectOpa(client)
 		a.InjectWatchManager(wm)
+		a.InjectControllerSwitch(cs)
 		if err := a.Add(m); err != nil {
 			return err
 		}

@@ -32,6 +32,25 @@ In addition to the `admission` scenario, Gatekeeper's audit functionality allows
 
 Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
+## Admission Webhook Fail-Open Status
+
+Currently Gatekeeper is defaulting to using `failurePolicy​: ​Ignore` for admission request webhook errors. The impact of
+this is that when the webhook is down, or otherwise unreachable, constraints will not be
+enforced. Audit is expected to pick up any slack in enforcement by highlighting invalid
+resources that made it into the cluster.
+
+The reason for fail-open is because the webhook server currently only has one instance, which risks downtime
+during actions like upgrades. If we were to fail closed, this downtime would lead to
+downtime in the cluster's control plane. We are currently working on addressing issues
+that may cause multi-pod deployments of Gatekeeper to not work as expected. Once
+we can improve availability by running in multiple pods, we will likely make
+that setup the default and change our default webhook behavior to fail-closed (`failurePolicy: Fail`).
+
+If desired, the webhook can be set to fail-closed by modifying the ValidatingWebhookConfiguration,
+though this may have uptime impact on your cluster's control plane. In the interim,
+it is best to avoid policies that assume 100% enforcement during request
+time (e.g. mimicking RBAC-like behavior by validating the user making the request).
+
 ## Installation Instructions
 
 ### Installation
@@ -227,6 +246,7 @@ Note the `match` field, which defines the scope of objects to which a given cons
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
    * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
+   * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
    * `labelSelector` is a standard Kubernetes label selector.
    * `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](#replicating-data) for more details.
 
@@ -236,7 +256,7 @@ Note that if multiple matchers are specified, a resource must satisfy each top-l
 
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
 
-The audit feature also requires replication. Because we rely on OPA as the source-of-truth for audit queries, an object must first be cached before it can be audited for constraint violations.
+The audit feature does not require replication by default. However, when the ``audit-from-cache`` flag is set to true, the OPA cache will be used as the source-of-truth for audit queries; thus, an object must first be cached before it can be audited for constraint violations.
 
 Kubernetes data can be replicated into OPA via the sync config resource. Currently resources defined in `syncOnly` will be synced into OPA. Updating `syncOnly` should dynamically update what objects are synced. Below is an example:
 
@@ -309,11 +329,12 @@ status:
     message: 'you must provide labels: {"gatekeeper"}'
     name: kube-system
 ```
-> NOTE: Audit requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
 - Audit interval: set `--audit-interval=123` (defaults to every `60` seconds)
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
 - Disable: set `--audit-interval=0`
+
+By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
 
 ### Log denies
 
@@ -356,9 +377,80 @@ status:
 ```
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
+### Exempting Namespaces from the Gatekeeper Admission Webhook
+
+Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints is
+necessary to exclude them from audit.
+
+If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
+
+   1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
+   
+        ```yaml
+          namespaceSelector:
+            matchExpressions:
+            - key: admission.gatekeeper.sh/ignore
+              operator: DoesNotExist
+        ```
+      the default Gatekeeper manifest should already have added this. The default name for the
+      webhook configuration is `gatekeeper-validating-webhook-configuration` and the default
+      name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
+
+   2. Tell Gatekeeper it's okay for the namespace to be ignored by adding a flag to the pod:
+      `--exempt-namespace=<NAMESPACE NAME>`. This step is necessary because otherwise the
+      permission to modify a namespace would be equivalent to the permission to exempt everything
+      in that namespace from policy checks. This way a user must explicitly have permissions
+      to configure the Gatekeeper pod before they can add exemptions.
+
+   3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
+      to the label is ignored, so it can be used to annotate the reason for the exemption.
+
 ### Debugging
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
+
+#### Viewing the Request Object
+
+A simple way to view the request object is to use a constraint/template that
+denies all requests and outputs the request object as its rejection message.
+
+Example template:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyall
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyAll
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyall
+
+        violation[{"msg": msg}] {
+          msg := sprintf("REVIEW OBJECT: %v", [input.review])
+        }
+```
+
+Example constraint:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyAll
+metadata:
+  name: deny-all-namespaces
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+```
+
+#### Tracing
 
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
@@ -409,24 +501,93 @@ When applying the constraint using `kubectl apply -f constraint.yaml` with a Con
 
 To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
 
+### Customizing Admission Behavior
+
+Gatekeeper is a [Kubernetes admission webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#webhook-configuration)
+whose default configuration can be found in the `gatekeeper.yaml` manifest file. By default, it is
+a `ValidatingWebhookConfiguration` resource named `gatekeeper-validating-webhook-configuration`.
+
+Currently the configuration specifies two webhooks: one for checking a request against
+the installed constraints and a second webhook for checking labels on namespace requests
+that would result in bypassing constraints for the namespace. The namespace-label webhook
+is necessary to prevent a privilege escalation where the permission to add a label to a
+namespace is equivalent to the ability to bypass all constraints for that namespace.
+You can read more about the ability to exempt namespaces by label [above](#exempting-namespaces-from-the-gatekeeper-admission-webhook).
+
+Because Kubernetes adds features with each version, if you want to know how the webhook can be configured it
+is best to look at the official documentation linked at the top of this section. However, two particularly important
+configuration options deserve special mention: [timeouts](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#timeouts) and
+[failure policy](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#failure-policy).
+
+Timeouts allow you to configure how long the API server will wait for a response from the admission webhook before it
+considers the request to have failed. Note that setting the timeout longer than the overall request timeout
+means that the main request will time out before the webhook's failure policy is invoked.
+
+Failure policy controls what happens when a webhook fails for whatever reason. Common
+failure scenarios include timeouts, a 5xx error from the server or the webhook being unavailable.
+You have the option to ignore errors, allowing the request through, or failing, rejecting the request.
+This results in a direct tradeoff between availability and enforcement.
+
+Currently Gatekeeper is defaulting to using `Ignore` for the constraint requests. This is because
+the webhook server currently only has one instance, which risks downtime during actions like upgrades.
+As the theoretical availability improves we will likely change the default to `Fail`.
+
+The namespace label webhook defaults to `Fail`, this is to help ensure that policies preventing
+labels that bypass the webhook from being applied are enforced. Because this webhook only gets
+called for namespace modification requests, the impact of downtime is mitigated, making the
+theoretical maximum availability less of an issue.
+
+Because the manifest is available for customization, the webhook configuration can
+be tuned to meet your specific needs if they differ from the defaults.
+
+### Emergency Recovery
+
+If a situation arises where Gatekeeper is preventing the cluster from operating correctly,
+the webhook can be disabled. This will remove all Gatekeeper admission checks. Assuming
+the default webhook name has been used this can be achieved by running:
+
+`kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration`
+
+Redeploying the webhook configuration will re-enable Gatekeeper.
+
+### Running on private GKE Cluster nodes
+
+By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straight to the POD on port 8443.
+
+Two ways of working around this:
+
+- create a new firewall rule from master to private nodes to open port `8443` (or any other custom port)
+  - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
+- make the pod to run on privileged port 443 (need to run pod as root)
+  - update Gatekeeper deployment manifest spec:
+    - remove `securityContext` settings that force the pods not to run as root
+    - update port from `8443` to `443`
+    ```yaml
+    containers:
+    - args:
+      - --port=443
+      ports:
+      - containerPort: 443
+        name: webhook-server
+        protocol: TCP
+    ```
+
+  - update Gatekeeper service manifest spec:
+    - update `targetPort` from `8443` to `443`
+    ```yaml
+    ports:
+    - port: 443
+      targetPort: 443
+    ```
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
 
+
 # FAQ
 
 ## Finalizers
-
-### Why does Gatekeeper add sync finalizers?
-
-When Gatekeeper syncs resources it's adding them to OPA's internal cache. This
-cache may be used by constraints to render decisions. Because of this stale data
-is bad. It can lead to invalid rejections (e.g. when a uniqueness constraint is
-violated because an update conflicts with a since-deleted resource), or invalid
-acceptance (e.g. if a constraint uses the cache to make sure a Deployment exists
-before a Service can be created). Finalizers help avoid stale state by making
-sure Gatekeeper has processed the deletion and removed the object from its cache
-before the API Server can garbage collect the object.
 
 ### How can I remove finalizers? Why are they hanging around?
 
@@ -446,7 +607,13 @@ If Gatekeeper is not running:
   * The container was sent a hard kill signal
   * The container had a panic
 
-It is safest to remove the Config resource before uninstalling Gatekeeper, as
-that causes finalizers to be removed outside of the normal GC process.
-
 Finalizers can be removed manually via `kubectl edit` or `kubectl patch`
+
+# Security
+
+Please report vulnerabilities by email to [open-policy-agent-security](mailto:open-policy-agent-security@googlegroups.com).
+We will send a confirmation message to acknowledge that we have received the
+report and then we will send additional messages to follow up once the issue
+has been investigated.
+
+For details on the security release process please refer to the [open-policy-agent/opa/SECURITY.md](https://github.com/open-policy-agent/opa/blob/master/SECURITY.md) file.

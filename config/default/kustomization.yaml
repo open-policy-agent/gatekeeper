@@ -9,8 +9,8 @@ namespace: gatekeeper-system
 namePrefix: gatekeeper-
 
 # Labels to add to all resources and selectors.
-#commonLabels:
-#  someName: someValue
+commonLabels:
+  gatekeeper.sh/system: "yes"
 
 bases:
 - ../crd

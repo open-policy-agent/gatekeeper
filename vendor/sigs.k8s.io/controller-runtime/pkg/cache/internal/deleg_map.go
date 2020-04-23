@@ -63,11 +63,17 @@ func (m *InformersMap) Start(stop <-chan struct{}) error {
 	return nil
 }
 
-// WaitForCacheSync waits until all the caches have been synced.
+// WaitForCacheSync waits until all the caches have been started and synced.
 func (m *InformersMap) WaitForCacheSync(stop <-chan struct{}) bool {
 	syncedFuncs := append([]cache.InformerSynced(nil), m.structured.HasSyncedFuncs()...)
 	syncedFuncs = append(syncedFuncs, m.unstructured.HasSyncedFuncs()...)
 
+	if !m.structured.waitForStarted(stop) {
+		return false
+	}
+	if !m.unstructured.waitForStarted(stop) {
+		return false
+	}
 	return cache.WaitForCacheSync(stop, syncedFuncs...)
 }
 

@@ -64,7 +64,7 @@ func New(config *rest.Config, options Options) (Client, error) {
 	// Init a Mapper if none provided
 	if options.Mapper == nil {
 		var err error
-		options.Mapper, err = apiutil.NewDiscoveryRESTMapper(config)
+		options.Mapper, err = apiutil.NewDynamicRESTMapper(config)
 		if err != nil {
 			return nil, err
 		}

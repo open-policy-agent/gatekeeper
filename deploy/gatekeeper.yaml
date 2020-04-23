@@ -2,15 +2,19 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
+    admission.gatekeeper.sh/ignore: no-self-managing
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-system
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.2
+    controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh
@@ -101,10 +105,20 @@ status:
   conditions: []
   storedVersions: []
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-admin
+  namespace: gatekeeper-system
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-role
   namespace: gatekeeper-system
 rules:
@@ -125,6 +139,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-role
 rules:
 - apiGroups:
@@ -134,18 +150,6 @@ rules:
   verbs:
   - get
   - list
-  - watch
-- apiGroups:
-  - admissionregistration.k8s.io
-  resources:
-  - validatingwebhookconfigurations
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - apiextensions.k8s.io
@@ -211,10 +215,26 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - gatekeeper-validating-webhook-configuration
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-rolebinding
   namespace: gatekeeper-system
 roleRef:
@@ -223,12 +243,14 @@ roleRef:
   name: gatekeeper-manager-role
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -236,18 +258,22 @@ roleRef:
   name: gatekeeper-manager-role
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Secret
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-webhook-service
   namespace: gatekeeper-system
 spec:
@@ -256,12 +282,14 @@ spec:
     targetPort: 8443
   selector:
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
@@ -269,16 +297,20 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
+      gatekeeper.sh/system: "yes"
   template:
     metadata:
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
         control-plane: controller-manager
+        gatekeeper.sh/system: "yes"
     spec:
       containers:
       - args:
-        - --auditInterval=30
         - --port=8443
         - --logtostderr
+        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:
@@ -291,7 +323,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.3
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -321,6 +353,9 @@ spec:
             memory: 256Mi
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -328,6 +363,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
       - name: cert
@@ -339,6 +375,8 @@ apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
 webhooks:
 - clientConfig:
@@ -353,6 +391,8 @@ webhooks:
     matchExpressions:
     - key: control-plane
       operator: DoesNotExist
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
   rules:
   - apiGroups:
     - '*'
@@ -363,6 +403,26 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 5
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
   sideEffects: None
   timeoutSeconds: 5
 ---
@@ -379,6 +439,8 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -404,6 +466,10 @@ spec:
                       properties:
                         kind:
                           type: string
+                        shortNames:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     validation:
                       type: object
@@ -445,6 +511,9 @@ spec:
                   id:
                     description: a unique identifier for the pod that wrote the status
                     type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
                 type: object
               type: array
             created:

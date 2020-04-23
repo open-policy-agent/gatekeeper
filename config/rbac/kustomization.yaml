@@ -1,6 +1,7 @@
 resources:
 - role.yaml
 - role_binding.yaml
+- service_account.yaml
 # - leader_election_role.yaml
 # - leader_election_role_binding.yaml
 # Comment the following 3 lines if you want to disable
@@ -9,3 +10,11 @@ resources:
 # - auth_proxy_service.yaml
 # - auth_proxy_role.yaml
 # - auth_proxy_role_binding.yaml
+
+patchesJson6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRole
+    name: manager-role
+  path: webhook_permissions_patch.yaml

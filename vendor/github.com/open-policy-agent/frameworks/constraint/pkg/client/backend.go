@@ -5,6 +5,8 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type Backend struct {
@@ -41,7 +43,7 @@ func NewBackend(opts ...BackendOpt) (*Backend, error) {
 }
 
 // NewClient creates a new client for the supplied backend
-func (b *Backend) NewClient(opts ...ClientOpt) (*Client, error) {
+func (b *Backend) NewClient(opts ...Opt) (*Client, error) {
 	if b.hasClient {
 		return nil, errors.New("Currently only one client per backend is supported")
 	}
@@ -51,7 +53,8 @@ func (b *Backend) NewClient(opts ...ClientOpt) (*Client, error) {
 	}
 	c := &Client{
 		backend:           b,
-		constraints:       make(map[string]*constraintEntry),
+		constraints:       make(map[schema.GroupKind]map[string]*unstructured.Unstructured),
+		templates:         make(map[templateKey]*templateEntry),
 		allowedDataFields: fields,
 	}
 	var errs Errors

@@ -11,6 +11,8 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -36,6 +38,10 @@ spec:
                       properties:
                         kind:
                           type: string
+                        shortNames:
+                          items:
+                            type: string
+                          type: array
                       type: object
                     validation:
                       type: object
@@ -77,6 +83,9 @@ spec:
                   id:
                     description: a unique identifier for the pod that wrote the status
                     type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
                 type: object
               type: array
             created:

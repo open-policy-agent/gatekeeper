@@ -19,6 +19,8 @@ limitations under the License.
 package templates
 
 import (
+	"reflect"
+
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -42,7 +44,8 @@ type CRDSpec struct {
 }
 
 type Names struct {
-	Kind string `json:"kind,omitempty"`
+	Kind       string   `json:"kind,omitempty"`
+	ShortNames []string `json:"shortNames,omitempty"`
 }
 
 type Validation struct {
@@ -66,8 +69,9 @@ type CreateCRDError struct {
 // an individual controller
 type ByPodStatus struct {
 	// a unique identifier for the pod that wrote the status
-	ID     string            `json:"id,omitempty"`
-	Errors []*CreateCRDError `json:"errors,omitempty"`
+	ID                 string            `json:"id,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	Errors             []*CreateCRDError `json:"errors,omitempty"`
 }
 
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
@@ -99,4 +103,11 @@ type ConstraintTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ConstraintTemplate `json:"items"`
+}
+
+// SemanticEqual returns whether there have been changes to a constraint that
+// the framework should know about. It can ignore metadata as it assumes the
+// two comparables share the same identity
+func (ct *ConstraintTemplate) SemanticEqual(other *ConstraintTemplate) bool {
+	return reflect.DeepEqual(ct.Spec, other.Spec)
 }

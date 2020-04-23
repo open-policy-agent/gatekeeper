@@ -40,7 +40,7 @@ func NewListener(addr string) (net.Listener, error) {
 	log.Info("metrics server is starting to listen", "addr", addr)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		er := fmt.Errorf("error listening on %s: %v", addr, err)
+		er := fmt.Errorf("error listening on %s: %w", addr, err)
 		log.Error(er, "metrics server failed to listen. You may want to disable the metrics server or use another port if it is due to conflicts")
 		return nil, er
 	}

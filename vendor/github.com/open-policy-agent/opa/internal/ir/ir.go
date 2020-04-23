@@ -22,13 +22,20 @@ type (
 
 	// Static represents a static data segment that is indexed into by the policy.
 	Static struct {
-		Strings []*StringConst
+		Strings      []*StringConst
+		BuiltinFuncs []*BuiltinFunc
+	}
+
+	// BuiltinFunc represents a built-in function that may be required by the
+	// policy.
+	BuiltinFunc struct {
+		Name string
 	}
 
 	// Funcs represents a collection of planned functions to include in the
 	// policy.
 	Funcs struct {
-		Funcs map[string]*Func
+		Funcs []*Func
 	}
 
 	// Func represents a named plan (function) that can be invoked. Functions
@@ -92,18 +99,6 @@ type (
 	FloatConst struct {
 		Value float64
 	}
-)
-
-const (
-	// Undefined represents an undefined return value. An undefined return value
-	// indicates the policy did not return a definitive answer.
-	Undefined int32 = iota
-
-	// Defined represents a defined return value.
-	Defined
-
-	// Error indicates a runtime error occurred during evaluation.
-	Error
 )
 
 const (
@@ -265,6 +260,12 @@ type MakeNumberIntStmt struct {
 	Target Local
 }
 
+// MakeNumberRefStmt constructs a local variable that refers to a number stored as a string.
+type MakeNumberRefStmt struct {
+	Index  int
+	Target Local
+}
+
 // MakeArrayStmt constructs a local variable that refers to an array value.
 type MakeArrayStmt struct {
 	Capacity int32
@@ -374,4 +375,21 @@ type ObjectMergeStmt struct {
 type SetAddStmt struct {
 	Value Local
 	Set   Local
+}
+
+// WithStmt replaces the Local or a portion of the document referred to by the
+// Local with the Value and executes the contained block. If the Path is
+// non-empty, the Value is upserted into the Local. If the intermediate nodes in
+// the Local referred to by the Path do not exist, they will be created. When
+// the WithStmt finishes the Local is reset to it's original value.
+type WithStmt struct {
+	Local Local
+	Path  []int
+	Value Local
+	Block *Block
+}
+
+// ResultSetAdd adds a value into the result set returned by the query plan.
+type ResultSetAdd struct {
+	Value Local
 }
