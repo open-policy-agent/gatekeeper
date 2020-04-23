@@ -187,7 +187,7 @@ docker-buildx-dev:
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
 	fi
 	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
-		-t $(REPOSITORY):dev \
+		-t $(REPOSITORY):$(DEV_TAG) \
 		. --push
 
 docker-buildx-release:
@@ -197,7 +197,7 @@ docker-buildx-release:
 	fi
 	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
-		$(REPOSITORY):latest \
+		-t $(REPOSITORY):latest \
 		. --push
 
 # Update manager_image_patch.yaml with image tag
