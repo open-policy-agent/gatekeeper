@@ -1,7 +1,6 @@
 #!/bin/bash
 scriptdir="$(dirname "$0")"
 cd "$scriptdir"
-cp ./../../deploy/gatekeeper.yaml ${PWD}/helm-modifications/_temp.yaml
 kustomize build helm-modifications -o templates/gatekeeper.yaml
 
 sed -i -E "s/HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES/\
@@ -19,5 +18,4 @@ sed -i "s/HELMSUBST_DEPLOYMENT_REPLICAS/{{ .Values.replicas }}/g" templates/gate
 sed -i -E "s/HELMSUBST_ANNOTATIONS/\
 \n{{- toYaml .Values.podAnnotations | trim | nindent 8 }}/" templates/gatekeeper.yaml
 
-rm ./helm-modifications/_temp.yaml
 echo "Helm template created under '$PWD/templates'"

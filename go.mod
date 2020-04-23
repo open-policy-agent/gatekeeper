@@ -12,8 +12,8 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200325031139-1a8f361c3e49
-	github.com/open-policy-agent/opa v0.17.2
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200420221412-5bae2037a343
+	github.com/open-policy-agent/opa v0.19.1
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0
 	go.opencensus.io v0.22.2
@@ -25,5 +25,4 @@ require (
 	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v0.17.2
 	sigs.k8s.io/controller-runtime v0.5.0
-	sigs.k8s.io/controller-tools v0.2.4 // indirect
 )
