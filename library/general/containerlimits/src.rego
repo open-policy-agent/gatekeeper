@@ -42,7 +42,7 @@ mem_multiple("G") = 1000000000000 { true }
 mem_multiple("M") = 1000000000 { true }
 
 # 10 ** 6
-mem_multiple("K") = 1000000 { true }
+mem_multiple("k") = 1000000 { true }
 
 # 10 ** 3
 mem_multiple("") = 1000 { true }
