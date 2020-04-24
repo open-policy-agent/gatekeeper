@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package readiness_test
 
 import (
@@ -43,7 +44,7 @@ import (
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.Logger(true))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
@@ -108,6 +109,13 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 	return nil
 }
 
+// Test_Tracker verifies that once an initial set of fixtures are loaded into OPA,
+// the readiness probe reflects that Gatekeeper is ready to enforce policy. Adding
+// additional constraints afterwards will not change the readiness state.
+//
+// Fixtures are loaded from testdata/ and testdata/post.
+// CRDs are loaded from testdata/crds (see TestMain).
+// Corresponding expectations are in testdata_test.go.
 func Test_Tracker(t *testing.T) {
 	g := gomega.NewWithT(t)
 
@@ -131,17 +139,7 @@ func Test_Tracker(t *testing.T) {
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:29090/readyz", http.NoBody)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "constructing http request")
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return false, err
-		}
-		defer resp.Body.Close()
-
-		return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
+		return probeIsReady(ctx)
 	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify cache (tracks testdata fixtures)
@@ -159,4 +157,50 @@ func Test_Tracker(t *testing.T) {
 	//	_, err := opaClient.GetData(ctx, c)
 	//	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
 	//}
+
+	// Add additional templates/constraints and verify that we remain satisfied
+	// Apply fixtures *before* the controllers are setup.
+	err = applyFixtures("testdata/post")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying post fixtures")
+
+	g.Eventually(func() (bool, error) {
+		// Verify cache (tracks testdata/post fixtures)
+		ctx := context.Background()
+		for _, ct := range postTemplates {
+			_, err := opaClient.GetTemplate(ctx, ct)
+			if err != nil {
+				return false, err
+			}
+		}
+		for _, c := range postConstraints {
+			_, err := opaClient.GetConstraint(ctx, c)
+			if err != nil {
+				return false, err
+			}
+		}
+
+		return true, nil
+	}, 10*time.Second, 100*time.Millisecond).Should(gomega.BeTrue(), "verifying cache for post-fixtures")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
+}
+
+// probeIsReady checks whether expectations have been satisfied (via the readiness probe)
+func probeIsReady(ctx context.Context) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:29090/readyz", http.NoBody)
+	if err != nil {
+		return false, fmt.Errorf("constructing http request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
 }

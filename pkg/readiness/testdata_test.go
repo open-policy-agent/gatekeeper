@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package readiness_test
 
 import (
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// Templates and constraints in testdata/
 var testTemplates = []*templates.ConstraintTemplate{
 	makeTemplate("k8sallowedrepos"),
 	makeTemplate("k8srequiredlabels"),
@@ -27,6 +29,14 @@ var testTemplates = []*templates.ConstraintTemplate{
 var testConstraints = []*unstructured.Unstructured{
 	makeConstraint("ns-must-have-gk", "K8sRequiredLabels"),
 	makeConstraint("prod-repo-is-openpolicyagent", "K8sAllowedRepos"),
+}
+
+// Templates and constraint in testdata/post/
+var postTemplates = []*templates.ConstraintTemplate{
+	makeTemplate("k8shttpsonly"),
+}
+var postConstraints = []*unstructured.Unstructured{
+	makeConstraint("ingress-https-only", "K8sHttpsOnly"),
 }
 
 func makeTemplate(name string) *templates.ConstraintTemplate {

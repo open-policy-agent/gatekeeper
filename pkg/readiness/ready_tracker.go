@@ -20,8 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -31,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,7 +42,7 @@ var log = logf.Log.WithName("readiness-tracker")
 const constraintGroup = "constraints.gatekeeper.sh"
 
 var constraintTemplateGVK = v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")
-var cfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"}
+var cfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"} // Config resource singleton reference
 
 // Lister lists resources from a cache.
 type Lister interface {
@@ -55,81 +54,16 @@ type DynamicLister interface {
 	List(ctx context.Context, gvk schema.GroupVersionKind, cbForEach func(runtime.Object)) error
 }
 
-type trackerMap struct {
-	mu      sync.RWMutex
-	m       map[schema.GroupVersionKind]*ObjectTracker
-	removed map[schema.GroupVersionKind]struct{}
-}
-
-func newTrackerMap() *trackerMap {
-	return &trackerMap{
-		m:       make(map[schema.GroupVersionKind]*ObjectTracker),
-		removed: make(map[schema.GroupVersionKind]struct{}),
-	}
-}
-
-// Get returns an ObjectTracker for the requested resource kind.
-// A new one is created if the resource was not previously tracked.
-func (t *trackerMap) Get(gvk schema.GroupVersionKind) *ObjectTracker {
-	if entry := func() *ObjectTracker {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
-
-		if _, ok := t.removed[gvk]; ok {
-			// Return a throwaway tracker if it was previously removed.
-			return newObjTracker(gvk)
-		}
-		return t.m[gvk]
-	}(); entry != nil {
-		return entry
-	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	entry := newObjTracker(gvk)
-	t.m[gvk] = entry
-	return entry
-}
-
-// Keys returns the resource kinds currently being tracked.
-func (t *trackerMap) Keys() []schema.GroupVersionKind {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
-	out := make([]schema.GroupVersionKind, 0, len(t.m))
-	for k := range t.m {
-		out = append(out, k)
-	}
-	return out
-}
-
-// Remove stops tracking a resource kind. It cannot be tracked again by the same map.
-func (t *trackerMap) Remove(gvk schema.GroupVersionKind) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.m, gvk)
-	t.removed[gvk] = struct{}{}
-}
-
-// Satisfied returns true if all tracked expectations have been satisfied.
-func (t *trackerMap) Satisfied() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	for _, ot := range t.m {
-		if !ot.Satisfied() {
-			return false
-		}
-	}
-	return true
-}
-
 // Tracker tracks readiness for templates, constraints and data.
 type Tracker struct {
+	mu        sync.RWMutex // protects satisfied circuit-breaker
+	satisfied bool         // indicates whether tracker has been satisfied at least once
+
 	lister        Lister
 	dynamicLister DynamicLister
 
-	templates   *ObjectTracker
-	config      *ObjectTracker
+	templates   *objectTracker
+	config      *objectTracker
 	constraints *trackerMap
 	data        *trackerMap
 
@@ -159,20 +93,33 @@ func (t *Tracker) CheckSatisfied(req *http.Request) error {
 	return nil
 }
 
-// For returns an ObjectTracker for the requested resource kind.
-func (t *Tracker) For(gvk schema.GroupVersionKind) *ObjectTracker {
+// For returns Expectations for the requested resource kind.
+func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 	switch {
 	case gvk.GroupVersion() == v1beta1.SchemeGroupVersion && gvk.Kind == "ConstraintTemplate":
 		return t.templates
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
-	default:
-		return t.constraints.Get(gvk)
 	}
+
+	// Avoid new constraint trackers after templates have been satisfied.
+	// Race is ok here - extra trackers will only consume some unneeded memory.
+	if t.templates.Populated() && !t.constraints.Has(gvk) {
+		// Return throw-away tracker instead.
+		return noopExpectations{}
+	}
+
+	return t.constraints.Get(gvk)
 }
 
-// ForData returns an data ObjectTracker for the requested resource kind.
-func (t *Tracker) ForData(gvk schema.GroupVersionKind) *ObjectTracker {
+// ForData returns Expectations for tracking data of the requested resource kind.
+func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
+	// Avoid new data trackers after templates have been satisfied.
+	// Race is ok here - extra trackers will only consume some unneeded memory.
+	if t.config.Populated() && !t.data.Has(gvk) {
+		// Return throw-away tracker instead.
+		return noopExpectations{}
+	}
 	return t.data.Get(gvk)
 }
 
@@ -188,12 +135,44 @@ func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
 
 // CancelData stops expecting data for the specified resource kind.
 func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
+	log.V(1).Info("cancel tracking for data", "gvk", gvk)
 	t.data.Remove(gvk)
 }
 
 // Satisfied returns true if all tracked expectations have been satisfied.
 func (t *Tracker) Satisfied(ctx context.Context) bool {
-	return t.templates.Satisfied() && t.constraints.Satisfied() && t.config.Satisfied() && t.data.Satisfied()
+	// Check circuit-breaker first. Once satisfied, always satisfied.
+	t.mu.RLock()
+	satisfied := t.satisfied
+	t.mu.RUnlock()
+	if satisfied {
+		return true
+	}
+
+	if !t.templates.Satisfied() {
+		return false
+	}
+	templateKinds := t.templates.kinds()
+	for _, gvk := range templateKinds {
+		if !t.constraints.Get(gvk).Satisfied() {
+			return false
+		}
+	}
+
+	if !t.config.Satisfied() {
+		return false
+	}
+	configKinds := t.config.kinds()
+	for _, gvk := range configKinds {
+		if !t.data.Get(gvk).Satisfied() {
+			return false
+		}
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.satisfied = true
+	return true
 }
 
 // Run runs the tracker and blocks until it completes.
@@ -221,9 +200,11 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		return fmt.Errorf("listing templates: %w", err)
 	}
 
+	log.V(1).Info("setting expectations for templates", "templateCount", len(templates.Items))
+
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
 	for _, ct := range templates.Items {
-		log.V(1).Info("[readiness] expecting ConstraintTemplate", "name", ct.GetName())
+		log.V(1).Info("expecting template", "name", ct.GetName())
 		t.templates.Expect(&ct)
 
 		gvk := schema.GroupVersionKind{
@@ -239,18 +220,73 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		// Set an expectation for this constraint type
 		ot := t.constraints.Get(gvk)
 		t.constraintTrackers.Go(gvk.String(), func(ctx context.Context) error {
-			return t.trackConstraints(ctx, gvk, ot)
+			err := t.trackConstraints(ctx, gvk, ot)
+			if err != nil {
+				log.Error(err, "aborted trackConstraints", "gvk", gvk)
+			}
+			return nil // do not return an error, this would abort other constraint trackers!
 		})
 	}
 	t.templates.ExpectationsDone()
+	log.V(1).Info("template expectations populated")
 	return nil
 }
 
 // trackConfig sets expectations for the singleton Config resource.
 func (t *Tracker) trackConfig(ctx context.Context) error {
+	defer func() {
+		defer t.config.ExpectationsDone()
+		log.V(1).Info("config expectations populated")
+	}()
+
+	cfg, err := t.getConfigResource(ctx)
+	if err != nil {
+		return fmt.Errorf("fetching config resource: %w", err)
+	}
+	if cfg == nil {
+		log.Info("config resource not found - skipping for readiness")
+		return nil
+	}
+	if !cfg.GetDeletionTimestamp().IsZero() {
+		log.Info("config resource is being deleted - skipping for readiness")
+		return nil
+	}
+
+	// Expect the resource kinds specified in the Config.
+	var wg sync.WaitGroup
+	for _, entry := range cfg.Spec.Sync.SyncOnly {
+		gvk := schema.GroupVersionKind{
+			Group:   entry.Group,
+			Version: entry.Version,
+			Kind:    entry.Kind,
+		}
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+		t.config.Expect(u)
+		t.config.Observe(u) // we only care about the gvk entry in kinds()
+
+		// Set expectations for individual cached resources
+		dt := t.ForData(gvk)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := t.trackData(ctx, gvk, dt)
+			if err != nil {
+				log.Error(err, "aborted trackData", "gvk", gvk)
+			}
+		}()
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// getConfigResource returns the Config singleton if present.
+// Returns a nil reference if it is not found.
+func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config, error) {
 	lst := &configv1alpha1.ConfigList{}
 	if err := t.lister.List(ctx, lst); err != nil {
-		return fmt.Errorf("listing config: %w", err)
+		return nil, fmt.Errorf("listing config: %w", err)
 	}
 
 	for _, c := range lst.Items {
@@ -258,40 +294,59 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 			log.Info("ignoring unsupported config name", "namespace", c.GetNamespace(), "name", c.GetName())
 			continue
 		}
-		log.V(1).Info("[readiness] expecting Config", "name", c.GetName(), "namespace", c.GetNamespace())
-		t.config.Expect(&c)
+		return &c, nil
 	}
 
-	t.config.ExpectationsDone()
+	// Not found.
+	return nil, nil
+}
+
+// trackData sets expectations for all cached data expected by Gatekeeper.
+// Blocks until data can be listed or context is canceled.
+func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt Expectations) error {
+	defer func() {
+		dt.ExpectationsDone()
+		log.V(1).Info("data expectations populated", "gvk", gvk)
+	}()
+
+	// List individual resources and expect observations of each in the sync controller.
+	u := &unstructured.UnstructuredList{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind + "List",
+	})
+	err := t.lister.List(ctx, u)
+	if err != nil {
+		log.Error(err, "listing data", "gvk", gvk)
+		return err
+	}
+
+	for i := range u.Items {
+		item := &u.Items[i]
+		dt.Expect(item)
+		log.V(1).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
+	}
 	return nil
 }
 
 // trackConstraints sets expectations for all constraints managed by a template.
 // Blocks until constraints can be listed or context is canceled.
-func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints *ObjectTracker) error {
+func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
 	err := t.dynamicLister.List(ctx, gvk, func(o runtime.Object) {
 		if o == nil {
 			return
 		}
 		constraints.Expect(o)
-		log.V(1).Info("[readiness] expecting Constraint", "name", objectName(o))
+		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(o))
 	})
 	if err != nil {
 		return err
 	}
 
 	constraints.ExpectationsDone()
+	log.V(1).Info("constraint expectations populated", "gvk", gvk)
 	return nil
-}
-
-// isCT returns true if the object is a ConstraintTemplate (versioned or otherwise).
-func isCT(o interface{}) bool {
-	t := reflect.TypeOf(o)
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	n := t.Name()
-	return strings.HasSuffix(n, "ConstraintTemplate")
 }
 
 // Returns the constraint GVK that would be generated by a template.

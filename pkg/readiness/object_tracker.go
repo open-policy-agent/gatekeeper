@@ -18,28 +18,43 @@ package readiness
 import (
 	"sync"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// ObjectTracker tracks expectations for runtime.Objects.
+// Expectations tracks expectations for runtime.Objects.
 // A set of Expect() calls are made, demarcated by ExpectationsDone().
 // Expectations are satisfied by calls to Observe().
 // Once all expectations are satisfied, Satisfied() will begin returning true.
-type ObjectTracker struct {
-	mu        sync.Mutex
-	gvk       schema.GroupVersionKind
-	cancelled objSet
-	expect    objSet
-	seen      objSet
-	satisfied objSet
-	populated bool
+type Expectations interface {
+	Expect(o runtime.Object)
+	CancelExpect(o runtime.Object)
+	ExpectationsDone()
+	Unsatisfied() []runtime.Object
+	Observe(o runtime.Object)
+	Satisfied() bool
 }
 
-func newObjTracker(gvk schema.GroupVersionKind) *ObjectTracker {
-	return &ObjectTracker{
+// objectTracker tracks expectations for runtime.Objects.
+// A set of Expect() calls are made, demarcated by ExpectationsDone().
+// Expectations are satisfied by calls to Observe().
+// Once all expectations are satisfied, Satisfied() will begin returning true.
+type objectTracker struct {
+	mu        sync.Mutex
+	gvk       schema.GroupVersionKind
+	cancelled objSet // expectations that have been cancelled
+	expect    objSet // unresolved expectations
+	seen      objSet // observations made before their expectations
+	satisfied objSet // tracked to avoid re-adding satisfied expectations and to support Unsatisfied()
+	populated bool   // all expectations have been provided
+}
+
+func newObjTracker(gvk schema.GroupVersionKind) *objectTracker {
+	return &objectTracker{
 		gvk:       gvk,
 		cancelled: make(objSet),
 		expect:    make(objSet),
@@ -49,7 +64,7 @@ func newObjTracker(gvk schema.GroupVersionKind) *ObjectTracker {
 }
 
 // Expect sets an expectation that must be met by a corresponding call to Observe().
-func (t *ObjectTracker) Expect(o runtime.Object) {
+func (t *objectTracker) Expect(o runtime.Object) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -72,7 +87,9 @@ func (t *ObjectTracker) Expect(o runtime.Object) {
 	// We may have seen it before starting to expect it
 	if _, ok := t.seen[k]; ok {
 		delete(t.seen, k)
+		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
+		return
 	}
 
 	t.expect[k] = struct{}{}
@@ -80,7 +97,7 @@ func (t *ObjectTracker) Expect(o runtime.Object) {
 
 // CancelExpect cancels an expectation and marks it so it
 // cannot be expected again going forward.
-func (t *ObjectTracker) CancelExpect(o runtime.Object) {
+func (t *objectTracker) CancelExpect(o runtime.Object) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	k, err := objKeyFromObject(o)
@@ -98,15 +115,16 @@ func (t *ObjectTracker) CancelExpect(o runtime.Object) {
 // ExpectationsDone tells the tracker to stop accepting new expectations.
 // Only expectations set before ExpectationsDone is called will be considered
 // in Satisfied().
-func (t *ObjectTracker) ExpectationsDone() {
+func (t *objectTracker) ExpectationsDone() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	log.Info("ExpectationsDone", "gvk", t.gvk, "expectationCount", len(t.expect)+len(t.satisfied))
 	t.populated = true
 }
 
 // Unsatisfied returns all unsatisfied expectations
-func (t *ObjectTracker) Unsatisfied() []runtime.Object {
+func (t *objectTracker) Unsatisfied() []runtime.Object {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -121,7 +139,7 @@ func (t *ObjectTracker) Unsatisfied() []runtime.Object {
 }
 
 // Observe makes an observation. Observations can be made before expectations and vice-versa.
-func (t *ObjectTracker) Observe(o runtime.Object) {
+func (t *objectTracker) Observe(o runtime.Object) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -136,19 +154,35 @@ func (t *ObjectTracker) Observe(o runtime.Object) {
 		return
 	}
 
-	if _, ok := t.expect[k]; ok {
+	_, wasExpecting := t.expect[k]
+	switch {
+	case wasExpecting:
 		// Satisfy existing expectation
 		delete(t.seen, k)
+		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
+		return
+	case !wasExpecting && t.populated:
+		// Not expecting and no longer accepting expectations.
+		// No need to track.
+		delete(t.seen, k)
 		return
 	}
 
+	// Track for future expectation.
 	t.seen[k] = struct{}{}
+}
+
+func (t *objectTracker) Populated() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.populated
 }
 
 // Satisfied returns true if all expectations have been satisfied.
 // Also returns false if ExpectationsDone() has not been called.
-func (t *ObjectTracker) Satisfied() bool {
+func (t *objectTracker) Satisfied() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -156,7 +190,7 @@ func (t *ObjectTracker) Satisfied() bool {
 		return false
 	}
 
-	if len(t.satisfied) == len(t.expect) {
+	if len(t.expect) == 0 {
 		return true
 	}
 
@@ -166,10 +200,30 @@ func (t *ObjectTracker) Satisfied() bool {
 			continue
 		}
 		delete(t.seen, k)
+		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
 	}
 
-	return len(t.satisfied) == len(t.expect)
+	return len(t.expect) == 0
+}
+
+func (t *objectTracker) kinds() []schema.GroupVersionKind {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	l := len(t.satisfied) + len(t.expect)
+	if l == 0 {
+		return nil
+	}
+
+	out := make([]schema.GroupVersionKind, 0, l)
+	for k := range t.satisfied {
+		out = append(out, k.gvk)
+	}
+	for k := range t.expect {
+		out = append(out, k.gvk)
+	}
+	return out
 }
 
 // objKeyFromObject constructs an objKey representing the provided runtime.Object.
@@ -180,10 +234,22 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	}
 
 	// TODO - Cheat because sometimes APIVersion / Kind are empty
+	// Index ConstraintTemplates by their corresponding constraint GVK.
+	// This will be leveraged in tracker.Satisfied().
 	var gvk schema.GroupVersionKind
-	switch {
-	case isCT(obj):
-		gvk = constraintTemplateGVK
+	switch v := obj.(type) {
+	case *templates.ConstraintTemplate:
+		gvk = schema.GroupVersionKind{
+			Group:   constraintGroup,
+			Version: v1beta1.SchemeGroupVersion.Version,
+			Kind:    v.Spec.CRD.Spec.Names.Kind,
+		}
+	case *v1beta1.ConstraintTemplate:
+		gvk = schema.GroupVersionKind{
+			Group:   constraintGroup,
+			Version: v1beta1.SchemeGroupVersion.Version,
+			Kind:    v.Spec.CRD.Spec.Names.Kind,
+		}
 	default:
 		gvk = obj.GetObjectKind().GroupVersionKind()
 	}

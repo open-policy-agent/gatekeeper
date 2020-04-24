@@ -225,11 +225,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 	}
 
-	// Readiness - set expectations once.
-	r.once.Do(func() {
-		r.setDataExpectations(ctx, instance, newSyncOnly)
-	})
-
 	// Remove expectations for resources we no longer watch.
 	diff := r.watched.Difference(newSyncOnly)
 	r.removeStaleExpectations(diff)
@@ -308,36 +303,6 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		}
 	}
 	return nil
-}
-
-// setDataExpectations sets expectations for the initial cached data set, based on the provided watch set.
-// Resources that cannot be listed will not be tracked.
-func (r *ReconcileConfig) setDataExpectations(ctx context.Context, instance *configv1alpha1.Config, w *watch.Set) {
-	for _, gvk := range w.Items() {
-		u := &unstructured.UnstructuredList{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   gvk.Group,
-			Version: gvk.Version,
-			Kind:    gvk.Kind + "List",
-		})
-		err := r.reader.List(ctx, u)
-		if err != nil {
-			log.Error(err, "listing data", "gvk", gvk)
-			r.tracker.ForData(gvk).ExpectationsDone()
-			continue
-		}
-
-		dt := r.tracker.ForData(gvk)
-		for i := range u.Items {
-			item := &u.Items[i]
-			dt.Expect(item)
-			log.V(1).Info("[readiness] expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
-		}
-		dt.ExpectationsDone()
-	}
-	configGVK := configv1alpha1.GroupVersion.WithKind("Config")
-	r.tracker.For(configGVK).Observe(instance)
-	log.V(1).Info("[readiness] observed Config", "gvk", configGVK, "name", instance.GetName())
 }
 
 // removeStaleExpectations stops tracking data for any resources that are no longer watched.
