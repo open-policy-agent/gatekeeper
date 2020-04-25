@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	outputDir = flag.String("output-dir", "manifest_staging/helm/gatekeeper", "The root directory in which to write the Helm chart")
+	outputDir  = flag.String("output-dir", "manifest_staging/helm/gatekeeper", "The root directory in which to write the Helm chart")
 	useCRDsDir = flag.Bool("use-crds-dir", false, `Use the "crds" subdirectory, which requires Helm v3`)
 )
 
@@ -24,7 +24,6 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 
 // use exactly two spaces to be sure we are capturing metadata.name
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
-
 
 func extractKind(s string) (string, error) {
 	matches := kindRegex.FindStringSubmatch(s)
@@ -119,7 +118,9 @@ func copyStaticFiles(root string, subdirs ...string) error {
 		destination := path.Join(append([]string{*outputDir}, newSubDirs...)...)
 		if f.IsDir() {
 			fmt.Printf("Making %s\n", destination)
-			os.Mkdir(destination, 0755)
+			if err := os.Mkdir(destination, 0755); err != nil {
+				return err
+			}
 			if err := copyStaticFiles(root, newSubDirs...); err != nil {
 				return err
 			}
