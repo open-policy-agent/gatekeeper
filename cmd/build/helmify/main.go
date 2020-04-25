@@ -143,19 +143,26 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	kinds := kindSet{byKind: make(map[string][]string)}
 	b := strings.Builder{}
+	notate := func() {
+		obj := doReplacements(b.String())
+		b.Reset()
+		if err := kinds.Add(obj); err != nil {
+			log.Fatalf("Error adding object: %s, %s", err, b.String())
+		}
+	}
+
 	for scanner.Scan() {
 		if strings.HasPrefix(scanner.Text(), "---") {
 			if b.Len() > 0 {
-				obj := doReplacements(b.String())
-				b.Reset()
-				if err := kinds.Add(obj); err != nil {
-					log.Fatalf("Error adding object: %s, %s", err, b.String())
-				}
+				notate()
 			}
 		} else {
 			b.WriteString(scanner.Text())
 			b.WriteString("\n")
 		}
+	}
+	if b.Len() > 0 {
+		notate()
 	}
 	if err := copyStaticFiles("cmd/build/helmify/static"); err != nil {
 		log.Fatal(err)
