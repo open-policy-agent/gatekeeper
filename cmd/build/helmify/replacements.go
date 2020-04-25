@@ -7,7 +7,7 @@ package main
 // kustomize build helm-modifications -o templates/gatekeeper.yaml
 
 var replacements = map[string]string{
-	"HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES": `\n{{ toYaml .Values.resources | indent 10 }}`,
+	"HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES": `{{ toYaml .Values.resources | indent 10 }}`,
 
 	"HELMSUBST_DEPLOYMENT_POD_SCHEDULING": `
 {{ toYaml .Values.nodeSelector | indent 8 }}

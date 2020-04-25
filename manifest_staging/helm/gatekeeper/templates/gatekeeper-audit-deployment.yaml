@@ -72,7 +72,7 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: \n{{ toYaml .Values.resources | indent 10 }}
+        resources: {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
