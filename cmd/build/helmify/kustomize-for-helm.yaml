@@ -42,7 +42,7 @@ spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   selector:
     matchLabels:
-      app: gatekeeper-operator
+      app: gatekeeper
       release: RELEASE_NAME
   template:
     metadata:

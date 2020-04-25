@@ -107,7 +107,7 @@ e2e-helm-deploy:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	./.staging/helm/linux-amd64/helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	./.staging/helm/linux-amd64/helm install manifest_staging/helm/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
 
 # Build manager binary
 manager: generate fmt vet
@@ -132,8 +132,11 @@ deploy: patch-image manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	rm -rf manifest_staging
+	mkdir -p manifest_staging/deploy
+	mkdir -p manifest_staging/helm/gatekeeper
 	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
-	sh manifest_staging/chart/gatekeeper-operator/generate_helm_template.sh
+	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # Run go fmt against code
 fmt:
@@ -223,16 +226,16 @@ docker-push:
 release-manifest:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./manifest_staging/deploy/gatekeeper.yaml
-	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
-	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
-	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/values.yaml
-	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./manifest_staging/chart/gatekeeper-operator/values.yaml
+	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/Chart.yaml
+	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/Chart.yaml
+	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/values.yaml
+	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./manifest_staging/helm/gatekeeper/values.yaml
 
 promote-staging-manifest:
 	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
-	@rm -rf chart
-	@cp -r manifest_staging/chart .
+	@rm -rf helm
+	@cp -r manifest_staging/helm .
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
