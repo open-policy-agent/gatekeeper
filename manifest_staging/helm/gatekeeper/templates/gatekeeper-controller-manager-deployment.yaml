@@ -24,7 +24,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
@@ -74,7 +75,8 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: {{ toYaml .Values.resources | indent 10 }}
+        resources: 
+{{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
