@@ -75,12 +75,19 @@ teardown() {
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
 
-  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
   assert_success
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o yaml | grep 'id: gatekeeper-controller-manager'"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
+  assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_match 'denied the request' "$output"
+  assert_failure
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
   assert_success
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.spec.enforcementAction' | grep dryrun"
@@ -89,15 +96,7 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_success
 
-  run kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
-  assert_success
-
-  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
-  assert_success
-
-  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
-  assert_match 'denied the request' "$output"
-  assert_failure
+  CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
 }
 
 @test "container limits test" {
@@ -151,7 +150,7 @@ teardown() {
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8suniquelabel.constraints.gatekeeper.sh ns-gk-label-unique -o yaml | grep 'id: gatekeeper-controller-manager'"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/no_dupe_ns_2.yaml
-  wait_for_process $WAIT_TIME $SLEEP_TIME assert_match 'denied the request' "$output"
+  assert_match 'denied the request' "$output"
   assert_failure
 }
 
