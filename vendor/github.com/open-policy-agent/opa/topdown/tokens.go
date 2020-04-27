@@ -173,29 +173,20 @@ func builtinJWTVerifyES256(a ast.Value, b ast.Value) (ast.Value, error) {
 // A valid PEM block is never valid JSON (and vice versa), hence can try parsing both.
 func getKeyFromCertOrJWK(certificate string) ([]interface{}, error) {
 	if block, rest := pem.Decode([]byte(certificate)); block != nil {
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("failed to find a PEM certificate block")
+		}
+
 		if len(rest) > 0 {
 			return nil, fmt.Errorf("extra data after a PEM certificate block")
 		}
 
-		if block.Type == "CERTIFICATE" {
-			cert, err := x509.ParseCertificate(block.Bytes)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to parse a PEM certificate")
-			}
-
-			return []interface{}{cert.PublicKey}, nil
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse a PEM certificate")
 		}
 
-		if block.Type == "PUBLIC KEY" {
-			key, err := x509.ParsePKIXPublicKey(block.Bytes)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to parse a PEM public key")
-			}
-
-			return []interface{}{key}, nil
-		}
-
-		return nil, fmt.Errorf("failed to extract a Key from the PEM certificate")
+		return []interface{}{cert.PublicKey}, nil
 	}
 
 	jwks, err := jwk.ParseString(certificate)

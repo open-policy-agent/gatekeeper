@@ -11,12 +11,11 @@ func CompileModules(modules map[string]string) (*Compiler, error) {
 	parsed := make(map[string]*Module, len(modules))
 
 	for f, module := range modules {
-		var pm *Module
-		var err error
-		if pm, err = ParseModule(f, module); err != nil {
+		if pm, err := ParseModule(f, module); err != nil {
 			return nil, err
+		} else if pm != nil {
+			parsed[f] = pm
 		}
-		parsed[f] = pm
 	}
 
 	compiler := NewCompiler()

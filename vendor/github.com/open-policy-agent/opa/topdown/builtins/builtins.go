@@ -92,21 +92,6 @@ func IntOperand(x ast.Value, pos int) (int, error) {
 	return i, nil
 }
 
-// BigIntOperand converts x to a big int. If the cast fails, a descriptive error
-// is returned.
-func BigIntOperand(x ast.Value, pos int) (*big.Int, error) {
-	n, err := NumberOperand(x, 1)
-	if err != nil {
-		return nil, NewOperandTypeErr(pos, x, "integer")
-	}
-	bi, err := NumberToInt(n)
-	if err != nil {
-		return nil, NewOperandErr(pos, "must be integer number but got floating-point number")
-	}
-
-	return bi, nil
-}
-
 // NumberOperand converts x to a number. If the cast fails, a descriptive error is
 // returned.
 func NumberOperand(x ast.Value, pos int) (ast.Number, error) {
@@ -174,9 +159,8 @@ func FloatToNumber(f *big.Float) ast.Number {
 // NumberToInt converts n to a big int.
 // If n cannot be converted to an big int, an error is returned.
 func NumberToInt(n ast.Number) (*big.Int, error) {
-	f := NumberToFloat(n)
-	r, accuracy := f.Int(nil)
-	if accuracy != big.Exact {
+	r, ok := new(big.Int).SetString(string(n), 10)
+	if !ok {
 		return nil, fmt.Errorf("illegal value")
 	}
 	return r, nil

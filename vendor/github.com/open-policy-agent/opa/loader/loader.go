@@ -433,6 +433,9 @@ func loadRego(path string, bs []byte, m metrics.Metrics) (*RegoFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	if module == nil {
+		return nil, emptyModuleError(path)
+	}
 	result := &RegoFile{
 		Name:   path,
 		Parsed: module,
