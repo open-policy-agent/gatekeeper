@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -40,6 +41,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
@@ -51,18 +53,29 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	secretName     = "gatekeeper-webhook-server-cert"
+	vwhName        = "gatekeeper-validating-webhook-configuration"
+	serviceName    = "gatekeeper-webhook-service"
+	caName         = "gatekeeper-ca"
+	caOrganization = "gatekeeper"
+)
+
 var (
+	// DNSName is <service name>.<namespace>.svc
+	dnsName    = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	scheme     = runtime.NewScheme()
 	setupLog   = ctrl.Log.WithName("setup")
 	operations = newOperationSet()
 )
 
 var (
-	logLevel    = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
-	healthAddr  = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
-	metricsAddr = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
-	port        = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	certDir     = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
+	logLevel            = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
+	healthAddr          = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
+	metricsAddr         = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
+	port                = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	certDir             = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
+	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 )
 
 func init() {
@@ -134,71 +147,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	// initialize OPA
-	driver := local.New(local.Tracing(false))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA backend")
-		os.Exit(1)
-	}
-	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA client")
-	}
-
-	c := mgr.GetCache()
-	dc, ok := c.(watch.RemovableCache)
-	if !ok {
-		err := fmt.Errorf("expected dynamic cache, got: %T", c)
-		setupLog.Error(err, "fetching dynamic cache")
-		os.Exit(1)
-	}
-	wm, err := watch.New(dc)
-	if err != nil {
-		setupLog.Error(err, "unable to create watch manager")
-		os.Exit(1)
-	}
-	if err := mgr.Add(wm); err != nil {
-		setupLog.Error(err, "unable to register watch manager to the manager")
-		os.Exit(1)
+	// Make sure certs are generated and valid if cert rotation is enabled.
+	setupFinished := make(chan struct{})
+	if !*disableCertRotation && operations["webhook"] {
+		setupLog.Info("setting up cert rotation")
+		if err := webhook.AddRotator(mgr, &webhook.CertRotator{
+			SecretKey: types.NamespacedName{
+				Namespace: util.GetNamespace(),
+				Name:      secretName,
+			},
+			CertDir:        *certDir,
+			CAName:         caName,
+			CAOrganization: caOrganization,
+			DNSName:        dnsName,
+			CertsMounted:   setupFinished,
+		}, vwhName); err != nil {
+			setupLog.Error(err, "unable to set up cert rotation")
+			os.Exit(1)
+		}
+	} else {
+		close(setupFinished)
 	}
 
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
-
-	// Setup all Controllers
-	setupLog.Info("setting up controller")
-	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
-		setupLog.Error(err, "unable to register controllers to the manager")
-		os.Exit(1)
-	}
-	if operations["webhook"] {
-		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client); err != nil {
-			setupLog.Error(err, "unable to register webhooks to the manager")
-			os.Exit(1)
-		}
-	}
-	if operations["audit"] {
-		setupLog.Info("setting up audit")
-		if err := audit.AddToManager(mgr, client); err != nil {
-			setupLog.Error(err, "unable to register audit to the manager")
-			os.Exit(1)
-		}
-	}
-
-	setupLog.Info("setting up upgrade")
-	if err := upgrade.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register upgrade to the manager")
-		os.Exit(1)
-	}
-
-	setupLog.Info("setting up metrics")
-	if err := metrics.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register metrics to the manager")
-		os.Exit(1)
-	}
+	go startControllers(mgr, sw, setupFinished)
 
 	// +kubebuilder:scaffold:builder
 
@@ -245,8 +219,73 @@ func main() {
 	<-templatesCleaned
 	setupLog.Info("state cleaned")
 	if hadError {
-		/// give the cert manager time to generate the cert
-		time.Sleep(5 * time.Second)
+		os.Exit(1)
+	}
+}
+
+func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinished chan struct{}) {
+	// Block until the setup finishes.
+	<-setupFinished
+
+	// initialize OPA
+	driver := local.New(local.Tracing(false))
+	backend, err := opa.NewBackend(opa.Driver(driver))
+	if err != nil {
+		setupLog.Error(err, "unable to set up OPA backend")
+		os.Exit(1)
+	}
+	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	if err != nil {
+		setupLog.Error(err, "unable to set up OPA client")
+	}
+
+	c := mgr.GetCache()
+	dc, ok := c.(watch.RemovableCache)
+	if !ok {
+		err := fmt.Errorf("expected dynamic cache, got: %T", c)
+		setupLog.Error(err, "fetching dynamic cache")
+		os.Exit(1)
+	}
+	wm, err := watch.New(dc)
+	if err != nil {
+		setupLog.Error(err, "unable to create watch manager")
+		os.Exit(1)
+	}
+	if err := mgr.Add(wm); err != nil {
+		setupLog.Error(err, "unable to register watch manager to the manager")
+		os.Exit(1)
+	}
+
+	// Setup all Controllers
+	setupLog.Info("setting up controller")
+	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
+		setupLog.Error(err, "unable to register controllers to the manager")
+		os.Exit(1)
+	}
+	if operations["webhook"] {
+		setupLog.Info("setting up webhooks")
+		if err := webhook.AddToManager(mgr, client); err != nil {
+			setupLog.Error(err, "unable to register webhooks to the manager")
+			os.Exit(1)
+		}
+	}
+	if operations["audit"] {
+		setupLog.Info("setting up audit")
+		if err := audit.AddToManager(mgr, client); err != nil {
+			setupLog.Error(err, "unable to register audit to the manager")
+			os.Exit(1)
+		}
+	}
+
+	setupLog.Info("setting up upgrade")
+	if err := upgrade.AddToManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register upgrade to the manager")
+		os.Exit(1)
+	}
+
+	setupLog.Info("setting up metrics")
+	if err := metrics.AddToManager(mgr); err != nil {
+		setupLog.Error(err, "unable to register metrics to the manager")
 		os.Exit(1)
 	}
 }
