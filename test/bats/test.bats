@@ -90,6 +90,11 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
   assert_success
 
+  observedGeneration=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.byPod[0].observedGeneration')
+  generation=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.metadata.generation')
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "[[ $observedGeneration = $generation ]]"
+  assert_success
+
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.spec.enforcementAction' | grep dryrun"
 
   # deploying a violation with dryrun enforcement action will be accepted
