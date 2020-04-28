@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package dynamiccache_test
 
