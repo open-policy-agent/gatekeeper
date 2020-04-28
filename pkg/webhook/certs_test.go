@@ -7,12 +7,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestCertSigning(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
+var (
+	cr = &CertRotator{
+		CAName:         "ca",
+		CAOrganization: "org",
+		DNSName:        "service.namespace",
 	}
+)
+
+func TestCertSigning(t *testing.T) {
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -29,11 +32,6 @@ func TestCertSigning(t *testing.T) {
 }
 
 func TestCertExpiry(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +46,7 @@ func TestCertExpiry(t *testing.T) {
 		t.Error("Generated cert is not valid")
 	}
 
-	valid, err := validCert(caArtifacts.CertPEM, cert, key, cr.dnsName, time.Now().Add(11*365*24*time.Hour))
+	valid, err := validCert(caArtifacts.CertPEM, cert, key, cr.DNSName, time.Now().Add(11*365*24*time.Hour))
 	if err == nil {
 		t.Error("Generated cert has not expired when it should have")
 	}
@@ -58,11 +56,6 @@ func TestCertExpiry(t *testing.T) {
 }
 
 func TestBadCA(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -84,11 +77,6 @@ func TestBadCA(t *testing.T) {
 }
 
 func TestSelfSignedCA(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -100,11 +88,6 @@ func TestSelfSignedCA(t *testing.T) {
 }
 
 func TestCAExpiry(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +97,7 @@ func TestCAExpiry(t *testing.T) {
 		t.Error("Generated cert is not valid")
 	}
 
-	valid, err := validCert(caArtifacts.CertPEM, caArtifacts.CertPEM, caArtifacts.KeyPEM, cr.caName, time.Now().Add(11*365*24*time.Hour))
+	valid, err := validCert(caArtifacts.CertPEM, caArtifacts.CertPEM, caArtifacts.KeyPEM, cr.CAName, time.Now().Add(11*365*24*time.Hour))
 	if err == nil {
 		t.Error("Generated cert has not expired when it should have")
 	}
@@ -124,11 +107,6 @@ func TestCAExpiry(t *testing.T) {
 }
 
 func TestSecretRoundTrip(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	caArtifacts, err := cr.createCACert()
 	if err != nil {
 		t.Fatal(err)
@@ -165,11 +143,6 @@ func TestSecretRoundTrip(t *testing.T) {
 }
 
 func TestEmptyIsInvalid(t *testing.T) {
-	cr := &certRotator{
-		caName:         caName,
-		caOrganization: caOrganization,
-		dnsName:        dnsName,
-	}
 	if cr.validServerCert([]byte{}, []byte{}, []byte{}) {
 		t.Fatal("empty cert is valid")
 	}
