@@ -43,21 +43,13 @@ var log = logf.Log.WithName("webhook")
 
 const (
 	serviceAccountName = "gatekeeper-admin"
-	secretName         = "gatekeeper-webhook-server-cert"
-	vwhName            = "gatekeeper-validating-webhook-configuration"
-	serviceName        = "gatekeeper-webhook-service"
-	caName             = "gatekeeper-ca"
-	caOrganization     = "gatekeeper"
 )
 
 var (
-	// DNSName is <service name>.<namespace>.svc
-	dnsName                            = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
-	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
@@ -73,23 +65,6 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 	}
 	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
-
-	if !*disableCertRotation {
-		log.Info("cert rotation is enabled")
-		if err := AddRotator(mgr, &certRotator{
-			secretKey: types.NamespacedName{
-				Namespace: util.GetNamespace(),
-				Name:      secretName,
-			},
-			caName:         caName,
-			caOrganization: caOrganization,
-			dnsName:        dnsName,
-		}, vwhName); err != nil {
-			return err
-		}
-	} else {
-		log.Info("cert rotation is disabled")
-	}
 	return nil
 }
 
