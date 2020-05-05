@@ -1,6 +1,6 @@
 package k8spspseccomp
 
-test_input_seccomp_allowed_empty {
+test_input_seccomp_empty_parameters {
     input := { "review": input_review_pod_single, "parameters": input_parameters_empty}
     results := violation with input as input
     count(results) == 1
@@ -23,7 +23,8 @@ test_input_seccomp_not_allowed_not_in_list {
     results := violation with input as input
     count(results) == 1
 }
-test_input_seccomp_pod_multiple_allowed_empty {
+
+test_input_seccomp_pod_multiple_empty_parameters {
     input := { "review": input_review_pod_multiple, "parameters": input_parameters_empty}
     results := violation with input as input
     count(results) == 2
