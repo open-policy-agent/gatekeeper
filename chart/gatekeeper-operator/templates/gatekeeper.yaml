@@ -133,6 +133,8 @@ spec:
     shortNames:
     - constraints
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -204,8 +206,7 @@ spec:
                     description: a unique identifier for the pod that wrote the status
                     type: string
                   observedGeneration:
-                    description: the latest generation of this template synced by
-                      gatekeeper
+                    format: int64
                     type: integer
                 type: object
               type: array
@@ -456,6 +457,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
@@ -469,6 +472,7 @@ spec:
         - --audit-interval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
+        - --log-level={{ .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --exempt-namespace=gatekeeper-system
@@ -509,6 +513,9 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000

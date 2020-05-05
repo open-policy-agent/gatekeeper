@@ -41,13 +41,17 @@ func init() {
 
 var log = logf.Log.WithName("webhook")
 
+const (
+	serviceAccountName = "gatekeeper-admin"
+)
+
 var (
 	runtimeScheme                      = k8sruntime.NewScheme()
 	codecs                             = serializer.NewCodecFactory(runtimeScheme)
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
-	disableCertRotation                = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
+	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
 
@@ -56,17 +60,12 @@ var (
 
 // AddPolicyWebhook registers the policy webhook server with the manager
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient()}}
-	mgr.GetWebhookServer().Register("/v1/admit", wh)
-
-	if !*disableCertRotation {
-		log.Info("cert rotation is enabled")
-		if err := AddRotator(mgr); err != nil {
-			return err
-		}
-	} else {
-		log.Info("cert rotation is disabled")
+	reporter, err := newStatsReporter()
+	if err != nil {
+		return err
 	}
+	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
+	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
 
@@ -95,11 +94,6 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	log := log.WithValues("hookType", "validation")
 
 	var timeStart = time.Now()
-	reporter, err := newStatsReporter()
-	if err != nil {
-		log.Error(err, "StatsReporter could not start")
-	}
-	h.reporter = reporter
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
@@ -210,13 +204,7 @@ func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, er
 }
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", util.GetNamespace())
-	for _, g := range user.Groups {
-		if g == saGroup {
-			return true
-		}
-	}
-	return false
+	return user.Username == serviceaccount
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
@@ -289,7 +277,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 		if gvk == trace.Kind {
 			traceEnabled = true
-			if trace.Dump == "All" {
+			if strings.EqualFold(trace.Dump, "All") {
 				dump = true
 			}
 		}

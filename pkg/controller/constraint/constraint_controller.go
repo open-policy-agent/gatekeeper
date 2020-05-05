@@ -17,7 +17,6 @@ package constraint
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -27,13 +26,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	csutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -46,12 +46,40 @@ var (
 )
 
 const (
-	finalizerName = "finalizers.gatekeeper.sh/constraint"
+	finalizerName    = "finalizers.gatekeeper.sh/constraint"
+	constraintsGroup = "constraints.gatekeeper.sh"
 )
 
 type Adder struct {
 	Opa              *opa.Client
 	ConstraintsCache *ConstraintsCache
+	WatchManager     *watch.Manager
+	ControllerSwitch *watch.ControllerSwitch
+	Events           <-chan event.GenericEvent
+}
+
+func (a *Adder) InjectOpa(o *opa.Client) {
+	a.Opa = o
+}
+
+func (a *Adder) InjectWatchManager(w *watch.Manager) {
+}
+
+func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
+	a.ControllerSwitch = cs
+}
+
+// Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
+// and Start it when the Manager is Started.
+func (a *Adder) Add(mgr manager.Manager) error {
+	reporter, err := newStatsReporter()
+	if err != nil {
+		log.Error(err, "StatsReporter could not start")
+		return err
+	}
+
+	r := newReconciler(mgr, a.Opa, a.ControllerSwitch, reporter, a.ConstraintsCache)
+	return add(mgr, r, a.Events)
 }
 
 type ConstraintsCache struct {
@@ -64,67 +92,57 @@ type tags struct {
 	status            metrics.Status
 }
 
-// Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func (a *Adder) Add(mgr manager.Manager, gvk schema.GroupVersionKind, cs *watch.ControllerSwitch) error {
-	reporter, err := newStatsReporter()
-	if err != nil {
-		log.Error(err, "StatsReporter could not start")
-		return err
-	}
-
-	r := newReconciler(mgr, gvk, a.Opa, cs, reporter, a.ConstraintsCache)
-	return add(mgr, r, gvk)
-}
-
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(
 	mgr manager.Manager,
-	gvk schema.GroupVersionKind,
 	opa *opa.Client,
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache) reconcile.Reconciler {
 	return &ReconcileConstraint{
-		Client:           mgr.GetClient(),
+		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
+		writer:       mgr.GetClient(),
+		statusClient: mgr.GetClient(),
+		reader:       mgr.GetCache(),
+
 		cs:               cs,
 		scheme:           mgr.GetScheme(),
 		opa:              opa,
-		log:              log.WithValues(logging.ConstraintKind, gvk.Kind, logging.ConstraintAPIVersion, gvk.GroupVersion().String()),
-		gvk:              gvk,
+		log:              log,
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
 	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler, gvk schema.GroupVersionKind) error {
+func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
-	c, err := controller.New(fmt.Sprintf("%s-constraint-controller", gvk.String()), mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("constraint-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to the provided constraint
-	instance := unstructured.Unstructured{}
-	instance.SetGroupVersionKind(gvk)
-	err = c.Watch(&source.Kind{Type: &instance}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.Watch(
+		&source.Channel{
+			Source:         events,
+			DestBufferSize: 1024,
+		},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+	)
 }
 
 var _ reconcile.Reconciler = &ReconcileConstraint{}
 
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
-	client.Client
+	reader       client.Reader
+	writer       client.Writer
+	statusClient client.StatusClient
+
 	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
 	opa              *opa.Client
-	gvk              schema.GroupVersionKind
 	log              logr.Logger
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
@@ -135,24 +153,45 @@ type ReconcileConstraint struct {
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
 func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	enabled := r.cs.Enter()
-	defer r.cs.Exit()
-	if !enabled {
-		r.log.Info("ignoring request, constraint controller disabled", "request", request)
-		return reconcile.Result{}, nil
-	}
-	instance := &unstructured.Unstructured{}
-	instance.SetGroupVersionKind(r.gvk)
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
+	// Short-circuit if shutting down.
+	if r.cs != nil {
+		running := r.cs.Enter()
+		defer r.cs.Exit()
+		if !running {
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
 	}
+
+	gvk, unpackedRequest, err := util.UnpackRequest(request)
+	if err != nil {
+		// Unrecoverable, do not retry.
+		// TODO(OREN) add metric
+		log.Error(err, "unpacking request", "request", request)
+		return reconcile.Result{}, nil
+	}
+
+	// Sanity - make sure it is a constraint resource.
+	if gvk.Group != constraintsGroup {
+		// Unrecoverable, do not retry.
+		log.Error(err, "invalid constraint GroupVersion", "gvk", gvk)
+		return reconcile.Result{}, nil
+	}
+
+	deleted := false
+	instance := &unstructured.Unstructured{}
+	instance.SetGroupVersionKind(gvk)
+	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		deleted = true
+		instance = &unstructured.Unstructured{}
+		instance.SetGroupVersionKind(gvk)
+		instance.SetNamespace(unpackedRequest.NamespacedName.Namespace)
+		instance.SetName(unpackedRequest.NamespacedName.Name)
+	}
+
+	deleted = deleted || !instance.GetDeletionTimestamp().IsZero()
 
 	constraintKey := strings.Join([]string{instance.GetKind(), instance.GetName()}, "/")
 	enforcementAction, err := util.GetEnforcementAction(instance.Object)
@@ -167,20 +206,28 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}()
 
-	if instance.GetDeletionTimestamp().IsZero() {
-		if !HasFinalizer(instance) {
-			instance.SetFinalizers(append(instance.GetFinalizers(), finalizerName))
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+	if HasFinalizer(instance) {
+		status, _, _ := unstructured.NestedFieldCopy(instance.Object, "status")
+		RemoveFinalizer(instance)
+		if err := r.writer.Update(context.Background(), instance); err != nil {
+			return reconcile.Result{Requeue: true}, nil
+		}
+
+		if status != nil {
+			if err := unstructured.SetNestedField(instance.Object, status, "status"); err != nil {
+				log.Error(err, "error preserving constraint status")
 			}
 		}
+	}
+
+	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
-		status, err := util.GetHAStatus(instance)
+		status, err := csutil.GetHAStatus(instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		delete(status, "errors")
-		if err = util.SetHAStatus(instance, status); err != nil {
+		status.Errors = nil
+		if err = csutil.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
 		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
@@ -189,22 +236,27 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
+				status.Errors = append(status.Errors, csutil.Error{Message: err.Error()})
+				if err2 := csutil.SetHAStatus(instance, status); err2 != nil {
+					log.Error(err2, "could not set constraint error status")
+				}
+				if err2 := r.statusClient.Status().Update(context.TODO(), instance); err2 != nil {
+					log.Error(err2, "could not report constraint error status")
+				}
 				reportMetrics = true
 				return reconcile.Result{}, err
 			}
 			logAddition(r.log, instance, enforcementAction)
 		}
-		status, err = util.GetHAStatus(instance)
-		if err != nil {
+
+		status.Enforced = true
+		if err = csutil.SetHAStatus(instance, status); err != nil {
 			return reconcile.Result{}, err
 		}
-		status["enforced"] = true
-		if err = util.SetHAStatus(instance, status); err != nil {
-			return reconcile.Result{}, err
-		}
-		if err = r.Update(context.Background(), instance); err != nil {
+		if err = r.statusClient.Status().Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
+
 		// adding constraint to cache and sending metrics
 		r.constraintsCache.addConstraintKey(constraintKey, tags{
 			enforcementAction: enforcementAction,
@@ -213,22 +265,14 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		reportMetrics = true
 	} else {
 		// Handle deletion
-		if HasFinalizer(instance) {
-			if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
-				if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
-					logRemoval(r.log, instance, enforcementAction)
-					return reconcile.Result{}, err
-				}
+		if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
+			if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
+				return reconcile.Result{}, err
 			}
-			logRemoval(r.log, instance, enforcementAction)
-			RemoveFinalizer(instance)
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
-			}
-			// removing constraint entry from cache
-			r.constraintsCache.deleteConstraintKey(constraintKey)
-			reportMetrics = true
 		}
+		logRemoval(r.log, instance, enforcementAction)
+		r.constraintsCache.deleteConstraintKey(constraintKey)
+		reportMetrics = true
 	}
 	return reconcile.Result{}, nil
 }

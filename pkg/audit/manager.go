@@ -38,12 +38,10 @@ const (
 )
 
 var (
-	auditInterval                       = flag.Int("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
-	constraintViolationsLimit           = flag.Int("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
-	auditIntervalDeprecated             = flag.Int("auditInterval", defaultAuditInterval, "DEPRECATED - use --audit-interval")
-	constraintViolationsLimitDeprecated = flag.Int("constraintViolationsLimit", defaultConstraintViolationsLimit, "DEPRECATED - use --constraint-violations-limit")
-	auditFromCache                      = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
-	emptyAuditResults                   []auditResult
+	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
+	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	emptyAuditResults         []auditResult
 )
 
 // Manager allows us to audit resources periodically
@@ -81,9 +79,30 @@ type StatusViolation struct {
 	EnforcementAction string `json:"enforcementAction"`
 }
 
+// nsCache is used for caching namespaces and their labels
+type nsCache struct {
+	cache map[string]corev1.Namespace
+}
+
+func newNSCache() *nsCache {
+	return &nsCache{
+		cache: make(map[string]corev1.Namespace),
+	}
+}
+
+func (c *nsCache) Get(ctx context.Context, client client.Client, namespace string) (corev1.Namespace, error) {
+	if ns, ok := c.cache[namespace]; !ok {
+		if err := client.Get(ctx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+			return corev1.Namespace{}, err
+		}
+		c.cache[namespace] = ns
+	}
+
+	return c.cache[namespace], nil
+}
+
 // New creates a new manager for audit
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
-	checkDeprecatedFlags()
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -180,7 +199,6 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 	}
 
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
-
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +230,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 	var responses []*constraintTypes.Result
 	var errs opa.Errors
+	nsCache := newNSCache()
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
@@ -229,9 +248,10 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				ns := &corev1.Namespace{}
+				ns := corev1.Namespace{}
 				if obj.GetNamespace() != "" {
-					if err := am.client.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, ns); err != nil {
+					ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
+					if err != nil {
 						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
 						continue
 					}
@@ -239,7 +259,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 
 				augmentedObj := target.AugmentedUnstructured{
 					Object:    obj,
-					Namespace: ns,
+					Namespace: &ns,
 				}
 				resp, err := am.opa.Review(ctx, augmentedObj)
 
@@ -290,12 +310,28 @@ func (am *Manager) ensureCRDExists(ctx context.Context) error {
 	return am.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
-func (am *Manager) getAllConstraintKinds() (*metav1.APIResourceList, error) {
+func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
-	return discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
+	l, err := discoveryClient.ServerResourcesForGroupVersion(constraintsGV)
+	if err != nil {
+		return nil, err
+	}
+	resourceGV := strings.Split(constraintsGV, "/")
+	group := resourceGV[0]
+	version := resourceGV[1]
+	// We have seen duplicate GVK entries on shifting to status client, remove them
+	unique := make(map[schema.GroupVersionKind]bool)
+	for _, i := range l.APIResources {
+		unique[schema.GroupVersionKind{Group: group, Version: version, Kind: i.Kind}] = true
+	}
+	var ret []schema.GroupVersionKind
+	for gvk := range unique {
+		ret = append(ret, gvk)
+	}
+	return ret, nil
 }
 
 func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
@@ -348,19 +384,10 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, resourceList *metav1.APIResourceList, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
-	resourceGV := strings.Split(resourceList.GroupVersion, "/")
-	group := resourceGV[0]
-	version := resourceGV[1]
-
+func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
 	// get constraints for each Kind
-	for _, r := range resourceList.APIResources {
-		am.log.Info("constraint", "resource kind", r.Kind)
-		constraintGvk := schema.GroupVersionKind{
-			Group:   group,
-			Version: version,
-			Kind:    r.Kind + "List",
-		}
+	for _, constraintGvk := range resourceList {
+		am.log.Info("constraint", "resource kind", constraintGvk.Kind)
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(constraintGvk)
 		err := am.client.List(ctx, instanceList)
@@ -405,7 +432,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	var statusViolations []interface{}
 	for _, ar := range auditResults {
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
-		if len(statusViolations) < *constraintViolationsLimit {
+		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			msg := ar.message
 			if len(msg) > msgSize {
 				msg = truncateString(msg, msgSize)
@@ -447,7 +474,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			unstructured.RemoveNestedField(instance.Object, "status", "violations")
 			log.Info("removed status violations", "constraintName", constraintName)
 		}
-		err = ucloop.client.Update(ctx, instance)
+		err = ucloop.client.Status().Update(ctx, instance)
 		if err != nil {
 			return err
 		}
@@ -456,7 +483,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 			return err
 		}
 		log.Info("update constraint", "object", instance)
-		err = ucloop.client.Update(ctx, instance)
+		err = ucloop.client.Status().Update(ctx, instance)
 		if err != nil {
 			return err
 		}
@@ -526,7 +553,7 @@ func (ucloop *updateConstraintLoop) update() {
 					}
 				}
 				if !failure {
-					delete(ucloop.uc, latestItem.GetSelfLink())
+					delete(ucloop.uc, item.GetSelfLink())
 				}
 			}
 		}
@@ -543,28 +570,6 @@ func (ucloop *updateConstraintLoop) update() {
 		Steps:    5,
 	}, updateLoop); err != nil {
 		log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
-	}
-}
-
-// Temporary fallback to check deprecated --auditInterval and --constraintViolationsLimit flags, which are now --audit-interval and --constraint-violations-limit
-// @TODO to be removed in an upcoming release
-func checkDeprecatedFlags() {
-	foundAuditInterval := false
-	foundConstraintViolationsLimit := false
-
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "audit-interval" {
-			foundAuditInterval = true
-		} else if f.Name == "constraint-violations-limit" {
-			foundConstraintViolationsLimit = true
-		}
-	})
-
-	if !foundAuditInterval {
-		auditInterval = auditIntervalDeprecated
-	}
-	if !foundConstraintViolationsLimit {
-		constraintViolationsLimit = constraintViolationsLimitDeprecated
 	}
 }
 

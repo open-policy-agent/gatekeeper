@@ -116,13 +116,19 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 	group := resourceGV[0]
 	version := resourceGV[1]
 
-	// get resource for each Kind
+	// For some reason we have seen duplicate kinds, suppress that
+	uniqueKinds := make(map[string]bool)
 	for _, r := range resourceList.APIResources {
-		log.Info("resource", "kind", r.Kind)
+		uniqueKinds[r.Kind] = true
+	}
+
+	// get resource for each Kind
+	for kind := range uniqueKinds {
+		log.Info("resource", "kind", kind, "group", group, "version", version)
 		resourceGvk := schema.GroupVersionKind{
 			Group:   group,
 			Version: version,
-			Kind:    r.Kind + "List",
+			Kind:    kind + "List",
 		}
 		instanceList := &unstructured.UnstructuredList{}
 		instanceList.SetGroupVersionKind(resourceGvk)
@@ -130,9 +136,9 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 		if err != nil {
 			return err
 		}
-		log.Info("resoure", "count of resources", len(instanceList.Items))
+		log.Info("resource count", "count", len(instanceList.Items))
 		updateResources := make(map[string]unstructured.Unstructured, len(instanceList.Items))
-		// get each resourcet
+		// get each resource
 		for _, item := range instanceList.Items {
 			updateResources[item.GetSelfLink()] = item
 		}
@@ -144,7 +150,7 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 				stop:    make(chan struct{}),
 				stopped: make(chan struct{}),
 			}
-			log.Info("starting update resources loop", "updateResources", updateResources)
+			log.Info("starting update resources loop", "group", group, "version", version, "kind", kind)
 			go urloop.update()
 		}
 	}

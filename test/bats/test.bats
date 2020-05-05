@@ -25,7 +25,7 @@ teardown() {
   FORWARDING_PID=$!
   CLEAN_CMD="${CLEAN_CMD}; kill ${FORWARDING_PID}"
 
-	run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --resolve gatekeeper-webhook-service.gatekeeper-system.svc:8443:127.0.0.1 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -f -v --resolve gatekeeper-webhook-service.gatekeeper-system.svc:8443:127.0.0.1 --cacert ${cert} https://gatekeeper-webhook-service.gatekeeper-system.svc:8443/v1/admitlabel"
   assert_success
 }
 
@@ -37,7 +37,7 @@ teardown() {
 }
 
 @test "waiting for validating webhook" {
-	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
 
   run kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration
   assert_success
@@ -68,12 +68,12 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   assert_success
 
-	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8srequiredlabels.constraints.gatekeeper.sh"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper.yaml
   assert_success
 
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o yaml | grep enforced"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o yaml | grep 'id: gatekeeper-controller-manager'"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/good_ns.yaml
   assert_success
@@ -96,7 +96,7 @@ teardown() {
   assert_match 'k8scontainerlimits.constraints.gatekeeper.sh/container-must-have-limits created' "$output"
   assert_success
 
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8scontainerlimits.constraints.gatekeeper.sh container-must-have-limits -o yaml | grep enforced"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8scontainerlimits.constraints.gatekeeper.sh container-must-have-limits -o yaml | grep 'id: gatekeeper-controller-manager'"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/opa_no_limits.yaml
   assert_match 'denied the request' "$output"
@@ -104,19 +104,25 @@ teardown() {
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/opa.yaml
   assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_deployment.yaml
+  assert_success
+
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get deploy opa-test-deployment -o yaml | grep unavailableReplicas"
+
 }
 
 @test "unique labels test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8suniquelabel_template.yaml
   assert_success
 
-	wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8suniquelabel.constraints.gatekeeper.sh"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/k8suniquelabel.constraints.gatekeeper.sh"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_gatekeeper_label_unique.yaml
   assert_match 'k8suniquelabel.constraints.gatekeeper.sh/ns-gk-label-unique created' "$output"
   assert_success
 
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8suniquelabel.constraints.gatekeeper.sh ns-gk-label-unique -o yaml | grep enforced"
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8suniquelabel.constraints.gatekeeper.sh ns-gk-label-unique -o yaml | grep 'id: gatekeeper-controller-manager'"
 
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/no_dupe_ns_2.yaml
   assert_match 'denied the request' "$output"
@@ -127,8 +133,8 @@ teardown() {
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
 
   violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
-  [[ "$violations" -eq 5 ]]
+  [[ "$violations" -eq 6 ]]
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
-  [[ "$totalViolations" -eq 5 ]]
+  [[ "$totalViolations" -eq 6 ]]
 }

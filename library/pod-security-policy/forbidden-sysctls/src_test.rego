@@ -36,6 +36,12 @@ test_input_sysctls_empty_allowed {
     count(results) == 0
 }
 
+test_input_no_sysctls_wildcard_allowed {
+    input := { "review": input_review_empty, "parameters": input_parameters_wildcard}
+    results := violation with input as input
+    count(results) == 0
+}
+
 input_review = {
     "object": {
         "metadata": {
@@ -57,6 +63,22 @@ input_review = {
                         "value": "1024"
                     }
                 ]
+            }
+        }
+    }
+}
+
+input_review_empty = {
+    "object": {
+        "metadata": {
+            "name": "nginx"
+        },
+        "spec": {
+            "containers": {
+                "name": "nginx",
+                "image": "nginx",
+            },
+            "securityContext": {
             }
         }
     }

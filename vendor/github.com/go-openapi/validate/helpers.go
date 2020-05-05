@@ -26,7 +26,11 @@ import (
 	"github.com/go-openapi/spec"
 )
 
-const swaggerBody = "body"
+const (
+	swaggerBody     = "body"
+	swaggerExample  = "example"
+	swaggerExamples = "examples"
+)
 
 const (
 	objectType  = "object"
@@ -37,6 +41,14 @@ const (
 	booleanType = "boolean"
 	fileType    = "file"
 	nullType    = "null"
+)
+
+const (
+	jsonProperties = "properties"
+	jsonItems      = "items"
+	jsonType       = "type"
+	//jsonSchema     = "schema"
+	jsonDefault = "default"
 )
 
 const (
@@ -252,7 +264,8 @@ func (h *paramHelper) checkExpandedParam(pr *spec.Parameter, path, in, operation
 	res := new(Result)
 	simpleZero := spec.SimpleSchema{}
 	// Try to explain why... best guess
-	if pr.In == swaggerBody && (pr.SimpleSchema != simpleZero && pr.SimpleSchema.Type != objectType) {
+	switch {
+	case pr.In == swaggerBody && (pr.SimpleSchema != simpleZero && pr.SimpleSchema.Type != objectType):
 		if isRef {
 			// Most likely, a $ref with a sibling is an unwanted situation: in itself this is a warning...
 			// but we detect it because of the following error:
@@ -260,13 +273,12 @@ func (h *paramHelper) checkExpandedParam(pr *spec.Parameter, path, in, operation
 			res.AddWarnings(refShouldNotHaveSiblingsMsg(path, operation))
 		}
 		res.AddErrors(invalidParameterDefinitionMsg(path, in, operation))
-	} else if pr.In != swaggerBody && pr.Schema != nil {
+	case pr.In != swaggerBody && pr.Schema != nil:
 		if isRef {
 			res.AddWarnings(refShouldNotHaveSiblingsMsg(path, operation))
 		}
 		res.AddErrors(invalidParameterDefinitionAsSchemaMsg(path, in, operation))
-	} else if (pr.In == swaggerBody && pr.Schema == nil) ||
-		(pr.In != swaggerBody && pr.SimpleSchema == simpleZero) { // Safeguard
+	case (pr.In == swaggerBody && pr.Schema == nil) || (pr.In != swaggerBody && pr.SimpleSchema == simpleZero):
 		// Other unexpected mishaps
 		res.AddErrors(invalidParameterDefinitionMsg(path, in, operation))
 	}
@@ -301,8 +313,8 @@ func (r *responseHelper) responseMsgVariants(
 	responseType string,
 	responseCode int) (responseName, responseCodeAsStr string) {
 	// Path variants for messages
-	if responseType == "default" {
-		responseCodeAsStr = "default"
+	if responseType == jsonDefault {
+		responseCodeAsStr = jsonDefault
 		responseName = "default response"
 	} else {
 		responseCodeAsStr = strconv.Itoa(responseCode)

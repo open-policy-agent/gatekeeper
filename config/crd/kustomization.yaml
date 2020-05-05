@@ -5,6 +5,10 @@ resources:
 - bases/config.gatekeeper.sh_configs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
+bases:
+- ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
+
+
 patchesStrategicMerge:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD

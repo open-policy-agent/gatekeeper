@@ -122,6 +122,7 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     controller-tools.k8s.io: "1.0"
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: constrainttemplates.templates.gatekeeper.sh
@@ -133,6 +134,8 @@ spec:
     shortNames:
     - constraints
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -204,8 +207,7 @@ spec:
                     description: a unique identifier for the pod that wrote the status
                     type: string
                   observedGeneration:
-                    description: the latest generation of this template synced by
-                      gatekeeper
+                    format: int64
                     type: integer
                 type: object
               type: array
@@ -428,6 +430,7 @@ spec:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
@@ -439,6 +442,101 @@ metadata:
     app: '{{ template "gatekeeper-operator.name" . }}'
     chart: '{{ template "gatekeeper-operator.name" . }}'
     control-plane: controller-manager
+    gatekeeper.sh/operation: audit
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper-operator.name" . }}'
+      chart: '{{ template "gatekeeper-operator.name" . }}'
+      control-plane: audit-controller
+      gatekeeper.sh/operation: audit
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+        app: '{{ template "gatekeeper-operator.name" . }}'
+        chart: '{{ template "gatekeeper-operator.name" . }}'
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      containers:
+      - args:
+        - --audit-interval={{ .Values.auditInterval }}
+        - --log-level={{ .Values.logLevel }}
+        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --audit-from-cache={{ .Values.auditFromCache }}
+        - --operation=audit
+        - --logtostderr
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+        name: auditcontainer
+        ports:
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+        resources: 
+{{ toYaml .Values.resources | indent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
+      nodeSelector: 
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: '{{ template "gatekeeper-operator.name" . }}'
+    chart: '{{ template "gatekeeper-operator.name" . }}'
+    control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
@@ -451,27 +549,30 @@ spec:
       app: '{{ template "gatekeeper-operator.name" . }}'
       chart: '{{ template "gatekeeper-operator.name" . }}'
       control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
       heritage: '{{ .Release.Service }}'
       release: '{{ .Release.Name }}'
   template:
     metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper-operator.name" . }}'
         chart: '{{ template "gatekeeper-operator.name" . }}'
         control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
         gatekeeper.sh/system: "yes"
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       containers:
       - args:
-        - --audit-interval={{ .Values.auditInterval }}
         - --port=8443
         - --logtostderr
-        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-        - --audit-from-cache={{ .Values.auditFromCache }}
+        - --log-level={{ .Values.logLevel }}
         - --exempt-namespace=gatekeeper-system
+        - --operation=webhook
         command:
         - /manager
         env:
@@ -509,6 +610,9 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000

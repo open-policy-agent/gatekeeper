@@ -50,6 +50,14 @@ var DefaultBuiltins = [...]*Builtin{
 	Abs,
 	Rem,
 
+	// Bitwise Arithmetic
+	BitsOr,
+	BitsAnd,
+	BitsNegate,
+	BitsXOr,
+	BitsShiftLeft,
+	BitsShiftRight,
+
 	// Binary
 	And,
 	Or,
@@ -125,8 +133,15 @@ var DefaultBuiltins = [...]*Builtin{
 	YAMLMarshal,
 	YAMLUnmarshal,
 
+	// Object Manipulation
+	ObjectUnion,
+	ObjectRemove,
+	ObjectFilter,
+	ObjectGet,
+
 	// JSON Object Manipulation
 	JSONFilter,
+	JSONRemove,
 
 	// Tokens
 	JWTDecode,
@@ -146,9 +161,13 @@ var DefaultBuiltins = [...]*Builtin{
 	Date,
 	Clock,
 	Weekday,
+	AddDate,
 
 	// Crypto
 	CryptoX509ParseCertificates,
+	CryptoMd5,
+	CryptoSha1,
+	CryptoSha256,
 
 	// Graphs
 	WalkBuiltin,
@@ -182,6 +201,7 @@ var DefaultBuiltins = [...]*Builtin{
 	NetCIDROverlap,
 	NetCIDRIntersects,
 	NetCIDRContains,
+	NetCIDRContainsMatches,
 	NetCIDRExpand,
 
 	// Glob
@@ -373,10 +393,69 @@ var Rem = &Builtin{
 }
 
 /**
- * Binary
+ * Bitwise
  */
 
-// TODO(tsandall): update binary operators to support integers.
+// BitsOr returns the bitwise "or" of two integers.
+var BitsOr = &Builtin{
+	Name: "bits.or",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsAnd returns the bitwise "and" of two integers.
+var BitsAnd = &Builtin{
+	Name: "bits.and",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsNegate returns the bitwise "negation" of an integer (i.e. flips each
+// bit).
+var BitsNegate = &Builtin{
+	Name: "bits.negate",
+	Decl: types.NewFunction(
+		types.Args(types.N),
+		types.N,
+	),
+}
+
+// BitsXOr returns the bitwise "exclusive-or" of two integers.
+var BitsXOr = &Builtin{
+	Name: "bits.xor",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsShiftLeft returns a new integer with its bits shifted some value to the
+// left.
+var BitsShiftLeft = &Builtin{
+	Name: "bits.lsh",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+// BitsShiftRight returns a new integer with its bits shifted some value to the
+// right.
+var BitsShiftRight = &Builtin{
+	Name: "bits.rsh",
+	Decl: types.NewFunction(
+		types.Args(types.N, types.N),
+		types.N,
+	),
+}
+
+/**
+ * Sets
+ */
 
 // And performs an intersection operation on sets.
 var And = &Builtin{
@@ -960,6 +1039,97 @@ var JSONFilter = &Builtin{
 	),
 }
 
+// JSONRemove removes paths in the JSON object
+var JSONRemove = &Builtin{
+	Name: "json.remove",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewAny(
+				types.NewArray(
+					nil,
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+				types.NewSet(
+					types.NewAny(
+						types.S,
+						types.NewArray(
+							nil,
+							types.A,
+						),
+					),
+				),
+			),
+		),
+		types.A,
+	),
+}
+
+// ObjectUnion creates a new object that is the asymmetric union of two objects
+var ObjectUnion = &Builtin{
+	Name: "object.union",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+		),
+		types.A,
+	),
+}
+
+// ObjectRemove Removes specified keys from an object
+var ObjectRemove = &Builtin{
+	Name: "object.remove",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewAny(
+				types.NewArray(nil, types.A),
+				types.NewSet(types.A),
+				types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			),
+		),
+		types.A,
+	),
+}
+
+// ObjectFilter filters the object by keeping only specified keys
+var ObjectFilter = &Builtin{
+	Name: "object.filter",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(types.A, types.A),
+			),
+			types.NewAny(
+				types.NewArray(nil, types.A),
+				types.NewSet(types.A),
+				types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			),
+		),
+		types.A,
+	),
+}
+
 // Base64Encode serializes the input string into base64 encoding.
 var Base64Encode = &Builtin{
 	Name: "base64.encode",
@@ -1244,6 +1414,20 @@ var Weekday = &Builtin{
 	),
 }
 
+// AddDate returns the nanoseconds since epoch after adding years, months and days to nanoseconds.
+var AddDate = &Builtin{
+	Name: "time.add_date",
+	Decl: types.NewFunction(
+		types.Args(
+			types.N,
+			types.N,
+			types.N,
+			types.N,
+		),
+		types.N,
+	),
+}
+
 /**
  * Crypto.
  */
@@ -1256,6 +1440,33 @@ var CryptoX509ParseCertificates = &Builtin{
 	Decl: types.NewFunction(
 		types.Args(types.S),
 		types.NewArray(nil, types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))),
+	),
+}
+
+// CryptoMd5 returns a string representing the input string hashed with the md5 function
+var CryptoMd5 = &Builtin{
+	Name: "crypto.md5",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
+	),
+}
+
+// CryptoSha1 returns a string representing the input string hashed with the sha1 function
+var CryptoSha1 = &Builtin{
+	Name: "crypto.sha1",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
+	),
+}
+
+// CryptoSha256 returns a string representing the input string hashed with the sha256 function
+var CryptoSha256 = &Builtin{
+	Name: "crypto.sha256",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
 	),
 }
 
@@ -1550,6 +1761,34 @@ var NetCIDRContains = &Builtin{
 	),
 }
 
+// NetCIDRContainsMatches checks if collections of cidrs or ips are contained within another collection of cidrs and returns matches.
+var NetCIDRContainsMatches = &Builtin{
+	Name: "net.cidr_contains_matches",
+	Decl: types.NewFunction(
+		types.Args(netCidrContainsMatchesOperandType, netCidrContainsMatchesOperandType),
+		types.NewSet(types.NewArray([]types.Type{types.A, types.A}, nil)),
+	),
+}
+
+var netCidrContainsMatchesOperandType = types.NewAny(
+	types.S,
+	types.NewArray(nil, types.NewAny(
+		types.S,
+		types.NewArray(nil, types.A),
+	)),
+	types.NewSet(types.NewAny(
+		types.S,
+		types.NewArray(nil, types.A),
+	)),
+	types.NewObject(nil, types.NewDynamicProperty(
+		types.S,
+		types.NewAny(
+			types.S,
+			types.NewArray(nil, types.A),
+		),
+	)),
+)
+
 /**
  * Deprecated built-ins.
  */
@@ -1634,6 +1873,20 @@ var CastObject = &Builtin{
 	Decl: types.NewFunction(
 		types.Args(types.A),
 		types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+	),
+}
+
+// ObjectGet returns takes an object and returns a value under its key if
+// present, otherwise it returns the default.
+var ObjectGet = &Builtin{
+	Name: "object.get",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			types.A,
+			types.A,
+		),
+		types.A,
 	),
 }
 

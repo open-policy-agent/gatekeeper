@@ -19,89 +19,18 @@ import (
 	"github.com/OneOfOne/xxhash"
 	"github.com/pkg/errors"
 
+	"github.com/open-policy-agent/opa/ast/location"
 	"github.com/open-policy-agent/opa/util"
 )
 
 var errFindNotFound = fmt.Errorf("find: not found")
 
-// Location records a position in source code
-type Location struct {
-	Text []byte `json:"-"`    // The original text fragment from the source.
-	File string `json:"file"` // The name of the source file (which may be empty).
-	Row  int    `json:"row"`  // The line in the source.
-	Col  int    `json:"col"`  // The column in the row.
-}
+// Location records a position in source code.
+type Location = location.Location
 
 // NewLocation returns a new Location object.
 func NewLocation(text []byte, file string, row int, col int) *Location {
-	return &Location{Text: text, File: file, Row: row, Col: col}
-}
-
-// Equal checks if two locations are equal to each other.
-func (loc *Location) Equal(other *Location) bool {
-	return bytes.Equal(loc.Text, other.Text) &&
-		loc.File == other.File &&
-		loc.Row == other.Row &&
-		loc.Col == other.Col
-}
-
-// Errorf returns a new error value with a message formatted to include the location
-// info (e.g., line, column, filename, etc.)
-func (loc *Location) Errorf(f string, a ...interface{}) error {
-	return errors.New(loc.Format(f, a...))
-}
-
-// Wrapf returns a new error value that wraps an existing error with a message formatted
-// to include the location info (e.g., line, column, filename, etc.)
-func (loc *Location) Wrapf(err error, f string, a ...interface{}) error {
-	return errors.Wrap(err, loc.Format(f, a...))
-}
-
-// Format returns a formatted string prefixed with the location information.
-func (loc *Location) Format(f string, a ...interface{}) string {
-	if len(loc.File) > 0 {
-		f = fmt.Sprintf("%v:%v: %v", loc.File, loc.Row, f)
-	} else {
-		f = fmt.Sprintf("%v:%v: %v", loc.Row, loc.Col, f)
-	}
-	return fmt.Sprintf(f, a...)
-}
-
-func (loc *Location) String() string {
-	if len(loc.File) > 0 {
-		return fmt.Sprintf("%v:%v", loc.File, loc.Row)
-	}
-	if len(loc.Text) > 0 {
-		return string(loc.Text)
-	}
-	return fmt.Sprintf("%v:%v", loc.Row, loc.Col)
-}
-
-// Compare returns -1, 0, or 1 to indicate if this loc is less than, equal to,
-// or greater than the other. Comparison is performed on the file, row, and
-// column of the Location (but not on the text.) Nil locations are greater than
-// non-nil locations.
-func (loc *Location) Compare(other *Location) int {
-	if loc == nil && other == nil {
-		return 0
-	} else if loc == nil {
-		return 1
-	} else if other == nil {
-		return -1
-	} else if loc.File < other.File {
-		return -1
-	} else if loc.File > other.File {
-		return 1
-	} else if loc.Row < other.Row {
-		return -1
-	} else if loc.Row > other.Row {
-		return 1
-	} else if loc.Col < other.Col {
-		return -1
-	} else if loc.Col > other.Col {
-		return 1
-	}
-	return 0
+	return location.NewLocation(text, file, row, col)
 }
 
 // Value declares the common interface for all Term values. Every kind of Term value
@@ -463,14 +392,14 @@ func (term *Term) UnmarshalJSON(bs []byte) error {
 // Vars returns a VarSet with variables contained in this term.
 func (term *Term) Vars() VarSet {
 	vis := &VarVisitor{vars: VarSet{}}
-	Walk(vis, term)
+	vis.Walk(term)
 	return vis.vars
 }
 
 // IsConstant returns true if the AST value is constant.
 func IsConstant(v Value) bool {
 	found := false
-	Walk(&GenericVisitor{
+	vis := GenericVisitor{
 		func(x interface{}) bool {
 			switch x.(type) {
 			case Var, Ref, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
@@ -479,7 +408,8 @@ func IsConstant(v Value) bool {
 			}
 			return false
 		},
-	}, v)
+	}
+	vis.Walk(v)
 	return !found
 }
 
@@ -939,6 +869,10 @@ func (ref Ref) Concat(terms []*Term) Ref {
 
 // Dynamic returns the offset of the first non-constant operand of ref.
 func (ref Ref) Dynamic() int {
+	switch ref[0].Value.(type) {
+	case Call:
+		return 0
+	}
 	for i := 1; i < len(ref); i++ {
 		if !IsConstant(ref[i].Value) {
 			return i
@@ -1054,13 +988,8 @@ func (ref Ref) String() string {
 	if len(ref) == 0 {
 		return ""
 	}
-	var buf []string
-	path := ref
-	switch v := ref[0].Value.(type) {
-	case Var:
-		buf = append(buf, string(v))
-		path = path[1:]
-	}
+	buf := []string{ref[0].Value.String()}
+	path := ref[1:]
 	for _, p := range path {
 		switch p := p.Value.(type) {
 		case String:
@@ -1081,7 +1010,7 @@ func (ref Ref) String() string {
 //  this expression in isolation.
 func (ref Ref) OutputVars() VarSet {
 	vis := NewVarVisitor().WithParams(VarVisitorParams{SkipRefHead: true})
-	Walk(vis, ref)
+	vis.Walk(ref)
 	return vis.Vars()
 }
 
@@ -1571,6 +1500,7 @@ type Object interface {
 	Diff(other Object) Object
 	Intersect(other Object) [][3]*Term
 	Merge(other Object) (Object, bool)
+	MergeWith(other Object, conflictResolver func(v1, v2 *Term) (*Term, bool)) (Object, bool)
 	Filter(filter Object) (Object, error)
 	Keys() []*Term
 }
@@ -1808,28 +1738,48 @@ func (obj *object) MarshalJSON() ([]byte, error) {
 // overlapping keys between obj and other, the values of associated with the keys are merged. Only
 // objects can be merged with other objects. If the values cannot be merged, the second turn value
 // will be false.
-func (obj object) Merge(other Object) (result Object, ok bool) {
-	result = NewObject()
-	stop := obj.Until(func(k, v *Term) bool {
-		if v2 := other.Get(k); v2 == nil {
-			result.Insert(k, v)
-		} else {
-			obj1, ok1 := v.Value.(Object)
-			obj2, ok2 := v2.Value.(Object)
-			if !ok1 || !ok2 {
-				return true
-			}
-			obj3, ok := obj1.Merge(obj2)
-			if !ok {
-				return true
-			}
-			result.Insert(k, NewTerm(obj3))
+func (obj object) Merge(other Object) (Object, bool) {
+	return obj.MergeWith(other, func(v1, v2 *Term) (*Term, bool) {
+		obj1, ok1 := v1.Value.(Object)
+		obj2, ok2 := v2.Value.(Object)
+		if !ok1 || !ok2 {
+			return nil, true
 		}
-		return false
+		obj3, ok := obj1.Merge(obj2)
+		if !ok {
+			return nil, true
+		}
+		return NewTerm(obj3), false
 	})
+}
+
+// MergeWith returns a new Object containing the merged keys of obj and other.
+// If there are overlapping keys between obj and other, the conflictResolver
+// is called. The conflictResolver can return a merged value and a boolean
+// indicating if the merge has failed and should stop.
+func (obj object) MergeWith(other Object, conflictResolver func(v1, v2 *Term) (*Term, bool)) (Object, bool) {
+	result := NewObject()
+	stop := obj.Until(func(k, v *Term) bool {
+		v2 := other.Get(k)
+		// The key didn't exist in other, keep the original value
+		if v2 == nil {
+			result.Insert(k, v)
+			return false
+		}
+
+		// The key exists in both, resolve the conflict if possible
+		merged, stop := conflictResolver(v, v2)
+		if !stop {
+			result.Insert(k, merged)
+		}
+		return stop
+	})
+
 	if stop {
 		return nil, false
 	}
+
+	// Copy in any values from other for keys that don't exist in obj
 	other.Foreach(func(k, v *Term) {
 		if v2 := obj.Get(k); v2 == nil {
 			result.Insert(k, v)

@@ -300,13 +300,14 @@ spec:
       gatekeeper.sh/system: "yes"
   template:
     metadata:
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
         control-plane: controller-manager
         gatekeeper.sh/system: "yes"
     spec:
       containers:
       - args:
-        - --audit-interval=30
         - --port=8443
         - --logtostderr
         - --exempt-namespace=gatekeeper-system
@@ -322,7 +323,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.6
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -352,6 +353,9 @@ spec:
             memory: 256Mi
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -435,6 +439,8 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -506,7 +512,7 @@ spec:
                     description: a unique identifier for the pod that wrote the status
                     type: string
                   observedGeneration:
-                    description: the latest generation of this template synced by gatekeeper
+                    format: int64
                     type: integer
                 type: object
               type: array

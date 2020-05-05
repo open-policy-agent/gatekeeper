@@ -524,9 +524,9 @@ func (c *Compiler) GetRules(ref Ref) (rules []*Rule) {
 //
 // The following calls yield the rules on the right.
 //
-//  GetRulesDynamic("data.a[x].c[y]")			=> [rule1, rule2]
-//  GetRulesDynamic("data.a[x].c.r2")	=> [rule2]
-//  GetRulesDynamic("data.a.b[x][y]")	=> [rule1]
+//  GetRulesDynamic("data.a[x].c[y]") => [rule1, rule2]
+//  GetRulesDynamic("data.a[x].c.r2") => [rule2]
+//  GetRulesDynamic("data.a.b[x][y]") => [rule1]
 func (c *Compiler) GetRulesDynamic(ref Ref) (rules []*Rule) {
 	node := c.RuleTree
 
@@ -1092,7 +1092,10 @@ func (c *Compiler) rewriteLocalVars() {
 			}
 
 			stack := newLocalDeclaredVars()
-			body, declared, errs := rewriteLocalVars(gen, stack, rule.Head.Args.Vars(), used, rule.Body)
+
+			c.rewriteLocalArgVars(gen, stack, rule)
+
+			body, declared, errs := rewriteLocalVars(gen, stack, used, rule.Body)
 			for _, err := range errs {
 				c.err(err)
 			}
@@ -1136,18 +1139,81 @@ func (c *Compiler) rewriteLocalVars() {
 				return false
 			})
 
-			Walk(vis, rule.Head.Args)
+			vis.Walk(rule.Head.Args)
 
 			if rule.Head.Key != nil {
-				Walk(vis, rule.Head.Key)
+				vis.Walk(rule.Head.Key)
 			}
 
 			if rule.Head.Value != nil {
-				Walk(vis, rule.Head.Value)
+				vis.Walk(rule.Head.Value)
 			}
 
 			return false
 		})
+	}
+}
+
+func (c *Compiler) rewriteLocalArgVars(gen *localVarGenerator, stack *localDeclaredVars, rule *Rule) {
+
+	vis := &ruleArgLocalRewriter{
+		stack: stack,
+		gen:   gen,
+	}
+
+	for i := range rule.Head.Args {
+		Walk(vis, rule.Head.Args[i])
+	}
+
+	for i := range vis.errs {
+		c.err(vis.errs[i])
+	}
+}
+
+type ruleArgLocalRewriter struct {
+	stack *localDeclaredVars
+	gen   *localVarGenerator
+	errs  []*Error
+}
+
+func (vis *ruleArgLocalRewriter) Visit(x interface{}) Visitor {
+
+	t, ok := x.(*Term)
+	if !ok {
+		return vis
+	}
+
+	switch v := t.Value.(type) {
+	case Var:
+		gv, ok := vis.stack.Declared(v)
+		if !ok {
+			gv = vis.gen.Generate()
+			vis.stack.Insert(v, gv, argVar)
+		}
+		t.Value = gv
+		return nil
+	case Object:
+		if cpy, err := v.Map(func(k, v *Term) (*Term, *Term, error) {
+			vcpy := v.Copy()
+			Walk(vis, vcpy)
+			return k, vcpy, nil
+		}); err != nil {
+			vis.errs = append(vis.errs, NewError(CompileErr, t.Location, err.Error()))
+		} else {
+			t.Value = cpy
+		}
+		return nil
+	case Null, Boolean, Number, String, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Set:
+		// Scalars are no-ops. Comprehensions are handled above. Sets must not
+		// contain variables.
+		return nil
+	case Call:
+		vis.errs = append(vis.errs, NewError(CompileErr, t.Location, "rule arguments cannot contain calls"))
+		return nil
+	default:
+		// Recurse on refs and arrays. Any embedded
+		// variables can be rewritten.
+		return vis
 	}
 }
 
@@ -1333,7 +1399,7 @@ func (qc *queryCompiler) rewriteExprTerms(_ *QueryContext, body Body) (Body, err
 func (qc *queryCompiler) rewriteLocalVars(_ *QueryContext, body Body) (Body, error) {
 	gen := newLocalVarGenerator("q", body)
 	stack := newLocalDeclaredVars()
-	body, _, err := rewriteLocalVars(gen, stack, nil, nil, body)
+	body, _, err := rewriteLocalVars(gen, stack, nil, body)
 	if len(err) != 0 {
 		return nil, err
 	}
@@ -1547,7 +1613,7 @@ func NewGraph(modules map[string]*Module, list func(Ref) []*Rule) *Graph {
 
 	// Create visitor to walk a rule AST and add edges to the rule graph for
 	// each dependency.
-	vis := func(a *Rule) Visitor {
+	vis := func(a *Rule) *GenericVisitor {
 		stop := false
 		return NewGenericVisitor(func(x interface{}) bool {
 			switch x := x.(type) {
@@ -1573,7 +1639,7 @@ func NewGraph(modules map[string]*Module, list func(Ref) []*Rule) *Graph {
 	for _, module := range modules {
 		WalkRules(module, func(a *Rule) bool {
 			graph.addNode(a)
-			Walk(vis(a), a)
+			vis(a).Walk(a)
 			return false
 		})
 	}
@@ -1836,7 +1902,7 @@ func reorderBodyForSafety(builtins map[string]*Builtin, arity func(Ref) int, glo
 			globals:  g,
 			unsafe:   unsafe,
 		}
-		Walk(vis, e)
+		NewGenericVisitor(vis.Visit).Walk(e)
 	}
 
 	// Need to reset expression indices as re-ordering may have
@@ -1854,23 +1920,37 @@ type bodySafetyVisitor struct {
 	unsafe   unsafeVars
 }
 
-func (vis *bodySafetyVisitor) Visit(x interface{}) Visitor {
+func (vis *bodySafetyVisitor) Visit(x interface{}) bool {
 	switch x := x.(type) {
 	case *Expr:
 		cpy := *vis
 		cpy.current = x
-		return &cpy
+
+		switch ts := x.Terms.(type) {
+		case *SomeDecl:
+			NewGenericVisitor(cpy.Visit).Walk(ts)
+		case []*Term:
+			for _, t := range ts {
+				NewGenericVisitor(cpy.Visit).Walk(t)
+			}
+		case *Term:
+			NewGenericVisitor(cpy.Visit).Walk(ts)
+		}
+		for i := range x.With {
+			NewGenericVisitor(cpy.Visit).Walk(x.With[i])
+		}
+		return true
 	case *ArrayComprehension:
 		vis.checkArrayComprehensionSafety(x)
-		return nil
+		return true
 	case *ObjectComprehension:
 		vis.checkObjectComprehensionSafety(x)
-		return nil
+		return true
 	case *SetComprehension:
 		vis.checkSetComprehensionSafety(x)
-		return nil
+		return true
 	}
-	return vis
+	return false
 }
 
 // Check term for safety. This is analogous to the rule head safety check.
@@ -1927,7 +2007,7 @@ func reorderBodyForClosures(builtins map[string]*Builtin, arity func(Ref) int, g
 			vs := VarSet{}
 			WalkClosures(e, func(x interface{}) bool {
 				vis := &VarVisitor{vars: vs}
-				Walk(vis, x)
+				vis.Walk(x)
 				return true
 			})
 
@@ -1997,7 +2077,7 @@ func outputVarsForExpr(expr *Expr, builtins map[string]*Builtin, arity func(Ref)
 		return outputVarsForExprBuiltin(expr, b, safe)
 	}
 
-	return outputVarsForExprCall(expr, builtins, arity, safe, terms)
+	return outputVarsForExprCall(expr, arity, safe, terms)
 }
 
 func outputVarsForExprBuiltin(expr *Expr, b *Builtin, safe VarSet) VarSet {
@@ -2016,7 +2096,7 @@ func outputVarsForExprBuiltin(expr *Expr, b *Builtin, safe VarSet) VarSet {
 			SkipObjectKeys: true,
 			SkipRefHead:    true,
 		})
-		Walk(vis, t)
+		vis.Walk(t)
 		unsafe := vis.Vars().Diff(output).Diff(safe)
 		if len(unsafe) > 0 {
 			return VarSet{}
@@ -2032,7 +2112,7 @@ func outputVarsForExprBuiltin(expr *Expr, b *Builtin, safe VarSet) VarSet {
 				SkipObjectKeys: true,
 				SkipClosures:   true,
 			})
-			Walk(vis, t)
+			vis.Walk(t)
 			output.Update(vis.vars)
 		}
 	}
@@ -2050,7 +2130,7 @@ func outputVarsForExprEq(expr *Expr, safe VarSet) VarSet {
 	return output.Diff(safe)
 }
 
-func outputVarsForExprCall(expr *Expr, builtins map[string]*Builtin, arity func(Ref) int, safe VarSet, terms []*Term) VarSet {
+func outputVarsForExprCall(expr *Expr, arity func(Ref) int, safe VarSet, terms []*Term) VarSet {
 
 	output := outputVarsForExprRefs(expr, safe)
 
@@ -2077,7 +2157,7 @@ func outputVarsForExprCall(expr *Expr, builtins map[string]*Builtin, arity func(
 		SkipRefHead:    true,
 	})
 
-	Walk(vis, Args(terms[:numInputTerms]))
+	vis.Walk(Args(terms[:numInputTerms]))
 	unsafe := vis.Vars().Diff(output).Diff(safe)
 
 	if len(unsafe) > 0 {
@@ -2091,7 +2171,7 @@ func outputVarsForExprCall(expr *Expr, builtins map[string]*Builtin, arity func(
 		SkipClosures:   true,
 	})
 
-	Walk(vis, Args(terms[numInputTerms:]))
+	vis.Walk(Args(terms[numInputTerms:]))
 	output.Update(vis.vars)
 	return output
 }
@@ -2134,7 +2214,7 @@ func newLocalVarGeneratorForModuleSet(sorted []string, modules map[string]*Modul
 	exclude := NewVarSet()
 	vis := &VarVisitor{vars: exclude}
 	for _, key := range sorted {
-		Walk(vis, modules[key])
+		vis.Walk(modules[key])
 	}
 	return &localVarGenerator{exclude: exclude, next: 0}
 }
@@ -2142,7 +2222,7 @@ func newLocalVarGeneratorForModuleSet(sorted []string, modules map[string]*Modul
 func newLocalVarGenerator(suffix string, node interface{}) *localVarGenerator {
 	exclude := NewVarSet()
 	vis := &VarVisitor{vars: exclude}
-	Walk(vis, node)
+	vis.Walk(node)
 	return &localVarGenerator{exclude: exclude, suffix: suffix, next: 0}
 }
 
@@ -2212,7 +2292,7 @@ func resolveRef(globals map[Var]Ref, ignore *declaredVarStack, ref Ref) Ref {
 			} else {
 				r = append(r, x)
 			}
-		case Ref, Array, Object, Set:
+		case Ref, Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
 			r = append(r, resolveRefsInTerm(globals, ignore, x))
 		default:
 			r = append(r, x)
@@ -2226,7 +2306,7 @@ func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
 	ignore := &declaredVarStack{}
 
 	vars := NewVarSet()
-	var vis Visitor
+	var vis *GenericVisitor
 	var err error
 
 	// Walk args to collect vars and transform body so that callers can shadow
@@ -2241,9 +2321,9 @@ func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
 
 		// Object keys cannot be pattern matched so only walk values.
 		case Object:
-			x.Foreach(func(_, v *Term) {
-				Walk(vis, v)
-			})
+			for _, k := range x.Keys() {
+				vis.Walk(x.Get(k))
+			}
 
 		// Skip terms that could contain vars that cannot be pattern matched.
 		case Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
@@ -2264,7 +2344,7 @@ func resolveRefsInRule(globals map[Var]Ref, rule *Rule) error {
 		return false
 	})
 
-	Walk(vis, rule.Head.Args)
+	vis.Walk(rule.Head.Args)
 
 	if err != nil {
 		return err
@@ -2436,7 +2516,7 @@ func declaredVars(x interface{}) VarSet {
 		}
 		return false
 	})
-	Walk(vis, x)
+	vis.Walk(x)
 	return vars
 }
 
@@ -2716,7 +2796,7 @@ func expandExprTerm(gen *localVarGenerator, term *Term) (support []*Expr, output
 		expr.Generated = true
 		support = append(support, expr)
 	case Ref:
-		support = expandExprTermSlice(gen, v)
+		support = expandExprRef(gen, v)
 	case Array:
 		support = expandExprTermSlice(gen, v)
 	case Object:
@@ -2761,6 +2841,33 @@ func expandExprTerm(gen *localVarGenerator, term *Term) (support []*Expr, output
 		}
 		v.Value = value
 		v.Body = rewriteExprTermsInBody(gen, v.Body)
+	}
+	return
+}
+
+func expandExprRef(gen *localVarGenerator, v []*Term) (support []*Expr) {
+	// Start by calling a normal expandExprTerm on all terms.
+	support = expandExprTermSlice(gen, v)
+
+	// Rewrite references in order to support indirect references.  We rewrite
+	// e.g.
+	//
+	//     [1, 2, 3][i]
+	//
+	// to
+	//
+	//     __local_var = [1, 2, 3]
+	//     __local_var[i]
+	//
+	// to support these.  This only impacts the reference subject, i.e. the
+	// first item in the slice.
+	var subject = v[0]
+	switch subject.Value.(type) {
+	case Array, Object, Set, *ArrayComprehension, *SetComprehension, *ObjectComprehension, Call:
+		f := newEqualityFactory(gen)
+		assignToLocal := f.Generate(subject)
+		support = append(support, assignToLocal)
+		v[0] = assignToLocal.Operand(0)
 	}
 	return
 }
@@ -2859,6 +2966,17 @@ func (s localDeclaredVars) Occurrence(x Var) varOccurrence {
 	return s.vars[len(s.vars)-1].occurrence[x]
 }
 
+// GlobalOccurrence returns a flag that indicates whether x has occurred in the
+// global scope.
+func (s localDeclaredVars) GlobalOccurrence(x Var) (varOccurrence, bool) {
+	for i := len(s.vars) - 1; i >= 0; i-- {
+		if occ, ok := s.vars[i].occurrence[x]; ok {
+			return occ, true
+		}
+	}
+	return newVar, false
+}
+
 // rewriteLocalVars rewrites bodies to remove assignment/declaration
 // expressions. For example:
 //
@@ -2869,10 +2987,7 @@ func (s localDeclaredVars) Occurrence(x Var) varOccurrence {
 // __local0__ = 1; p[__local0__]
 //
 // During rewriting, assignees are validated to prevent use before declaration.
-func rewriteLocalVars(g *localVarGenerator, stack *localDeclaredVars, args VarSet, used VarSet, body Body) (Body, map[Var]Var, Errors) {
-	for v := range args {
-		stack.Insert(v, v, argVar)
-	}
+func rewriteLocalVars(g *localVarGenerator, stack *localDeclaredVars, used VarSet, body Body) (Body, map[Var]Var, Errors) {
 	var errs Errors
 	body, errs = rewriteDeclaredVarsInBody(g, stack, used, body, errs)
 	return body, stack.Pop().vs, errs
@@ -2964,7 +3079,7 @@ func rewriteDeclaredVarsInExpr(g *localVarGenerator, stack *localDeclaredVars, e
 		}
 		return stop
 	})
-	Walk(vis, expr)
+	vis.Walk(expr)
 	return expr, errs
 }
 
@@ -3044,9 +3159,12 @@ func rewriteDeclaredVarsInTerm(g *localVarGenerator, stack *localDeclaredVars, t
 		}
 	case Ref:
 		if RootDocumentRefs.Contains(term) {
-			if gv, ok := stack.Declared(v[0].Value.(Var)); ok {
+			x := v[0].Value.(Var)
+			if occ, ok := stack.GlobalOccurrence(x); ok && occ != seenVar {
+				gv, _ := stack.Declared(x)
 				term.Value = gv
 			}
+
 			return true, errs
 		}
 		return false, errs

@@ -37,15 +37,15 @@ func (i insertParam) add(name string, src string) error {
 	return nil
 }
 
-type arg func(*driver)
+type Arg func(*driver)
 
-func Tracing(enabled bool) arg {
+func Tracing(enabled bool) Arg {
 	return func(d *driver) {
 		d.traceEnabled = enabled
 	}
 }
 
-func New(args ...arg) drivers.Driver {
+func New(args ...Arg) drivers.Driver {
 	d := &driver{
 		compiler: ast.NewCompiler(),
 		modules:  make(map[string]*ast.Module),

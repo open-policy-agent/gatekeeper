@@ -12,9 +12,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"os"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,8 +33,6 @@ import (
 )
 
 const (
-	caName                 = "gatekeeper-ca"
-	service                = "gatekeeper-webhook-service"
 	certName               = "tls.crt"
 	keyName                = "tls.key"
 	caCertName             = "ca.crt"
@@ -45,71 +43,71 @@ const (
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-var (
-	secretKey = types.NamespacedName{
-		Namespace: util.GetNamespace(),
-		Name:      "gatekeeper-webhook-server-cert",
-	}
-	// DNSName is <service name>.<namespace>.svc
-	DNSName = fmt.Sprintf("%s.%s.svc", service, util.GetNamespace())
-	vwhGVK  = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
-	vwhKey  = types.NamespacedName{Name: "gatekeeper-validating-webhook-configuration"}
-)
+var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 
-var _ manager.Runnable = &certRotator{}
+var _ manager.Runnable = &CertRotator{}
 
-func AddRotator(mgr manager.Manager) error {
-	// Use a new client so we are unaffected by the cache sync kill signal
-	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
-	if err != nil {
-		return err
-	}
-	rotator := &certRotator{client: cli}
-	if err = mgr.Add(rotator); err != nil {
+// AddRotator adds the CertRotator and ReconcileVWH to the manager.
+func AddRotator(mgr manager.Manager, cr *CertRotator, vwhName string) error {
+	cr.client = mgr.GetClient()
+	cr.certsNotMounted = make(chan struct{})
+	if err := mgr.Add(cr); err != nil {
 		return err
 	}
 
+	vwhKey := types.NamespacedName{Name: vwhName}
 	reconciler := &ReconcileVWH{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		ctx:    context.Background(),
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		ctx:       context.Background(),
+		secretKey: cr.SecretKey,
+		vwhKey:    vwhKey,
 	}
-	if err := addController(mgr, reconciler); err != nil {
+	if err := addController(mgr, reconciler, cr.SecretKey, vwhKey); err != nil {
 		return err
 	}
 	return nil
 }
 
-type certRotator struct {
-	client client.Client
+// CertRotator contains cert artifacts and a channel to close when the certs are ready.
+type CertRotator struct {
+	client          client.Client
+	SecretKey       types.NamespacedName
+	CertDir         string
+	CAName          string
+	CAOrganization  string
+	DNSName         string
+	CertsMounted    chan struct{}
+	certsNotMounted chan struct{}
 }
 
-func (cr *certRotator) Start(stop <-chan (struct{})) error {
+// Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
+func (cr *CertRotator) Start(stop <-chan (struct{})) error {
 	// explicitly rotate on the first round so that the certificate
 	// can be bootstrapped, otherwise manager exits before a cert can be written
 	crLog.Info("starting cert rotator controller")
 	defer crLog.Info("stopping cert rotator controller")
-	if restart, err := cr.refreshCertIfNeeded(); err != nil {
+	if err := cr.refreshCertIfNeeded(); err != nil {
 		crLog.Error(err, "could not refresh cert on startup")
-		return errors.Wrap(err, "could not refresh cert on startup")
-	} else if restart {
-		crLog.Info("certs refreshed, restarting server")
-		return nil
+		return err
 	}
+
+	// Once the certs are ready, close the channel.
+	go cr.ensureCertsExist()
+
 	ticker := time.NewTicker(rotationCheckFrequency)
 
 tickerLoop:
 	for {
 		select {
 		case <-ticker.C:
-			if restart, err := cr.refreshCertIfNeeded(); err != nil {
+			if err := cr.refreshCertIfNeeded(); err != nil {
 				crLog.Error(err, "error rotating certs")
-			} else if restart {
-				crLog.Info("certs refreshed, restarting server")
-				break tickerLoop
 			}
 		case <-stop:
 			break tickerLoop
+		case <-cr.certsNotMounted:
+			return errors.New("could not mount certs")
 		}
 	}
 
@@ -117,48 +115,33 @@ tickerLoop:
 	return nil
 }
 
-// refreshCertIfNeeded returns whether the cert was refreshed and any errors
-func (cr *certRotator) refreshCertIfNeeded() (bool, error) {
-	secret := &corev1.Secret{}
-	if err := cr.client.Get(context.Background(), secretKey, secret); err != nil {
-		return false, errors.Wrap(err, "acquiring secret to update certificates")
-	}
-	if secret.Data == nil || !validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
-		crLog.Info("refreshing CA and server certs")
-		return cr.refreshCerts(true, secret)
-	}
-	// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)
-	if !validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
-		crLog.Info("refreshing server certs")
-		return cr.refreshCerts(false, secret)
-	}
-	crLog.Info("no cert refresh needed")
-	return false, nil
-}
-
-func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool, error) {
-	var caArtifacts *KeyPairArtifacts
-	if refreshCA {
-		var err error
-		caArtifacts, err = createCACert()
-		if err != nil {
-			return false, err
+// refreshCertIfNeeded returns whether there's any error when refreshing the certs if needed.
+func (cr *CertRotator) refreshCertIfNeeded() error {
+	refreshFn := func() (bool, error) {
+		secret := &corev1.Secret{}
+		if err := cr.client.Get(context.Background(), cr.SecretKey, secret); err != nil {
+			return false, errors.Wrap(err, "acquiring secret to update certificates")
 		}
-	} else {
-		var err error
-		caArtifacts, err = buildArtifactsFromSecret(secret)
-		if err != nil {
-			return false, err
+		if secret.Data == nil || !cr.validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
+			crLog.Info("refreshing CA and server certs")
+			if err := cr.refreshCerts(true, secret); err != nil {
+				crLog.Error(err, "could not refresh CA and server certs")
+				return false, nil
+			}
+			crLog.Info("server certs refreshed")
+			return true, nil
 		}
-	}
-	cert, key, err := createCertPEM(caArtifacts)
-	if err != nil {
-		return false, err
-	}
-	writeFn := func() (bool, error) {
-		if err := cr.writeSecret(cert, key, caArtifacts, secret); err != nil {
-			return false, err
+		// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)
+		if !cr.validServerCert(secret.Data[caCertName], secret.Data[certName], secret.Data[keyName]) {
+			crLog.Info("refreshing server certs")
+			if err := cr.refreshCerts(false, secret); err != nil {
+				crLog.Error(err, "could not refresh server certs")
+				return false, nil
+			}
+			crLog.Info("server certs refreshed")
+			return true, nil
 		}
+		crLog.Info("no cert refresh needed")
 		return true, nil
 	}
 	if err := wait.ExponentialBackoff(wait.Backoff{
@@ -166,11 +149,35 @@ func (cr *certRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) (bool
 		Factor:   2,
 		Jitter:   1,
 		Steps:    10,
-	}, writeFn); err != nil {
-		log.Error(err, "max retries for writing of secret reached")
-		return false, err
+	}, refreshFn); err != nil {
+		return err
 	}
-	return true, nil
+	return nil
+}
+
+func (cr *CertRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error {
+	var caArtifacts *KeyPairArtifacts
+	if refreshCA {
+		var err error
+		caArtifacts, err = cr.createCACert()
+		if err != nil {
+			return err
+		}
+	} else {
+		var err error
+		caArtifacts, err = buildArtifactsFromSecret(secret)
+		if err != nil {
+			return err
+		}
+	}
+	cert, key, err := cr.createCertPEM(caArtifacts)
+	if err != nil {
+		return err
+	}
+	if err := cr.writeSecret(cert, key, caArtifacts, secret); err != nil {
+		return err
+	}
+	return nil
 }
 
 func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
@@ -197,11 +204,12 @@ func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
 	return nil
 }
 
-func (cr *certRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
+func (cr *CertRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
 	populateSecret(cert, key, caArtifacts, secret)
 	return cr.client.Update(context.Background(), secret)
 }
 
+// KeyPairArtifacts stores cert artifacts.
 type KeyPairArtifacts struct {
 	Cert    *x509.Certificate
 	Key     *rsa.PrivateKey
@@ -254,15 +262,15 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 
 // createCACert creates the self-signed CA cert and private key that will
 // be used to sign the server certificate
-func createCACert() (*KeyPairArtifacts, error) {
+func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
 	end := now.Add(certValidityDuration)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
-			CommonName:   caName,
-			Organization: []string{"gatekeeper"},
+			CommonName:   cr.CAName,
+			Organization: []string{cr.CAOrganization},
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
@@ -292,14 +300,14 @@ func createCACert() (*KeyPairArtifacts, error) {
 
 // createCertPEM takes the results of createCACert and uses it to create the
 // PEM-encoded public certificate and private key, respectively
-func createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
+func (cr *CertRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
 	now := time.Now()
 	begin := now.Add(-1 * time.Hour)
 	end := now.Add(certValidityDuration)
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: DNSName,
+			CommonName: cr.DNSName,
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
@@ -339,16 +347,16 @@ func lookaheadTime() time.Time {
 	return time.Now().Add(90 * 24 * time.Hour)
 }
 
-func validServerCert(caCert, cert, key []byte) bool {
-	valid, err := validCert(caCert, cert, key, DNSName, lookaheadTime())
+func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
+	valid, err := validCert(caCert, cert, key, cr.DNSName, lookaheadTime())
 	if err != nil {
 		return false
 	}
 	return valid
 }
 
-func validCACert(cert, key []byte) bool {
-	valid, err := validCert(cert, cert, key, caName, lookaheadTime())
+func (cr *CertRotator) validCACert(cert, key []byte) bool {
+	valid, err := validCert(cert, cert, key, cr.CAName, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -401,20 +409,23 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 
 var _ handler.Mapper = &mapper{}
 
-type mapper struct{}
+type mapper struct {
+	secretKey types.NamespacedName
+	vwhKey    types.NamespacedName
+}
 
 func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
-	if object.Meta.GetNamespace() != vwhKey.Namespace {
+	if object.Meta.GetNamespace() != m.vwhKey.Namespace {
 		return nil
 	}
-	if object.Meta.GetName() != vwhKey.Name {
+	if object.Meta.GetName() != m.vwhKey.Name {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: secretKey}}
+	return []reconcile.Request{{NamespacedName: m.secretKey}}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func addController(mgr manager.Manager, r reconcile.Reconciler) error {
+func addController(mgr manager.Manager, r reconcile.Reconciler, secretKey, vwhKey types.NamespacedName) error {
 	// Create a new controller
 	c, err := controller.New(("validating-webhook-controller"), mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -429,7 +440,10 @@ func addController(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{}}
+	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
+		secretKey: secretKey,
+		vwhKey:    vwhKey,
+	}}
 	if err := c.Watch(&source.Kind{Type: vwh}, mapper); err != nil {
 		return err
 	}
@@ -442,15 +456,17 @@ var _ reconcile.Reconciler = &ReconcileVWH{}
 // ReconcileVWH reconciles a validatingwebhookconfiguration, making sure it
 // has the appropriate CA cert
 type ReconcileVWH struct {
-	client client.Client
-	scheme *runtime.Scheme
-	ctx    context.Context
+	client    client.Client
+	scheme    *runtime.Scheme
+	ctx       context.Context
+	secretKey types.NamespacedName
+	vwhKey    types.NamespacedName
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
 // object and makes sure the most recent CA cert is included
 func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	if request.NamespacedName != secretKey {
+	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
 	}
 	secret := &corev1.Secret{}
@@ -466,7 +482,7 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.client.Get(r.ctx, vwhKey, vwh); err != nil {
+	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
@@ -479,12 +495,12 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 	if secret.GetDeletionTimestamp().IsZero() {
 		artifacts, err := buildArtifactsFromSecret(secret)
 		if err != nil {
-			log.Error(err, "secret is not well-formed, cannot update ValidatingWebhookConfiguration")
+			crLog.Error(err, "secret is not well-formed, cannot update ValidatingWebhookConfiguration")
 			return reconcile.Result{}, nil
 		}
-		log.Info("ensuring CA cert on ValidatingWebhookConfiguration")
+		crLog.Info("ensuring CA cert on ValidatingWebhookConfiguration")
 		if err = injectCertToWebhook(vwh, artifacts.CertPEM); err != nil {
-			log.Error(err, "unable to inject cert to webhook")
+			crLog.Error(err, "unable to inject cert to webhook")
 			return reconcile.Result{}, err
 		}
 		if err := r.client.Update(r.ctx, vwh); err != nil {
@@ -493,4 +509,28 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// ensureCertsExist ensure the cert files exist.
+func (cr *CertRotator) ensureCertsExist() {
+	checkFn := func() (bool, error) {
+		certFile := cr.CertDir + "/" + certName
+		_, err := os.Stat(certFile)
+		if err == nil {
+			return true, nil
+		}
+		return false, nil
+	}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 1 * time.Second,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, checkFn); err != nil {
+		crLog.Error(err, "max retries for checking certs existence")
+		close(cr.certsNotMounted)
+		return
+	}
+	crLog.Info(fmt.Sprintf("certs are ready in %s", cr.CertDir))
+	close(cr.CertsMounted)
 }

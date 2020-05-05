@@ -48,6 +48,8 @@ func (tc *typeChecker) WithVarRewriter(f rewriteVars) *typeChecker {
 // TypeEnv will be able to resolve types of vars contained in the body.
 func (tc *typeChecker) CheckBody(env *TypeEnv, body Body) (*TypeEnv, Errors) {
 
+	errors := []*Error{}
+
 	if env == nil {
 		env = NewTypeEnv()
 	} else {
@@ -58,15 +60,15 @@ func (tc *typeChecker) CheckBody(env *TypeEnv, body Body) (*TypeEnv, Errors) {
 
 		closureErrs := tc.checkClosures(env, expr)
 		for _, err := range closureErrs {
-			tc.err(err)
+			errors = append(errors, err)
 		}
 
 		hasClosureErrors := len(closureErrs) > 0
 
 		vis := newRefChecker(env, tc.varRewriter)
-		Walk(vis, expr)
+		NewGenericVisitor(vis.Visit).Walk(expr)
 		for _, err := range vis.errs {
-			tc.err(err)
+			errors = append(errors, err)
 		}
 
 		hasRefErrors := len(vis.errs) > 0
@@ -78,14 +80,14 @@ func (tc *typeChecker) CheckBody(env *TypeEnv, body Body) (*TypeEnv, Errors) {
 			// likely to be the result of the more specific error.
 			skip := (hasClosureErrors || hasRefErrors) && causedByNilType(err)
 			if !skip {
-				tc.err(err)
+				errors = append(errors, err)
 			}
 		}
-
 		return true
 	})
 
-	return env, tc.errs
+	tc.err(errors)
+	return env, errors
 }
 
 // CheckTypes runs type checking on the rules returns a TypeEnv if no errors
@@ -205,6 +207,11 @@ func (tc *typeChecker) checkRule(env *TypeEnv, rule *Rule) {
 		if tpe != nil {
 			env.tree.Put(path, tpe)
 		}
+	} else {
+		// if the rule/function contains an error, add it to the type env
+		// so that expressions that refer to this rule/function
+		// do not encounter type errors
+		env.tree.Put(rule.Path(), types.A)
 	}
 }
 
@@ -239,6 +246,12 @@ func (tc *typeChecker) checkExprBuiltin(env *TypeEnv, expr *Expr) *Error {
 
 	if tpe == nil {
 		return NewError(TypeErr, expr.Location, "undefined function %v", name)
+	}
+
+	// check if the expression refers to a function that contains an error
+	_, ok := tpe.(types.Any)
+	if ok {
+		return nil
 	}
 
 	ftpe, ok := tpe.(*types.Function)
@@ -489,8 +502,8 @@ func unify1Set(env *TypeEnv, val Set, tpe *types.Set, union bool) bool {
 	})
 }
 
-func (tc *typeChecker) err(err *Error) {
-	tc.errs = append(tc.errs, err)
+func (tc *typeChecker) err(errors []*Error) {
+	tc.errs = append(tc.errs, errors...)
 }
 
 type refChecker struct {
@@ -512,31 +525,31 @@ func newRefChecker(env *TypeEnv, f rewriteVars) *refChecker {
 	}
 }
 
-func (rc *refChecker) Visit(x interface{}) Visitor {
+func (rc *refChecker) Visit(x interface{}) bool {
 	switch x := x.(type) {
 	case *ArrayComprehension, *ObjectComprehension, *SetComprehension:
-		return nil
+		return true
 	case *Expr:
 		switch terms := x.Terms.(type) {
 		case []*Term:
 			for i := 1; i < len(terms); i++ {
-				Walk(rc, terms[i])
+				NewGenericVisitor(rc.Visit).Walk(terms[i])
 			}
-			return nil
+			return true
 		case *Term:
-			Walk(rc, terms)
-			return nil
+			NewGenericVisitor(rc.Visit).Walk(terms)
+			return true
 		}
 	case Ref:
 		if err := rc.checkApply(rc.env, x); err != nil {
 			rc.errs = append(rc.errs, err)
-			return nil
+			return true
 		}
 		if err := rc.checkRef(rc.env, rc.env.tree, x, 0); err != nil {
 			rc.errs = append(rc.errs, err)
 		}
 	}
-	return rc
+	return false
 }
 
 func (rc *refChecker) checkApply(curr *TypeEnv, ref Ref) *Error {

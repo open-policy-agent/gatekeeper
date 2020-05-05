@@ -3,12 +3,14 @@ REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
+DEV_TAG ?= dev
 
-VERSION := v3.1.0-beta.6
+VERSION := v3.1.0-beta.8
 
 USE_LOCAL_IMG ?= false
-KIND_VERSION=0.6.0
+KIND_VERSION=0.7.0
 KUSTOMIZE_VERSION=3.0.2
+HELM_VERSION=v2.15.2
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -29,7 +31,20 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
-\n        name: manager"
+\n        name: manager\
+\n---\
+\napiVersion: apps/v1\
+\nkind: Deployment\
+\nmetadata:\
+\n  name: audit\
+\n  namespace: system\
+\nspec:\
+\n  template:\
+\n    spec:\
+\n      containers:\
+\n      - image: <your image file>\
+\n        name: auditcontainer"
+
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
 
@@ -64,11 +79,13 @@ test-e2e:
 
 e2e-bootstrap:
 	# Download and install kind
-	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output kind && chmod +x kind && sudo mv kind /usr/local/bin/
+	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output ${GITHUB_WORKSPACE}/bin/kind && chmod +x ${GITHUB_WORKSPACE}/bin/kind
 	# Download and install kubectl
-	curl -LO https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x ./kubectl && sudo mv kubectl /usr/local/bin/
+	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
-	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 --output kustomize && chmod +x kustomize && sudo mv kustomize /usr/local/bin/
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/kustomize && chmod +x ${GITHUB_WORKSPACE}/bin/kustomize
+	# Download and install bats
+	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
@@ -84,12 +101,13 @@ e2e-helm-deploy:
 	# tiller needs enough permissions to create CRDs
 	kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
 	# Download and install helm
-	curl https://raw.githubusercontent.com/helm/helm/master/scripts/get > get_helm.sh
-	chmod 700 get_helm.sh
-	./get_helm.sh
-	helm init --wait --history-max=5
+	rm -rf .staging/helm
+	mkdir -p .staging/helm
+	curl https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
+	cd .staging/helm && tar -xvf helmbin.tar.gz
+	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	./.staging/helm/linux-amd64/helm install manifest_staging/chart/gatekeeper-operator --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
 
 # Build manager binary
 manager: generate fmt vet
@@ -109,17 +127,12 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
-	touch -a ./config/overlays/dev/manager_image_patch.yaml
-# TODO use kustomize for CRDs
-	kubectl apply -f config/crd/bases
-	kubectl apply -f vendor/${FRAMEWORK_PACKAGE}/deploy
 	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
-	bash -c 'for x in vendor/${FRAMEWORK_PACKAGE}/deploy/*.yaml ; do echo --- >> manifest_staging/deploy/gatekeeper.yaml ; cat $${x} >> manifest_staging/deploy/gatekeeper.yaml ; done'
 	sh manifest_staging/chart/gatekeeper-operator/generate_helm_template.sh
 
 # Run go fmt against code
@@ -129,7 +142,7 @@ fmt:
 
 # Run go vet against code
 vet:
-	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/...
+	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/... ./third_party/...
 	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
@@ -145,7 +158,7 @@ docker-login:
 
 # Tag for Dev
 docker-tag-dev:
-	@docker tag $(IMG) $(REPOSITORY):dev
+	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
 
 # Tag for Dev
 docker-tag-release:
@@ -154,7 +167,7 @@ docker-tag-release:
 
 # Push for Dev
 docker-push-dev:  docker-tag-dev
-	@docker push $(REPOSITORY):dev
+	@docker push $(REPOSITORY):$(DEV_TAG)
 
 # Push for Release
 docker-push-release:  docker-tag-release
@@ -165,12 +178,35 @@ docker-push-release:  docker-tag-release
 docker-build: test
 	docker build --pull . -t ${IMG}
 
+# Build docker image with buildx
+# Experimental docker feature to build cross platform multi-architecture docker images
+# https://docs.docker.com/buildx/working-with-buildx/
+docker-buildx-dev:
+	export DOCKER_CLI_EXPERIMENTAL=enabled
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+	fi
+	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+		-t $(REPOSITORY):$(DEV_TAG) \
+		. --push
+
+docker-buildx-release:
+	export DOCKER_CLI_EXPERIMENTAL=enabled
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+	fi
+	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+		-t $(REPOSITORY):$(VERSION) \
+		-t $(REPOSITORY):latest \
+		. --push
+
 # Update manager_image_patch.yaml with image tag
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
-	@test -s ./config/overlays/dev/manager_image_patch.yaml || bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
+	@bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
 ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
+	@sed -i '/^        name: auditcontainer/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
 
@@ -184,10 +220,8 @@ target-template-source:
 docker-push:
 	docker push ${IMG}
 
-release:
-	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
-
 release-manifest:
+	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./manifest_staging/deploy/gatekeeper.yaml
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
 	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./manifest_staging/chart/gatekeeper-operator/Chart.yaml
@@ -220,11 +254,4 @@ endif
 
 .PHONY: vendor
 vendor:
-	$(eval $@_TMP := $(shell mktemp -d))
-	$(eval $@_CACHE := ${$@_TMP}/pkg/mod/cache/download)
-	GO111MODULE=on go mod download
-	GO111MODULE=on GOPROXY=file://${GOPATH}/pkg/mod/cache/download GOPATH=${$@_TMP} go mod download
-	GO111MODULE=on GOPROXY=file://${$@_CACHE} go mod vendor
-	$(eval $@_PACKAGE := $(shell GO111MODULE=on go mod graph | awk '{print $$2}' | grep '^${FRAMEWORK_PACKAGE}@'))
-	mkdir -p vendor/${FRAMEWORK_PACKAGE}/deploy
-	cp -r ${$@_TMP}/pkg/mod/${$@_PACKAGE}/deploy/* vendor/${FRAMEWORK_PACKAGE}/deploy/.
+	go mod vendor

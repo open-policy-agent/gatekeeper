@@ -32,6 +32,25 @@ In addition to the `admission` scenario, Gatekeeper's audit functionality allows
 
 Finally, Gatekeeper's engine is designed to be portable, allowing administrators to detect and reject non-compliant commits to an infrastructure-as-code system's source-of-truth, further strengthening compliance efforts and preventing bad state from slowing down the organization.
 
+## Admission Webhook Fail-Open Status
+
+Currently Gatekeeper is defaulting to using `failurePolicy​: ​Ignore` for admission request webhook errors. The impact of
+this is that when the webhook is down, or otherwise unreachable, constraints will not be
+enforced. Audit is expected to pick up any slack in enforcement by highlighting invalid
+resources that made it into the cluster.
+
+The reason for fail-open is because the webhook server currently only has one instance, which risks downtime
+during actions like upgrades. If we were to fail closed, this downtime would lead to
+downtime in the cluster's control plane. We are currently working on addressing issues
+that may cause multi-pod deployments of Gatekeeper to not work as expected. Once
+we can improve availability by running in multiple pods, we will likely make
+that setup the default and change our default webhook behavior to fail-closed (`failurePolicy: Fail`).
+
+If desired, the webhook can be set to fail-closed by modifying the ValidatingWebhookConfiguration,
+though this may have uptime impact on your cluster's control plane. In the interim,
+it is best to avoid policies that assume 100% enforcement during request
+time (e.g. mimicking RBAC-like behavior by validating the user making the request).
+
 ## Installation Instructions
 
 ### Installation
@@ -390,6 +409,49 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
 
+#### Viewing the Request Object
+
+A simple way to view the request object is to use a constraint/template that
+denies all requests and outputs the request object as its rejection message.
+
+Example template:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyall
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyAll
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyall
+
+        violation[{"msg": msg}] {
+          msg := sprintf("REVIEW OBJECT: %v", [input.review])
+        }
+```
+
+Example constraint:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyAll
+metadata:
+  name: deny-all-namespaces
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+```
+
+#### Tracing
+
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
    * Cached data and existing rules at the time of the request
@@ -488,9 +550,40 @@ the default webhook name has been used this can be achieved by running:
 
 Redeploying the webhook configuration will re-enable Gatekeeper.
 
+### Running on private GKE Cluster nodes
+
+By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straight to the POD on port 8443.
+
+Two ways of working around this:
+
+- create a new firewall rule from master to private nodes to open port `8443` (or any other custom port)
+  - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
+- make the pod to run on privileged port 443 (need to run pod as root)
+  - update Gatekeeper deployment manifest spec:
+    - remove `securityContext` settings that force the pods not to run as root
+    - update port from `8443` to `443`
+    ```yaml
+    containers:
+    - args:
+      - --port=443
+      ports:
+      - containerPort: 443
+        name: webhook-server
+        protocol: TCP
+    ```
+
+  - update Gatekeeper service manifest spec:
+    - update `targetPort` from `8443` to `443`
+    ```yaml
+    ports:
+    - port: 443
+      targetPort: 443
+    ```
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
+
 
 # FAQ
 
@@ -515,3 +608,12 @@ If Gatekeeper is not running:
   * The container had a panic
 
 Finalizers can be removed manually via `kubectl edit` or `kubectl patch`
+
+# Security
+
+Please report vulnerabilities by email to [open-policy-agent-security](mailto:open-policy-agent-security@googlegroups.com).
+We will send a confirmation message to acknowledge that we have received the
+report and then we will send additional messages to follow up once the issue
+has been investigated.
+
+For details on the security release process please refer to the [open-policy-agent/opa/SECURITY.md](https://github.com/open-policy-agent/opa/blob/master/SECURITY.md) file.

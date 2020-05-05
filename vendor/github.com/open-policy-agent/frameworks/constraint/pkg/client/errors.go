@@ -42,6 +42,11 @@ func NewUnrecognizedConstraintError(text string) error {
 	return &UnrecognizedConstraintError{text}
 }
 
+func IsMissingConstraintError(e error) bool {
+	_, ok := e.(*MissingConstraintError)
+	return ok
+}
+
 type MissingConstraintError struct {
 	s string
 }
@@ -52,6 +57,11 @@ func (e *MissingConstraintError) Error() string {
 
 func NewMissingConstraintError(subPath string) error {
 	return &MissingConstraintError{subPath}
+}
+
+func IsMissingTemplateError(e error) bool {
+	_, ok := e.(*MissingTemplateError)
+	return ok
 }
 
 type MissingTemplateError struct {

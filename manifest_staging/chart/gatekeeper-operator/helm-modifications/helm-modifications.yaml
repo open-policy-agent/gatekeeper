@@ -45,17 +45,46 @@ spec:
       app: gatekeeper-operator
       release: RELEASE_NAME
   template:
+    metadata:
+      annotations: HELMSUBST_ANNOTATIONS
     spec:
       containers:
         - name: manager
           args:
-            - --audit-interval={{ .Values.auditInterval }}
             - --port=8443
             - --logtostderr
-            - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
-            - --audit-from-cache={{ .Values.auditFromCache }}
+            - --log-level={{ .Values.logLevel }}
             - --exempt-namespace=gatekeeper-system
+            - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
+      nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  selector:
+    matchLabels:
+      app: gatekeeper-operator
+      release: RELEASE_NAME
+  template:
+    metadata:
+      annotations: HELMSUBST_ANNOTATIONS
+    spec:
+      containers:
+      - name: auditcontainer
+        args:
+        - --audit-interval={{ .Values.auditInterval }}
+        - --log-level={{ .Values.logLevel }}
+        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --audit-from-cache={{ .Values.auditFromCache }}
+        - --operation=audit
+        - --logtostderr
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+        resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
