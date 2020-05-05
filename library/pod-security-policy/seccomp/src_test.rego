@@ -1,4 +1,4 @@
-package k8sazureallowedseccomp
+package k8spspseccomp
 
 test_input_seccomp_allowed_empty {
     input := { "review": input_review_pod_single, "parameters": input_parameters_empty}
