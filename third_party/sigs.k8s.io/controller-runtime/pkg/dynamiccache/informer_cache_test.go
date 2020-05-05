@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package dynamiccache_test
 
@@ -25,6 +25,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -37,7 +38,7 @@ var _ = Describe("dynamicInformerCache", func() {
 		mapper, err := apiutil.NewDynamicRESTMapper(cfg, apiutil.WithLazyDiscovery)
 		Expect(err).ToNot(HaveOccurred())
 
-		c, err := cache.New(cfg, cache.Options{Mapper: mapper})
+		c, err := dynamiccache.New(cfg, cache.Options{Mapper: mapper})
 		Expect(err).ToNot(HaveOccurred())
 
 		leaderElectionRunnable, ok := c.(manager.LeaderElectionRunnable)

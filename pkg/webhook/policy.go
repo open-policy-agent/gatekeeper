@@ -51,6 +51,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
+	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
 
@@ -203,8 +204,7 @@ func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, er
 }
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	sa := fmt.Sprintf("system:serviceaccounts:%s:%s", util.GetNamespace(), serviceAccountName)
-	return user.Username == sa
+	return user.Username == serviceaccount
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors

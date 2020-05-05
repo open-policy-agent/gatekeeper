@@ -50,6 +50,7 @@ const (
 
 	defaultReadinessEndpoint = "/readyz"
 	defaultLivenessEndpoint  = "/healthz"
+	defaultMetricsEndpoint   = "/metrics"
 )
 
 var log = logf.RuntimeLog.WithName("manager")
@@ -95,6 +96,9 @@ type controllerManager struct {
 	// metricsListener is used to serve prometheus metrics
 	metricsListener net.Listener
 
+	// metricsExtraHandlers contains extra handlers to register on http server that serves metrics.
+	metricsExtraHandlers map[string]http.Handler
+
 	// healthProbeListener is used to serve liveness probe
 	healthProbeListener net.Listener
 
@@ -129,6 +133,11 @@ type controllerManager struct {
 	// internalStopper is the write side of the internal stop channel, allowing us to close it.
 	// It and `internalStop` should point to the same channel.
 	internalStopper chan<- struct{}
+
+	// elected is closed when this manager becomes the leader of a group of
+	// managers, either because it won a leader election or because no leader
+	// election was configured.
+	elected chan struct{}
 
 	startCache func(stop <-chan struct{}) error
 
@@ -260,6 +269,25 @@ func (cm *controllerManager) SetFields(i interface{}) error {
 	return nil
 }
 
+// AddMetricsExtraHandler adds extra handler served on path to the http server that serves metrics.
+func (cm *controllerManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
+	if path == defaultMetricsEndpoint {
+		return fmt.Errorf("overriding builtin %s endpoint is not allowed", defaultMetricsEndpoint)
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	_, found := cm.metricsExtraHandlers[path]
+	if found {
+		return fmt.Errorf("can't register extra handler by duplicate path %q on metrics http server", path)
+	}
+
+	cm.metricsExtraHandlers[path] = handler
+	log.V(2).Info("Registering metrics http server extra handler", "path", path)
+	return nil
+}
+
 // AddHealthzCheck allows you to add Healthz checker
 func (cm *controllerManager) AddHealthzCheck(name string, check healthz.Checker) error {
 	cm.mu.Lock()
@@ -341,34 +369,43 @@ func (cm *controllerManager) GetWebhookServer() *webhook.Server {
 }
 
 func (cm *controllerManager) serveMetrics(stop <-chan struct{}) {
-	var metricsPath = "/metrics"
 	handler := promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{
 		ErrorHandling: promhttp.HTTPErrorOnError,
 	})
 	// TODO(JoelSpeed): Use existing Kubernetes machinery for serving metrics
 	mux := http.NewServeMux()
-	mux.Handle(metricsPath, handler)
+	mux.Handle(defaultMetricsEndpoint, handler)
+
+	func() {
+		cm.mu.Lock()
+		defer cm.mu.Unlock()
+
+		for path, extraHandler := range cm.metricsExtraHandlers {
+			mux.Handle(path, extraHandler)
+		}
+	}()
+
 	server := http.Server{
 		Handler: mux,
 	}
 	// Run the server
 	go func() {
-		log.Info("starting metrics server", "path", metricsPath)
+		log.Info("starting metrics server", "path", defaultMetricsEndpoint)
 		if err := server.Serve(cm.metricsListener); err != nil && err != http.ErrServerClosed {
 			cm.errSignal.SignalError(err)
 		}
 	}()
 
 	// Shutdown the server when stop is closed
-	select {
-	case <-stop:
-		if err := server.Shutdown(context.Background()); err != nil {
-			cm.errSignal.SignalError(err)
-		}
+	<-stop
+	if err := server.Shutdown(context.Background()); err != nil {
+		cm.errSignal.SignalError(err)
 	}
 }
 
 func (cm *controllerManager) serveHealthProbes(stop <-chan struct{}) {
+	// TODO(hypnoglow): refactor locking to use anonymous func in the similar way
+	// it's done in serveMetrics.
 	cm.mu.Lock()
 	mux := http.NewServeMux()
 
@@ -392,11 +429,9 @@ func (cm *controllerManager) serveHealthProbes(stop <-chan struct{}) {
 	cm.mu.Unlock()
 
 	// Shutdown the server when stop is closed
-	select {
-	case <-stop:
-		if err := server.Shutdown(context.Background()); err != nil {
-			cm.errSignal.SignalError(err)
-		}
+	<-stop
+	if err := server.Shutdown(context.Background()); err != nil {
+		cm.errSignal.SignalError(err)
 	}
 }
 
@@ -427,6 +462,8 @@ func (cm *controllerManager) Start(stop <-chan struct{}) error {
 			return err
 		}
 	} else {
+		// Treat not having leader election enabled the same as being elected.
+		close(cm.elected)
 		go cm.startLeaderElectionRunnables()
 	}
 
@@ -515,6 +552,7 @@ func (cm *controllerManager) startLeaderElection() (err error) {
 		RetryPeriod:   cm.retryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(_ context.Context) {
+				close(cm.elected)
 				cm.startLeaderElectionRunnables()
 			},
 			OnStoppedLeading: func() {
@@ -541,4 +579,8 @@ func (cm *controllerManager) startLeaderElection() (err error) {
 	// Start the leader elector process
 	go l.Run(ctx)
 	return nil
+}
+
+func (cm *controllerManager) Elected() <-chan struct{} {
+	return cm.elected
 }

@@ -19,7 +19,11 @@ package metrics
 import (
 	"fmt"
 	"net"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
 )
+
+var log = logf.RuntimeLog.WithName("metrics")
 
 // DefaultBindAddress sets the default bind address for the metrics listener
 // The metrics is on by default.

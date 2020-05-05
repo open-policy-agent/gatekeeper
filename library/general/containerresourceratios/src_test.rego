@@ -155,12 +155,12 @@ test_init_containers_checked {
 }
 # MEM SCALE TESTS
 test_input_no_violations_mem_K {
-    input := {"review": review([ctr("a", "1K", "2", "1K", "2")]), "parameters": {"ratio": "4"}}
+    input := {"review": review([ctr("a", "1k", "2", "1k", "2")]), "parameters": {"ratio": "4"}}
     results := violation with input as input
     count(results) == 0
 }
 test_input_violations_mem_K {
-    input := {"review": review([ctr("a", "4K", "2", "1K", "2")]), "parameters": {"ratio": "2"}}
+    input := {"review": review([ctr("a", "4k", "2", "1k", "2")]), "parameters": {"ratio": "2"}}
     results := violation with input as input
     count(results) == 1
 }
@@ -170,7 +170,7 @@ test_input_violations_mem_m {
     count(results) == 1
 }
 test_input_violations_mem_M {
-    input := {"review": review([ctr("a", "1M", "2", "1K", "2")]), "parameters": {"ratio": "4"}}
+    input := {"review": review([ctr("a", "1M", "2", "1k", "2")]), "parameters": {"ratio": "4"}}
     results := violation with input as input
     count(results) == 1
 }

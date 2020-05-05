@@ -151,7 +151,6 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		Version: gvk.Version,
 		Kind:    gvk.Kind + "List",
 	})
-	// TODO need to upgrade to controller-runtime 0.5.1 for context passed to List to be respected.
 	if err := c.List(ctx, lst); err != nil {
 		return fmt.Errorf("listing resources %+v: %w", gvk, err)
 	}

@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package dynamiccache_test
 
@@ -37,6 +37,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 )
 
 const testNamespaceOne = "test-namespace-1"
@@ -76,10 +78,10 @@ func deletePod(pod runtime.Object) {
 }
 
 var _ = Describe("Informer Cache", func() {
-	CacheTest(cache.New)
+	CacheTest(dynamiccache.New)
 })
 var _ = Describe("Multi-Namespace Informer Cache", func() {
-	CacheTest(cache.MultiNamespacedCacheBuilder([]string{testNamespaceOne, testNamespaceTwo, "default"}))
+	CacheTest(dynamiccache.MultiNamespacedCacheBuilder([]string{testNamespaceOne, testNamespaceTwo, "default"}))
 })
 
 // nolint: gocyclo
@@ -99,6 +101,14 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 			Expect(cfg).NotTo(BeNil())
 
 			By("creating three pods")
+			cl, err := client.New(cfg, client.Options{})
+			Expect(err).NotTo(HaveOccurred())
+			err = ensureNamespace(testNamespaceOne, cl)
+			Expect(err).NotTo(HaveOccurred())
+			err = ensureNamespace(testNamespaceTwo, cl)
+			Expect(err).NotTo(HaveOccurred())
+			err = ensureNamespace(testNamespaceThree, cl)
+			Expect(err).NotTo(HaveOccurred())
 			// Includes restart policy since these objects are indexed on this field.
 			knownPod1 = createPod("test-pod-1", testNamespaceOne, kcorev1.RestartPolicyNever)
 			knownPod2 = createPod("test-pod-2", testNamespaceTwo, kcorev1.RestartPolicyAlways)
@@ -114,7 +124,6 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 			knownPod4.GetObjectKind().SetGroupVersionKind(podGVK)
 
 			By("creating the informer cache")
-			var err error
 			informerCache, err = createCacheFunc(cfg, cache.Options{})
 			Expect(err).NotTo(HaveOccurred())
 			By("running the cache and waiting for it to sync")
@@ -264,6 +273,20 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					err := informerCache.Get(context.Background(), svcKey, svc)
 					Expect(err).To(HaveOccurred())
 				})
+
+				It("should return an error when context is cancelled", func() {
+					By("creating a context and cancelling it")
+					ctx, cancel := context.WithCancel(context.Background())
+					cancel()
+
+					By("listing pods in test-namespace-1 with a cancelled context")
+					listObj := &kcorev1.PodList{}
+					err := informerCache.List(ctx, listObj, client.InNamespace(testNamespaceOne))
+
+					By("verifying that an error is returned")
+					Expect(err).To(HaveOccurred())
+					Expect(errors.IsTimeout(err)).To(BeTrue())
+				})
 			})
 			Context("with unstructured objects", func() {
 				It("should be able to list objects that haven't been watched previously", func() {
@@ -372,7 +395,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 
 				It("should be able to restrict cache to a namespace", func() {
 					By("creating a namespaced cache")
-					namespacedCache, err := cache.New(cfg, cache.Options{Namespace: testNamespaceOne})
+					namespacedCache, err := dynamiccache.New(cfg, cache.Options{Namespace: testNamespaceOne})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("running the cache and waiting for it to sync")
@@ -478,7 +501,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 							},
 						},
 					}
-					sii, err := informerCache.GetInformer(pod)
+					sii, err := informerCache.GetInformer(context.TODO(), pod)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(sii).NotTo(BeNil())
 					Expect(sii.HasSynced()).To(BeTrue())
@@ -504,7 +527,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 				It("should be able to get an informer by group/version/kind", func(done Done) {
 					By("getting an shared index informer for gvk = core/v1/pod")
 					gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-					sii, err := informerCache.GetInformerForKind(gvk)
+					sii, err := informerCache.GetInformerForKind(context.TODO(), gvk)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(sii).NotTo(BeNil())
 					Expect(sii.HasSynced()).To(BeTrue())
@@ -543,7 +566,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 
 				It("should be able to index an object field then retrieve objects by that field", func() {
 					By("creating the cache")
-					informer, err := cache.New(cfg, cache.Options{})
+					informer, err := dynamiccache.New(cfg, cache.Options{})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("indexing the restartPolicy field of the Pod object before starting")
@@ -551,7 +574,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					indexFunc := func(obj runtime.Object) []string {
 						return []string{string(obj.(*kcorev1.Pod).Spec.RestartPolicy)}
 					}
-					Expect(informer.IndexField(pod, "spec.restartPolicy", indexFunc)).To(Succeed())
+					Expect(informer.IndexField(context.TODO(), pod, "spec.restartPolicy", indexFunc)).To(Succeed())
 
 					By("running the cache and waiting for it to sync")
 					go func() {
@@ -569,6 +592,45 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(listObj.Items).Should(HaveLen(1))
 					actual := listObj.Items[0]
 					Expect(actual.Name).To(Equal("test-pod-3"))
+				})
+
+				It("should allow for get informer to be cancelled", func() {
+					By("creating a context and cancelling it")
+					ctx, cancel := context.WithCancel(context.Background())
+					cancel()
+
+					By("getting a shared index informer for a pod with a cancelled context")
+					pod := &kcorev1.Pod{
+						ObjectMeta: kmetav1.ObjectMeta{
+							Name:      "informer-obj",
+							Namespace: "default",
+						},
+						Spec: kcorev1.PodSpec{
+							Containers: []kcorev1.Container{
+								{
+									Name:  "nginx",
+									Image: "nginx",
+								},
+							},
+						},
+					}
+					sii, err := informerCache.GetInformer(ctx, pod)
+					Expect(err).To(HaveOccurred())
+					Expect(sii).To(BeNil())
+					Expect(errors.IsTimeout(err)).To(BeTrue())
+				})
+
+				It("should allow getting an informer by group/version/kind to be cancelled", func() {
+					By("creating a context and cancelling it")
+					ctx, cancel := context.WithCancel(context.Background())
+					cancel()
+
+					By("getting an shared index informer for gvk = core/v1/pod with a cancelled context")
+					gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+					sii, err := informerCache.GetInformerForKind(ctx, gvk)
+					Expect(err).To(HaveOccurred())
+					Expect(sii).To(BeNil())
+					Expect(errors.IsTimeout(err)).To(BeTrue())
 				})
 			})
 			Context("with unstructured objects", func() {
@@ -594,7 +656,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 						Version: "v1",
 						Kind:    "Pod",
 					})
-					sii, err := informerCache.GetInformer(pod)
+					sii, err := informerCache.GetInformer(context.TODO(), pod)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(sii).NotTo(BeNil())
 					Expect(sii.HasSynced()).To(BeTrue())
@@ -619,7 +681,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 
 				It("should be able to index an object field then retrieve objects by that field", func() {
 					By("creating the cache")
-					informer, err := cache.New(cfg, cache.Options{})
+					informer, err := dynamiccache.New(cfg, cache.Options{})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("indexing the restartPolicy field of the Pod object before starting")
@@ -640,7 +702,7 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 						}
 						return []string{fmt.Sprintf("%v", m["restartPolicy"])}
 					}
-					Expect(informer.IndexField(pod, "spec.restartPolicy", indexFunc)).To(Succeed())
+					Expect(informer.IndexField(context.TODO(), pod, "spec.restartPolicy", indexFunc)).To(Succeed())
 
 					By("running the cache and waiting for it to sync")
 					go func() {
@@ -666,7 +728,45 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					actual := listObj.Items[0]
 					Expect(actual.GetName()).To(Equal("test-pod-3"))
 				}, 3)
+
+				It("should allow for get informer to be cancelled", func() {
+					By("creating a context and cancelling it")
+					ctx, cancel := context.WithCancel(context.Background())
+					cancel()
+
+					By("getting a shared index informer for a pod with a cancelled context")
+					pod := &unstructured.Unstructured{}
+					pod.SetName("informer-obj2")
+					pod.SetNamespace("default")
+					pod.SetGroupVersionKind(schema.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					})
+					sii, err := informerCache.GetInformer(ctx, pod)
+					Expect(err).To(HaveOccurred())
+					Expect(sii).To(BeNil())
+					Expect(errors.IsTimeout(err)).To(BeTrue())
+				})
 			})
 		})
 	})
+}
+
+// ensureNamespace installs namespace of a given name if not exists
+func ensureNamespace(namespace string, client client.Client) error {
+	ns := kcorev1.Namespace{
+		ObjectMeta: kmetav1.ObjectMeta{
+			Name: namespace,
+		},
+		TypeMeta: kmetav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+	}
+	err := client.Create(context.TODO(), &ns)
+	if errors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
 }
