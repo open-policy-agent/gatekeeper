@@ -1,4 +1,4 @@
-package k8sazureallowedseccomp
+package k8spspseccomp
 
 violation[{"msg": msg, "details": {}}] {
     metadata := input.review.object.metadata
