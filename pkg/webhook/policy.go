@@ -20,6 +20,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -64,7 +65,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
 	if err != nil {
 		return err
 	}
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reporter: reporter}}
+	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reader: mgr.GetAPIReader(), reporter: reporter}}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
@@ -75,7 +76,9 @@ type validationHandler struct {
 	opa      *opa.Client
 	client   client.Client
 	reporter StatsReporter
-
+	// reader that will be configured to use the API server
+	// obtained from mgr.GetAPIReader()
+	reader client.Reader
 	// for testing
 	injectedConfig *v1alpha1.Config
 }
@@ -286,7 +289,14 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
-			return nil, err
+			if !k8serrors.IsNotFound(err) {
+				return nil, err
+			}
+			// bypass cached client and ask api-server directly
+			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+			if err != nil {
+				return nil, err
+			}
 		}
 		review.Namespace = ns
 	}
