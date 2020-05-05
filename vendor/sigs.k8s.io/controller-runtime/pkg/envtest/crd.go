@@ -114,7 +114,7 @@ func defaultCRDOptions(o *CRDInstallOptions) {
 func WaitForCRDs(config *rest.Config, crds []runtime.Object, options CRDInstallOptions) error {
 	// Add each CRD to a map of GroupVersion to Resource
 	waitingFor := map[schema.GroupVersion]*sets.String{}
-	for _, crd := range runtimeListToUnstructured(crds) {
+	for _, crd := range runtimeCRDListToUnstructured(crds) {
 		gvs := []schema.GroupVersion{}
 		crdGroup, _, err := unstructured.NestedString(crd.Object, "spec", "group")
 		if err != nil {
@@ -230,7 +230,7 @@ func UninstallCRDs(config *rest.Config, options CRDInstallOptions) error {
 	}
 
 	// Uninstall each CRD
-	for _, crd := range runtimeListToUnstructured(options.CRDs) {
+	for _, crd := range runtimeCRDListToUnstructured(options.CRDs) {
 		log.V(1).Info("uninstalling CRD", "crd", crd.GetName())
 		if err := cs.Delete(context.TODO(), crd); err != nil {
 			// If CRD is not found, we can consider success
@@ -251,7 +251,7 @@ func CreateCRDs(config *rest.Config, crds []runtime.Object) error {
 	}
 
 	// Create each CRD
-	for _, crd := range runtimeListToUnstructured(crds) {
+	for _, crd := range runtimeCRDListToUnstructured(crds) {
 		log.V(1).Info("installing CRD", "crd", crd.GetName())
 		existingCrd := crd.DeepCopy()
 		err := cs.Get(context.TODO(), client.ObjectKey{Name: crd.GetName()}, existingCrd)
@@ -278,9 +278,15 @@ func renderCRDs(options *CRDInstallOptions) ([]runtime.Object, error) {
 	var (
 		err   error
 		info  os.FileInfo
-		crds  []*unstructured.Unstructured
 		files []os.FileInfo
 	)
+
+	type GVKN struct {
+		GVK  schema.GroupVersionKind
+		Name string
+	}
+
+	crds := map[GVKN]*unstructured.Unstructured{}
 
 	for _, path := range options.Paths {
 		var filePath = path
@@ -294,7 +300,7 @@ func renderCRDs(options *CRDInstallOptions) ([]runtime.Object, error) {
 		}
 
 		if !info.IsDir() {
-			filePath, files = filepath.Dir(path), append(files, info)
+			filePath, files = filepath.Dir(path), []os.FileInfo{info}
 		} else {
 			if files, err = ioutil.ReadDir(path); err != nil {
 				return nil, err
@@ -307,14 +313,23 @@ func renderCRDs(options *CRDInstallOptions) ([]runtime.Object, error) {
 			return nil, err
 		}
 
-		// If CRD already in the list, skip it.
-		if existsUnstructured(crds, crdList) {
-			continue
+		for i, crd := range crdList {
+			gvkn := GVKN{GVK: crd.GroupVersionKind(), Name: crd.GetName()}
+			if _, found := crds[gvkn]; found {
+				// Currently, we only print a log when there are duplicates. We may want to error out if that makes more sense.
+				log.Info("there are more than one CRD definitions with the same <Group, Version, Kind, Name>", "GVKN", gvkn)
+			}
+			// We always use the CRD definition that we found last.
+			crds[gvkn] = crdList[i]
 		}
-		crds = append(crds, crdList...)
 	}
 
-	return unstructuredListToRuntime(crds), nil
+	// Converting map to a list to return
+	var res []runtime.Object
+	for _, obj := range crds {
+		res = append(res, obj)
+	}
+	return res, nil
 }
 
 // readCRDs reads the CRDs from files and Unmarshals them into structs

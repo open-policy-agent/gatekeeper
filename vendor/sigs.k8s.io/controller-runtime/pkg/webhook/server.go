@@ -19,7 +19,9 @@ package webhook
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -54,8 +56,12 @@ type Server struct {
 	// CertName is the server certificate name. Defaults to tls.crt.
 	CertName string
 
-	// CertName is the server key name. Defaults to tls.key.
+	// KeyName is the server key name. Defaults to tls.key.
 	KeyName string
+
+	// ClientCAName is the CA certificate name which server used to verify remote(client)'s certificate.
+	// Defaults to "", which means server does not verify client's certificate.
+	ClientCAName string
 
 	// WebhookMux is the multiplexer that handles different webhooks.
 	WebhookMux *http.ServeMux
@@ -119,7 +125,7 @@ func (s *Server) Register(path string, hook http.Handler) {
 func instrumentedHook(path string, hookRaw http.Handler) http.Handler {
 	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		startTS := time.Now()
-		defer func() { metrics.RequestLatency.WithLabelValues(path).Observe(time.Now().Sub(startTS).Seconds()) }()
+		defer func() { metrics.RequestLatency.WithLabelValues(path).Observe(time.Since(startTS).Seconds()) }()
 		hookRaw.ServeHTTP(resp, req)
 
 		// TODO(directxman12): add back in metric about total requests broken down by result?
@@ -166,6 +172,23 @@ func (s *Server) Start(stop <-chan struct{}) error {
 	cfg := &tls.Config{
 		NextProtos:     []string{"h2"},
 		GetCertificate: certWatcher.GetCertificate,
+	}
+
+	// load CA to verify client certificate
+	if s.ClientCAName != "" {
+		certPool := x509.NewCertPool()
+		clientCABytes, err := ioutil.ReadFile(filepath.Join(s.CertDir, s.ClientCAName))
+		if err != nil {
+			return fmt.Errorf("failed to read client CA cert: %v", err)
+		}
+
+		ok := certPool.AppendCertsFromPEM(clientCABytes)
+		if !ok {
+			return fmt.Errorf("failed to append client CA cert to CA pool")
+		}
+
+		cfg.ClientCAs = certPool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
 	listener, err := tls.Listen("tcp", net.JoinHostPort(s.Host, strconv.Itoa(int(s.Port))), cfg)
