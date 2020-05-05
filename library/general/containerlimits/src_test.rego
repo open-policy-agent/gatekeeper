@@ -105,7 +105,7 @@ test_init_containers_checked {
 
 # MEM SCALE TESTS
 test_input_no_violations_mem_K {
-    input := {"review": review([ctr("a", "1", "2")]), "parameters": {"memory": "1K", "cpu": "4"}}
+    input := {"review": review([ctr("a", "1", "2")]), "parameters": {"memory": "1k", "cpu": "4"}}
     results := violation with input as input
     count(results) == 0
 }
@@ -115,12 +115,12 @@ test_input_violations_mem_m {
     count(results) == 1
 }
 test_input_violations_mem_K {
-    input := {"review": review([ctr("a", "1K", "2")]), "parameters": {"memory": "1", "cpu": "4"}}
+    input := {"review": review([ctr("a", "1k", "2")]), "parameters": {"memory": "1", "cpu": "4"}}
     results := violation with input as input
     count(results) == 1
 }
 test_input_violations_mem_M {
-    input := {"review": review([ctr("a", "1M", "2")]), "parameters": {"memory": "1K", "cpu": "4"}}
+    input := {"review": review([ctr("a", "1M", "2")]), "parameters": {"memory": "1k", "cpu": "4"}}
     results := violation with input as input
     count(results) == 1
 }
