@@ -3,7 +3,10 @@ package integration
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/internal/testing/integration/addr"
@@ -116,10 +119,45 @@ func (s *APIServer) setProcessState() error {
 	s.StartTimeout = s.processState.StartTimeout
 	s.StopTimeout = s.processState.StopTimeout
 
+	if err := s.populateAPIServerCerts(); err != nil {
+		return err
+	}
+
 	s.processState.Args, err = internal.RenderTemplates(
 		internal.DoAPIServerArgDefaulting(s.Args), s,
 	)
 	return err
+}
+
+func (s *APIServer) populateAPIServerCerts() error {
+	_, statErr := os.Stat(filepath.Join(s.CertDir, "apiserver.crt"))
+	if !os.IsNotExist(statErr) {
+		return statErr
+	}
+
+	ca, err := internal.NewTinyCA()
+	if err != nil {
+		return err
+	}
+
+	certs, err := ca.NewServingCert()
+	if err != nil {
+		return err
+	}
+
+	certData, keyData, err := certs.AsBytes()
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(s.CertDir, "apiserver.crt"), certData, 0640); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(filepath.Join(s.CertDir, "apiserver.key"), keyData, 0640); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Stop stops this process gracefully, waits for its termination, and cleans up

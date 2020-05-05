@@ -15,11 +15,12 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package internal
 
 import (
+	"context"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -82,31 +83,16 @@ func (m *InformersMap) WaitForCacheSync(stop <-chan struct{}) bool {
 
 // Get will create a new Informer and add it to the map of InformersMap if none exists.  Returns
 // the Informer from the map.
-func (m *InformersMap) Get(gvk schema.GroupVersionKind, obj runtime.Object) (bool, *MapEntry, error) {
+func (m *InformersMap) Get(ctx context.Context, gvk schema.GroupVersionKind, obj runtime.Object) (bool, *MapEntry, error) {
 	_, isUnstructured := obj.(*unstructured.Unstructured)
 	_, isUnstructuredList := obj.(*unstructured.UnstructuredList)
 	isUnstructured = isUnstructured || isUnstructuredList
 
 	if isUnstructured {
-		return m.unstructured.Get(gvk, obj, true)
+		return m.unstructured.Get(ctx, gvk, obj)
 	}
 
-	return m.structured.Get(gvk, obj, true)
-}
-
-// GetNonBlocking will create a new Informer and add it to the map of InformersMap if none exists.
-// Returns the Informer from the map.
-// This method differs from Get() in that it will not block for cache sync when an informer is first instantiated.
-func (m *InformersMap) GetNonBlocking(gvk schema.GroupVersionKind, obj runtime.Object) (bool, *MapEntry, error) {
-	_, isUnstructured := obj.(*unstructured.Unstructured)
-	_, isUnstructuredList := obj.(*unstructured.UnstructuredList)
-	isUnstructured = isUnstructured || isUnstructuredList
-
-	if isUnstructured {
-		return m.unstructured.Get(gvk, obj, false)
-	}
-
-	return m.structured.Get(gvk, obj, false)
+	return m.structured.Get(ctx, gvk, obj)
 }
 
 // Remove will remove an new Informer from the InformersMap and stop it if it exists.
