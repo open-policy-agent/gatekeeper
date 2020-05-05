@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package internal
 
@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,6 +74,7 @@ type MapEntry struct {
 	// CacheReader wraps Informer and implements the CacheReader interface for a single type
 	Reader CacheReader
 
+	// Stop can be used to stop this individual informer without stopping the entire specificInformersMap.
 	stop chan struct{}
 }
 
@@ -180,7 +182,7 @@ func (ip *specificInformersMap) HasSyncedFuncs() []cache.InformerSynced {
 
 // Get will create a new Informer and add it to the map of specificInformersMap if none exists.  Returns
 // the Informer from the map.
-func (ip *specificInformersMap) Get(gvk schema.GroupVersionKind, obj runtime.Object, waitSync bool) (bool, *MapEntry, error) {
+func (ip *specificInformersMap) Get(ctx context.Context, gvk schema.GroupVersionKind, obj runtime.Object) (bool, *MapEntry, error) {
 	// Return the informer if it is found
 	i, started, ok := func() (*MapEntry, bool, bool) {
 		ip.mu.RLock()
@@ -196,12 +198,14 @@ func (ip *specificInformersMap) Get(gvk schema.GroupVersionKind, obj runtime.Obj
 		}
 	}
 
-	if waitSync && started && !i.Informer.HasSynced() {
+	if started && !i.Informer.HasSynced() {
 		// Wait for it to sync before returning the Informer so that folks don't read from a stale cache.
-		syncStop, cancel := eitherChan(ip.stop, i.stop)
+		// Cancel for context, informer stopping, or entire map stopping.
+		syncStop, cancel := mergeChan(ctx.Done(), i.stop, ip.stop)
 		defer cancel()
 		if !cache.WaitForCacheSync(syncStop, i.Informer.HasSynced) {
-			return started, nil, fmt.Errorf("failed waiting for %T Informer to sync", obj)
+			// Return entry even on timeout - caller may have intended a non-blocking fetch.
+			return started, i, apierrors.NewTimeoutError(fmt.Sprintf("failed waiting for %T Informer to sync", obj), 0)
 		}
 	}
 
@@ -276,12 +280,15 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 		return nil, err
 	}
 
+	// TODO: the functions that make use of this ListWatch should be adapted to
+	//  pass in their own contexts instead of relying on this fixed one here.
+	ctx := context.TODO()
 	// Create a new ListWatch for the obj
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			res := listObj.DeepCopyObject()
 			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			err := client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do().Into(res)
+			err := client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do(ctx).Into(res)
 			return res, err
 		},
 		// Setup the watch function
@@ -289,7 +296,7 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 			// Watch needs to be set to true separately
 			opts.Watch = true
 			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			return client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch()
+			return client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch(ctx)
 		},
 	}, nil
 }
@@ -306,22 +313,25 @@ func createUnstructuredListWatch(gvk schema.GroupVersionKind, ip *specificInform
 		return nil, err
 	}
 
+	// TODO: the functions that make use of this ListWatch should be adapted to
+	//  pass in their own contexts instead of relying on this fixed one here.
+	ctx := context.TODO()
 	// Create a new ListWatch for the obj
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).List(opts)
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).List(ctx, opts)
 			}
-			return dynamicClient.Resource(mapping.Resource).List(opts)
+			return dynamicClient.Resource(mapping.Resource).List(ctx, opts)
 		},
 		// Setup the watch function
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
 			// Watch needs to be set to true separately
 			opts.Watch = true
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).Watch(opts)
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).Watch(ctx, opts)
 			}
-			return dynamicClient.Resource(mapping.Resource).Watch(opts)
+			return dynamicClient.Resource(mapping.Resource).Watch(ctx, opts)
 		},
 	}, nil
 }
@@ -353,6 +363,30 @@ func eitherChan(a, b <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
 		select {
 		case <-a:
 		case <-b:
+		case <-cancel:
+		}
+	}()
+
+	return out, cancelFunc
+}
+
+// mergeChan returns a channel that is closed when any of the input channels are signaled.
+// The caller must call the returned CancelFunc to ensure no resources are leaked.
+func mergeChan(a, b, c <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
+	var once sync.Once
+	out := make(chan struct{})
+	cancel := make(chan struct{})
+	cancelFunc := func() {
+		once.Do(func() {
+			close(cancel)
+		})
+	}
+	go func() {
+		defer close(out)
+		select {
+		case <-a:
+		case <-b:
+		case <-c:
 		case <-cancel:
 		}
 	}()

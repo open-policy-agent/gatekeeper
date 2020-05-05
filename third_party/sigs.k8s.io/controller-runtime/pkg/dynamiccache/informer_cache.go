@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.5.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
 
 package dynamiccache
 
@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,7 +62,7 @@ func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, o
 		return err
 	}
 
-	started, cache, err := ip.InformersMap.Get(gvk, out)
+	started, cache, err := ip.InformersMap.Get(ctx, gvk, out)
 	if err != nil {
 		return err
 	}
@@ -74,38 +75,13 @@ func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, o
 
 // List implements Reader
 func (ip *dynamicInformerCache) List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
-	gvk, err := apiutil.GVKForObject(out, ip.Scheme)
+
+	gvk, cacheTypeObj, err := ip.objectTypeForListObject(out)
 	if err != nil {
 		return err
 	}
 
-	if !strings.HasSuffix(gvk.Kind, "List") {
-		return fmt.Errorf("non-list type %T (kind %q) passed as output", out, gvk)
-	}
-	// we need the non-list GVK, so chop off the "List" from the end of the kind
-	gvk.Kind = gvk.Kind[:len(gvk.Kind)-4]
-	_, isUnstructured := out.(*unstructured.UnstructuredList)
-	var cacheTypeObj runtime.Object
-	if isUnstructured {
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-		cacheTypeObj = u
-	} else {
-		itemsPtr, err := apimeta.GetItemsPtr(out)
-		if err != nil {
-			return nil
-		}
-		// http://knowyourmeme.com/memes/this-is-fine
-		elemType := reflect.Indirect(reflect.ValueOf(itemsPtr)).Type().Elem()
-		cacheTypeValue := reflect.Zero(reflect.PtrTo(elemType))
-		var ok bool
-		cacheTypeObj, ok = cacheTypeValue.Interface().(runtime.Object)
-		if !ok {
-			return fmt.Errorf("cannot get cache for %T, its element %T is not a runtime.Object", out, cacheTypeValue.Interface())
-		}
-	}
-
-	started, cache, err := ip.InformersMap.Get(gvk, cacheTypeObj)
+	started, cache, err := ip.InformersMap.Get(ctx, *gvk, cacheTypeObj)
 	if err != nil {
 		return err
 	}
@@ -117,14 +93,57 @@ func (ip *dynamicInformerCache) List(ctx context.Context, out runtime.Object, op
 	return cache.Reader.List(ctx, out, opts...)
 }
 
+// objectTypeForListObject tries to find the runtime.Object and associated GVK
+// for a single object corresponding to the passed-in list type. We need them
+// because they are used as cache map key.
+func (ip *dynamicInformerCache) objectTypeForListObject(list runtime.Object) (*schema.GroupVersionKind, runtime.Object, error) {
+	gvk, err := apiutil.GVKForObject(list, ip.Scheme)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if !strings.HasSuffix(gvk.Kind, "List") {
+		return nil, nil, fmt.Errorf("non-list type %T (kind %q) passed as output", list, gvk)
+	}
+	// we need the non-list GVK, so chop off the "List" from the end of the kind
+	gvk.Kind = gvk.Kind[:len(gvk.Kind)-4]
+	_, isUnstructured := list.(*unstructured.UnstructuredList)
+	var cacheTypeObj runtime.Object
+	if isUnstructured {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+		cacheTypeObj = u
+	} else {
+		itemsPtr, err := apimeta.GetItemsPtr(list)
+		if err != nil {
+			return nil, nil, err
+		}
+		// http://knowyourmeme.com/memes/this-is-fine
+		elemType := reflect.Indirect(reflect.ValueOf(itemsPtr)).Type().Elem()
+		if elemType.Kind() != reflect.Ptr {
+			elemType = reflect.PtrTo(elemType)
+		}
+
+		cacheTypeValue := reflect.Zero(elemType)
+		var ok bool
+		cacheTypeObj, ok = cacheTypeValue.Interface().(runtime.Object)
+		if !ok {
+			return nil, nil, fmt.Errorf("cannot get cache for %T, its element %T is not a runtime.Object", list, cacheTypeValue.Interface())
+		}
+	}
+
+	return &gvk, cacheTypeObj, nil
+}
+
 // GetInformerForKind returns the informer for the GroupVersionKind
-func (ip *dynamicInformerCache) GetInformerForKind(gvk schema.GroupVersionKind) (cache.Informer, error) {
+func (ip *dynamicInformerCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (cache.Informer, error) {
 	// Map the gvk to an object
 	obj, err := ip.Scheme.New(gvk)
 	if err != nil {
 		return nil, err
 	}
-	_, i, err := ip.InformersMap.Get(gvk, obj)
+
+	_, i, err := ip.InformersMap.Get(ctx, gvk, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -132,12 +151,13 @@ func (ip *dynamicInformerCache) GetInformerForKind(gvk schema.GroupVersionKind) 
 }
 
 // GetInformer returns the informer for the obj
-func (ip *dynamicInformerCache) GetInformer(obj runtime.Object) (cache.Informer, error) {
+func (ip *dynamicInformerCache) GetInformer(ctx context.Context, obj runtime.Object) (cache.Informer, error) {
 	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
 	if err != nil {
 		return nil, err
 	}
-	_, i, err := ip.InformersMap.Get(gvk, obj)
+
+	_, i, err := ip.InformersMap.Get(ctx, gvk, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +170,16 @@ func (ip *dynamicInformerCache) GetInformerNonBlocking(obj runtime.Object) (cach
 	if err != nil {
 		return nil, err
 	}
-	_, i, err := ip.InformersMap.GetNonBlocking(gvk, obj)
-	if err != nil {
+
+	// Use a cancelled context to signal non-blocking
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, i, err := ip.InformersMap.Get(ctx, gvk, obj)
+	if err != nil && !apierrors.IsTimeout(err) {
 		return nil, err
 	}
-	return i.Informer, err
+	return i.Informer, nil
 }
 
 // NeedLeaderElection implements the LeaderElectionRunnable interface
@@ -168,8 +193,8 @@ func (ip *dynamicInformerCache) NeedLeaderElection() bool {
 // to List. For one-to-one compatibility with "normal" field selectors, only return one value.
 // The values may be anything.  They will automatically be prefixed with the namespace of the
 // given object, if present.  The objects passed are guaranteed to be objects of the correct type.
-func (ip *dynamicInformerCache) IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
-	informer, err := ip.GetInformer(obj)
+func (ip *dynamicInformerCache) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+	informer, err := ip.GetInformer(ctx, obj)
 	if err != nil {
 		return err
 	}
