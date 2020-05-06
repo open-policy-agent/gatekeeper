@@ -107,7 +107,7 @@ e2e-helm-deploy:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	./.staging/helm/linux-amd64/helm install manifest_staging/helm/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
 
 # Build manager binary
 manager: generate fmt vet
@@ -134,7 +134,7 @@ manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
-	mkdir -p manifest_staging/helm/gatekeeper
+	mkdir -p manifest_staging/charts/gatekeeper
 	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
 	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
 
@@ -238,7 +238,7 @@ promote-staging-manifest:
 	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
 	@rm -rf helm
-	@cp -r manifest_staging/helm .
+	@cp -r manifest_staging/charts .
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:

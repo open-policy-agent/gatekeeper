@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	outputDir  = flag.String("output-dir", "manifest_staging/helm/gatekeeper", "The root directory in which to write the Helm chart")
+	outputDir  = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
 	useCRDsDir = flag.Bool("use-crds-dir", false, `Use the "crds" subdirectory, which requires Helm v3`)
 )
 
