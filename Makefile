@@ -225,11 +225,14 @@ docker-push:
 
 release-manifest:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml ./manifest_staging/deploy/gatekeeper.yaml
-	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/Chart.yaml
-	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/Chart.yaml
-	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./manifest_staging/helm/gatekeeper/values.yaml
-	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./manifest_staging/helm/gatekeeper/values.yaml
+	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
+	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
+	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./cmd/build/helmify/static/values.yaml
+	export
+	$(MAKE) manifests
 
 promote-staging-manifest:
 	@rm -rf deploy
