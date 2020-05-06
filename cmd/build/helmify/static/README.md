@@ -13,7 +13,7 @@
 | image.release             | The image release tag to use                                | Current release version: `v3.1.0-beta.8`                                   |
 | resources                 | The resource request/limits for the container image         | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                             |
 | nodeSelector              | The node selector to use for pod scheduling                 | `{}`                                                                       |
-| affinity                  | The node affinity to use for pod scheduling                 |                                                                            |
+| affinity                  | The node affinity to use for pod scheduling                 | `{}`                                                                       |
 | tolerations               | The tolerations to use for pod scheduling                   | `[]`                                                                       |
 | replicas                  | The number of Gatekeeper replicas to deploy for the webhook | `1`                                                                        |
 | podAnnotations            | The annotations to add to the Gatekeeper pods               | `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default`  |
