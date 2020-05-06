@@ -16,6 +16,11 @@ teardown() {
   assert_success
 }
 
+@test "gatekeeper-audit is running" {
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
+  assert_success
+}
+
 @test "namespace label webhook is serving" {
   cert=$(mktemp)
   CLEAN_CMD="${CLEAN_CMD}; rm ${CERT}"
@@ -64,7 +69,7 @@ teardown() {
   assert_success
 }
 
-@test "required labels test" {
+@test "required labels dryrun test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/templates/k8srequiredlabels_template.yaml
   assert_success
 
@@ -81,6 +86,20 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_match 'denied the request' "$output"
   assert_failure
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
+  assert_success
+
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "compare_generation k8srequiredlabels ns-must-have-gk"
+  assert_success
+
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.spec.enforcementAction' | grep dryrun"
+
+  # deploying a violation with dryrun enforcement action will be accepted
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_success
+
+  CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
 }
 
 @test "container limits test" {
@@ -109,7 +128,16 @@ teardown() {
   assert_success
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get deploy opa-test-deployment -o yaml | grep unavailableReplicas"
+}
 
+@test "waiting for namespaces to be synced using metrics endpoint" {
+  kubectl port-forward -n gatekeeper-system deployment/gatekeeper-controller-manager 8888:8888 &
+  FORWARDING_PID=$!
+  CLEAN_CMD="kill ${FORWARDING_PID}"
+
+  num_namespaces=$(kubectl get ns -o json | jq '.items | length')
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "curl -s 127.0.0.1:8888/metrics | grep 'gatekeeper_sync{kind=\"Namespace\",status=\"active\"} ${num_namespaces}'"
+  assert_success
 }
 
 @test "unique labels test" {

@@ -50,7 +50,7 @@ assert_not_match() {
   fi
 }
 
-wait_for_process(){
+wait_for_process() {
   wait_time="$1"
   sleep_time="$2"
   cmd="$3"
@@ -59,7 +59,7 @@ wait_for_process(){
       return 0
     else
       sleep "$sleep_time"
-      wait_time=$((wait_time-sleep_time))
+      wait_time=$((wait_time - sleep_time))
     fi
   done
   return 1
@@ -70,5 +70,12 @@ get_ca_cert() {
   if [ $(kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then
     return 1
   fi
-  kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > $destination
+  kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d >$destination
+}
+
+compare_generation() {
+  kind="$1"
+  constraint="$2"
+
+  [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.status.byPod[0].observedGeneration')" = "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.metadata.generation')" ]]
 }
