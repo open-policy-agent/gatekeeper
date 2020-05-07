@@ -104,7 +104,7 @@ jobs:
           if [[ $exists == null ]]
           then
             make docker-login
-            docker-buildx-dev IMG=gatekeeper-e2e:latest DEV_TAG=${GITHUB_SHA::7}
+            docker-buildx-dev DEV_TAG=${GITHUB_SHA::7}
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -140,7 +140,7 @@ jobs:
           if [[ $exists == null ]]
           then
             make docker-login
-            make docker-buildx-release IMG=gatekeeper-e2e:latest VERSION=${TAG}
+            make docker-buildx-release VERSION=${TAG}
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
