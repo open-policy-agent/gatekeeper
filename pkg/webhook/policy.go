@@ -174,6 +174,15 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 	var msgs []string
 	for _, r := range res {
 		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
+			resourceName := req.AdmissionRequest.Name
+			if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
+				// On a CREATE operation, the client may omit name and
+				// rely on the server to generate the name.
+				obj := &unstructured.Unstructured{}
+				if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
+					resourceName = obj.GetName()
+				}
+			}
 			if *logDenies {
 				log.WithValues(
 					"process", "admission",
@@ -183,7 +192,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					"constraint_action", r.EnforcementAction,
 					"resource_kind", req.AdmissionRequest.Kind.Kind,
 					"resource_namespace", req.AdmissionRequest.Namespace,
-					"resource_name", req.AdmissionRequest.Name,
+					"resource_name", resourceName,
 				).Info("denied admission")
 			}
 		}
