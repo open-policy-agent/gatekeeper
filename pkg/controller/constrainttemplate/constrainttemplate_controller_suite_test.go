@@ -24,6 +24,8 @@ import (
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/api"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
+
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -34,20 +36,29 @@ import (
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
+	var err error
+
+	// Load framework CRDs separately - controller-runtime tries to parse any *.yaml it sees,
+	// picks up kustomization.yaml, and fails. TODO upstream better filtering support for envtest.
+	frameworkCRDs, err := util.ReadCRD(filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"))
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			// Due to a bug in how the testenv loads CRDDirectoryPaths (files slice
 			// defined at too-wide a scope), this path needs to come first.
-			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
+			// (See controller-runtime comment bug above) filepath.Join("..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy"),
 			filepath.Join("..", "..", "..", "config", "crd", "bases"),
 		},
+		CRDs:                  frameworkCRDs,
 		ErrorIfCRDPathMissing: true,
 	}
 	if err := api.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 
-	var err error
 	if cfg, err = t.Start(); err != nil {
 		stdlog.Fatal(err)
 	}

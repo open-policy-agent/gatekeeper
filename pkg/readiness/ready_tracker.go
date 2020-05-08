@@ -41,7 +41,6 @@ var log = logf.Log.WithName("readiness-tracker")
 
 const constraintGroup = "constraints.gatekeeper.sh"
 
-var constraintTemplateGVK = v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")
 var cfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"} // Config resource singleton reference
 
 // Lister lists resources from a cache.
@@ -56,7 +55,7 @@ type DynamicLister interface {
 
 // Tracker tracks readiness for templates, constraints and data.
 type Tracker struct {
-	mu        sync.RWMutex // protects satisfied circuit-breaker
+	mu        sync.RWMutex // protects "satisfied" circuit-breaker
 	satisfied bool         // indicates whether tracker has been satisfied at least once
 
 	lister        Lister
