@@ -187,6 +187,38 @@ func Test_Tracker(t *testing.T) {
 	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
 }
 
+// Verifies that a Config resource referencing bogus (unregistered) GVKs will not halt readiness.
+func Test_Tracker_UnregisteredCachedData(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	// Apply fixtures *before* the controllers are setup.
+	err := applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	// Apply config resource with bogus GVK reference
+	err = applyFixtures("testdata/bogus-config")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying config")
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+	if err := setupController(mgr, wm, opaClient); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+}
+
 // probeIsReady checks whether expectations have been satisfied (via the readiness probe)
 func probeIsReady(ctx context.Context) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:29090/readyz", http.NoBody)

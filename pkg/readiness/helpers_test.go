@@ -55,12 +55,20 @@ func applyFixtures(path string) error {
 			return fmt.Errorf("reading file %s: %w", entry, err)
 		}
 
-		u := unstructured.Unstructured{}
-		if err := yaml.Unmarshal(b, &u); err != nil {
+		desired := unstructured.Unstructured{}
+		if err := yaml.Unmarshal(b, &desired); err != nil {
 			return fmt.Errorf("parsing file %s: %w", entry, err)
 		}
 
+		u := unstructured.Unstructured{}
+		u.SetGroupVersionKind(desired.GroupVersionKind())
+		u.SetName(desired.GetName())
+		u.SetNamespace(desired.GetNamespace())
 		_, err = controllerutil.CreateOrUpdate(context.Background(), c, &u, func() error {
+			resourceVersion := u.GetResourceVersion()
+			desired.DeepCopyInto(&u)
+			u.SetResourceVersion(resourceVersion)
+
 			return nil
 		})
 		if err != nil {

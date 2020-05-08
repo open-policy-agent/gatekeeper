@@ -189,7 +189,6 @@ func (t *Tracker) Run(ctx context.Context) error {
 	})
 
 	_ = grp.Wait()
-	_ = t.constraintTrackers.Wait()
 	return nil
 }
 
@@ -228,10 +227,13 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	}
 	t.templates.ExpectationsDone()
 	log.V(1).Info("template expectations populated")
+
+	_ = t.constraintTrackers.Wait()
 	return nil
 }
 
-// trackConfig sets expectations for the singleton Config resource.
+// trackConfig sets expectations for cached data as specified by the singleton Config resource.
+// Fails-open if the Config resource cannot be fetched or does not exist.
 func (t *Tracker) trackConfig(ctx context.Context) error {
 	defer func() {
 		defer t.config.ExpectationsDone()
@@ -252,6 +254,8 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 	}
 
 	// Expect the resource kinds specified in the Config.
+	// We will fail-open (resolve expectations) for GVKs
+	// that are unregistered.
 	var wg sync.WaitGroup
 	for _, entry := range cfg.Spec.Sync.SyncOnly {
 		gvk := schema.GroupVersionKind{
@@ -301,7 +305,8 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 }
 
 // trackData sets expectations for all cached data expected by Gatekeeper.
-// Blocks until data can be listed or context is canceled.
+// If the provided gvk is registered, blocks until data can be listed or context is canceled.
+// Invalid GVKs (not registered to the RESTMapper) will fail-open.
 func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt Expectations) error {
 	defer func() {
 		dt.ExpectationsDone()
