@@ -237,7 +237,7 @@ release-manifest:
 promote-staging-manifest:
 	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
-	@rm -rf helm
+	@rm -rf charts
 	@cp -r manifest_staging/charts .
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
