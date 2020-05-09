@@ -73,26 +73,6 @@ func (r *recordKeeper) NewRegistrar(parentName string, events chan<- event.Gener
 	return out, nil
 }
 
-// newSyncRegistrar creates a registrar whose watches will receive the initial population of
-// resources only. Once they have been delivered, the events channel will be closed to mark
-// then end of the stream.
-// A SyncRegistrar can only set a single watch.
-func (r *recordKeeper) NewSyncRegistrar(parentName string, events chan<- event.GenericEvent) (*Registrar, error) {
-	r.intentMux.Lock()
-	defer r.intentMux.Unlock()
-	if _, ok := r.registrars[parentName]; ok {
-		return nil, fmt.Errorf("registrar for %s already exists", parentName)
-	}
-	out := &Registrar{
-		parentName:        parentName,
-		mgr:               r.mgr,
-		managedKinds:      r,
-		initialPopulation: events,
-	}
-	r.registrars[parentName] = out
-	return out, nil
-}
-
 // RemoveRegistrar removes a registrar and all its watches.
 func (r *recordKeeper) RemoveRegistrar(parentName string) error {
 	r.intentMux.Lock()
@@ -183,11 +163,10 @@ func newRecordKeeper() *recordKeeper {
 
 // A Registrar allows a parent to add/remove child watches
 type Registrar struct {
-	parentName        string
-	mgr               *Manager
-	managedKinds      *recordKeeper
-	events            chan<- event.GenericEvent
-	initialPopulation chan<- event.GenericEvent
+	parentName   string
+	mgr          *Manager
+	managedKinds *recordKeeper
+	events       chan<- event.GenericEvent
 }
 
 // AddWatch registers a watch for the given kind.

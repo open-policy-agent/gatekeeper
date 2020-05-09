@@ -16,20 +16,16 @@ limitations under the License.
 package readiness
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // SetupTracker sets up a readiness tracker and registers it to run under control of the
 // provided Manager object.
-func SetupTracker(mgr manager.Manager, wm *watch.Manager) (*Tracker, error) {
-	tracker := NewTracker(mgr.GetCache(), defaultDynamicLister(wm))
+func SetupTracker(mgr manager.Manager) (*Tracker, error) {
+	tracker := NewTracker(mgr.GetAPIReader())
 
 	err := mgr.Add(manager.RunnableFunc(func(done <-chan struct{}) error {
 		ctx, cancel := syncutil.ContextForChannel(done)
@@ -46,17 +42,4 @@ func SetupTracker(mgr manager.Manager, wm *watch.Manager) (*Tracker, error) {
 	}
 
 	return tracker, nil
-}
-
-type dynamicListerFunc func(ctx context.Context, gvk schema.GroupVersionKind, cbForEach func(runtime.Object)) error
-
-func (f dynamicListerFunc) List(ctx context.Context, gvk schema.GroupVersionKind, cbForEach func(runtime.Object)) error {
-	return f(ctx, gvk, cbForEach)
-}
-
-func defaultDynamicLister(wm *watch.Manager) DynamicLister {
-	return dynamicListerFunc(func(ctx context.Context, gvk schema.GroupVersionKind, cbForEach func(runtime.Object)) error {
-		return watch.List(ctx, wm, gvk, cbForEach)
-	})
-
 }

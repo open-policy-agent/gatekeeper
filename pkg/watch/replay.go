@@ -80,7 +80,7 @@ func (wm *Manager) replayEventsLoop() error {
 				continue
 			}
 
-			if req.r.events == nil && req.r.initialPopulation == nil {
+			if req.r.events == nil {
 				log.Info("skipping replay: can't deliver to nil channel")
 				continue
 			}
@@ -149,8 +149,8 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 	if r == nil {
 		return fmt.Errorf("nil registrar")
 	}
-	if r.events == nil && r.initialPopulation == nil {
-		// Skip replay if there's not channel to deliver to
+	if r.events == nil {
+		// Skip replay if there's no channel to deliver to
 		return nil
 	}
 
@@ -164,14 +164,6 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		return fmt.Errorf("listing resources %+v: %w", gvk, err)
 	}
 
-	if r.initialPopulation != nil {
-		// initialPopulation is a channel for initial events.
-		// It will be closed once the initial set has been delivered.
-		defer func() {
-			close(r.initialPopulation)
-			r.initialPopulation = nil
-		}()
-	}
 	for _, o := range lst.Items {
 		o := o
 		acc, err := meta.Accessor(&o)
@@ -185,7 +177,6 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		}
 		select {
 		case r.events <- e:
-		case r.initialPopulation <- e:
 		case <-ctx.Done():
 			return context.Canceled
 		case <-wm.stopped:

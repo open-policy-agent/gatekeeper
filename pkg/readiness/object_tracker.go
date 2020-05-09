@@ -233,7 +233,6 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 		return objKey{}, err
 	}
 
-	// TODO - Cheat because sometimes APIVersion / Kind are empty
 	// Index ConstraintTemplates by their corresponding constraint GVK.
 	// This will be leveraged in tracker.Satisfied().
 	var gvk schema.GroupVersionKind

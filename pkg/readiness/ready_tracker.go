@@ -48,18 +48,12 @@ type Lister interface {
 	List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error
 }
 
-// DynamicLister lists unstructured resources using a dynamic watch manager.
-type DynamicLister interface {
-	List(ctx context.Context, gvk schema.GroupVersionKind, cbForEach func(runtime.Object)) error
-}
-
 // Tracker tracks readiness for templates, constraints and data.
 type Tracker struct {
 	mu        sync.RWMutex // protects "satisfied" circuit-breaker
 	satisfied bool         // indicates whether tracker has been satisfied at least once
 
-	lister        Lister
-	dynamicLister DynamicLister
+	lister Lister
 
 	templates   *objectTracker
 	config      *objectTracker
@@ -70,10 +64,9 @@ type Tracker struct {
 	constraintTrackers *syncutil.SingleRunner
 }
 
-func NewTracker(lister Lister, dynamicLister DynamicLister) *Tracker {
+func NewTracker(lister Lister) *Tracker {
 	return &Tracker{
 		lister:             lister,
-		dynamicLister:      dynamicLister,
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
 		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config")),
 		constraints:        newTrackerMap(),
@@ -194,7 +187,8 @@ func (t *Tracker) Run(ctx context.Context) error {
 
 func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	templates := &v1beta1.ConstraintTemplateList{}
-	if err := t.lister.List(ctx, templates); err != nil {
+	lister := retryLister(t.lister, nil)
+	if err := lister.List(ctx, templates); err != nil {
 		return fmt.Errorf("listing templates: %w", err)
 	}
 
@@ -288,7 +282,8 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 // Returns a nil reference if it is not found.
 func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config, error) {
 	lst := &configv1alpha1.ConfigList{}
-	if err := t.lister.List(ctx, lst); err != nil {
+	lister := retryLister(t.lister, nil)
+	if err := lister.List(ctx, lst); err != nil {
 		return nil, fmt.Errorf("listing config: %w", err)
 	}
 
@@ -320,7 +315,11 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 		Version: gvk.Version,
 		Kind:    gvk.Kind + "List",
 	})
-	err := t.lister.List(ctx, u)
+	lister := retryLister(t.lister, func(err error) bool {
+		// NoKindMatchError is non-recoverable, otherwise we'll retry.
+		return !meta.IsNoMatchError(err)
+	})
+	err := lister.List(ctx, u)
 	if err != nil {
 		log.Error(err, "listing data", "gvk", gvk)
 		return err
@@ -337,15 +336,16 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 // trackConstraints sets expectations for all constraints managed by a template.
 // Blocks until constraints can be listed or context is canceled.
 func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
-	err := t.dynamicLister.List(ctx, gvk, func(o runtime.Object) {
-		if o == nil {
-			return
-		}
-		constraints.Expect(o)
-		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(o))
-	})
-	if err != nil {
+	u := unstructured.UnstructuredList{}
+	u.SetGroupVersionKind(gvk)
+	if err := t.lister.List(ctx, &u); err != nil {
 		return err
+	}
+
+	for i := range u.Items {
+		o := u.Items[i]
+		constraints.Expect(&o)
+		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
 	}
 
 	constraints.ExpectationsDone()

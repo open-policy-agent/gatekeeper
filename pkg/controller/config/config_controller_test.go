@@ -126,7 +126,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, wm)
+	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	recFn, requests := SetupTestReconcile(rec)
@@ -217,7 +217,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, wm)
+	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())

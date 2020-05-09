@@ -87,7 +87,7 @@ func setupOpa(t *testing.T) *opa.Client {
 }
 
 func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) error {
-	tracker, err := readiness.SetupTracker(mgr, wm)
+	tracker, err := readiness.SetupTracker(mgr)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
