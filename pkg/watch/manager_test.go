@@ -600,11 +600,21 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	pod := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	volume := schema.GroupVersionKind{Version: "v1", Kind: "Volume"}
+	deploy := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 	configMap := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
 	service := schema.GroupVersionKind{Version: "v1", Kind: "Service"}
 	secret := schema.GroupVersionKind{Version: "v1", Kind: "Secret"}
+
 	err = r1.AddWatch(pod)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial pod watch")
+	err = r1.AddWatch(volume)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial volume watch")
+	err = r1.AddWatch(deploy)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial deployment watch")
+
+	err = r2.AddWatch(volume)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial volume watch")
 	err = r2.AddWatch(configMap)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial configmap watch")
 	err = r2.AddWatch(secret)
@@ -614,13 +624,20 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	func() {
 		mu.Lock()
 		defer mu.Unlock()
+		// There should only be a single GetInformer call, even with multiple watchers
 		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "initial pod informer count")
+		g.Expect(getInformerCalls[volume]).To(gomega.Equal(1), "initial configmap informer count")
+		g.Expect(getInformerCalls[deploy]).To(gomega.Equal(1), "initial deployment informer count")
 		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "initial configmap informer count")
 		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "initial secret informer count")
 		g.Expect(getInformerCalls[service]).To(gomega.Equal(0), "initial service informer count")
+
+		// When a second registrar watches the same resource, it will trigger a replay (and thus a List request)
 		g.Expect(listCalls[pod]).To(gomega.Equal(0), "initial pod replay count")
 	}()
 
+	// Pod overlaps between r1 and r2. Secret is retained. ConfigMap is swapped for Service.
+	// Volume originally overlapped between r1 and r2, but will be removed from r2.
 	err = r2.ReplaceWatch([]schema.GroupVersionKind{pod, service, secret})
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "calling replaceWatch")
 
@@ -629,6 +646,8 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "final pod informer count")
+		g.Expect(getInformerCalls[volume]).To(gomega.Equal(1), "final volume informer count")
+		g.Expect(getInformerCalls[deploy]).To(gomega.Equal(1), "final deployment informer count")
 		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "final configmap informer count")
 		g.Expect(getInformerCalls[service]).To(gomega.Equal(1), "final service informer count")
 		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "final secret informer count")
@@ -638,6 +657,29 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 		defer mu.Unlock()
 		return listCalls[pod]
 	}, 5*time.Second).Should(gomega.Equal(1), "final pod replay count")
+
+	// Replay should not be called against deployment - it should not leak from r1 to r2.
+	g.Consistently(func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return listCalls[deploy]
+	}, 50*time.Millisecond).Should(gomega.Equal(0), "final deployment replay count")
+
+	// Verify internals
+	registrarCounts := map[schema.GroupVersionKind]int{
+		pod:       2,
+		volume:    1,
+		deploy:    1,
+		configMap: 0,
+		secret:    1,
+		service:   1,
+	}
+	wm.watchedMux.Lock()
+	defer wm.watchedMux.Unlock()
+	for gvk, count := range registrarCounts {
+		registrars := wm.watchedKinds[gvk].registrars
+		g.Expect(registrars).To(gomega.HaveLen(count), "registrar count for %v", gvk)
+	}
 }
 
 func generateTestResources(gvk schema.GroupVersionKind, n int) []unstructured.Unstructured {
