@@ -172,17 +172,20 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
 	var msgs []string
+	var resourceName string
+	if len(res) > 0 && *logDenies {
+		resourceName = req.AdmissionRequest.Name
+		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
+			// On a CREATE operation, the client may omit name and
+			// rely on the server to generate the name.
+			obj := &unstructured.Unstructured{}
+			if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
+				resourceName = obj.GetName()
+			}
+		}
+	}
 	for _, r := range res {
 		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
-			resourceName := req.AdmissionRequest.Name
-			if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
-				// On a CREATE operation, the client may omit name and
-				// rely on the server to generate the name.
-				obj := &unstructured.Unstructured{}
-				if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
-					resourceName = obj.GetName()
-				}
-			}
 			if *logDenies {
 				log.WithValues(
 					"process", "admission",
