@@ -37,6 +37,8 @@ matching_constraints[constraint] {
 
   matches_nsselector(match)
 
+  matches_scope(match)
+
   label_selector := get_default(match, "labelSelector", {})
   any_labelselector_match(label_selector)
 }
@@ -151,6 +153,28 @@ kind_matches(ks) {
 
 kind_matches(ks) {
   ks.kinds[_] == input.review.kind.kind
+}
+
+########################
+# Scope Selector Logic #
+########################
+
+matches_scope(match) {
+  not has_field(match, "scope")
+}
+
+matches_scope(match) {
+  match.scope == "*"
+}
+
+matches_scope(match) {
+  match.scope == "Namespaced"
+  has_field(input.review, "namespace")
+}
+
+matches_scope(match) {
+  match.scope == "Cluster"
+  not has_field(input.review, "namespace")
 }
 
 ########################
@@ -288,6 +312,12 @@ matches_namespaces(match) {
   not has_field(match, "namespaces")
 }
 
+# Always match cluster scoped resources, unless resource is namespace
+matches_namespaces(match) {
+  not is_ns(input.review.kind)
+  not has_field(input.review, "namespace")
+}
+
 matches_namespaces(match) {
   has_field(match, "namespaces")
   get_ns_name[ns]
@@ -299,6 +329,12 @@ does_not_match_excludednamespaces(match) {
   not has_field(match, "excludedNamespaces")
 }
 
+# Always match cluster scoped resources, unless resource is namespace
+does_not_match_excludednamespaces(match) {
+  not is_ns(input.review.kind)
+  not has_field(input.review, "namespace")
+}
+
 does_not_match_excludednamespaces(match) {
   has_field(match, "excludedNamespaces")
   get_ns_name[ns]
@@ -308,6 +344,12 @@ does_not_match_excludednamespaces(match) {
 
 matches_nsselector(match) {
   not has_field(match, "namespaceSelector")
+}
+
+# Always match cluster scoped resources, unless resource is namespace
+matches_nsselector(match) {
+  not is_ns(input.review.kind)
+  not has_field(input.review, "namespace")
 }
 
 matches_nsselector(match) {
