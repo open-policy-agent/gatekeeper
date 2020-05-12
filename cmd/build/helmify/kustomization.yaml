@@ -1,0 +1,9 @@
+commonLabels:
+  app: '{{ template "gatekeeper.name" . }}'
+  chart: '{{ template "gatekeeper.name" . }}'
+  release: '{{ .Release.Name }}'
+  heritage: '{{ .Release.Service }}'
+bases:
+- "../../../config/default"
+patchesStrategicMerge:
+  - kustomize-for-helm.yaml
