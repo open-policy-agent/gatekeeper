@@ -12,12 +12,16 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	testclients "github.com/open-policy-agent/gatekeeper/test/client"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -219,6 +223,99 @@ func TestTemplateValidation(t *testing.T) {
 	}
 }
 
+type nsGetter struct {
+	testclients.NoopClient
+}
+
+func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+	if ns, ok := obj.(*corev1.Namespace); ok {
+		ns.ObjectMeta = metav1.ObjectMeta{
+			Name: key.Name,
+		}
+		return nil
+	}
+
+	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
+}
+
+type errorNSGetter struct {
+	testclients.NoopClient
+}
+
+func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
+}
+
+func TestReviewRequest(t *testing.T) {
+	cfg := &v1alpha1.Config{
+		Spec: v1alpha1.ConfigSpec{
+			Validation: v1alpha1.Validation{
+				Traces: []v1alpha1.Trace{},
+			},
+		},
+	}
+	tc := []struct {
+		Name         string
+		Template     string
+		Cfg          *v1alpha1.Config
+		CachedClient ctrlclient.Client
+		APIReader    ctrlclient.Reader
+		Error        bool
+	}{
+		{
+			Name:         "cached client success",
+			Cfg:          cfg,
+			CachedClient: &nsGetter{},
+			Error:        false,
+		},
+		{
+			Name:         "cached client fail reader success",
+			Cfg:          cfg,
+			CachedClient: &errorNSGetter{},
+			APIReader:    &nsGetter{},
+			Error:        false,
+		},
+		{
+			Name:         "reader fail",
+			Cfg:          cfg,
+			CachedClient: &errorNSGetter{},
+			APIReader:    &errorNSGetter{},
+			Error:        true,
+		},
+	}
+	for _, tt := range tc {
+		t.Run(tt.Name, func(t *testing.T) {
+			opa, err := makeOpaClient()
+			if err != nil {
+				t.Fatalf("Could not initialize OPA: %s", err)
+			}
+			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}
+			review := atypes.Request{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					Object: runtime.RawExtension{
+						Raw: []byte(
+							`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
+					},
+					Namespace: "ns1",
+				},
+			}
+			_, err = handler.reviewRequest(context.Background(), review)
+			if err != nil && !tt.Error {
+				t.Errorf("err = %s; want nil", err)
+			}
+			if err == nil && tt.Error {
+				t.Error("err = nil; want non-nil")
+			}
+		})
+	}
+
+}
+
 func TestConstraintValidation(t *testing.T) {
 	tc := []struct {
 		Name          string
@@ -401,9 +498,6 @@ func TestTracing(t *testing.T) {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg}
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{

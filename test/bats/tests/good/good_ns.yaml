@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: good-ns
   labels:
-          "gatekeeper": "true"
+    gatekeeper: "true"

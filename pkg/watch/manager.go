@@ -232,15 +232,20 @@ func (wm *Manager) replaceWatches(r *Registrar) error {
 
 	desired := wm.managedKinds.Get()
 	for gvk := range wm.watchedKinds {
-		if _, ok := desired[gvk]; !ok {
-			if err := wm.doRemoveWatch(r, gvk); err != nil {
-				errlist = append(errlist, fmt.Errorf("removing watch for %+v %w", gvk, err))
-			}
+		if v, ok := desired[gvk]; ok && v.registrars[r] {
+			// This registrar still desires this gvk, skip.
+			continue
+		}
+		if err := wm.doRemoveWatch(r, gvk); err != nil {
+			errlist = append(errlist, fmt.Errorf("removing watch for %+v %w", gvk, err))
 		}
 	}
 
 	// Add desired watches. This is idempotent for existing watches.
-	for gvk := range desired {
+	for gvk, v := range desired {
+		if !v.registrars[r] {
+			continue
+		}
 		if err := wm.doAddWatch(r, gvk); err != nil {
 			errlist = append(errlist, fmt.Errorf("adding watch for %+v %w", gvk, err))
 		}
