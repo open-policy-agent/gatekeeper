@@ -193,7 +193,7 @@ docker-buildx-dev: test
 		-t $(REPOSITORY):$(DEV_TAG) \
 		. --push
 
-docker-buildx-release:
+docker-buildx-release: test
 	export DOCKER_CLI_EXPERIMENTAL=enabled
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
