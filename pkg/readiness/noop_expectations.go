@@ -30,10 +30,6 @@ func (n noopExpectations) CancelExpect(o runtime.Object) {
 func (n noopExpectations) ExpectationsDone() {
 }
 
-func (n noopExpectations) Unsatisfied() []runtime.Object {
-	return nil
-}
-
 func (n noopExpectations) Observe(o runtime.Object) {
 }
 

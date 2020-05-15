@@ -34,7 +34,6 @@ type Expectations interface {
 	Expect(o runtime.Object)
 	CancelExpect(o runtime.Object)
 	ExpectationsDone()
-	Unsatisfied() []runtime.Object
 	Observe(o runtime.Object)
 	Satisfied() bool
 }
@@ -44,12 +43,12 @@ type Expectations interface {
 // Expectations are satisfied by calls to Observe().
 // Once all expectations are satisfied, Satisfied() will begin returning true.
 type objectTracker struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	gvk       schema.GroupVersionKind
 	cancelled objSet // expectations that have been cancelled
 	expect    objSet // unresolved expectations
 	seen      objSet // observations made before their expectations
-	satisfied objSet // tracked to avoid re-adding satisfied expectations and to support Unsatisfied()
+	satisfied objSet // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
 	populated bool   // all expectations have been provided
 }
 
@@ -124,11 +123,11 @@ func (t *objectTracker) ExpectationsDone() {
 }
 
 // Unsatisfied returns all unsatisfied expectations
-func (t *objectTracker) Unsatisfied() []runtime.Object {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *objectTracker) unsatisfied() []objKey {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	out := make([]runtime.Object, 0, len(t.expect))
+	out := make([]objKey, 0, len(t.expect))
 	for k := range t.expect {
 		if _, ok := t.satisfied[k]; ok {
 			continue
@@ -174,8 +173,8 @@ func (t *objectTracker) Observe(o runtime.Object) {
 }
 
 func (t *objectTracker) Populated() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	return t.populated
 }
@@ -183,22 +182,38 @@ func (t *objectTracker) Populated() bool {
 // Satisfied returns true if all expectations have been satisfied.
 // Also returns false if ExpectationsDone() has not been called.
 func (t *objectTracker) Satisfied() bool {
+	satisfied, seenKeys := func() (bool, []objKey) {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+
+		if !t.populated {
+			return false, nil
+		}
+
+		if len(t.expect) == 0 {
+			return true, nil
+		}
+
+		// Resolve any expectations where the observation preceded the expect request.
+		var keys []objKey
+		for k := range t.seen {
+			if _, ok := t.expect[k]; !ok {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		return false, keys
+	}()
+
+	if len(seenKeys) == 0 {
+		return satisfied
+	}
+
+	// From here we need a write lock to mutate state.
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if !t.populated {
-		return false
-	}
-
-	if len(t.expect) == 0 {
-		return true
-	}
-
-	// Resolve any expectations where the observation preceded the expect request.
-	for k := range t.seen {
-		if _, ok := t.expect[k]; !ok {
-			continue
-		}
+	for _, k := range seenKeys {
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
@@ -208,8 +223,8 @@ func (t *objectTracker) Satisfied() bool {
 }
 
 func (t *objectTracker) kinds() []schema.GroupVersionKind {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	l := len(t.satisfied) + len(t.expect)
 	if l == 0 {

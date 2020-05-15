@@ -20,10 +20,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,13 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
-	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
-	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 )
 
 // TODO write a reconciliation process that looks at the state of the cluster to make sure

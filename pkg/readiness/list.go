@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,10 +33,12 @@ func (f listerFunc) List(ctx context.Context, out runtime.Object, opts ...client
 	return f(ctx, out, opts...)
 }
 
-// retryLister returns a delegating lister that retries until it succeeds or its context is canceled.
-// Optionally, an isRecoverable function can be provided. When provided, it will be consulted to
-// determine if errors are transient or recoverable. Non-recoverable errors will abort the retry loop.
-func retryLister(r Lister, isRecoverable func(err error) bool) Lister {
+// retryLister returns a delegating lister that retries until it succeeds or
+// its context is canceled.  Optionally, a predicate can be provided to
+// determine if errors are transient and the operation should be retried.  If
+// the predicate returns false, the error is terminal and the operation will be
+// abandoned.  If predicate is nil, all errors are considered recoverable.
+func retryLister(r Lister, predicate retryPredicate) Lister {
 	return listerFunc(func(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
 		if out == nil {
 			return errors.New("nil output resource")
@@ -52,7 +55,7 @@ func retryLister(r Lister, isRecoverable func(err error) bool) Lister {
 					// Give up when our parent context is canceled
 					return false, err
 				}
-				if isRecoverable != nil && !isRecoverable(err) {
+				if predicate != nil && !predicate(err) {
 					return false, err
 				}
 				// Log and retry w/ backoff
@@ -70,4 +73,22 @@ func retryLister(r Lister, isRecoverable func(err error) bool) Lister {
 		}
 		return nil
 	})
+}
+
+// retryPredicate is a function that determines whether an error is recoverable
+// in the context of a retryable operation.  If the predicate returns true, the
+// operation can be retried. Otherwise, the error is considered terminal.
+type retryPredicate func(err error) bool
+
+// retryAll is a retryPredicate that will retry any error.
+func retryAll(_ error) bool {
+	return true
+}
+
+// retryUnlessUnregistered is a retryPredicate that retries all errors except
+// *NoResourceMatchError, *NoKindMatchError, e.g. a resource was not registered to
+// the RESTMapper.
+func retryUnlessUnregistered(err error) bool {
+	// NoKindMatchError is non-recoverable, otherwise we'll retry.
+	return !meta.IsNoMatchError(err)
 }

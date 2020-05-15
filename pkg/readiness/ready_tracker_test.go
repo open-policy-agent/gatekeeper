@@ -159,7 +159,6 @@ func Test_Tracker(t *testing.T) {
 	//}
 
 	// Add additional templates/constraints and verify that we remain satisfied
-	// Apply fixtures *before* the controllers are setup.
 	err = applyFixtures("testdata/post")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying post fixtures")
 

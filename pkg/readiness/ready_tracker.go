@@ -186,8 +186,15 @@ func (t *Tracker) Run(ctx context.Context) error {
 }
 
 func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
+	defer func() {
+		t.templates.ExpectationsDone()
+		log.V(1).Info("template expectations populated")
+
+		_ = t.constraintTrackers.Wait()
+	}()
+
 	templates := &v1beta1.ConstraintTemplateList{}
-	lister := retryLister(t.lister, nil)
+	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, templates); err != nil {
 		return fmt.Errorf("listing templates: %w", err)
 	}
@@ -219,19 +226,18 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 			return nil // do not return an error, this would abort other constraint trackers!
 		})
 	}
-	t.templates.ExpectationsDone()
-	log.V(1).Info("template expectations populated")
-
-	_ = t.constraintTrackers.Wait()
 	return nil
 }
 
 // trackConfig sets expectations for cached data as specified by the singleton Config resource.
 // Fails-open if the Config resource cannot be fetched or does not exist.
 func (t *Tracker) trackConfig(ctx context.Context) error {
+	var wg sync.WaitGroup
 	defer func() {
 		defer t.config.ExpectationsDone()
 		log.V(1).Info("config expectations populated")
+
+		wg.Wait()
 	}()
 
 	cfg, err := t.getConfigResource(ctx)
@@ -250,7 +256,6 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 	// Expect the resource kinds specified in the Config.
 	// We will fail-open (resolve expectations) for GVKs
 	// that are unregistered.
-	var wg sync.WaitGroup
 	for _, entry := range cfg.Spec.Sync.SyncOnly {
 		gvk := schema.GroupVersionKind{
 			Group:   entry.Group,
@@ -274,7 +279,6 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 		}()
 	}
 
-	wg.Wait()
 	return nil
 }
 
@@ -315,10 +319,8 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 		Version: gvk.Version,
 		Kind:    gvk.Kind + "List",
 	})
-	lister := retryLister(t.lister, func(err error) bool {
-		// NoKindMatchError is non-recoverable, otherwise we'll retry.
-		return !meta.IsNoMatchError(err)
-	})
+	// NoKindMatchError is non-recoverable, otherwise we'll retry.
+	lister := retryLister(t.lister, retryUnlessUnregistered)
 	err := lister.List(ctx, u)
 	if err != nil {
 		log.Error(err, "listing data", "gvk", gvk)
@@ -336,9 +338,15 @@ func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt
 // trackConstraints sets expectations for all constraints managed by a template.
 // Blocks until constraints can be listed or context is canceled.
 func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
+	defer func() {
+		constraints.ExpectationsDone()
+		log.V(1).Info("constraint expectations populated", "gvk", gvk)
+	}()
+
 	u := unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	if err := t.lister.List(ctx, &u); err != nil {
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, &u); err != nil {
 		return err
 	}
 
@@ -348,8 +356,6 @@ func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionK
 		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
 	}
 
-	constraints.ExpectationsDone()
-	log.V(1).Info("constraint expectations populated", "gvk", gvk)
 	return nil
 }
 
