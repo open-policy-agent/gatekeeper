@@ -155,3 +155,5 @@ spec:
           runAsUser: 1000
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      nodeSelector:
+        kubernetes.io/os: linux
