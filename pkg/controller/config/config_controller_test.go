@@ -16,7 +16,6 @@ limitations under the License.
 package config
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	gosync "sync"
@@ -27,8 +26,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/keys"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -44,7 +42,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -174,24 +171,6 @@ func TestReconcile(t *testing.T) {
 
 	testMgrStopped()
 	cs.Stop()
-	time.Sleep(1 * time.Second)
-	finished := make(chan struct{})
-	newCli, err := client.New(mgr.GetConfig(), client.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	TearDownState(newCli, finished)
-	<-finished
-	time.Sleep(1 * time.Second)
-
-	g.Eventually(func() error {
-		obj := &configv1alpha1.Config{}
-		if err := newCli.Get(context.TODO(), keys.Config, obj); err != nil {
-			return err
-		}
-		if hasFinalizer(obj) {
-			return errors.New("config resource still has sync finalizer")
-		}
-		return nil
-	}, timeout).Should(gomega.BeNil())
 }
 
 // Verify the Opa cache is populated based on the config resource.

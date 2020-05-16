@@ -23,15 +23,18 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	csutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -47,8 +50,7 @@ var (
 )
 
 const (
-	finalizerName    = "finalizers.gatekeeper.sh/constraint"
-	constraintsGroup = "constraints.gatekeeper.sh"
+	finalizerName = "finalizers.gatekeeper.sh/constraint"
 )
 
 type Adder struct {
@@ -58,6 +60,7 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
+	GetPod           func() (*corev1.Pod, error)
 }
 
 func (a *Adder) InjectOpa(o *opa.Client) {
@@ -76,7 +79,7 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-// Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
+// Add creates a new Constraint Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	reporter, err := newStatsReporter()
@@ -86,6 +89,9 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	}
 
 	r := newReconciler(mgr, a.Opa, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
+	if a.GetPod != nil {
+		r.getPod = a.GetPod
+	}
 	return add(mgr, r, a.Events)
 }
 
@@ -106,8 +112,8 @@ func newReconciler(
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
-	tracker *readiness.Tracker) reconcile.Reconciler {
-	return &ReconcileConstraint{
+	tracker *readiness.Tracker) *ReconcileConstraint {
+	r := &ReconcileConstraint{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
@@ -121,6 +127,8 @@ func newReconciler(
 		constraintsCache: constraintsCache,
 		tracker:          tracker,
 	}
+	r.getPod = r.defaultGetPod
+	return r
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -132,13 +140,25 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	}
 
 	// Watch for changes to the provided constraint
-	return c.Watch(
+	err = c.Watch(
 		&source.Channel{
 			Source:         events,
 			DestBufferSize: 1024,
 		},
 		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
 	)
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ConstraintStatus
+	err = c.Watch(
+		&source.Kind{Type: &statusv1beta1.ConstraintPodStatus{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constraintstatus.Mapper{}})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 var _ reconcile.Reconciler = &ReconcileConstraint{}
@@ -156,6 +176,7 @@ type ReconcileConstraint struct {
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
+	getPod           func() (*corev1.Pod, error)
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -181,7 +202,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Sanity - make sure it is a constraint resource.
-	if gvk.Group != constraintsGroup {
+	if gvk.Group != constraintstatus.ConstraintsGroup {
 		// Unrecoverable, do not retry.
 		log.Error(err, "invalid constraint GroupVersion", "gvk", gvk)
 		return reconcile.Result{}, nil
@@ -217,40 +238,30 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}()
 
 	if HasFinalizer(instance) {
-		status, _, _ := unstructured.NestedFieldCopy(instance.Object, "status")
 		RemoveFinalizer(instance)
 		if err := r.writer.Update(context.Background(), instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
-		}
-
-		if status != nil {
-			if err := unstructured.SetNestedField(instance.Object, status, "status"); err != nil {
-				log.Error(err, "error preserving constraint status")
-			}
 		}
 	}
 
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
-		status, err := csutil.GetHAStatus(instance)
+		status, err := r.getOrCreatePodStatus(instance)
 		if err != nil {
+			log.Info("could not get/create pod status object", "error", err)
 			return reconcile.Result{}, err
 		}
-		status.Errors = nil
-		if err = csutil.SetHAStatus(instance, status); err != nil {
-			return reconcile.Result{}, err
-		}
+		status.Status.ConstraintUID = instance.GetUID()
+		status.Status.ObservedGeneration = instance.GetGeneration()
+		status.Status.Errors = nil
 		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
 			if err := r.cacheConstraint(instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
-				status.Errors = append(status.Errors, csutil.Error{Message: err.Error()})
-				if err2 := csutil.SetHAStatus(instance, status); err2 != nil {
-					log.Error(err2, "could not set constraint error status")
-				}
-				if err2 := r.statusClient.Status().Update(context.TODO(), instance); err2 != nil {
+				status.Status.Errors = append(status.Status.Errors, statusv1beta1.Error{Message: err.Error()})
+				if err2 := r.writer.Update(context.TODO(), status); err2 != nil {
 					log.Error(err2, "could not report constraint error status")
 				}
 				reportMetrics = true
@@ -259,11 +270,8 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			logAddition(r.log, instance, enforcementAction)
 		}
 
-		status.Enforced = true
-		if err = csutil.SetHAStatus(instance, status); err != nil {
-			return reconcile.Result{}, err
-		}
-		if err = r.statusClient.Status().Update(context.Background(), instance); err != nil {
+		status.Status.Enforced = true
+		if err = r.writer.Update(context.Background(), status); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 
@@ -283,8 +291,50 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		logRemoval(r.log, instance, enforcementAction)
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
+		statusObj := &statusv1beta1.ConstraintPodStatus{}
+		statusObj.SetName(statusv1beta1.KeyForConstraint(util.GetPodName(), instance))
+		if err := r.writer.Delete(context.TODO(), statusObj); err != nil {
+			if !errors.IsNotFound(err) {
+				return reconcile.Result{}, err
+			}
+		}
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
+	ns := util.GetNamespace()
+	name := util.GetPodName()
+	key := types.NamespacedName{Namespace: ns, Name: name}
+	pod := &corev1.Pod{}
+	if err := r.reader.Get(context.TODO(), key, pod); err != nil {
+		return nil, err
+	}
+	return pod, nil
+}
+
+func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatus, error) {
+	statusObj := &statusv1beta1.ConstraintPodStatus{}
+	key := types.NamespacedName{Name: statusv1beta1.KeyForConstraint(util.GetPodName(), constraint), Namespace: util.GetNamespace()}
+	if err := r.reader.Get(context.TODO(), key, statusObj); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+	} else {
+		return statusObj, nil
+	}
+	pod, err := r.getPod()
+	if err != nil {
+		return nil, err
+	}
+	statusObj, err = statusv1beta1.NewConstraintStatusForPod(pod, constraint, r.scheme)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.writer.Create(context.TODO(), statusObj); err != nil {
+		return nil, err
+	}
+	return statusObj, nil
 }
 
 func logAddition(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction util.EnforcementAction) {
