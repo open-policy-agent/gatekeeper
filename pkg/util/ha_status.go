@@ -1,15 +1,8 @@
 package util
 
 import (
-	"os"
-
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 )
-
-// GetID returns a unique name for the Gatekeeper pod
-func GetID() string {
-	return os.Getenv("POD_NAME")
-}
 
 func GetCTHAStatus(template *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 	id := GetID()

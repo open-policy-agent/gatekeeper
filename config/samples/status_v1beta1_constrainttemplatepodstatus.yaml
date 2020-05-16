@@ -1,0 +1,7 @@
+apiVersion: status.gatekeeper.sh/v1beta1
+kind: ConstraintTemplatePodStatus
+metadata:
+  name: constrainttemplatepodstatus-sample
+spec:
+  # Add fields here
+  foo: bar
