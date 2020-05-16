@@ -127,6 +127,12 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          version: latest
+
       - name: Get tag
         id: get_version
         run: |

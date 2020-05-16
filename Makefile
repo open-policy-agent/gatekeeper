@@ -1,3 +1,6 @@
+# Enable Docker CLI experimental features
+DOCKER_CLI_EXPERIMENTAL=enabled
+
 # Image URL to use all building/pushing image targets
 REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
@@ -91,7 +94,7 @@ e2e-bootstrap:
 	# Create a new kind cluster
 	TERM=dumb kind create cluster
 
-e2e-build-load-image: docker-build
+e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
@@ -177,15 +180,18 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
-# Build the docker image
-docker-build: test
-	docker build --pull . -t ${IMG}
+docker-buildx: test
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+	fi
+	docker buildx build --platform "linux/amd64" \
+		-t $(IMG) \
+		. --load
 
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
 docker-buildx-dev: test
-	export DOCKER_CLI_EXPERIMENTAL=enabled
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
 	fi
@@ -194,7 +200,6 @@ docker-buildx-dev: test
 		. --push
 
 docker-buildx-release: test
-	export DOCKER_CLI_EXPERIMENTAL=enabled
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
 	fi
