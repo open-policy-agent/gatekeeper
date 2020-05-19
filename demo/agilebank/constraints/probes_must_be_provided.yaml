@@ -1,0 +1,11 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredProbes
+metadata:
+  name: must-have-probes
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps", ""]
+        kinds: ["Deployment", "ReplicaSet", "DaemonSet", "StatefulSet"]
+  parameters:
+    message: "PLEASE SPECIFY READINESS AND LIVENESS PROBES"

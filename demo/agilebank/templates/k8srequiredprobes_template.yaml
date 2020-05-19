@@ -1,0 +1,41 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredprobes
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredProbes
+      validation:
+        openAPIV3Schema:
+          properties:
+            message:
+              type: string
+
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredprobes
+
+        get_constraint_message(parameters) = msg {
+          msg := parameters.message
+        }
+
+        violation[{"msg": msg}] {
+          probe_violation[{"msg": msg}]
+        }
+
+        probe_violation[{"msg": msg}] {
+          container := input.review.object.spec.template.spec.containers[_]
+          not container.readinessProbe
+          constr_msg := get_constraint_message(input.parameters)
+          msg := sprintf("\n%v:\n>>>CONTAINER [%v] in your [%v] [%v] HAS NO readinessProbe<<<\n********************\n", [constr_msg, container.name, input.review.kind.kind, input.review.object.metadata.name])
+        }
+
+        probe_violation[{"msg": msg}] {
+          container := input.review.object.spec.template.spec.containers[_]
+          not container.livenessProbe
+          constr_msg := get_constraint_message(input.parameters)
+          msg := sprintf("\n%v:\n>>>CONTAINER [%v] in your [%v] [%v] HAS NO livenessProbe<<<\n********************\n", [constr_msg, container.name, input.review.kind.kind, input.review.object.metadata.name])
+        }
