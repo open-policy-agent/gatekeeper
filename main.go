@@ -172,15 +172,22 @@ func main() {
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
-	go startControllers(mgr, sw, setupFinished)
+
+	// Setup tracker and register readiness probe.
+	tracker, err := readiness.SetupTracker(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to register readiness tracker")
+		os.Exit(1)
+	}
 
 	// +kubebuilder:scaffold:builder
 
-	// Setup probes. For readiness probe, see readiness.SetupTracker().
 	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to create health check")
 		os.Exit(1)
 	}
+	// Setup controllers asynchronously, they will block for certificate generation if needed.
+	go setupControllers(mgr, sw, tracker, setupFinished)
 
 	setupLog.Info("starting manager")
 	hadError := false
@@ -220,8 +227,8 @@ func main() {
 	}
 }
 
-func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinished chan struct{}) {
-	// Block until the setup finishes.
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
+	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
 	// initialize OPA
@@ -250,12 +257,6 @@ func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinishe
 	}
 	if err := mgr.Add(wm); err != nil {
 		setupLog.Error(err, "unable to register watch manager to the manager")
-		os.Exit(1)
-	}
-
-	tracker, err := readiness.SetupTracker(mgr)
-	if err != nil {
-		setupLog.Error(err, "unable to register readiness tracker")
 		os.Exit(1)
 	}
 
