@@ -97,6 +97,12 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: crazy-max/ghaction-docker-buildx@v1
+        with:
+          version: latest
+
       - name: make docker-push-dev
         run: |
           version_list=$(curl https://quay.io/v2/${{ env.GITHUB_REPO }}/tags/list)
