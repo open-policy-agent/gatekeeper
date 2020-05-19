@@ -25,14 +25,13 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -40,8 +39,6 @@ import (
 var log = logf.Log.WithName("readiness-tracker")
 
 const constraintGroup = "constraints.gatekeeper.sh"
-
-var cfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"} // Config resource singleton reference
 
 // Lister lists resources from a cache.
 type Lister interface {
@@ -94,7 +91,7 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return t.config
 	}
 
-	// Avoid new constraint trackers after templates have been satisfied.
+	// Avoid new constraint trackers after templates have been populated.
 	// Race is ok here - extra trackers will only consume some unneeded memory.
 	if t.templates.Populated() && !t.constraints.Has(gvk) {
 		// Return throw-away tracker instead.
@@ -106,7 +103,7 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 
 // ForData returns Expectations for tracking data of the requested resource kind.
 func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
-	// Avoid new data trackers after templates have been satisfied.
+	// Avoid new data trackers after data expectations have been fully populated.
 	// Race is ok here - extra trackers will only consume some unneeded memory.
 	if t.config.Populated() && !t.data.Has(gvk) {
 		// Return throw-away tracker instead.
@@ -292,7 +289,7 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 	}
 
 	for _, c := range lst.Items {
-		if c.GetName() != cfgKey.Name || c.GetNamespace() != cfgKey.Namespace {
+		if c.GetName() != keys.Config.Name || c.GetNamespace() != keys.Config.Namespace {
 			log.Info("ignoring unsupported config name", "namespace", c.GetNamespace(), "name", c.GetName())
 			continue
 		}

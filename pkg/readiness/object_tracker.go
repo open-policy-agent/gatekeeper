@@ -180,7 +180,8 @@ func (t *objectTracker) Populated() bool {
 }
 
 // Satisfied returns true if all expectations have been satisfied.
-// Also returns false if ExpectationsDone() has not been called.
+// Expectations must be populated before the tracker can be considered satisfied.
+// Expectations are marked as populated by calling ExpectationsDone().
 func (t *objectTracker) Satisfied() bool {
 	satisfied, seenKeys := func() (bool, []objKey) {
 		t.mu.RLock()

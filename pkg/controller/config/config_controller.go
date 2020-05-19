@@ -23,16 +23,15 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -52,7 +51,6 @@ const (
 	finalizerName = "finalizers.gatekeeper.sh/config"
 )
 
-var CfgKey = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"}
 var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 
 type Adder struct {
@@ -182,7 +180,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	// Fetch the Config instance
-	if request.NamespacedName != CfgKey {
+	if request.NamespacedName != keys.Config {
 		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
@@ -331,13 +329,13 @@ func removeString(s string, items []string) []string {
 func TearDownState(c client.Client, finished chan struct{}) {
 	defer close(finished)
 	syncCfg := &configv1alpha1.Config{}
-	if err := c.Get(context.Background(), CfgKey, syncCfg); err != nil {
+	if err := c.Get(context.Background(), keys.Config, syncCfg); err != nil {
 		log.Error(err, "while retrieving sync config")
 		return
 	}
 	cleanFn := func() (bool, error) {
 		syncCfg := &configv1alpha1.Config{}
-		if err := c.Get(context.Background(), CfgKey, syncCfg); err != nil {
+		if err := c.Get(context.Background(), keys.Config, syncCfg); err != nil {
 			if errors.IsNotFound(err) {
 				return true, nil
 			}

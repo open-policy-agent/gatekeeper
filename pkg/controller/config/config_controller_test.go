@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -183,7 +184,7 @@ func TestReconcile(t *testing.T) {
 
 	g.Eventually(func() error {
 		obj := &configv1alpha1.Config{}
-		if err := newCli.Get(context.TODO(), CfgKey, obj); err != nil {
+		if err := newCli.Get(context.TODO(), keys.Config, obj); err != nil {
 			return err
 		}
 		if hasFinalizer(obj) {
