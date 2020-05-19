@@ -470,6 +470,8 @@ spec:
           runAsUser: 1000
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      nodeSelector:
+        kubernetes.io/os: linux
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -561,6 +563,8 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
+      nodeSelector:
+        kubernetes.io/os: linux
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
