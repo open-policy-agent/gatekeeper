@@ -19,6 +19,7 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -27,6 +28,7 @@ type Injector interface {
 	InjectOpa(*opa.Client)
 	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
+	InjectTracker(tracker *readiness.Tracker)
 	Add(mgr manager.Manager) error
 }
 
@@ -37,16 +39,25 @@ var Injectors []Injector
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
 
+// Dependencies are dependencies that can be injected into controllers.
+type Dependencies struct {
+	Opa              *opa.Client
+	WatchManger      *watch.Manager
+	ControllerSwitch *watch.ControllerSwitch
+	Tracker          *readiness.Tracker
+}
+
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, client *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch) error {
+func AddToManager(m manager.Manager, deps Dependencies) error {
 	// Reset cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
-	if err := client.Reset(context.Background()); err != nil {
+	if err := deps.Opa.Reset(context.Background()); err != nil {
 		return err
 	}
 	for _, a := range Injectors {
-		a.InjectOpa(client)
-		a.InjectWatchManager(wm)
-		a.InjectControllerSwitch(cs)
+		a.InjectOpa(deps.Opa)
+		a.InjectWatchManager(deps.WatchManger)
+		a.InjectControllerSwitch(deps.ControllerSwitch)
+		a.InjectTracker(deps.Tracker)
 		if err := a.Add(m); err != nil {
 			return err
 		}

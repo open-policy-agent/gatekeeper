@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package constrainttemplate
+package readiness_test
 
 import (
 	stdlog "log"
@@ -23,13 +23,13 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/api"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/open-policy-agent/gatekeeper/api"
 )
 
 var cfg *rest.Config
@@ -39,12 +39,16 @@ func TestMain(m *testing.M) {
 
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
-			filepath.Join("..", "..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
+			filepath.Join("testdata", "crds"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
 	if err := api.AddToScheme(scheme.Scheme); err != nil {
+		stdlog.Fatal(err)
+	}
+	if err := apiextensionsv1beta1.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 

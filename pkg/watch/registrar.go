@@ -73,6 +73,25 @@ func (r *recordKeeper) NewRegistrar(parentName string, events chan<- event.Gener
 	return out, nil
 }
 
+// RemoveRegistrar removes a registrar and all its watches.
+func (r *recordKeeper) RemoveRegistrar(parentName string) error {
+	r.intentMux.Lock()
+	registrar := r.registrars[parentName]
+	r.intentMux.Unlock()
+
+	if registrar == nil {
+		return nil
+	}
+	if err := registrar.ReplaceWatch(nil); err != nil {
+		return err
+	}
+
+	r.intentMux.Lock()
+	defer r.intentMux.Unlock()
+	delete(r.registrars, parentName)
+	return nil
+}
+
 func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
@@ -92,6 +111,7 @@ func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.
 	r.intent[reg.parentName] = roster
 }
 
+// Remove removes the intent-to-watch a particular resource kind.
 func (r *recordKeeper) Remove(parentName string, gvk schema.GroupVersionKind) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()

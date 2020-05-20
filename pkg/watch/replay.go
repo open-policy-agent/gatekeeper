@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/go-logr/logr"
+	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,7 +37,7 @@ func (wm *Manager) replayEventsLoop() error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
-	ctx, cancel := ContextForChannel(wm.stopped)
+	ctx, cancel := syncutil.ContextForChannel(wm.stopped)
 	defer cancel()
 
 	// Entries remain until a watch is removed.
@@ -50,13 +52,14 @@ func (wm *Manager) replayEventsLoop() error {
 				log.Info("skipping replay for nil registrar")
 				continue
 			}
+			log := log.WithValues("registrar", req.r.parentName, "gvk", req.gvk)
 
 			byRegistrar := m[req.gvk]
 			c, inProgress := byRegistrar[req.r]
 
 			// Handle cancellation requests
 			if req.isCancel && inProgress {
-				log.Info("canceling replay", "registrar", req.r.parentName, "gvk", req.gvk)
+				log.Info("canceling replay")
 				delete(byRegistrar, req.r)
 				if len(byRegistrar) == 0 {
 					delete(m, req.gvk)
@@ -77,13 +80,18 @@ func (wm *Manager) replayEventsLoop() error {
 				continue
 			}
 
+			if req.r.events == nil {
+				log.Info("skipping replay: can't deliver to nil channel")
+				continue
+			}
+
 			// Handle replay requests
-			log.Info("replaying events", "registrar", req.r.parentName, "gvk", req.gvk)
+			log.Info("replaying events")
 			childCtx, childCancel := context.WithCancel(ctx)
 			byRegistrar.Set(req.r, childCancel)
 			m[req.gvk] = byRegistrar
 			wg.Add(1)
-			go func(group *sync.WaitGroup, ctx context.Context, cancel context.CancelFunc) {
+			go func(group *sync.WaitGroup, ctx context.Context, cancel context.CancelFunc, log logr.Logger) {
 				defer wg.Done()
 				defer cancel()
 
@@ -91,7 +99,7 @@ func (wm *Manager) replayEventsLoop() error {
 					err := wm.replayEvents(childCtx, req.r, req.gvk)
 					if err != nil && err != context.Canceled {
 						// Log and retry w/ backoff
-						log.Error(err, "replaying events", "registrar", req.r.parentName, "gvk", req.gvk)
+						log.Error(err, "replaying events")
 						return false, nil
 					}
 					if err == context.Canceled {
@@ -102,9 +110,9 @@ func (wm *Manager) replayEventsLoop() error {
 					return true, nil
 				})
 				if err != nil && err != context.Canceled {
-					log.Error(err, "replaying events", "registrar", req.r.parentName, "gvk", req.gvk)
+					log.Error(err, "replaying events")
 				}
-			}(&wg, childCtx, childCancel)
+			}(&wg, childCtx, childCancel, log)
 		}
 	}
 }
@@ -142,7 +150,8 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		return fmt.Errorf("nil registrar")
 	}
 	if r.events == nil {
-		return fmt.Errorf("registrar has no events channel")
+		// Skip replay if there's no channel to deliver to
+		return nil
 	}
 
 	lst := &unstructured.UnstructuredList{}
@@ -154,6 +163,7 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 	if err := c.List(ctx, lst); err != nil {
 		return fmt.Errorf("listing resources %+v: %w", gvk, err)
 	}
+
 	for _, o := range lst.Items {
 		o := o
 		acc, err := meta.Accessor(&o)
@@ -174,26 +184,4 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 		}
 	}
 	return nil
-}
-
-// contextForChannel derives a child context from a parent channel.
-//
-// The derived context's Done channel is closed when the returned cancel function
-// is called or when the parent channel is closed, whichever happens first.
-//
-// Note the caller must *always* call the CancelFunc, otherwise resources may be leaked.
-func ContextForChannel(parentCh <-chan struct{}) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	if parentCh == nil {
-		return ctx, cancel
-	}
-
-	go func() {
-		select {
-		case <-parentCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	return ctx, cancel
 }
