@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
+	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/.staging/test/pkg/controller/constraintstatus"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -202,7 +203,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	// Sanity - make sure it is a constraint resource.
-	if gvk.Group != constraintstatus.ConstraintsGroup {
+	if gvk.Group != constraintstatusv1beta1.ConstraintsGroup {
 		// Unrecoverable, do not retry.
 		log.Error(err, "invalid constraint GroupVersion", "gvk", gvk)
 		return reconcile.Result{}, nil

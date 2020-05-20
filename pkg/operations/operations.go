@@ -3,6 +3,7 @@ package operations
 import (
 	"flag"
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -10,15 +11,18 @@ type Operation string
 
 const (
 	Audit   = Operation("audit")
-	Webhook = Operation("webhook")
 	Status  = Operation("status")
+	Webhook = Operation("webhook")
 )
 
 var (
+	// AllOperations is a list of all possible operations that can be assigned to
+	// a pod it is NOT intended to be mutated. It should be kept in alphabetical
+	// order so that it can be readily compared to the results from AssignedOperations
 	AllOperations = []Operation{
 		Audit,
-		Webhook,
 		Status,
+		Webhook,
 	}
 	operations = newOperationSet()
 	initOnce   = sync.Once{}
@@ -27,6 +31,7 @@ var (
 type opSet struct {
 	validOperations    map[Operation]bool
 	assignedOperations map[Operation]bool
+	assignedStringList []string
 }
 
 var _ flag.Value = &opSet{}
@@ -66,6 +71,7 @@ func defaulting() {
 	}
 }
 
+// AssignedOperations returns a map of operations assigned to the pod
 func AssignedOperations() map[Operation]bool {
 	initOnce.Do(defaulting)
 	ret := make(map[Operation]bool)
@@ -75,16 +81,24 @@ func AssignedOperations() map[Operation]bool {
 	return ret
 }
 
+// IsAssigned returns true when the provided operation is assigned to the pod
 func IsAssigned(op Operation) bool {
 	initOnce.Do(defaulting)
 	return operations.assignedOperations[op]
 }
 
+// AssignedStringList returns a list of all operations assigned to the pod
+// as a sorted list of strings
 func AssignedStringList() []string {
 	initOnce.Do(defaulting)
+	if operations.assignedStringList != nil {
+		return operations.assignedStringList
+	}
 	var ret []string
 	for k := range operations.assignedOperations {
 		ret = append(ret, string(k))
 	}
-	return ret
+	sort.Strings(ret)
+	operations.assignedStringList = ret
+	return operations.assignedStringList
 }

@@ -41,10 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	ConstraintsGroup = "constraints.gatekeeper.sh"
-)
-
 var (
 	log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_status_controller")
 )
@@ -109,7 +105,7 @@ func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
 		return nil
 	}
 	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{Group: ConstraintsGroup, Version: "v1beta1", Kind: kind})
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
 	u.SetName(name)
 	return m.packer.Map(handler.MapObject{Meta: u, Object: u})
 }
@@ -176,7 +172,7 @@ func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconc
 	}
 
 	// Sanity - make sure it is a constraint resource.
-	if gvk.Group != ConstraintsGroup {
+	if gvk.Group != v1beta1.ConstraintsGroup {
 		// Unrecoverable, do not retry.
 		log.Error(err, "invalid constraint GroupVersion", "gvk", gvk)
 		return reconcile.Result{}, nil
