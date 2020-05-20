@@ -68,6 +68,9 @@ func init() {
 	SchemeBuilder.Register(&ConstraintTemplatePodStatus{}, &ConstraintTemplatePodStatusList{})
 }
 
+// NewConstraintTemplateStatusForPod returns a constraint template status object
+// that has been initialized with the bare minimum of fields to make it functional
+// with the constraint template status controller
 func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, scheme *runtime.Scheme) (*ConstraintTemplatePodStatus, error) {
 	obj := &ConstraintTemplatePodStatus{}
 	name := KeyForConstraintTemplate(pod.Name, templateName)
@@ -77,7 +80,7 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 	obj.Status.Operations = operations.AssignedStringList()
 	obj.SetLabels(map[string]string{ConstraintTemplateMapLabel: templateName})
 	if PodOwnershipEnabled() {
-		if err := controllerutil.SetControllerReference(pod, obj, scheme); err != nil {
+		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err
 		}
 	}

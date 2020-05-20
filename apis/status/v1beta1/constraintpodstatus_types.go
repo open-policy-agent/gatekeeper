@@ -31,6 +31,7 @@ import (
 
 const (
 	ConstraintMapLabel = "internal.gatekeeper.sh/constraint-map"
+	ConstraintsGroup = "constraints.gatekeeper.sh"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -83,6 +84,9 @@ func init() {
 	SchemeBuilder.Register(&ConstraintPodStatus{}, &ConstraintPodStatusList{})
 }
 
+// NewConstraintStatusForPod returns a constraint status object
+// that has been initialized with the bare minimum of fields to make it functional
+// with the constraint status controller
 func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstructured, scheme *runtime.Scheme) (*ConstraintPodStatus, error) {
 	obj := &ConstraintPodStatus{}
 	name := KeyForConstraint(pod.Name, constraint)
@@ -92,21 +96,25 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 	obj.Status.Operations = operations.AssignedStringList()
 	obj.SetLabels(map[string]string{ConstraintMapLabel: StatusLabelValueForConstraint(constraint)})
 	if PodOwnershipEnabled() {
-		if err := controllerutil.SetControllerReference(pod, obj, scheme); err != nil {
+		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err
 		}
 	}
 	return obj, nil
 }
 
+// StatusLabelValueForConstraint returns the label value that can be used to
+// select status objects for the specific constraint
 func StatusLabelValueForConstraint(constraint *unstructured.Unstructured) string {
 	return dashPacker(constraint.GetKind(), constraint.GetName())
 }
 
+// DecodeConstraintLabel returns the Kind and name of the constraint that matches
+// the provided label
 func DecodeConstraintLabel(val string) (string, string, error) {
 	tokens := dashExtractor(val)
 	if len(tokens) != 2 {
-		return "", "", fmt.Errorf("could not parse constraint status label, incorrect number of dashes: %s", val)
+		return "", "", fmt.Errorf("could not parse constraint status label, incorrect number of fields: %s", val)
 	}
 	return tokens[0], tokens[1], nil
 }
