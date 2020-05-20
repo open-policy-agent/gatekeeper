@@ -25,6 +25,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	csutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -56,6 +57,7 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
+	Tracker          *readiness.Tracker
 }
 
 func (a *Adder) InjectOpa(o *opa.Client) {
@@ -63,10 +65,15 @@ func (a *Adder) InjectOpa(o *opa.Client) {
 }
 
 func (a *Adder) InjectWatchManager(w *watch.Manager) {
+	a.WatchManager = w
 }
 
 func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 	a.ControllerSwitch = cs
+}
+
+func (a *Adder) InjectTracker(t *readiness.Tracker) {
+	a.Tracker = t
 }
 
 // Add creates a new Constraint Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -78,7 +85,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r := newReconciler(mgr, a.Opa, a.ControllerSwitch, reporter, a.ConstraintsCache)
+	r := newReconciler(mgr, a.Opa, a.ControllerSwitch, reporter, a.ConstraintsCache, a.Tracker)
 	return add(mgr, r, a.Events)
 }
 
@@ -98,7 +105,8 @@ func newReconciler(
 	opa *opa.Client,
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
-	constraintsCache *ConstraintsCache) reconcile.Reconciler {
+	constraintsCache *ConstraintsCache,
+	tracker *readiness.Tracker) reconcile.Reconciler {
 	return &ReconcileConstraint{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
@@ -111,6 +119,7 @@ func newReconciler(
 		log:              log,
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
+		tracker:          tracker,
 	}
 }
 
@@ -146,6 +155,7 @@ type ReconcileConstraint struct {
 	log              logr.Logger
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
+	tracker          *readiness.Tracker
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -298,11 +308,22 @@ func logRemoval(l logr.Logger, constraint *unstructured.Unstructured, enforcemen
 }
 
 func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructured) error {
+	t := r.tracker.For(instance.GroupVersionKind())
+
 	obj := instance.DeepCopy()
 	// Remove the status field since we do not need it for OPA
 	unstructured.RemoveNestedField(obj.Object, "status")
 	_, err := r.opa.AddConstraint(context.Background(), obj)
-	return err
+	if err != nil {
+		t.CancelExpect(obj)
+		return err
+	}
+
+	// Track for readiness
+	t.Observe(instance)
+	log.Info("[readiness] observed Constraint", "name", instance.GetName())
+
+	return nil
 }
 
 func RemoveFinalizer(instance *unstructured.Unstructured) {

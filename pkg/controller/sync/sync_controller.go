@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -44,6 +45,7 @@ type Adder struct {
 	Opa          OpaDataClient
 	Events       <-chan event.GenericEvent
 	MetricsCache *MetricsCache
+	Tracker      *readiness.Tracker
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -55,7 +57,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache)
+	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker)
 	if err != nil {
 		return err
 	}
@@ -67,7 +69,8 @@ func newReconciler(
 	mgr manager.Manager,
 	opa OpaDataClient,
 	reporter Reporter,
-	metricsCache *MetricsCache) (reconcile.Reconciler, error) {
+	metricsCache *MetricsCache,
+	tracker *readiness.Tracker) (reconcile.Reconciler, error) {
 
 	return &ReconcileSync{
 		reader:       mgr.GetCache(),
@@ -76,6 +79,7 @@ func newReconciler(
 		log:          log,
 		reporter:     reporter,
 		metricsCache: metricsCache,
+		tracker:      tracker,
 	}, nil
 }
 
@@ -119,6 +123,7 @@ type ReconcileSync struct {
 	log          logr.Logger
 	reporter     Reporter
 	metricsCache *MetricsCache
+	tracker      *readiness.Tracker
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -196,6 +201,8 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 		return reconcile.Result{}, err
 	}
+	r.tracker.ForData(gvk).Observe(instance)
+	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
 
 	r.metricsCache.AddObject(syncKey, Tags{
 		Kind:   instance.GetKind(),

@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
@@ -59,7 +60,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.Logger(true))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -137,7 +138,9 @@ violation[{"msg": "denied!"}] {
 	}
 
 	cs := watch.NewSwitch()
-	rec, _ := newReconciler(mgr, opa, wm, cs)
+	tracker, err := readiness.SetupTracker(mgr)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
