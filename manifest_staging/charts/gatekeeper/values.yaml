@@ -5,11 +5,12 @@ auditFromCache: false
 logLevel: INFO
 image:
   repository: quay.io/open-policy-agent/gatekeeper
-  release: v3.1.0-beta.8
+  release: v3.1.0-beta.9
   pullPolicy: IfNotPresent
 nodeSelector: {
   kubernetes.io/os: linux
 }
+affinity: {}
 tolerations: []
 podAnnotations: {
   container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
