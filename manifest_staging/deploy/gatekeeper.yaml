@@ -435,7 +435,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -468,10 +468,10 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-      serviceAccountName: gatekeeper-admin
-      terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -516,7 +516,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -556,6 +556,8 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      nodeSelector:
+        kubernetes.io/os: linux
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
@@ -563,8 +565,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
-      nodeSelector:
-        kubernetes.io/os: linux
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
