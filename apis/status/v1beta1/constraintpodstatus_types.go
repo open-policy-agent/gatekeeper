@@ -31,7 +31,8 @@ import (
 
 const (
 	ConstraintMapLabel = "internal.gatekeeper.sh/constraint-map"
-	ConstraintsGroup = "constraints.gatekeeper.sh"
+	PodLabel           = "internal.gatekeeper.sh/pod"
+	ConstraintsGroup   = "constraints.gatekeeper.sh"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -94,7 +95,12 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
-	obj.SetLabels(map[string]string{ConstraintMapLabel: StatusLabelValueForConstraint(constraint)})
+	obj.SetLabels(map[string]string{
+		ConstraintMapLabel: StatusLabelValueForConstraint(constraint),
+		PodLabel:           pod.Name,
+		// the template name is the lower-case of the constraint kind
+		ConstraintTemplateMapLabel: strings.ToLower(constraint.GetKind()),
+	})
 	if PodOwnershipEnabled() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err

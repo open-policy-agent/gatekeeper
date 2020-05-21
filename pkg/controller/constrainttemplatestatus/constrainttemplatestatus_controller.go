@@ -102,7 +102,7 @@ func (m Mapper) Map(obj handler.MapObject) []reconcile.Request {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("constraint-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("constraint-template-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconc
 	gv := constrainttemplatev1beta1.SchemeGroupVersion
 	template.SetGroupVersionKind(gv.WithKind("ConstraintTemplate"))
 	if err := r.reader.Get(context.TODO(), request.NamespacedName, template); err != nil {
-		// If the constraint does not exist, we are done
+		// If the template does not exist, we are done
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}

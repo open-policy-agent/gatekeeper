@@ -63,7 +63,7 @@ all: lint test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	GO111MODULE=on go test -mod vendor ./pkg/... -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test

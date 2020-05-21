@@ -20,8 +20,8 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	defer os.Unsetenv("POD_NAMESPACE")
 
 	scheme := runtime.NewScheme()
-	SchemeBuilder.AddToScheme(scheme)
-	corev1.AddToScheme(scheme)
+	g.Expect(SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 	pod := &corev1.Pod{}
 	pod.SetName(podName)
@@ -32,8 +32,11 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	expectedStatus.SetNamespace(podNS)
 	expectedStatus.Status.ID = podName
 	expectedStatus.Status.Operations = operations.AssignedStringList()
-	expectedStatus.SetLabels(map[string]string{ConstraintTemplateMapLabel: templateName})
-	controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
+	expectedStatus.SetLabels(map[string]string{
+		ConstraintTemplateMapLabel: templateName,
+		PodLabel:                   podName,
+	})
+	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
 	status, err := NewConstraintTemplateStatusForPod(pod, templateName, scheme)
 	g.Expect(err).NotTo(HaveOccurred())

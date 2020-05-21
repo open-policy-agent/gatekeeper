@@ -23,7 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
-	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/.staging/test/pkg/controller/constraintstatus"
+	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -213,7 +214,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
-		if !errors.IsNotFound(err) {
+		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
@@ -283,7 +284,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		})
 		reportMetrics = true
 	} else {
-		// Handle deletion
+		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
 			if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
 				return reconcile.Result{}, err
@@ -294,6 +295,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		reportMetrics = true
 		statusObj := &statusv1beta1.ConstraintPodStatus{}
 		statusObj.SetName(statusv1beta1.KeyForConstraint(util.GetPodName(), instance))
+		statusObj.SetNamespace(util.GetNamespace())
 		if err := r.writer.Delete(context.TODO(), statusObj); err != nil {
 			if !errors.IsNotFound(err) {
 				return reconcile.Result{}, err
