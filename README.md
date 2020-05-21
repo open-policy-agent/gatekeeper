@@ -119,6 +119,8 @@ A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm install
 helm install charts/gatekeeper/
 ```
 
+Please note that this chart is not compatible with Helm 3 at this time.
+
 You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
 ### Uninstallation
