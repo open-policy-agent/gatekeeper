@@ -171,6 +171,7 @@ docker-tag-release:
 # Push for Dev
 docker-push-dev:  docker-tag-dev
 	@docker push $(REPOSITORY):$(DEV_TAG)
+	@docker push $(REPOSITORY):dev
 
 # Push for Release
 docker-push-release:  docker-tag-release
