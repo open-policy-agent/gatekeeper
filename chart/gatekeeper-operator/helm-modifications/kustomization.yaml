@@ -1,9 +1,0 @@
-commonLabels:
-  app: '{{ template "gatekeeper-operator.name" . }}'
-  chart: '{{ template "gatekeeper-operator.name" . }}'
-  release: '{{ .Release.Name }}'
-  heritage: '{{ .Release.Service }}'
-resources:
-  - _temp.yaml
-patchesStrategicMerge:
-  - helm-modifications.yaml

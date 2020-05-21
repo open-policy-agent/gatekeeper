@@ -100,26 +100,28 @@ Currently the most reliable way of installing Gatekeeper is to build and install
    * `cd` to the repository directory.
    * Define your destination Docker image location:
       ```sh
-      export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE> 
+      export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
       ```
-   * Build and push your Docker image: 
+   * Build and push your Docker image:
       ```sh
       make docker-build REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       make docker-push-release REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       ```
-   * Finally, deploy: 
+   * Finally, deploy:
      ```sh
      make deploy REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
      ```
 
 #### Deploying via Helm ####
 
-A basic Helm v2 template exists in `chart/gatekeeper-operator`. If you have Helm installed and Tiller initialized on your cluster you can deploy via 
+A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm installed and Tiller initialized on your cluster you can deploy via
 ```sh
-helm install chart/gatekeeper-operator/
+helm install charts/gatekeeper/
 ```
 
-You can alter the variables in `chart/gatekeeper-operator/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
+Please note that this chart is not compatible with Helm 3 at this time.
+
+You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
 ### Uninstallation
 
@@ -343,9 +345,9 @@ This is useful when trying to see what is being denied/fails dry-run and keeping
 
 ### Dry Run
 
-When rolling out new constraints to running clusters, the dry run functionality can be helpful as it enables constraints to be deployed in the cluster without making actual changes. This allows constraints to be tested in a running cluster without enforcing them. Cluster resources that are impacted by the dry run constraint are surfaced as violations in the `status` field of the constraint. 
+When rolling out new constraints to running clusters, the dry run functionality can be helpful as it enables constraints to be deployed in the cluster without making actual changes. This allows constraints to be tested in a running cluster without enforcing them. Cluster resources that are impacted by the dry run constraint are surfaced as violations in the `status` field of the constraint.
 
-To use the dry run feature, add `enforcementAction: dryrun` to the constraint spec to ensure no actual changes are made as a result of the constraint. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation. 
+To use the dry run feature, add `enforcementAction: dryrun` to the constraint spec to ensure no actual changes are made as a result of the constraint. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation.
 
 For example:
 ```yaml
@@ -385,7 +387,7 @@ necessary to exclude them from audit.
 If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
 
    1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
-   
+
         ```yaml
           namespaceSelector:
             matchExpressions:

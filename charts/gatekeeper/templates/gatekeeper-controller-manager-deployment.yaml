@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      chart: '{{ template "gatekeeper.name" . }}'
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      containers:
+      - args:
+        - --port=8443
+        - --logtostderr
+        - --log-level={{ .Values.logLevel }}
+        - --exempt-namespace=gatekeeper-system
+        - --operation=webhook
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+        name: manager
+        ports:
+        - containerPort: 8443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+        resources: 
+{{ toYaml .Values.resources | indent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
+        volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
+      nodeSelector: 
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-webhook-server-cert
