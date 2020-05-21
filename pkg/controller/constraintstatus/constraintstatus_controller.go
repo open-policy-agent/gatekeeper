@@ -113,7 +113,7 @@ func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
-	c, err := controller.New("constraint-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("constraint-status-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

@@ -148,7 +148,7 @@ func Test_Tracker(t *testing.T) {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	createGatekeeperNamespace(mgr.GetConfig())
+	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

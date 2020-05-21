@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -23,8 +24,8 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	defer os.Unsetenv("POD_NAMESPACE")
 
 	scheme := runtime.NewScheme()
-	SchemeBuilder.AddToScheme(scheme)
-	corev1.AddToScheme(scheme)
+	g.Expect(SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 	pod := &corev1.Pod{}
 	pod.SetName(podName)
@@ -39,12 +40,20 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	expectedStatus.SetNamespace(podNS)
 	expectedStatus.Status.ID = podName
 	expectedStatus.Status.Operations = operations.AssignedStringList()
-	expectedStatus.SetLabels(map[string]string{ConstraintMapLabel: "AConstraintKind-a--constraint"})
-	controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
+	expectedStatus.SetLabels(
+		map[string]string{
+			ConstraintMapLabel:         "AConstraintKind-a--constraint",
+			PodLabel:                   podName,
+			ConstraintTemplateMapLabel: strings.ToLower(cstrKind),
+		})
+	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
 	status, err := NewConstraintStatusForPod(pod, cstr, scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	g.Expect(status.Name).To(Equal(KeyForConstraint(podName, cstr)))
-	g.Expect(DecodeConstraintLabel(status.GetLabels()[ConstraintMapLabel])).To(Equal([]string{cstrKind, cstrName}))
+	ck, cn, err := DecodeConstraintLabel(status.GetLabels()[ConstraintMapLabel])
+	g.Expect(err).To(BeNil())
+	g.Expect(ck).To(Equal(cstrKind))
+	g.Expect(cn).To(Equal(cstrName))
 }

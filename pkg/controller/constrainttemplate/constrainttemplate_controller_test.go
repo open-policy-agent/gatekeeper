@@ -29,10 +29,10 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,6 +40,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -130,7 +131,7 @@ violation[{"msg": "denied!"}] {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	createGatekeeperNamespace(mgr.GetConfig())
+	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -164,6 +165,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	defer testMgrStopped()
+	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
 
 	log.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
@@ -248,6 +250,18 @@ violation[{"msg": "denied!"}] {
 			}
 			return errors.New("Not established")
 		}, timeout, time.Second).Should(gomega.BeNil())
+
+		g.Eventually(func() error {
+			sList := &podstatus.ConstraintPodStatusList{}
+			if err := c.List(ctx, sList); err != nil {
+				return err
+			}
+			if len(sList.Items) != 0 {
+				return fmt.Errorf("Remaining status items: %+v", sList.Items)
+			}
+			return nil
+		}, timeout).Should(gomega.BeNil())
+
 		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
 		// we need a longer timeout because deleting the CRD interrupts the watch
 		constraintEnforced(c, g, 50*timeout)
@@ -294,7 +308,10 @@ anyrule[}}}//invalid//rego
 				return err
 			}
 			if ct.Name == "invalidrego" {
-				status := util.GetCTHAStatus(ct)
+				status := getCTByPodStatus(ct)
+				if status == nil {
+					return fmt.Errorf("could not retrieve CT status for pod, byPod status: %+v", ct.Status.ByPod)
+				}
 				if len(status.Errors) == 0 {
 					j, err := json.Marshal(status)
 					if err != nil {
@@ -358,7 +375,7 @@ func constraintEnforced(c client.Client, g *gomega.GomegaWithT, timeout time.Dur
 		if err != nil {
 			return err
 		}
-		status, err := constraintutil.GetHAStatus(cstr)
+		status, err := getCByPodStatus(cstr)
 		if err != nil {
 			return err
 		}
@@ -380,4 +397,52 @@ func newDenyAllCstr() *unstructured.Unstructured {
 	})
 	cstr.SetName("denyallconstraint")
 	return cstr
+}
+
+func getCTByPodStatus(templ *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
+	statuses := templ.Status.ByPod
+	var status *v1beta1.ByPodStatus
+	for _, s := range statuses {
+		if s.ID == util.GetID() {
+			status = s
+			break
+		}
+	}
+	return status
+}
+
+func ignoreNotFound(err error) error {
+	if err != nil && errors2.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func getCByPodStatus(obj *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatusStatus, error) {
+	list, found, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("no byPod status is set")
+	}
+	var status *statusv1beta1.ConstraintPodStatusStatus
+	for _, v := range list {
+		j, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		s := &statusv1beta1.ConstraintPodStatusStatus{}
+		if err := json.Unmarshal(j, s); err != nil {
+			return nil, err
+		}
+		if s.ID == util.GetID() {
+			status = s
+			break
+		}
+	}
+	if status == nil {
+		return nil, errors.New("current pod is not listed in byPod status")
+	}
+	return status, nil
 }

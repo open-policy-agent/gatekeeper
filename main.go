@@ -15,11 +15,6 @@ limitations under the License.
 
 package main
 
-// TODO:
-// * tests
-// * make sure audit and the status controllers play nicely together
-// * remove the old HAStatus code
-
 import (
 	"flag"
 	"fmt"

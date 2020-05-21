@@ -78,7 +78,10 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
-	obj.SetLabels(map[string]string{ConstraintTemplateMapLabel: templateName})
+	obj.SetLabels(map[string]string{
+		ConstraintTemplateMapLabel: templateName,
+		PodLabel:                   pod.Name,
+	})
 	if PodOwnershipEnabled() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err
