@@ -3,6 +3,7 @@ REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
+# DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 
 VERSION := v3.1.0-beta.9
