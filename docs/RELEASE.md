@@ -23,11 +23,18 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 	git clone git@github.com:open-policy-agent/gatekeeper.git
 	```
 
-1. Execute the release-patch target to generate boilerplate patch. Give the semantic version of the release:
+1. Execute the release-patch target to generate patch. Give the semantic version of the release:
 
 	```
 	make release-manifest NEWVERSION=v3.0.4-beta.x
 	```
+
+1. Promote staging manifest to release.
+
+	```
+	make promote-staging-manifest
+	```
+
 1. Preview the changes:
 
 	```
