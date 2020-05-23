@@ -1,5 +1,21 @@
 name: build_test_release
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "**.md"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "library/**"
+      - "demo/**"
+      - "deprecated/**"
+      - "example/**"
+      - "**.md"
 env:
   GITHUB_REPO: open-policy-agent/gatekeeper
   IMAGE_REPO: quay.io/open-policy-agent/gatekeeper
