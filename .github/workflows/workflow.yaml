@@ -34,7 +34,7 @@ jobs:
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Set up Go 1.13
         uses: actions/setup-go@v2-beta
@@ -62,7 +62,7 @@ jobs:
   helm_build_test:
     name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Set up Go 1.13
         uses: actions/setup-go@v2-beta
@@ -92,7 +92,7 @@ jobs:
     runs-on: "ubuntu-latest"
     if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, build_test, helm_build_test]
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
