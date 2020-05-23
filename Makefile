@@ -163,6 +163,7 @@ docker-login:
 # Tag for Dev
 docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
+	@docker tag $(IMG) $(REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
