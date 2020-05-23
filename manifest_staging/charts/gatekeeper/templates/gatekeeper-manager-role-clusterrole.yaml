@@ -63,6 +63,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+- apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates
