@@ -105,6 +105,115 @@ status:
   conditions: []
   storedVersions: []
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+    gatekeeper.sh/system: "yes"
+  name: constrainttemplates.templates.gatekeeper.sh
+spec:
+  group: templates.gatekeeper.sh
+  names:
+    kind: ConstraintTemplate
+    plural: constrainttemplates
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            crd:
+              properties:
+                spec:
+                  properties:
+                    names:
+                      properties:
+                        kind:
+                          type: string
+                        shortNames:
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    validation:
+                      type: object
+                  type: object
+              type: object
+            targets:
+              items:
+                properties:
+                  libs:
+                    items:
+                      type: string
+                    type: array
+                  rego:
+                    type: string
+                  target:
+                    type: string
+                type: object
+              type: array
+          type: object
+        status:
+          properties:
+            byPod:
+              items:
+                properties:
+                  errors:
+                    items:
+                      properties:
+                        code:
+                          type: string
+                        location:
+                          type: string
+                        message:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      type: object
+                    type: array
+                  id:
+                    description: a unique identifier for the pod that wrote the status
+                    type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                type: object
+              type: array
+            created:
+              type: boolean
+          type: object
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -282,6 +391,7 @@ spec:
     targetPort: 8443
   selector:
     control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
 ---
 apiVersion: apps/v1
@@ -289,28 +399,30 @@ kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    gatekeeper.sh/operation: audit
     gatekeeper.sh/system: "yes"
-  name: gatekeeper-controller-manager
+  name: gatekeeper-audit
   namespace: gatekeeper-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: audit-controller
+      gatekeeper.sh/operation: audit
       gatekeeper.sh/system: "yes"
   template:
     metadata:
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
-        control-plane: controller-manager
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
         gatekeeper.sh/system: "yes"
     spec:
       containers:
       - args:
-        - --port=8443
+        - --operation=audit
         - --logtostderr
-        - --exempt-namespace=gatekeeper-system
         command:
         - /manager
         env:
@@ -323,7 +435,88 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.8
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+        name: auditcontainer
+        ports:
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+  template:
+    metadata:
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+      labels:
+        control-plane: controller-manager
+        gatekeeper.sh/operation: webhook
+        gatekeeper.sh/system: "yes"
+    spec:
+      containers:
+      - args:
+        - --port=8443
+        - --logtostderr
+        - --exempt-namespace=gatekeeper-system
+        - --operation=webhook
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -363,6 +556,8 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      nodeSelector:
+        kubernetes.io/os: linux
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
@@ -425,111 +620,3 @@ webhooks:
     - namespaces
   sideEffects: None
   timeoutSeconds: 5
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  creationTimestamp: null
-  labels:
-    controller-tools.k8s.io: "1.0"
-  name: constrainttemplates.templates.gatekeeper.sh
-spec:
-  group: templates.gatekeeper.sh
-  names:
-    kind: ConstraintTemplate
-    plural: constrainttemplates
-  scope: Cluster
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          properties:
-            crd:
-              properties:
-                spec:
-                  properties:
-                    names:
-                      properties:
-                        kind:
-                          type: string
-                        shortNames:
-                          items:
-                            type: string
-                          type: array
-                      type: object
-                    validation:
-                      type: object
-                  type: object
-              type: object
-            targets:
-              items:
-                properties:
-                  libs:
-                    items:
-                      type: string
-                    type: array
-                  rego:
-                    type: string
-                  target:
-                    type: string
-                type: object
-              type: array
-          type: object
-        status:
-          properties:
-            byPod:
-              items:
-                properties:
-                  errors:
-                    items:
-                      properties:
-                        code:
-                          type: string
-                        location:
-                          type: string
-                        message:
-                          type: string
-                      required:
-                      - code
-                      - message
-                      type: object
-                    type: array
-                  id:
-                    description: a unique identifier for the pod that wrote the status
-                    type: string
-                  observedGeneration:
-                    format: int64
-                    type: integer
-                type: object
-              type: array
-            created:
-              type: boolean
-          type: object
-  version: v1beta1
-  versions:
-  - name: v1beta1
-    served: true
-    storage: true
-  - name: v1alpha1
-    served: true
-    storage: false
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
