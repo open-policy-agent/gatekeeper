@@ -10,7 +10,7 @@
 | logLevel                  | Minimum log level                                           | `INFO`                                                                     |
 | image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                             |
 | image.repository          | The Docker image repository                                 | `quay.io/open-policy-agent/gatekeeper`                                     |
-| image.release             | The image release tag to use                                | Current release version: `v3.1.0-beta.8`                                   |
+| image.release             | The image release tag to use                                | Current release version: `v3.1.0-beta.9`                                   |
 | resources                 | The resource request/limits for the container image         | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                             |
 | nodeSelector              | The node selector to use for pod scheduling                 | `kubernetes.io/os: linux`                                                  |
 | affinity                  | The node affinity to use for pod scheduling                 | `{}`                                                                       |
