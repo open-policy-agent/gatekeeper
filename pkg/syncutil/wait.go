@@ -13,9 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package syncutil
 
-func init() {
-	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
-	//Injectors = append(Injectors, &constraint.Adder{})
+type Waiter interface {
+	Wait() error
+}
+
+// WaitAll waits (blocks) for multiple Wait()-ables and returns the first non-nil error.
+func WaitAll(w ...Waiter) error {
+	var final error
+	for _, f := range w {
+		if err := f.Wait(); err != nil && final == nil {
+			final = err
+		}
+	}
+	return final
 }

@@ -31,6 +31,7 @@ import (
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -114,15 +115,14 @@ func main() {
 
 	switch *logLevel {
 	case "DEBUG":
-		ctrl.SetLogger(crzap.Logger(true))
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(true)))
 	case "WARNING", "ERROR":
 		setLoggerForProduction()
 	case "INFO":
 		fallthrough
 	default:
-		ctrl.SetLogger(crzap.Logger(false))
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false)))
 	}
-	ctrl.SetLogger(crzap.Logger(true))
 
 	// set default if --operation is not provided
 	if len(operations) == 0 {
@@ -172,18 +172,22 @@ func main() {
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
-	go startControllers(mgr, sw, setupFinished)
+
+	// Setup tracker and register readiness probe.
+	tracker, err := readiness.SetupTracker(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to register readiness tracker")
+		os.Exit(1)
+	}
 
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddReadyzCheck("default", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create ready check")
-		os.Exit(1)
-	}
 	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to create health check")
 		os.Exit(1)
 	}
+	// Setup controllers asynchronously, they will block for certificate generation if needed.
+	go setupControllers(mgr, sw, tracker, setupFinished)
 
 	setupLog.Info("starting manager")
 	hadError := false
@@ -223,8 +227,8 @@ func main() {
 	}
 }
 
-func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinished chan struct{}) {
-	// Block until the setup finishes.
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
+	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
 	// initialize OPA
@@ -258,10 +262,17 @@ func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinishe
 
 	// Setup all Controllers
 	setupLog.Info("setting up controller")
-	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
+	opts := controller.Dependencies{
+		Opa:              client,
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+	}
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
+
 	if operations["webhook"] {
 		setupLog.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, client); err != nil {
