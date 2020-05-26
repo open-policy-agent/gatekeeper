@@ -64,14 +64,14 @@ const (
 
 var (
 	// DNSName is <service name>.<namespace>.svc
-	dnsName    = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
-	scheme     = runtime.NewScheme()
-	setupLog   = ctrl.Log.WithName("setup")
-	operations = newOperationSet()
+	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
+	scheme           = runtime.NewScheme()
+	setupLog         = ctrl.Log.WithName("setup")
+	operations       = newOperationSet()
 	logLevelEncoders = map[string]zapcore.LevelEncoder{
-		"lower":  zapcore.LowercaseLevelEncoder,
-		"capital":  zapcore.CapitalLevelEncoder,
-		"color":   zapcore.LowercaseColorLevelEncoder,
+		"lower":        zapcore.LowercaseLevelEncoder,
+		"capital":      zapcore.CapitalLevelEncoder,
+		"color":        zapcore.LowercaseColorLevelEncoder,
 		"capitalcolor": zapcore.CapitalColorLevelEncoder,
 	}
 )
@@ -140,7 +140,7 @@ func main() {
 		eCfg := zap.NewProductionEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg)) ))
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg))))
 	}
 
 	// set default if --operation is not provided
