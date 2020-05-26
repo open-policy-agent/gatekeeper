@@ -3,6 +3,7 @@ REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
 
 IMG := $(REPOSITORY):latest
+# DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 
 VERSION := v3.1.0-beta.9
@@ -162,6 +163,7 @@ docker-login:
 # Tag for Dev
 docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
+	@docker tag $(IMG) $(REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
@@ -171,6 +173,7 @@ docker-tag-release:
 # Push for Dev
 docker-push-dev:  docker-tag-dev
 	@docker push $(REPOSITORY):$(DEV_TAG)
+	@docker push $(REPOSITORY):dev
 
 # Push for Release
 docker-push-release:  docker-tag-release
