@@ -211,6 +211,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					"resource_kind", req.AdmissionRequest.Kind.Kind,
 					"resource_namespace", req.AdmissionRequest.Namespace,
 					"resource_name", resourceName,
+					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
 		}
