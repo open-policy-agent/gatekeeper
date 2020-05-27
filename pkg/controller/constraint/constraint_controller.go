@@ -24,7 +24,6 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -155,7 +154,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
-		&source.Kind{Type: &statusv1beta1.ConstraintPodStatus{}},
+		&source.Kind{Type: &constraintstatusv1beta1.ConstraintPodStatus{}},
 		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constraintstatus.Mapper{}})
 	if err != nil {
 		return err
@@ -262,7 +261,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
-				status.Status.Errors = append(status.Status.Errors, statusv1beta1.Error{Message: err.Error()})
+				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
 				if err2 := r.writer.Update(context.TODO(), status); err2 != nil {
 					log.Error(err2, "could not report constraint error status")
 				}
@@ -293,8 +292,8 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		logRemoval(r.log, instance, enforcementAction)
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
-		statusObj := &statusv1beta1.ConstraintPodStatus{}
-		statusObj.SetName(statusv1beta1.KeyForConstraint(util.GetPodName(), instance))
+		statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
+		statusObj.SetName(constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), instance))
 		statusObj.SetNamespace(util.GetNamespace())
 		if err := r.writer.Delete(context.TODO(), statusObj); err != nil {
 			if !errors.IsNotFound(err) {
@@ -316,9 +315,9 @@ func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
 	return pod, nil
 }
 
-func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatus, error) {
-	statusObj := &statusv1beta1.ConstraintPodStatus{}
-	key := types.NamespacedName{Name: statusv1beta1.KeyForConstraint(util.GetPodName(), constraint), Namespace: util.GetNamespace()}
+func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
+	statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
+	key := types.NamespacedName{Name: constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), constraint), Namespace: util.GetNamespace()}
 	if err := r.reader.Get(context.TODO(), key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
@@ -330,7 +329,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unst
 	if err != nil {
 		return nil, err
 	}
-	statusObj, err = statusv1beta1.NewConstraintStatusForPod(pod, constraint, r.scheme)
+	statusObj, err = constraintstatusv1beta1.NewConstraintStatusForPod(pod, constraint, r.scheme)
 	if err != nil {
 		return nil, err
 	}
