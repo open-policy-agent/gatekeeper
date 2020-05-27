@@ -41,5 +41,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	status, err := NewConstraintTemplateStatusForPod(pod, templateName, scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
-	g.Expect(status.Name).To(Equal(KeyForConstraintTemplate(podName, templateName)))
+	n, err := KeyForConstraintTemplate(podName, templateName)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(status.Name).To(Equal(n))
 }

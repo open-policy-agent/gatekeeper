@@ -493,7 +493,11 @@ func (r *ReconcileConstraintTemplate) defaultGetPod() (*corev1.Pod, error) {
 
 func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 	statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
-	statusObj.SetName(statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName))
+	sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName)
+	if err != nil {
+		return err
+	}
+	statusObj.SetName(sName)
 	statusObj.SetNamespace(util.GetNamespace())
 	if err := r.Delete(context.TODO(), statusObj); err != nil {
 		if !errors.IsNotFound(err) {
@@ -510,7 +514,9 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 	}
 	for _, s := range cstrStatusObjs.Items {
 		if err := r.Delete(context.TODO(), &s); err != nil {
-			return nil
+			if !errors.IsNotFound(err) {
+				return err
+			}
 		}
 	}
 
@@ -519,7 +525,11 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 
 func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctName string) (*statusv1beta1.ConstraintTemplatePodStatus, error) {
 	statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
-	key := types.NamespacedName{Name: statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName), Namespace: util.GetNamespace()}
+	sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName)
+	if err != nil {
+		return nil, err
+	}
+	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.Get(context.TODO(), key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
