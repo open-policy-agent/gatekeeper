@@ -32,7 +32,6 @@ const (
 
 // ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
 type ConstraintTemplatePodStatusStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	ID                 string                             `json:"id,omitempty"`
 	TemplateUID        types.UID                          `json:"templateUID,omitempty"`
