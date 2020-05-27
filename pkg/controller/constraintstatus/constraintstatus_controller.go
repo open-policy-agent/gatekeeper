@@ -52,17 +52,6 @@ type Adder struct {
 	Events           <-chan event.GenericEvent
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
-	a.Opa = o
-}
-
-func (a *Adder) InjectWatchManager(w *watch.Manager) {
-}
-
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
@@ -92,6 +81,7 @@ type Mapper struct {
 	packer util.EventPacker
 }
 
+// Map correlates a ConstraintPodStatus with its corresponding constraint
 func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
 	labels := obj.Meta.GetLabels()
 	lbl, ok := labels[v1beta1.ConstraintMapLabel]

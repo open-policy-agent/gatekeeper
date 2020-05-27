@@ -51,17 +51,6 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
-	a.Opa = o
-}
-
-func (a *Adder) InjectWatchManager(w *watch.Manager) {
-}
-
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
-	a.ControllerSwitch = cs
-}
-
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
@@ -89,6 +78,7 @@ var _ handler.Mapper = &Mapper{}
 
 type Mapper struct{}
 
+// Map correlates a ConstraintTemplatePodStatus with its corresponding constraint template
 func (m Mapper) Map(obj handler.MapObject) []reconcile.Request {
 	labels := obj.Meta.GetLabels()
 	name, ok := labels[v1beta1.ConstraintTemplateMapLabel]

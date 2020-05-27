@@ -33,11 +33,6 @@ var dashingTestCases = []struct {
 		packed:    "cat",
 	},
 	{
-		name:      "single string no dash",
-		extracted: []string{"cat"},
-		packed:    "cat",
-	},
-	{
 		name:      "single string, dash",
 		extracted: []string{"cat-dog"},
 		packed:    "cat--dog",
