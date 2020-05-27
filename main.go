@@ -66,7 +66,6 @@ var (
 	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	scheme           = runtime.NewScheme()
 	setupLog         = ctrl.Log.WithName("setup")
-	operations       = newOperationSet()
 	logLevelEncoders = map[string]zapcore.LevelEncoder{
 		"lower":        zapcore.LowercaseLevelEncoder,
 		"capital":      zapcore.CapitalLevelEncoder,
