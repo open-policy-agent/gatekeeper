@@ -5,7 +5,8 @@ metadata:
 spec:
   match:
     kinds:
-      - apiGroups: ["apps", "extensions", ""]
-        kinds: ["Deployment", "ReplicaSet", "DaemonSet", "StatefulSet", "Pod"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
   parameters:
     probes: ["readinessProbe", "livenessProbe"]
+    probeTypes: ["tcpSocket", "httpGet", "exec"]

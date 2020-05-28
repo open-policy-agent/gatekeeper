@@ -14,51 +14,40 @@ spec:
               type: array
               items:
                 type: string
+            probeTypes:
+              type: array
+              items:
+                type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8srequiredprobes
 
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Deployment"
-          container := input.review.object.spec.template.spec.containers[_]
-          probe := input.parameters.probes[_]
-          not container[probe]
-          msg := get_violation_message(container, input.review, probe)
+        probe_type_set = probe_types {
+          probe_types := {type | type := input.parameters.probeTypes[_]}
         }
 
         violation[{"msg": msg}] {
-          input.review.kind.kind == "DaemonSet"
-          container := input.review.object.spec.template.spec.containers[_]
-          probe := input.parameters.probes[_]
-          not container[probe]
-          msg := get_violation_message(container, input.review, probe)
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "StatefulSet"
-          container := input.review.object.spec.template.spec.containers[_]
-          probe := input.parameters.probes[_]
-          not container[probe]
-          msg := get_violation_message(container, input.review, probe)
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "ReplicaSet"
-          container := input.review.object.spec.template.spec.containers[_]
-          probe := input.parameters.probes[_]
-          not container[probe]
-          msg := get_violation_message(container, input.review, probe)
-        }
-
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Pod"
           container := input.review.object.spec.containers[_]
           probe := input.parameters.probes[_]
-          not container[probe]
+          probe_is_missing(container, probe)
           msg := get_violation_message(container, input.review, probe)
+        }
+
+        probe_is_missing(ctr, probe) = true {
+          not ctr[probe]
+        }
+
+        probe_is_missing(ctr, probe) = true {
+          probe_field_empty(ctr, probe)
+        }
+
+        probe_field_empty(ctr, probe) = true {
+          probe_fields := {field | ctr[probe][field]}
+          diff_fields := probe_type_set - probe_fields
+          count(diff_fields) == count(probe_type_set)
         }
 
         get_violation_message(container, review, probe) = msg {
-          msg := sprintf("CONTAINER <%v> in your <%v> <%v> HAS NO <%v>", [container.name, review.kind.kind, review.object.metadata.name, probe])
+          msg := sprintf("Container <%v> in your <%v> <%v> has no <%v>", [container.name, review.kind.kind, review.object.metadata.name, probe])
         }
