@@ -41,6 +41,7 @@ var (
 	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
 	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	detailedViolationsMetrics = flag.Bool("detailed-violations-metrics", false, "export detailed violations metrics")
 	emptyAuditResults         []auditResult
 )
 
@@ -375,6 +376,18 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
 		logViolation(am.log, r.Constraint, r.EnforcementAction, result)
+		if *detailedViolationsMetrics {
+			err := am.reporter.reportViolationsDetails(
+				r.EnforcementAction,
+				r.Constraint.GetKind(),
+				r.Constraint.GetName(),
+				result.rkind,
+				result.rnamespace,
+				result.rname)
+			if err != nil {
+				am.log.Error(err, "failed to export detailed violations metrics")
+			}
+		}
 	}
 	// log constraints with violations
 	for link := range updateLists {

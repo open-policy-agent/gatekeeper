@@ -12,17 +12,24 @@ import (
 )
 
 const (
-	violationsMetricName    = "violations"
-	auditDurationMetricName = "audit_duration_seconds"
-	lastRunTimeMetricName   = "audit_last_run_time"
+	violationsMetricName        = "violations"
+	violationsDetailsMetricName = "violations_details"
+	auditDurationMetricName     = "audit_duration_seconds"
+	lastRunTimeMetricName       = "audit_last_run_time"
 )
 
 var (
-	violationsM    = stats.Int64(violationsMetricName, "Total number of violations per constraint", stats.UnitDimensionless)
-	auditDurationM = stats.Float64(auditDurationMetricName, "Latency of audit operation in seconds", stats.UnitSeconds)
-	lastRunTimeM   = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
+	violationsM        = stats.Int64(violationsMetricName, "Total number of violations", stats.UnitDimensionless)
+	violationsDetailsM = stats.Int64(violationsDetailsMetricName, "Number of audit runs seeing violations, per constraint", stats.UnitDimensionless)
+	auditDurationM     = stats.Float64(auditDurationMetricName, "Latency of audit operation in seconds", stats.UnitSeconds)
+	lastRunTimeM       = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
+	constraintKindKey    = tag.MustNewKey("constraint_kind")
+	constraintNameKey    = tag.MustNewKey("constraint_name")
+	resourceKindKey      = tag.MustNewKey("resource_kind")
+	resourceNamespaceKey = tag.MustNewKey("resource_namespace")
+	resourceNameKey      = tag.MustNewKey("resource_name")
 )
 
 func init() {
@@ -38,6 +45,19 @@ func register() error {
 			Measure:     violationsM,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{enforcementActionKey},
+		},
+		{
+			Name:        violationsDetailsMetricName,
+			Measure:     violationsDetailsM,
+			Aggregation: view.Count(),
+			TagKeys: []tag.Key{
+				enforcementActionKey,
+				constraintKindKey,
+				constraintNameKey,
+				resourceKindKey,
+				resourceNamespaceKey,
+				resourceNameKey,
+			},
 		},
 		{
 			Name:        auditDurationMetricName,
@@ -63,6 +83,23 @@ func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementActio
 	}
 
 	return r.report(ctx, violationsM.M(v))
+}
+
+func (r *reporter) reportViolationsDetails(enforcementAction, constraintKind, constraintName, resourceKind, resourceNamespace, resourceName string) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(enforcementActionKey, enforcementAction),
+		tag.Insert(constraintKindKey, constraintKind),
+		tag.Insert(constraintNameKey, constraintName),
+		tag.Insert(resourceKindKey, resourceKind),
+		tag.Insert(resourceNamespaceKey, resourceNamespace),
+		tag.Insert(resourceNameKey, resourceName),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, violationsDetailsM.M(1))
 }
 
 func (r *reporter) reportLatency(d time.Duration) error {
