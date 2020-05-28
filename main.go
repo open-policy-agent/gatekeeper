@@ -31,6 +31,7 @@ import (
 	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -63,14 +64,22 @@ const (
 
 var (
 	// DNSName is <service name>.<namespace>.svc
-	dnsName    = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
-	scheme     = runtime.NewScheme()
-	setupLog   = ctrl.Log.WithName("setup")
-	operations = newOperationSet()
+	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
+	scheme           = runtime.NewScheme()
+	setupLog         = ctrl.Log.WithName("setup")
+	operations       = newOperationSet()
+	logLevelEncoders = map[string]zapcore.LevelEncoder{
+		"lower":        zapcore.LowercaseLevelEncoder,
+		"capital":      zapcore.CapitalLevelEncoder,
+		"color":        zapcore.LowercaseColorLevelEncoder,
+		"capitalcolor": zapcore.CapitalColorLevelEncoder,
+	}
 )
 
 var (
 	logLevel            = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
+	logLevelKey         = flag.String("log-level-key", "level", "JSON key for the log level field, defaults to `level`")
+	logLevelEncoder     = flag.String("log-level-encoder", "lower", "Encoder for the value of the log level field. Valid values: [`lower`, `capital`, `color`, `capitalcolor`], default: `lower`")
 	healthAddr          = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
 	metricsAddr         = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
 	port                = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
@@ -111,18 +120,28 @@ func (l opSet) Set(s string) error {
 
 func main() {
 	flag.Parse()
+	encoder, ok := logLevelEncoders[*logLevelEncoder]
+	if !ok {
+		setupLog.Error(fmt.Errorf("invalid log level encoder: %v", *logLevelEncoder), "Invalid log level encoder")
+		os.Exit(1)
+	}
 
 	switch *logLevel {
 	case "DEBUG":
-		ctrl.SetLogger(crzap.Logger(true))
+		eCfg := zap.NewDevelopmentEncoderConfig()
+		eCfg.LevelKey = *logLevelKey
+		eCfg.EncodeLevel = encoder
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(true), crzap.Encoder(zapcore.NewConsoleEncoder(eCfg))))
 	case "WARNING", "ERROR":
-		setLoggerForProduction()
+		setLoggerForProduction(encoder)
 	case "INFO":
 		fallthrough
 	default:
-		ctrl.SetLogger(crzap.Logger(false))
+		eCfg := zap.NewProductionEncoderConfig()
+		eCfg.LevelKey = *logLevelKey
+		eCfg.EncodeLevel = encoder
+		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg))))
 	}
-	ctrl.SetLogger(crzap.Logger(true))
 
 	// set default if --operation is not provided
 	if len(operations) == 0 {
@@ -172,18 +191,22 @@ func main() {
 	// ControllerSwitch will be used to disable controllers during our teardown process,
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
-	go startControllers(mgr, sw, setupFinished)
+
+	// Setup tracker and register readiness probe.
+	tracker, err := readiness.SetupTracker(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to register readiness tracker")
+		os.Exit(1)
+	}
 
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddReadyzCheck("default", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to create ready check")
-		os.Exit(1)
-	}
 	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to create health check")
 		os.Exit(1)
 	}
+	// Setup controllers asynchronously, they will block for certificate generation if needed.
+	go setupControllers(mgr, sw, tracker, setupFinished)
 
 	setupLog.Info("starting manager")
 	hadError := false
@@ -223,8 +246,8 @@ func main() {
 	}
 }
 
-func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinished chan struct{}) {
-	// Block until the setup finishes.
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
+	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
 	// initialize OPA
@@ -258,10 +281,17 @@ func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinishe
 
 	// Setup all Controllers
 	setupLog.Info("setting up controller")
-	if err := controller.AddToManager(mgr, client, wm, sw); err != nil {
+	opts := controller.Dependencies{
+		Opa:              client,
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+	}
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}
+
 	if operations["webhook"] {
 		setupLog.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, client); err != nil {
@@ -290,10 +320,12 @@ func startControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, setupFinishe
 	}
 }
 
-func setLoggerForProduction() {
+func setLoggerForProduction(encoder zapcore.LevelEncoder) {
 	sink := zapcore.AddSync(os.Stderr)
 	var opts []zap.Option
 	encCfg := zap.NewProductionEncoderConfig()
+	encCfg.LevelKey = *logLevelKey
+	encCfg.EncodeLevel = encoder
 	enc := zapcore.NewJSONEncoder(encCfg)
 	lvl := zap.NewAtomicLevelAt(zap.WarnLevel)
 	opts = append(opts, zap.AddStacktrace(zap.ErrorLevel),

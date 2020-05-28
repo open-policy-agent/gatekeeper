@@ -91,6 +91,11 @@ func (ks *kindSet) Write() error {
 			fileName := fmt.Sprintf("%s-%s.yaml", strings.ToLower(name), strings.ToLower(kind))
 			destFile := path.Join(*outputDir, subPath, fileName)
 			fmt.Printf("Writing %s\n", destFile)
+
+			if name == "gatekeeper-validating-webhook-configuration" {
+				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
+			}
+
 			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
 				return err
 			}

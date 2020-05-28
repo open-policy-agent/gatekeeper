@@ -88,6 +88,11 @@ func (wm *Manager) NewRegistrar(parent string, events chan<- event.GenericEvent)
 	return wm.managedKinds.NewRegistrar(parent, events)
 }
 
+// RemoveRegistrar removes a registrar and all its watches.
+func (wm *Manager) RemoveRegistrar(parentName string) error {
+	return wm.managedKinds.RemoveRegistrar(parentName)
+}
+
 // Start runs the watch manager, processing events received from dynamic informers and distributing them
 // to registrars.
 func (wm *Manager) Start(done <-chan struct{}) error {

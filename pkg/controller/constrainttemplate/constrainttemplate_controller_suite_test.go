@@ -23,21 +23,22 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
-	"github.com/open-policy-agent/gatekeeper/api"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/open-policy-agent/gatekeeper/api"
 )
 
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
+	var err error
+
 	t := &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			// Due to a bug in how the testenv loads CRDDirectoryPaths (files slice
-			// defined at too-wide a scope), this path needs to come first.
 			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
 			filepath.Join("..", "..", "..", "config", "crd", "bases"),
 		},
@@ -47,7 +48,6 @@ func TestMain(m *testing.M) {
 		stdlog.Fatal(err)
 	}
 
-	var err error
 	if cfg, err = t.Start(); err != nil {
 		stdlog.Fatal(err)
 	}
