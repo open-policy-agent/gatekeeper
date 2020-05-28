@@ -89,14 +89,14 @@ func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
 		log.Error(fmt.Errorf("constraint status resource with no mapping label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
 		return nil
 	}
-	kind, name, err := v1beta1.DecodeConstraintLabel(lbl)
+	kn, err := v1beta1.DecodeConstraintLabel(lbl)
 	if err != nil {
 		log.Error(err, "could not decode status label")
 		return nil
 	}
 	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
-	u.SetName(name)
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kn.Kind})
+	u.SetName(kn.Name)
 	return m.packer.Map(handler.MapObject{Meta: u, Object: u})
 }
 
@@ -181,10 +181,14 @@ func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconc
 	r.log.Info("handling constraint status update", "instance", instance)
 
 	sObjs := &v1beta1.ConstraintPodStatusList{}
+	lblVal, err := v1beta1.StatusLabelValueForConstraint(instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	if err := r.reader.List(
 		context.TODO(),
 		sObjs,
-		client.MatchingLabels{v1beta1.ConstraintMapLabel: v1beta1.StatusLabelValueForConstraint(instance)},
+		client.MatchingLabels{v1beta1.ConstraintMapLabel: lblVal},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err

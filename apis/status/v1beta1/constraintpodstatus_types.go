@@ -86,13 +86,20 @@ func init() {
 // with the constraint status controller
 func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstructured, scheme *runtime.Scheme) (*ConstraintPodStatus, error) {
 	obj := &ConstraintPodStatus{}
-	name := KeyForConstraint(pod.Name, constraint)
+	name, err := KeyForConstraint(pod.Name, constraint)
+	if err != nil {
+		return nil, err
+	}
 	obj.SetName(name)
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
+	cmVal, err := StatusLabelValueForConstraint(constraint)
+	if err != nil {
+		return nil, err
+	}
 	obj.SetLabels(map[string]string{
-		ConstraintMapLabel: StatusLabelValueForConstraint(constraint),
+		ConstraintMapLabel: cmVal,
 		PodLabel:           pod.Name,
 		// the template name is the lower-case of the constraint kind
 		ConstraintTemplateMapLabel: strings.ToLower(constraint.GetKind()),
@@ -107,23 +114,29 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 
 // StatusLabelValueForConstraint returns the label value that can be used to
 // select status objects for the specific constraint
-func StatusLabelValueForConstraint(constraint *unstructured.Unstructured) string {
+func StatusLabelValueForConstraint(constraint *unstructured.Unstructured) (string, error) {
 	return dashPacker(constraint.GetKind(), constraint.GetName())
 }
 
 // DecodeConstraintLabel returns the Kind and name of the constraint that matches
 // the provided label
-func DecodeConstraintLabel(val string) (string, string, error) {
+func DecodeConstraintLabel(val string) (KindName, error) {
 	tokens := dashExtractor(val)
 	if len(tokens) != 2 {
-		return "", "", fmt.Errorf("could not parse constraint status label, incorrect number of fields: %s", val)
+		return KindName{}, fmt.Errorf("could not parse constraint status label, incorrect number of fields: %s", val)
 	}
-	return tokens[0], tokens[1], nil
+	return KindName{Kind: tokens[0], Name: tokens[1]}, nil
+}
+
+// KindName is the kind and name of a constraint
+type KindName struct {
+	Kind string
+	Name string
 }
 
 // KeyForConstraint returns a unique status object name given the Pod ID and
 // a constraint object
-func KeyForConstraint(id string, constraint *unstructured.Unstructured) string {
+func KeyForConstraint(id string, constraint *unstructured.Unstructured) (string, error) {
 	// We don't need to worry that lower-casing the kind will cause a collision because
 	// the constraint framework requires resource == lower-case kind. We must do this
 	// because K8s requires all lowercase letters for resource names

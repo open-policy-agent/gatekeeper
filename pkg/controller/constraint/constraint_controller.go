@@ -292,8 +292,13 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		logRemoval(r.log, instance, enforcementAction)
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
+
+		sName, err := constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 		statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
-		statusObj.SetName(constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), instance))
+		statusObj.SetName(sName)
 		statusObj.SetNamespace(util.GetNamespace())
 		if err := r.writer.Delete(context.TODO(), statusObj); err != nil {
 			if !errors.IsNotFound(err) {
@@ -317,7 +322,11 @@ func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
 
 func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
 	statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
-	key := types.NamespacedName{Name: constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), constraint), Namespace: util.GetNamespace()}
+	sName, err := constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), constraint)
+	if err != nil {
+		return nil, err
+	}
+	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.reader.Get(context.TODO(), key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err

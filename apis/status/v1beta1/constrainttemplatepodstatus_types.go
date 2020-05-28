@@ -69,7 +69,10 @@ func init() {
 // with the constraint template status controller
 func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, scheme *runtime.Scheme) (*ConstraintTemplatePodStatus, error) {
 	obj := &ConstraintTemplatePodStatus{}
-	name := KeyForConstraintTemplate(pod.Name, templateName)
+	name, err := KeyForConstraintTemplate(pod.Name, templateName)
+	if err != nil {
+		return nil, err
+	}
 	obj.SetName(name)
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
@@ -88,6 +91,6 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 
 // KeyForConstraintTemplate returns a unique status object name given the Pod ID and
 // a template object
-func KeyForConstraintTemplate(id string, templateName string) string {
+func KeyForConstraintTemplate(id string, templateName string) (string, error) {
 	return dashPacker(id, templateName)
 }
