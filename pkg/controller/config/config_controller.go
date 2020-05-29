@@ -18,10 +18,9 @@ package config
 import (
 	"context"
 	"fmt"
-	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -32,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -323,44 +321,6 @@ func removeString(s string, items []string) []string {
 		}
 	}
 	return rval
-}
-
-// TearDownState removes all finalizers
-// written by the config controller
-func TearDownState(c client.Client, finished chan struct{}) {
-	defer close(finished)
-	syncCfg := &configv1alpha1.Config{}
-	if err := c.Get(context.Background(), keys.Config, syncCfg); err != nil {
-		log.Error(err, "while retrieving sync config")
-		return
-	}
-	cleanFn := func() (bool, error) {
-		syncCfg := &configv1alpha1.Config{}
-		if err := c.Get(context.Background(), keys.Config, syncCfg); err != nil {
-			if errors.IsNotFound(err) {
-				return true, nil
-			}
-			log.Error(err, "get error while removing finalizer from config")
-			return false, nil
-		}
-		removeFinalizer(syncCfg)
-		if err := c.Update(context.Background(), syncCfg); err != nil {
-			if errors.IsNotFound(err) {
-				return true, nil
-			}
-			log.Error(err, "write error while removing finalizer from config")
-			return false, nil
-		}
-		return true, nil
-	}
-	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 500 * time.Millisecond,
-		Factor:   2,
-		Jitter:   1,
-		Steps:    10,
-	}, cleanFn); err != nil {
-		log.Error(err, "max retries for removal of config finalizer reached")
-	}
 }
 
 func hasFinalizer(instance *configv1alpha1.Config) bool {

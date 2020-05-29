@@ -24,13 +24,13 @@ import (
 	"github.com/go-logr/zapr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"github.com/open-policy-agent/gatekeeper/api"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	api "github.com/open-policy-agent/gatekeeper/apis"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
-	configController "github.com/open-policy-agent/gatekeeper/pkg/controller/config"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
@@ -47,7 +47,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	k8sCli "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -67,7 +66,6 @@ var (
 	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	scheme           = runtime.NewScheme()
 	setupLog         = ctrl.Log.WithName("setup")
-	operations       = newOperationSet()
 	logLevelEncoders = map[string]zapcore.LevelEncoder{
 		"lower":        zapcore.LowercaseLevelEncoder,
 		"capital":      zapcore.CapitalLevelEncoder,
@@ -93,29 +91,8 @@ func init() {
 	_ = api.AddToScheme(scheme)
 
 	_ = configv1alpha1.AddToScheme(scheme)
+	_ = statusv1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
-	flag.Var(operations, "operation", "The operation to be performed by this instance. e.g. audit, webhook. This flag can be declared more than once. Omitting will default to supporting all operations.")
-}
-
-type opSet map[string]bool
-
-var _ flag.Value = opSet{}
-
-func newOperationSet() opSet {
-	return make(map[string]bool)
-}
-
-func (l opSet) String() string {
-	contents := make([]string, 0)
-	for k := range l {
-		contents = append(contents, k)
-	}
-	return fmt.Sprintf("%s", contents)
-}
-
-func (l opSet) Set(s string) error {
-	l[s] = true
-	return nil
 }
 
 func main() {
@@ -143,12 +120,6 @@ func main() {
 		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg))))
 	}
 
-	// set default if --operation is not provided
-	if len(operations) == 0 {
-		operations["audit"] = true
-		operations["webhook"] = true
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
@@ -168,7 +139,7 @@ func main() {
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && operations["webhook"] {
+	if !*disableCertRotation && operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up cert rotation")
 		if err := webhook.AddRotator(mgr, &webhook.CertRotator{
 			SecretKey: types.NamespacedName{
@@ -221,26 +192,6 @@ func main() {
 	setupLog.Info("disabling controllers...")
 	sw.Stop()
 
-	// Create a fresh client to be sure RESTmapper is up-to-date
-	setupLog.Info("cleaning state...")
-	cli, err := k8sCli.New(mgr.GetConfig(), k8sCli.Options{Scheme: mgr.GetScheme(), Mapper: nil})
-	if err != nil {
-		setupLog.Error(err, "unable to create cleanup client")
-		os.Exit(1)
-	}
-
-	// Clean up sync finalizers
-	// This logic should be disabled if OPA is run as a sidecar
-	syncCleaned := make(chan struct{})
-	go configController.TearDownState(cli, syncCleaned)
-
-	// Clean up constraint finalizers
-	templatesCleaned := make(chan struct{})
-	go constrainttemplate.TearDownState(cli, templatesCleaned)
-
-	<-syncCleaned
-	<-templatesCleaned
-	setupLog.Info("state cleaned")
 	if hadError {
 		os.Exit(1)
 	}
@@ -275,12 +226,12 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 	if err := mgr.Add(wm); err != nil {
-		setupLog.Error(err, "unable to register watch manager to the manager")
+		setupLog.Error(err, "unable to register watch manager with the manager")
 		os.Exit(1)
 	}
 
 	// Setup all Controllers
-	setupLog.Info("setting up controller")
+	setupLog.Info("setting up controllers")
 	opts := controller.Dependencies{
 		Opa:              client,
 		WatchManger:      wm,
@@ -292,30 +243,30 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
-	if operations["webhook"] {
+	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, client); err != nil {
-			setupLog.Error(err, "unable to register webhooks to the manager")
+			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}
 	}
-	if operations["audit"] {
+	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
 		if err := audit.AddToManager(mgr, client); err != nil {
-			setupLog.Error(err, "unable to register audit to the manager")
+			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}
 	}
 
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register upgrade to the manager")
+		setupLog.Error(err, "unable to register upgrade with the manager")
 		os.Exit(1)
 	}
 
 	setupLog.Info("setting up metrics")
 	if err := metrics.AddToManager(mgr); err != nil {
-		setupLog.Error(err, "unable to register metrics to the manager")
+		setupLog.Error(err, "unable to register metrics with the manager")
 		os.Exit(1)
 	}
 }

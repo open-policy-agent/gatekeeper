@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
-	"github.com/open-policy-agent/gatekeeper/api"
+	"github.com/open-policy-agent/gatekeeper/apis"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -34,7 +34,7 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{}
-	if err := api.AddToScheme(scheme.Scheme); err != nil {
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 	if err := apiextensionsv1beta1.AddToScheme(scheme.Scheme); err != nil {

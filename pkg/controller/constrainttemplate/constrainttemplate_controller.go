@@ -24,23 +24,24 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplatestatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -70,12 +71,13 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
+	GetPod           func() (*corev1.Pod, error)
 }
 
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.GetPod)
 	if err != nil {
 		return err
 	}
@@ -98,28 +100,61 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
+func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
+	a.GetPod = getPod
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
-	// Events will be used to receive events from dynamic watches registered
+	// cstrEvents will be used to receive events from dynamic watches registered
 	// via the registrar below.
-	events := make(chan event.GenericEvent, 1024)
+	cstrEvents := make(chan event.GenericEvent, 1024)
 	constraintAdder := constraint.Adder{
 		Opa:              opa,
 		ConstraintsCache: constraintsCache,
 		WatchManager:     wm,
 		ControllerSwitch: cs,
-		Events:           events,
+		Events:           cstrEvents,
 		Tracker:          tracker,
+		GetPod:           getPod,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := constraintAdder.Add(mgr); err != nil {
 		return nil, fmt.Errorf("registering constraint controller: %w", err)
 	}
 
-	w, err := wm.NewRegistrar(ctrlName, events)
+	if operations.IsAssigned(operations.Status) {
+		// statusEvents will be used to receive events from dynamic watches registered
+		// via the registrar below.
+		statusEvents := make(chan event.GenericEvent, 1024)
+		csAdder := constraintstatus.Adder{
+			Opa:              opa,
+			WatchManager:     wm,
+			ControllerSwitch: cs,
+			Events:           statusEvents,
+		}
+		if err := csAdder.Add(mgr); err != nil {
+			return nil, err
+		}
+
+		ctsAdder := constrainttemplatestatus.Adder{
+			Opa:              opa,
+			WatchManager:     wm,
+			ControllerSwitch: cs,
+		}
+		if err := ctsAdder.Add(mgr); err != nil {
+			return nil, err
+		}
+	}
+
+	w, err := wm.NewRegistrar(ctrlName, cstrEvents)
+	if err != nil {
+		return nil, err
+	}
+	statusW, err := wm.NewRegistrar(ctrlName+"-status", cstrEvents)
 	if err != nil {
 		return nil, err
 	}
@@ -127,15 +162,21 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 	if err != nil {
 		return nil, err
 	}
-	return &ReconcileConstraintTemplate{
-		Client:  mgr.GetClient(),
-		scheme:  mgr.GetScheme(),
-		opa:     opa,
-		watcher: w,
-		cs:      cs,
-		metrics: r,
-		tracker: tracker,
-	}, nil
+	reconciler := &ReconcileConstraintTemplate{
+		Client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		opa:           opa,
+		watcher:       w,
+		statusWatcher: statusW,
+		cs:            cs,
+		metrics:       r,
+		tracker:       tracker,
+		getPod:        getPod,
+	}
+	if getPod == nil {
+		reconciler.getPod = reconciler.defaultGetPod
+	}
+	return reconciler, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -148,6 +189,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ConstraintTemplate
 	err = c.Watch(&source.Kind{Type: &v1beta1.ConstraintTemplate{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
+	// Watch for changes to ConstraintTemplateStatus
+	err = c.Watch(
+		&source.Kind{Type: &statusv1beta1.ConstraintTemplatePodStatus{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constrainttemplatestatus.Mapper{}})
 	if err != nil {
 		return err
 	}
@@ -172,12 +221,14 @@ var _ reconcile.Reconciler = &ReconcileConstraintTemplate{}
 // ReconcileConstraintTemplate reconciles a ConstraintTemplate object
 type ReconcileConstraintTemplate struct {
 	client.Client
-	scheme  *runtime.Scheme
-	watcher *watch.Registrar
-	opa     *opa.Client
-	cs      *watch.ControllerSwitch
-	metrics *reporter
-	tracker *readiness.Tracker
+	scheme        *runtime.Scheme
+	watcher       *watch.Registrar
+	statusWatcher *watch.Registrar
+	opa           *opa.Client
+	cs            *watch.ControllerSwitch
+	metrics       *reporter
+	tracker       *readiness.Tracker
+	getPod        func() (*corev1.Pod, error)
 }
 
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
@@ -216,14 +267,11 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	deleted = deleted || !ct.GetDeletionTimestamp().IsZero()
 
 	if containsString(finalizerName, ct.GetFinalizers()) {
-		// preserve original status as otherwise it will get wiped in the update
-		origStatus := ct.Status.DeepCopy()
 		RemoveFinalizer(ct)
 		if err := r.Update(context.Background(), ct); err != nil && !errors.IsNotFound(err) {
 			log.Error(err, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
-		ct.Status = *origStatus
 	}
 
 	if deleted {
@@ -231,25 +279,34 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		ctRef.SetNamespace(request.Namespace)
 		ctRef.SetName(request.Name)
 		ctUnversioned, err := r.opa.GetTemplate(context.TODO(), ctRef)
+		result := reconcile.Result{}
 		if err != nil {
 			log.Info("missing constraint template in OPA cache, no deletion necessary")
 			logAction(ctRef, deletedAction)
 			r.metrics.registry.remove(request.NamespacedName)
-			return reconcile.Result{}, nil
+		} else {
+			result, err = r.handleDelete(ctUnversioned)
+			if err != nil {
+				logError(request.NamespacedName.Name)
+				r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
+				return reconcile.Result{}, err
+			} else if !result.Requeue {
+				logAction(ct, deletedAction)
+				r.metrics.registry.remove(request.NamespacedName)
+			}
 		}
-		result, err := r.handleDelete(ctUnversioned)
-		if err != nil {
-			logError(request.NamespacedName.Name)
-			r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		} else if !result.Requeue {
-			logAction(ct, deletedAction)
-			r.metrics.registry.remove(request.NamespacedName)
-		}
+		err = r.deleteAllStatus(request.Name)
 		return result, err
 	}
 
-	status := util.GetCTHAStatus(ct)
-	status.Errors = nil
+	status, err := r.getOrCreatePodStatus(ct.Name)
+	if err != nil {
+		log.Info("could not get/create pod status object", "error", err)
+		return reconcile.Result{}, err
+	}
+	status.Status.TemplateUID = ct.GetUID()
+	status.Status.ObservedGeneration = ct.GetGeneration()
+	status.Status.Errors = nil
 	unversionedCT := &templates.ConstraintTemplate{}
 	if err := r.scheme.Convert(ct, unversionedCT, nil); err != nil {
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
@@ -265,22 +322,20 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		if parseErrs, ok := err.(ast.Errors); ok {
 			for i := 0; i < len(parseErrs); i++ {
 				createErr = &v1beta1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
-				status.Errors = append(status.Errors, createErr)
+				status.Status.Errors = append(status.Status.Errors, createErr)
 			}
 		} else {
 			createErr = &v1beta1.CreateCRDError{Code: "create_error", Message: err.Error()}
-			status.Errors = append(status.Errors, createErr)
+			status.Status.Errors = append(status.Status.Errors, createErr)
 		}
 
-		util.SetCTHAStatus(ct, status)
-		if updateErr := r.Status().Update(context.Background(), ct); updateErr != nil {
+		if updateErr := r.Update(context.Background(), status); updateErr != nil {
 			log.Error(updateErr, "update error")
 			return reconcile.Result{Requeue: true}, nil
 		}
 		logError(request.NamespacedName.Name)
 		return reconcile.Result{}, nil
 	}
-	util.SetCTHAStatus(ct, status)
 
 	proposedCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := r.scheme.Convert(unversionedProposedCRD, proposedCRD, nil); err != nil {
@@ -288,7 +343,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		logError(request.NamespacedName.Name)
-		err := r.reportErrorOnCTStatus("conversion_error", "Could not convert from unversioned resource", ct, err)
+		err := r.reportErrorOnCTStatus("conversion_error", "Could not convert from unversioned resource", status, err)
 		return reconcile.Result{}, err
 	}
 
@@ -312,7 +367,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	result, err := r.handleUpdate(ct, unversionedCT, proposedCRD, currentCRD)
+	result, err := r.handleUpdate(ct, unversionedCT, proposedCRD, currentCRD, status)
 	if err != nil {
 		logError(request.NamespacedName.Name)
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
@@ -323,16 +378,14 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	return result, err
 }
 
-func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(code, message string, ct *v1beta1.ConstraintTemplate, err error) error {
-	status := util.GetCTHAStatus(ct)
-	status.Errors = []*v1beta1.CreateCRDError{}
+func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(code, message string, status *statusv1beta1.ConstraintTemplatePodStatus, err error) error {
+	status.Status.Errors = []*v1beta1.CreateCRDError{}
 	createErr := &v1beta1.CreateCRDError{
 		Code:    code,
 		Message: fmt.Sprintf("%s: %s", message, err),
 	}
-	status.Errors = append(status.Errors, createErr)
-	util.SetCTHAStatus(ct, status)
-	if err2 := r.Status().Update(context.Background(), ct); err2 != nil {
+	status.Status.Errors = append(status.Status.Errors, createErr)
+	if err2 := r.Update(context.Background(), status); err2 != nil {
 		return errorpkg.Wrap(err, fmt.Sprintf("Could not update status: %s", err2))
 	}
 	return err
@@ -341,7 +394,9 @@ func (r *ReconcileConstraintTemplate) reportErrorOnCTStatus(code, message string
 func (r *ReconcileConstraintTemplate) handleUpdate(
 	ct *v1beta1.ConstraintTemplate,
 	unversionedCT *templates.ConstraintTemplate,
-	proposedCRD, currentCRD *apiextensionsv1beta1.CustomResourceDefinition) (reconcile.Result, error) {
+	proposedCRD, currentCRD *apiextensionsv1beta1.CustomResourceDefinition,
+	status *statusv1beta1.ConstraintTemplatePodStatus,
+) (reconcile.Result, error) {
 	name := proposedCRD.GetName()
 	log := log.WithValues("name", ct.GetName(), "crdName", name)
 
@@ -355,7 +410,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if err := r.metrics.reportIngestDuration(metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
-		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", ct, err)
+		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", status, err)
 		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
@@ -384,24 +439,23 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if currentCRD == nil {
 		log.Info("creating crd")
 		if err := r.Create(context.TODO(), newCRD); err != nil {
-			err := r.reportErrorOnCTStatus("create_error", "Could not create CRD", ct, err)
+			err := r.reportErrorOnCTStatus("create_error", "Could not create CRD", status, err)
 			return reconcile.Result{}, err
 		}
 	} else if !reflect.DeepEqual(newCRD, currentCRD) {
 		log.Info("updating crd")
 		if err := r.Update(context.Background(), newCRD); err != nil {
-			err := r.reportErrorOnCTStatus("update_error", "Could not update CRD", ct, err)
+			err := r.reportErrorOnCTStatus("update_error", "Could not update CRD", status, err)
 			return reconcile.Result{}, err
 		}
 	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
 	log.Info("making sure constraint is in watcher registry")
-	if err := r.watcher.AddWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
+	if err := r.addWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
-	ct.Status.Created = true
-	if err := r.Status().Update(context.Background(), ct); err != nil {
+	if err := r.Update(context.Background(), status); err != nil {
 		log.Error(err, "update error")
 		return reconcile.Result{Requeue: true}, nil
 	}
@@ -413,7 +467,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	log := log.WithValues("name", ct.GetName())
 	log.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)
-	if err := r.watcher.RemoveWatch(gvk); err != nil {
+	if err := r.removeWatch(gvk); err != nil {
 		return reconcile.Result{}, err
 	}
 	r.tracker.CancelTemplate(ct)
@@ -424,6 +478,97 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConstraintTemplate) defaultGetPod() (*corev1.Pod, error) {
+	ns := util.GetNamespace()
+	name := util.GetPodName()
+	key := types.NamespacedName{Namespace: ns, Name: name}
+	pod := &corev1.Pod{}
+	if err := r.Get(context.TODO(), key, pod); err != nil {
+		return nil, err
+	}
+	return pod, nil
+}
+
+func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
+	statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+	sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName)
+	if err != nil {
+		return err
+	}
+	statusObj.SetName(sName)
+	statusObj.SetNamespace(util.GetNamespace())
+	if err := r.Delete(context.TODO(), statusObj); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	cstrStatusObjs := &statusv1beta1.ConstraintPodStatusList{}
+	if err := r.List(context.TODO(), cstrStatusObjs, client.MatchingLabels(map[string]string{
+		statusv1beta1.PodLabel:                   util.GetPodName(),
+		statusv1beta1.ConstraintTemplateMapLabel: ctName,
+	})); err != nil {
+		return err
+	}
+	for _, s := range cstrStatusObjs.Items {
+		if err := r.Delete(context.TODO(), &s); err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctName string) (*statusv1beta1.ConstraintTemplatePodStatus, error) {
+	statusObj := &statusv1beta1.ConstraintTemplatePodStatus{}
+	sName, err := statusv1beta1.KeyForConstraintTemplate(util.GetPodName(), ctName)
+	if err != nil {
+		return nil, err
+	}
+	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+	if err := r.Get(context.TODO(), key, statusObj); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+	} else {
+		return statusObj, nil
+	}
+	pod, err := r.getPod()
+	if err != nil {
+		return nil, err
+	}
+	statusObj, err = statusv1beta1.NewConstraintTemplateStatusForPod(pod, ctName, r.scheme)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Create(context.TODO(), statusObj); err != nil {
+		return nil, err
+	}
+	return statusObj, nil
+}
+
+func (r *ReconcileConstraintTemplate) addWatch(kind schema.GroupVersionKind) error {
+	if err := r.watcher.AddWatch(kind); err != nil {
+		return err
+	}
+	if err := r.statusWatcher.AddWatch(kind); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcileConstraintTemplate) removeWatch(kind schema.GroupVersionKind) error {
+	if err := r.watcher.RemoveWatch(kind); err != nil {
+		return err
+	}
+	if err := r.statusWatcher.RemoveWatch(kind); err != nil {
+		return err
+	}
+	return nil
 }
 
 type action string
@@ -483,98 +628,4 @@ func removeString(s string, items []string) []string {
 		}
 	}
 	return rval
-}
-
-// TearDownState removes all finalizers from constraints and
-// constraint templates as well as any pod-specific status written
-func TearDownState(c client.Client, finished chan struct{}) {
-	defer close(finished)
-	toList := func(m map[types.NamespacedName]string) []string {
-		var out []string
-		for k := range m {
-			out = append(out, k.Name)
-		}
-		return out
-	}
-
-	templates := &v1beta1.ConstraintTemplateList{}
-	names := make(map[types.NamespacedName]string)
-	if err := c.List(context.Background(), templates); err != nil {
-		log.Error(err, "could not clean all contraint/template state")
-		return
-	}
-	for _, templ := range templates.Items {
-		names[types.NamespacedName{Name: templ.GetName()}] = templ.Spec.CRD.Spec.Names.Kind
-	}
-	log.Info("found constraint templates to scrub", "templates", toList(names))
-	cleanLoop := func() (bool, error) {
-		log.Info("removing state from constraint templates", "templates", toList(names))
-		for nn, kind := range names {
-			listKind := kind + "List"
-			// TODO these should be constants somewhere
-			gvk := schema.GroupVersionKind{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Kind: listKind}
-			objs := &unstructured.UnstructuredList{}
-			objs.SetGroupVersionKind(gvk)
-			if err := c.List(context.Background(), objs); err != nil {
-				// If the kind is not recognized, there is nothing to clean
-				if !meta.IsNoMatchError(err) {
-					log.Error(err, "while listing constraints for cleanup", "kind", listKind)
-					continue
-				}
-			}
-			success := true
-			for _, obj := range objs.Items {
-				log.Info("scrubbing constraint state", "name", obj.GetName())
-				constraint.RemoveFinalizer(&obj)
-				if err := c.Update(context.Background(), &obj); err != nil {
-					success = false
-					log.Error(err, "could not scrub constraint finalizer", "name", obj.GetName())
-				}
-
-				if err := constraintutil.DeleteHAStatus(&obj); err != nil {
-					success = false
-					log.Error(err, "could not remove pod-specific status")
-				}
-				if err := c.Status().Update(context.Background(), &obj); err != nil {
-					success = false
-					log.Error(err, "could not scrub constraint status", "name", obj.GetName())
-				}
-			}
-			if success {
-				templ := &v1beta1.ConstraintTemplate{}
-				if err := c.Get(context.Background(), nn, templ); err != nil {
-					if errors.IsNotFound(err) {
-						delete(names, nn)
-						continue
-					} else {
-						log.Error(err, "while retrieving constraint template for cleanup", "template", nn)
-						continue
-					}
-				}
-				RemoveFinalizer(templ)
-				if err := c.Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
-					log.Error(err, "while writing a constraint template for finalizer cleanup", "template", nn)
-					continue
-				}
-				util.DeleteCTHAStatus(templ)
-				if err := c.Status().Update(context.Background(), templ); err != nil && !errors.IsNotFound(err) {
-					log.Error(err, "while writing a constraint template for status cleanup", "template", nn)
-					continue
-				}
-				delete(names, nn)
-			}
-		}
-		if len(names) == 0 {
-			return true, nil
-		}
-		return false, nil
-	}
-	if err := wait.ExponentialBackoff(wait.Backoff{
-		Duration: 50 * time.Millisecond,
-		Factor:   2,
-		Jitter:   1,
-		Steps:    10,
-	}, cleanLoop); err != nil {
-		log.Error(err, "max retries for cleanup", "remaining constraint kinds", names)
-	}
 }

@@ -65,6 +65,18 @@ rules:
   verbs:
   - use
 - apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates

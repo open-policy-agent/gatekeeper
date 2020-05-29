@@ -63,7 +63,7 @@ all: lint test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	GO111MODULE=on go test -mod vendor ./pkg/... -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -132,7 +132,7 @@ deploy: patch-image manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./apis/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
@@ -141,12 +141,12 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	GO111MODULE=on go fmt ./api/... ./pkg/...
+	GO111MODULE=on go fmt ./apis/... ./pkg/...
 	GO111MODULE=on go fmt main.go
 
 # Run go vet against code
 vet:
-	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/... ./third_party/...
+	GO111MODULE=on go vet -mod vendor ./apis/... ./pkg/... ./third_party/...
 	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
@@ -154,7 +154,7 @@ lint:
 
 # Generate code
 generate: controller-gen target-template-source
-	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./api/..." paths="./pkg/..."
+	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 
 # Docker Login
 docker-login:
