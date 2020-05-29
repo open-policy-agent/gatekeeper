@@ -1,16 +1,4 @@
-# Ignore everything
-**
-
-# Allow files and directories
-!pkg/
-!third_party/
-!vendor/
-!main.go
-!apis/
-!go.mod
-
-# Ignore unnecessary files inside allowed directories
-# This should go after the allowed directories
+# Ignore unnecessary files
 **/*~
 **/*.log
 **/.DS_Store
