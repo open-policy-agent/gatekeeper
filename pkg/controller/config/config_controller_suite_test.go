@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/open-policy-agent/gatekeeper/api"
+	"github.com/open-policy-agent/gatekeeper/apis"
 )
 
 var cfg *rest.Config
@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
-	if err := api.AddToScheme(scheme.Scheme); err != nil {
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 

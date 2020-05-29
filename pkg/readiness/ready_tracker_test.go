@@ -19,18 +19,21 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -96,12 +99,16 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
 
+	pod := &corev1.Pod{}
+	pod.Name = "no-pod"
+
 	// Setup all Controllers
 	opts := controller.Dependencies{
 		Opa:              opa,
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
+		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
@@ -119,6 +126,9 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 func Test_Tracker(t *testing.T) {
 	g := gomega.NewWithT(t)
 
+	os.Setenv("POD_NAME", "no-pod")
+	podstatus.DisablePodOwnership()
+
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
@@ -135,6 +145,10 @@ func Test_Tracker(t *testing.T) {
 		close(stopMgr)
 		mgrStopped.Wait()
 	}()
+
+	// creating the gatekeeper-system namespace is necessary because that's where
+	// status resources live by default
+	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

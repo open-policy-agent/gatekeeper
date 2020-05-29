@@ -11,7 +11,7 @@ COPY pkg/ pkg/
 COPY third_party/ third_party/	
 COPY vendor/ vendor/	
 COPY main.go main.go	
-COPY api/ api/	
+COPY apis/ apis/
 COPY go.mod .
 
 RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \

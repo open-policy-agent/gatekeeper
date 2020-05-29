@@ -1,7 +1,14 @@
-version: "2"
 domain: gatekeeper.sh
+multigroup: true
 repo: github.com/open-policy-agent/gatekeeper
 resources:
 - group: config
-  version: v1alpha1
   kind: Config
+  version: v1alpha1
+- group: status
+  kind: ConstraintPodStatus
+  version: v1beta1
+- group: status
+  kind: ConstraintTemplatePodStatus
+  version: v1beta1
+version: "2"

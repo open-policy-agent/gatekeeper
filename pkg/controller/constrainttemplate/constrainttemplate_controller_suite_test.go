@@ -16,6 +16,7 @@ limitations under the License.
 package constrainttemplate
 
 import (
+	"context"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -23,13 +24,16 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/apis"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/open-policy-agent/gatekeeper/api"
 )
 
 var cfg *rest.Config
@@ -44,7 +48,7 @@ func TestMain(m *testing.M) {
 		},
 		ErrorIfCRDPathMissing: true,
 	}
-	if err := api.AddToScheme(scheme.Scheme); err != nil {
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 
@@ -82,4 +86,23 @@ func StartTestManager(mgr manager.Manager, g *gomega.GomegaWithT) (chan struct{}
 		g.Expect(mgr.Start(stop)).NotTo(gomega.HaveOccurred())
 	}()
 	return stop, wg
+}
+
+// Bootstrap the gatekeeper-system namespace for use in tests
+func createGatekeeperNamespace(cfg *rest.Config) error {
+	c, err := client.New(cfg, client.Options{})
+	if err != nil {
+		return err
+	}
+
+	// Create gatekeeper namespace
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "gatekeeper-system",
+		},
+	}
+
+	ctx := context.Background()
+	_, err = controllerutil.CreateOrUpdate(ctx, c, ns, func() error { return nil })
+	return err
 }

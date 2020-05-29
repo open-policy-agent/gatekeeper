@@ -6,7 +6,7 @@
 !third_party/
 !vendor/
 !main.go
-!api/
+!apis/
 !go.mod
 
 # Ignore unnecessary files inside allowed directories

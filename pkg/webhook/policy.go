@@ -27,8 +27,8 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/api"
-	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis"
+	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -49,7 +49,7 @@ import (
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
-	if err := api.AddToScheme(runtimeScheme); err != nil {
+	if err := apis.AddToScheme(runtimeScheme); err != nil {
 		log.Error(err, "unable to add to scheme")
 		panic(err)
 	}
