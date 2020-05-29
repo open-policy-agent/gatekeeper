@@ -77,6 +77,10 @@ For either installation method, make sure you have cluster admin permissions:
     --user <YOUR USER NAME>
 ```
 
+##### Firewall Rules
+
+TCP port 8443 must be allowed from the Kubernetes API server to the node which Gatekeeper runs on in order for the validation webhooks to be accessible. This is blocked in the default configuration for some managed Kubernetes services and will result in a timeout. 
+
 #### Deploying a Release using Prebuilt Image
 
 If you want to deploy a released version of Gatekeeper in your cluster with a prebuilt image, then you can run the following command:
