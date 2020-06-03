@@ -90,6 +90,18 @@ func Test_ObjectTracker_Seen_Before_Expect(t *testing.T) {
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should have been satisfied")
 }
 
+// Verify that terminated resources are ignored when calling Expect.
+func Test_ObjectTracker_Termintated_Expect(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ot := newObjTracker(schema.GroupVersionKind{})
+	ct := makeCT("test-ct")
+	now := metav1.Now()
+	ct.ObjectMeta.DeletionTimestamp = &now
+	ot.Expect(ct)
+	ot.ExpectationsDone()
+	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+}
+
 // Verify that that expectations can be cancelled.
 func Test_ObjectTracker_Cancelled_Expectations(t *testing.T) {
 	g := gomega.NewWithT(t)
