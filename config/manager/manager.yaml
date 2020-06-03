@@ -109,6 +109,7 @@ spec:
       containers:
       - args:
         - --operation=audit
+        - --operation=status
         - --logtostderr
         command:
         - /manager

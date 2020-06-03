@@ -29,7 +29,7 @@ import (
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"

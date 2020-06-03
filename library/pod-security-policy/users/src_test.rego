@@ -596,6 +596,62 @@ test_one_container_empty_security_context {
   count(results) > 0
 }
 
+test_one_container_no_security_context {
+  results := violation with input as
+  {
+  	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
+  		"object": {
+  			"spec": {
+  				"containers": [{
+  					"name": "container1",
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
+
+test_one_container_no_security_context_RunAsAny {
+  results := violation with input as
+  {
+  	"review": {
+  	  "kind": {
+  	    "kind": "Pod"
+  	  },
+  		"object": {
+  			"spec": {
+  				"containers": [{
+  					"name": "container1",
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "RunAsAny",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) == 0
+}
+
 test_one_container_empty_security_context_empty_pod_security_context {
   results := violation with input as
   {
@@ -609,6 +665,34 @@ test_one_container_empty_security_context_empty_pod_security_context {
   				"containers": [{
   					"name": "container1",
   					"securityContext": {}
+  				}]
+  			}
+  		}
+  	},
+  	"parameters": {
+  		"runAsUser": {
+  			"rule": "MustRunAs",
+  			"ranges": [{
+  				"min": 100,
+  				"max": 200
+  			}]
+  		}
+  	}
+  }
+  count(results) > 0
+}
+
+test_one_container_no_security_context_no_pod_security_context {
+  results := violation with input as
+  {
+  	"review": {
+      "kind": {
+        "kind": "Pod"
+      },
+  		"object": {
+  			"spec": {
+  				"containers": [{
+  					"name": "container1",
   				}]
   			}
   		}
