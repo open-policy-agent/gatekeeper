@@ -72,6 +72,16 @@ func (t *objectTracker) Expect(o runtime.Object) {
 		return
 	}
 
+	accessor, err := meta.Accessor(o)
+	if err != nil {
+		return
+	}
+
+	// Don't expect resources which are being terminated.
+	if !accessor.GetDeletionTimestamp().IsZero() {
+		return
+	}
+
 	k, err := objKeyFromObject(o)
 	if err != nil {
 		log.Error(err, "skipping")
