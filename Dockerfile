@@ -1,5 +1,6 @@
-FROM golang:1.13-alpine as builder
+FROM --platform=$BUILDPLATFORM golang:1.13-alpine as builder
 
+ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
 ENV GO111MODULE=on\
@@ -7,10 +8,10 @@ ENV GO111MODULE=on\
 
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 
-COPY pkg/ pkg/	
-COPY third_party/ third_party/	
-COPY vendor/ vendor/	
-COPY main.go main.go	
+COPY pkg/ pkg/
+COPY third_party/ third_party/
+COPY vendor/ vendor/
+COPY main.go main.go
 COPY apis/ apis/
 COPY go.mod .
 
