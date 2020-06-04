@@ -183,6 +183,13 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
+# Build the docker image
+docker-build: test
+	docker build --pull . -t ${IMG}
+
+# Build docker image with buildx
+# Experimental docker feature to build cross platform multi-architecture docker images
+# https://docs.docker.com/buildx/working-with-buildx/
 docker-buildx: test
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
@@ -191,9 +198,6 @@ docker-buildx: test
 		-t $(IMG) \
 		. --load
 
-# Build docker image with buildx
-# Experimental docker feature to build cross platform multi-architecture docker images
-# https://docs.docker.com/buildx/working-with-buildx/
 docker-buildx-dev: test
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
