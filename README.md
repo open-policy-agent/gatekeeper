@@ -90,6 +90,7 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
    * Make sure that:
+       * You have Docker version 19.03 or later installed.
        * [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
        * Your kubectl context is set to the desired installation cluster.
        * You have a container registry you can write to that is readable by the target cluster.
@@ -104,7 +105,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
       ```
    * Build and push your Docker image:
       ```sh
-      make docker-build REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       make docker-push-release REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       ```
    * Finally, deploy:

@@ -1,6 +1,3 @@
-# Enable Docker CLI experimental features
-DOCKER_CLI_EXPERIMENTAL=enabled
-
 # Image URL to use all building/pushing image targets
 REGISTRY ?= quay.io
 REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
@@ -183,31 +180,31 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
-docker-buildx: test
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
-	fi
-	docker buildx build --platform "linux/amd64" \
-		-t $(IMG) \
-		. --load
-
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx-dev: test
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+docker-buildx: test
+	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64" \
+		-t $(IMG) \
+		. --load
+
+docker-buildx-dev: test
+	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	fi
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(DEV_TAG) \
 		-t $(REPOSITORY):dev \
 		. --push
 
 docker-buildx-release: test
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
 		-t $(REPOSITORY):latest \
 		. --push
