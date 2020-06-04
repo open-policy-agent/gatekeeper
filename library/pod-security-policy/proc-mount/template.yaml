@@ -25,8 +25,14 @@ spec:
         }
 
         input_proc_mount_type_allowed(c) {
-            input.parameters.procMount == c.securityContext.procMount
+          lower(input.parameters.procMountType) == "default"
+            lower(c.securityContext.procMount) == "default"
         }
+
+        input_proc_mount_type_allowed(c) {
+          lower(input.parameters.procMountType) == "unmasked"
+        }
+
 
         input_containers[c] {
             c := input.review.object.spec.containers[_]
