@@ -25,12 +25,12 @@ spec:
         }
 
         input_proc_mount_type_allowed(c) {
-          lower(input.parameters.procMountType) == "default"
+            lower(input.parameters.procMountType) == "default"
             lower(c.securityContext.procMount) == "default"
         }
 
         input_proc_mount_type_allowed(c) {
-          lower(input.parameters.procMountType) == "unmasked"
+            lower(input.parameters.procMountType) == "unmasked"
         }
 
 
