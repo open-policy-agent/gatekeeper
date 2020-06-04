@@ -104,7 +104,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
       ```
    * Build and push your Docker image:
       ```sh
-      make docker-build REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       make docker-push-release REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
       ```
    * Finally, deploy:
