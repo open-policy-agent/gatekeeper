@@ -27,13 +27,17 @@ spec:
 
         violation[{"msg": msg, "details": {}}] {
             volume := input_hostpath_volumes[_]
-            not input_hostpath_allowed(volume)
+            input_hostpath_violation(volume)
             msg := sprintf("HostPath volume %v is not allowed, pod: %v. Allowed path: %v", [volume, input.review.object.metadata.name, input.parameters.allowedHostPaths])
         }
 
-        input_hostpath_allowed(volume) {
-            # An empty list means there is no restriction on host paths used
+        input_hostpath_violation(volume) {
+            # An empty list means all host paths are blocked
             input.parameters.allowedHostPaths == []
+        }
+
+        input_hostpath_violation(volume) {
+            not input_hostpath_allowed(volume)
         }
 
         input_hostpath_allowed(volume) {
