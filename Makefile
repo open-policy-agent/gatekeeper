@@ -195,19 +195,37 @@ docker-buildx-dev: test
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
-		-t $(REPOSITORY):$(DEV_TAG) \
-		-t $(REPOSITORY):dev \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64" \
+		-t $(REPOSITORY):$(DEV_TAG)-linux-amd64 \
 		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/arm64" \
+		-t $(REPOSITORY):$(DEV_TAG)-linux-arm64 \
+		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/arm/v7" \
+		-t $(REPOSITORY):$(DEV_TAG)-linux-armv7 \
+		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(REPOSITORY):$(DEV_TAG) $(REPOSITORY):$(DEV_TAG)-linux-amd64 $(REPOSITORY):$(DEV_TAG)-linux-arm64 $(REPOSITORY):$(DEV_TAG)-linux-armv7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(REPOSITORY):dev $(REPOSITORY):$(DEV_TAG)-linux-amd64 $(REPOSITORY):$(DEV_TAG)-linux-arm64 $(REPOSITORY):$(DEV_TAG)-linux-armv7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(REPOSITORY):$(DEV_TAG)
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(REPOSITORY):dev
 
 docker-buildx-release: test
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
-		-t $(REPOSITORY):$(VERSION) \
-		-t $(REPOSITORY):latest \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64" \
+		-t $(REPOSITORY):$(VERSION)-linux-amd64 \
 		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/arm64" \
+		-t $(REPOSITORY):$(VERSION)-linux-arm64 \
+		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/arm/v7" \
+		-t $(REPOSITORY):$(VERSION)-linux-armv7 \
+		. --push
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(REPOSITORY):$(VERSION) $(REPOSITORY):$(VERSION)-linux-amd64 $(REPOSITORY):$(VERSION)-linux-arm64 $(REPOSITORY):$(VERSION)-linux-armv7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create $(REPOSITORY):latest $(REPOSITORY):$(VERSION)-linux-amd64 $(REPOSITORY):$(VERSION)-linux-arm64 $(REPOSITORY):$(VERSION)-linux-armv7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(REPOSITORY):$(VERSION)
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push $(REPOSITORY):latest
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
