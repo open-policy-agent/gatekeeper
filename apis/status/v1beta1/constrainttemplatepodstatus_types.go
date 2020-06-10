@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	ConstraintTemplateMapLabel = "internal.gatekeeper.sh/constrainttemplate-map"
+	ConstraintTemplateNameLabel = "internal.gatekeeper.sh/constrainttemplate-name"
 )
 
 // ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
@@ -78,8 +78,8 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
 	obj.SetLabels(map[string]string{
-		ConstraintTemplateMapLabel: templateName,
-		PodLabel:                   pod.Name,
+		ConstraintTemplateNameLabel: templateName,
+		PodLabel:                    pod.Name,
 	})
 	if PodOwnershipEnabled() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {

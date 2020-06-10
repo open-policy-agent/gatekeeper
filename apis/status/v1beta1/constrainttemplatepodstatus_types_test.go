@@ -33,7 +33,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	expectedStatus.Status.ID = podName
 	expectedStatus.Status.Operations = operations.AssignedStringList()
 	expectedStatus.SetLabels(map[string]string{
-		ConstraintTemplateMapLabel: templateName,
+		ConstraintTemplateNameLabel: templateName,
 		PodLabel:                   podName,
 	})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
