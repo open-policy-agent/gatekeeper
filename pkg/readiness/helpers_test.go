@@ -17,64 +17,173 @@ package readiness_test
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"sort"
+	"net/http"
+	"time"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
+	ctrl_cache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/yaml"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-// Applies fixture YAMLs directly under the provided path in alpha-sorted order.
-func applyFixtures(path string) error {
-	files, err := ioutil.ReadDir(path)
-	if err != nil {
-		return fmt.Errorf("reading path %s: %w", path, err)
-	}
+type mockManager struct {
+	mockCache *mockCache
+}
 
-	c, err := client.New(cfg, client.Options{})
-	if err != nil {
-		return fmt.Errorf("creating client: %w", err)
-	}
+func (m *mockManager) Add(runnable manager.Runnable) error {
+	return nil
+}
+func (m *mockManager) Elected() <-chan struct{} {
+	return nil
+}
 
-	sorted := make([]string, 0, len(files))
-	for _, entry := range files {
-		if entry.IsDir() {
-			continue
-		}
-		sorted = append(sorted, entry.Name())
-	}
-	sort.StringSlice(sorted).Sort()
+func (m *mockManager) SetFields(fields interface{}) error {
+	return nil
+}
 
-	for _, entry := range sorted {
-		b, err := ioutil.ReadFile(filepath.Join(path, entry))
-		if err != nil {
-			return fmt.Errorf("reading file %s: %w", entry, err)
-		}
+func (m *mockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
 
-		desired := unstructured.Unstructured{}
-		if err := yaml.Unmarshal(b, &desired); err != nil {
-			return fmt.Errorf("parsing file %s: %w", entry, err)
-		}
+func (m *mockManager) AddHealthzCheck(name string, check healthz.Checker) error {
+	return nil
+}
 
-		u := unstructured.Unstructured{}
-		u.SetGroupVersionKind(desired.GroupVersionKind())
-		u.SetName(desired.GetName())
-		u.SetNamespace(desired.GetNamespace())
-		_, err = controllerutil.CreateOrUpdate(context.Background(), c, &u, func() error {
-			resourceVersion := u.GetResourceVersion()
-			desired.DeepCopyInto(&u)
-			u.SetResourceVersion(resourceVersion)
+func (m *mockManager) AddReadyzCheck(name string, check healthz.Checker) error {
+	return nil
+}
 
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("creating %v %s: %w", u.GroupVersionKind(), u.GetName(), err)
-		}
-	}
+func (m *mockManager) Start(<-chan struct{}) error {
+	return nil
+}
 
+func (m *mockManager) GetConfig() *rest.Config {
+	return nil
+}
+
+func (m *mockManager) GetScheme() *runtime.Scheme {
+	return nil
+}
+
+func (m *mockManager) GetClient() client.Client {
+	return nil
+}
+
+func (m *mockManager) GetFieldIndexer() client.FieldIndexer {
+	return nil
+}
+
+func (m *mockManager) GetCache() ctrl_cache.Cache {
+	return m.mockCache
+}
+
+func (m *mockManager) GetEventRecorderFor(name string) record.EventRecorder {
+	return nil
+}
+
+func (m *mockManager) GetRESTMapper() meta.RESTMapper {
+	return nil
+}
+
+func (m *mockManager) GetAPIReader() client.Reader {
+	return nil
+}
+func (m *mockManager) GetWebhookServer() *webhook.Server {
+	return nil
+}
+
+type mockCache struct {
+	informers              map[schema.GroupVersionKind]*mockInformer
+	waitForCacheSyncCalled bool
+}
+
+func (m *mockCache) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+	return nil
+}
+func (m *mockCache) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+	return nil
+}
+
+func (m *mockCache) GetInformer(ctx context.Context, obj runtime.Object) (ctrl_cache.Informer, error) {
+	return m.GetInformerForKind(ctx, obj.GetObjectKind().GroupVersionKind())
+}
+
+func (m *mockCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (ctrl_cache.Informer, error) {
+	return m.informers[gvk], nil
+}
+func (m *mockCache) Start(stopCh <-chan struct{}) error {
+	return nil
+}
+func (m *mockCache) WaitForCacheSync(stop <-chan struct{}) bool {
+	m.waitForCacheSyncCalled = true
+	return true
+}
+func (m *mockCache) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+	return nil
+}
+
+type mockInformer struct {
+	mockStore       *cache.Store
+	hasSyncedCalled bool
+}
+
+func (m *mockInformer) AddEventHandler(handler cache.ResourceEventHandler) {}
+func (m *mockInformer) AddEventHandlerWithResyncPeriod(handler cache.ResourceEventHandler, resyncPeriod time.Duration) {
+}
+func (m *mockInformer) AddIndexers(indexers cache.Indexers) error {
+	return nil
+}
+
+func (m *mockInformer) GetStore() cache.Store {
+	return *m.mockStore
+}
+func (m *mockInformer) GetController() cache.Controller {
+	return nil
+}
+func (m *mockInformer) Run(stopCh <-chan struct{}) {}
+func (m *mockInformer) HasSynced() bool {
+	m.hasSyncedCalled = true
+	return true
+}
+func (m *mockInformer) LastSyncResourceVersion() string {
+	return ""
+}
+
+type mockStore struct {
+}
+
+func (m *mockStore) Add(obj interface{}) error {
+	return nil
+}
+func (m *mockStore) Update(obj interface{}) error {
+	return nil
+}
+func (m *mockStore) Delete(obj interface{}) error {
+	return nil
+}
+func (m *mockStore) List() []interface{} {
+	return nil
+}
+func (m *mockStore) ListKeys() []string {
+	return nil
+}
+func (m *mockStore) Get(obj interface{}) (item interface{}, exists bool, err error) {
+	return nil, true, nil
+}
+func (m *mockStore) GetByKey(key string) (item interface{}, exists bool, err error) {
+	return nil, true, nil
+}
+
+func (m *mockStore) Replace([]interface{}, string) error {
+	return nil
+}
+func (m *mockStore) Resync() error {
 	return nil
 }

@@ -60,12 +60,6 @@ const (
 
 var log = logf.Log.WithName("controller").WithValues("kind", "ConstraintTemplate", logging.Process, "constraint_template_controller")
 
-var gvkConstraintTemplate = schema.GroupVersionKind{
-	Group:   v1beta1.SchemeGroupVersion.Group,
-	Version: v1beta1.SchemeGroupVersion.Version,
-	Kind:    "ConstraintTemplate",
-}
-
 type Adder struct {
 	Opa              *opa.Client
 	WatchManager     *watch.Manager
@@ -248,6 +242,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 		}
 	}
 
+	defer r.tracker.Observe("templates.gatekeeper.sh", "ConstraintTemplate", request.Name, request.Namespace)
 	defer r.metrics.registry.report(r.metrics)
 
 	// Fetch the ConstraintTemplate instance
@@ -316,7 +311,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 	}
 	unversionedProposedCRD, err := r.opa.CreateCRD(context.Background(), unversionedCT)
 	if err != nil {
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
@@ -339,7 +333,6 @@ func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reco
 
 	proposedCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := r.scheme.Convert(unversionedProposedCRD, proposedCRD, nil); err != nil {
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		logError(request.NamespacedName.Name)
@@ -411,18 +404,12 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
 		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", status, err)
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
 
 	if err := r.metrics.reportIngestDuration(metrics.ActiveStatus, time.Since(beginCompile)); err != nil {
 		log.Error(err, "failed to report constraint template ingestion duration")
 	}
-
-	// Mark for readiness tracking
-	t := r.tracker.For(gvkConstraintTemplate)
-	t.Observe(unversionedCT)
-	log.Info("[readiness] observed ConstraintTemplate", "name", unversionedCT.GetName())
 
 	var newCRD *apiextensionsv1beta1.CustomResourceDefinition
 	if currentCRD == nil {
@@ -470,7 +457,6 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	if err := r.removeWatch(gvk); err != nil {
 		return reconcile.Result{}, err
 	}
-	r.tracker.CancelTemplate(ct)
 
 	// removing the template from the OPA cache must go last as we are relying
 	// on that cache to derive the Kind to remove from the watch

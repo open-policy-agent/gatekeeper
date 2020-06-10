@@ -164,7 +164,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraint{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraint reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -201,6 +201,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		log.Error(err, "unpacking request", "request", request)
 		return reconcile.Result{}, nil
 	}
+	defer r.tracker.Observe(gvk.Group, gvk.Kind, unpackedRequest.Name, unpackedRequest.Namespace)
 
 	// Sanity - make sure it is a constraint resource.
 	if gvk.Group != constraintstatusv1beta1.ConstraintsGroup {
@@ -369,20 +370,13 @@ func logRemoval(l logr.Logger, constraint *unstructured.Unstructured, enforcemen
 }
 
 func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructured) error {
-	t := r.tracker.For(instance.GroupVersionKind())
-
 	obj := instance.DeepCopy()
 	// Remove the status field since we do not need it for OPA
 	unstructured.RemoveNestedField(obj.Object, "status")
 	_, err := r.opa.AddConstraint(context.Background(), obj)
 	if err != nil {
-		t.CancelExpect(obj)
 		return err
 	}
-
-	// Track for readiness
-	t.Observe(instance)
-	log.Info("[readiness] observed Constraint", "name", instance.GetName())
 
 	return nil
 }

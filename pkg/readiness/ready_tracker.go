@@ -16,360 +16,253 @@ limitations under the License.
 package readiness
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
-	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var log = logf.Log.WithName("readiness-tracker")
 
-const constraintGroup = "constraints.gatekeeper.sh"
-
-// Lister lists resources from a cache.
-type Lister interface {
-	List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error
-}
-
-// Tracker tracks readiness for templates, constraints and data.
-type Tracker struct {
-	mu        sync.RWMutex // protects "satisfied" circuit-breaker
-	satisfied bool         // indicates whether tracker has been satisfied at least once
-
-	lister Lister
-
-	templates   *objectTracker
-	config      *objectTracker
-	constraints *trackerMap
-	data        *trackerMap
-
-	ready              chan struct{}
-	constraintTrackers *syncutil.SingleRunner
-}
-
-func NewTracker(lister Lister) *Tracker {
+func NewTracker(mgr manager.Manager) *Tracker {
 	return &Tracker{
-		lister:             lister,
-		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
-		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config")),
-		constraints:        newTrackerMap(),
-		data:               newTrackerMap(),
-		ready:              make(chan struct{}),
-		constraintTrackers: &syncutil.SingleRunner{},
+		Manager:   mgr,
+		Seen:      make(map[string]bool),
+		Expecting: make(map[string]bool),
 	}
 }
 
-// CheckSatisfied implements healthz.Checker to report readiness based on tracker status.
-// Returns nil if all expectations have been satisfied, otherwise returns an error.
+type Tracker struct {
+	mutex       sync.RWMutex
+	Manager     manager.Manager
+	Seen        map[string]bool
+	Expecting   map[string]bool
+	InitialSync bool
+	Ready       bool
+}
+
+func (t *Tracker) Observe(group, kind, name, namespace string) {
+	t.mutex.RLock()
+	ready := t.Ready
+	t.mutex.RUnlock()
+
+	if ready {
+		return
+	}
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Seen[fmt.Sprintf("%s|%s|%s|%s", group, kind, name, namespace)] = true
+}
+
+func (t *Tracker) Expect(group, kind, name, namespace string) {
+	t.mutex.RLock()
+	ready := t.Ready
+	t.mutex.RUnlock()
+
+	if ready {
+		return
+	}
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Expecting[fmt.Sprintf("%s|%s|%s|%s", group, kind, name, namespace)] = true
+}
+
+func (t *Tracker) Satisfied() bool {
+	t.mutex.RLock()
+
+	if t.Ready {
+		t.mutex.RUnlock()
+		return true
+	}
+
+	if !t.InitialSync {
+		t.mutex.RUnlock()
+		return false
+	}
+
+	for k := range t.Expecting {
+		if !t.Seen[k] {
+			t.mutex.RUnlock()
+			return false
+		}
+	}
+	t.mutex.RUnlock()
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.Ready = true
+	// release uneeded memory, not necessary, but nice to do
+	t.Seen = make(map[string]bool)
+	t.Expecting = make(map[string]bool)
+	return true
+}
+
 func (t *Tracker) CheckSatisfied(req *http.Request) error {
-	if !t.Satisfied(req.Context()) {
+	if !t.Satisfied() {
 		return errors.New("expectations not satisfied")
 	}
 	return nil
 }
 
-// For returns Expectations for the requested resource kind.
-func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
-	switch {
-	case gvk.GroupVersion() == v1beta1.SchemeGroupVersion && gvk.Kind == "ConstraintTemplate":
-		return t.templates
-	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
-		return t.config
+func (t *Tracker) Start(done <-chan struct{}) error {
+	ctx, cancel := syncutil.ContextForChannel(done)
+	defer cancel()
+
+	managerCache := t.Manager.GetCache()
+	if !managerCache.WaitForCacheSync(done) {
+		return errors.New("Unable to sync cache")
 	}
 
-	// Avoid new constraint trackers after templates have been populated.
-	// Race is ok here - extra trackers will only consume some unneeded memory.
-	if t.templates.Populated() && !t.constraints.Has(gvk) {
-		// Return throw-away tracker instead.
-		return noopExpectations{}
+	configGVK := schema.GroupVersionKind{
+		Group:   configv1alpha1.GroupVersion.Group,
+		Kind:    "Config",
+		Version: configv1alpha1.GroupVersion.Version,
 	}
 
-	return t.constraints.Get(gvk)
-}
-
-// ForData returns Expectations for tracking data of the requested resource kind.
-func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
-	// Avoid new data trackers after data expectations have been fully populated.
-	// Race is ok here - extra trackers will only consume some unneeded memory.
-	if t.config.Populated() && !t.data.Has(gvk) {
-		// Return throw-away tracker instead.
-		return noopExpectations{}
-	}
-	return t.data.Get(gvk)
-}
-
-// CancelTemplate stops expecting the provided ConstraintTemplate and associated Constraints.
-func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
-	log.V(1).Info("cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
-	t.templates.CancelExpect(ct)
-	gvk := constraintGVK(ct)
-	t.constraints.Remove(gvk)
-	<-t.ready // constraintTrackers are setup in Run()
-	t.constraintTrackers.Cancel(gvk.String())
-}
-
-// CancelData stops expecting data for the specified resource kind.
-func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
-	log.V(1).Info("cancel tracking for data", "gvk", gvk)
-	t.data.Remove(gvk)
-}
-
-// Satisfied returns true if all tracked expectations have been satisfied.
-func (t *Tracker) Satisfied(ctx context.Context) bool {
-	// Check circuit-breaker first. Once satisfied, always satisfied.
-	t.mu.RLock()
-	satisfied := t.satisfied
-	t.mu.RUnlock()
-	if satisfied {
-		return true
-	}
-
-	if !t.templates.Satisfied() {
-		return false
-	}
-	templateKinds := t.templates.kinds()
-	for _, gvk := range templateKinds {
-		if !t.constraints.Get(gvk).Satisfied() {
-			return false
-		}
-	}
-
-	if !t.config.Satisfied() {
-		return false
-	}
-	configKinds := t.config.kinds()
-	for _, gvk := range configKinds {
-		if !t.data.Get(gvk).Satisfied() {
-			return false
-		}
-	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.satisfied = true
-	return true
-}
-
-// Run runs the tracker and blocks until it completes.
-// The provided context can be cancelled to signal a shutdown request.
-func (t *Tracker) Run(ctx context.Context) error {
-	var grp errgroup.Group
-	t.constraintTrackers = syncutil.RunnerWithContext(ctx)
-	close(t.ready) // The constraintTrackers SingleRunner is ready.
-
-	grp.Go(func() error {
-		return t.trackConstraintTemplates(ctx)
-	})
-	grp.Go(func() error {
-		return t.trackConfig(ctx)
-	})
-
-	_ = grp.Wait()
-	return nil
-}
-
-func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
-	defer func() {
-		t.templates.ExpectationsDone()
-		log.V(1).Info("template expectations populated")
-
-		_ = t.constraintTrackers.Wait()
-	}()
-
-	templates := &v1beta1.ConstraintTemplateList{}
-	lister := retryLister(t.lister, retryAll)
-	if err := lister.List(ctx, templates); err != nil {
-		return fmt.Errorf("listing templates: %w", err)
-	}
-
-	log.V(1).Info("setting expectations for templates", "templateCount", len(templates.Items))
-
-	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
-	for _, ct := range templates.Items {
-		log.V(1).Info("expecting template", "name", ct.GetName())
-		t.templates.Expect(&ct)
-
-		gvk := schema.GroupVersionKind{
-			Group:   constraintGroup,
-			Version: v1beta1.SchemeGroupVersion.Version,
-			Kind:    ct.Spec.CRD.Spec.Names.Kind,
-		}
-		if _, ok := handled[gvk]; ok {
-			log.Info("duplicate constraint type", "gvk", gvk)
-			continue
-		}
-		handled[gvk] = true
-		// Set an expectation for this constraint type
-		ot := t.constraints.Get(gvk)
-		t.constraintTrackers.Go(gvk.String(), func(ctx context.Context) error {
-			err := t.trackConstraints(ctx, gvk, ot)
-			if err != nil {
-				log.Error(err, "aborted trackConstraints", "gvk", gvk)
-			}
-			return nil // do not return an error, this would abort other constraint trackers!
-		})
-	}
-	return nil
-}
-
-// trackConfig sets expectations for cached data as specified by the singleton Config resource.
-// Fails-open if the Config resource cannot be fetched or does not exist.
-func (t *Tracker) trackConfig(ctx context.Context) error {
-	var wg sync.WaitGroup
-	defer func() {
-		defer t.config.ExpectationsDone()
-		log.V(1).Info("config expectations populated")
-
-		wg.Wait()
-	}()
-
-	cfg, err := t.getConfigResource(ctx)
+	configInformer, err := managerCache.GetInformerForKind(ctx, configGVK)
 	if err != nil {
-		return fmt.Errorf("fetching config resource: %w", err)
-	}
-	if cfg == nil {
-		log.Info("config resource not found - skipping for readiness")
-		return nil
-	}
-	if !cfg.GetDeletionTimestamp().IsZero() {
-		log.Info("config resource is being deleted - skipping for readiness")
-		return nil
-	}
-
-	// Expect the resource kinds specified in the Config.
-	// We will fail-open (resolve expectations) for GVKs
-	// that are unregistered.
-	for _, entry := range cfg.Spec.Sync.SyncOnly {
-		gvk := schema.GroupVersionKind{
-			Group:   entry.Group,
-			Version: entry.Version,
-			Kind:    entry.Kind,
-		}
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-		t.config.Expect(u)
-		t.config.Observe(u) // we only care about the gvk entry in kinds()
-
-		// Set expectations for individual cached resources
-		dt := t.ForData(gvk)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := t.trackData(ctx, gvk, dt)
-			if err != nil {
-				log.Error(err, "aborted trackData", "gvk", gvk)
-			}
-		}()
-	}
-
-	return nil
-}
-
-// getConfigResource returns the Config singleton if present.
-// Returns a nil reference if it is not found.
-func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config, error) {
-	lst := &configv1alpha1.ConfigList{}
-	lister := retryLister(t.lister, nil)
-	if err := lister.List(ctx, lst); err != nil {
-		return nil, fmt.Errorf("listing config: %w", err)
-	}
-
-	for _, c := range lst.Items {
-		if c.GetName() != keys.Config.Name || c.GetNamespace() != keys.Config.Namespace {
-			log.Info("ignoring unsupported config name", "namespace", c.GetNamespace(), "name", c.GetName())
-			continue
-		}
-		return &c, nil
-	}
-
-	// Not found.
-	return nil, nil
-}
-
-// trackData sets expectations for all cached data expected by Gatekeeper.
-// If the provided gvk is registered, blocks until data can be listed or context is canceled.
-// Invalid GVKs (not registered to the RESTMapper) will fail-open.
-func (t *Tracker) trackData(ctx context.Context, gvk schema.GroupVersionKind, dt Expectations) error {
-	defer func() {
-		dt.ExpectationsDone()
-		log.V(1).Info("data expectations populated", "gvk", gvk)
-	}()
-
-	// List individual resources and expect observations of each in the sync controller.
-	u := &unstructured.UnstructuredList{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-		Kind:    gvk.Kind + "List",
-	})
-	// NoKindMatchError is non-recoverable, otherwise we'll retry.
-	lister := retryLister(t.lister, retryUnlessUnregistered)
-	err := lister.List(ctx, u)
-	if err != nil {
-		log.Error(err, "listing data", "gvk", gvk)
 		return err
 	}
 
-	for i := range u.Items {
-		item := &u.Items[i]
-		dt.Expect(item)
-		log.V(1).Info("expecting data", "gvk", item.GroupVersionKind(), "namespace", item.GetNamespace(), "name", item.GetName())
-	}
-	return nil
-}
-
-// trackConstraints sets expectations for all constraints managed by a template.
-// Blocks until constraints can be listed or context is canceled.
-func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionKind, constraints Expectations) error {
-	defer func() {
-		constraints.ExpectationsDone()
-		log.V(1).Info("constraint expectations populated", "gvk", gvk)
-	}()
-
-	u := unstructured.UnstructuredList{}
-	u.SetGroupVersionKind(gvk)
-	lister := retryLister(t.lister, retryAll)
-	if err := lister.List(ctx, &u); err != nil {
-		return err
+	sharedConfigInformer, ok := configInformer.(cache.SharedInformer)
+	if !ok {
+		return fmt.Errorf(
+			"expected informer to be of type `SharedInformer` instead found `%T`",
+			configInformer,
+		)
 	}
 
-	for i := range u.Items {
-		o := u.Items[i]
-		constraints.Expect(&o)
-		log.V(1).Info("expecting Constraint", "gvk", gvk, "name", objectName(&o))
+	for _, config := range sharedConfigInformer.GetStore().List() {
+		cachedConfig, _ := config.(*configv1alpha1.Config)
+		if cachedConfig.GetName() != keys.Config.Name || cachedConfig.GetNamespace() != keys.Config.Namespace {
+			continue
+		}
+
+		t.Expect(
+			configGVK.Group,
+			configGVK.Kind,
+			cachedConfig.GetName(),
+			cachedConfig.GetNamespace(),
+		)
+
+		for _, entry := range cachedConfig.Spec.Sync.SyncOnly {
+			gvk := schema.GroupVersionKind{
+				Group:   entry.Group,
+				Version: entry.Version,
+				Kind:    entry.Kind,
+			}
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(gvk)
+
+			informer, err := managerCache.GetInformer(ctx, u)
+			if err != nil {
+				log.V(1).Info("Unable to fetch informer", "gvk", gvk)
+				continue
+			}
+			sharedInformer, ok := informer.(cache.SharedInformer)
+			if !ok {
+				return fmt.Errorf(
+					"expected informer to be of type `SharedInformer` instead found `%T`",
+					informer,
+				)
+			}
+
+			if !cache.WaitForCacheSync(done, sharedInformer.HasSynced) {
+				return errors.New("Unable to sync cache")
+			}
+
+			for _, item := range sharedInformer.GetStore().List() {
+				cachedObject, _ := item.(metav1.Object)
+				t.Expect(
+					gvk.Group,
+					gvk.Kind,
+					cachedObject.GetName(),
+					cachedObject.GetNamespace(),
+				)
+			}
+		}
 	}
 
-	return nil
-}
-
-// Returns the constraint GVK that would be generated by a template.
-func constraintGVK(ct *templates.ConstraintTemplate) schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   constraintGroup,
+	templateGVK := schema.GroupVersionKind{
+		Group:   v1beta1.SchemeGroupVersion.Group,
+		Kind:    "ConstraintTemplate",
 		Version: v1beta1.SchemeGroupVersion.Version,
-		Kind:    ct.Spec.CRD.Spec.Names.Kind,
 	}
-}
 
-// objectName returns the name of a runtime.Object, or empty string on error.
-func objectName(o runtime.Object) string {
-	acc, err := meta.Accessor(o)
+	templateInformer, err := managerCache.GetInformerForKind(ctx, templateGVK)
 	if err != nil {
-		return ""
+		return err
 	}
-	return acc.GetName()
+
+	sharedTemplateInformer, ok := templateInformer.(cache.SharedInformer)
+	if !ok {
+		return fmt.Errorf(
+			"expected informer to be of type `SharedInformer` instead found `%T`",
+			templateInformer,
+		)
+	}
+
+	for _, template := range sharedTemplateInformer.GetStore().List() {
+		cachedTemplate, _ := template.(*v1beta1.ConstraintTemplate)
+		t.Expect(
+			templateGVK.Group,
+			templateGVK.Kind,
+			cachedTemplate.GetName(),
+			cachedTemplate.GetNamespace(),
+		)
+
+		constraintGVK := schema.GroupVersionKind{
+			Group:   "constraints.gatekeeper.sh",
+			Kind:    cachedTemplate.Spec.CRD.Spec.Names.Kind,
+			Version: v1beta1.SchemeGroupVersion.Version,
+		}
+
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(constraintGVK)
+		informer, err := managerCache.GetInformer(ctx, u)
+		if err != nil {
+			log.V(1).Info("Unable to fetch informer", "gvk", constraintGVK)
+			continue
+		}
+
+		sharedInformer, ok := informer.(cache.SharedInformer)
+		if !ok {
+			return fmt.Errorf(
+				"expected informer to be of type `SharedInformer` instead found `%T`",
+				informer,
+			)
+		}
+
+		if !cache.WaitForCacheSync(done, sharedInformer.HasSynced) {
+			return errors.New("Unable to sync cache")
+		}
+
+		for _, item := range sharedInformer.GetStore().List() {
+			cachedObject, _ := item.(metav1.Object)
+			t.Expect(
+				constraintGVK.Group,
+				constraintGVK.Kind,
+				cachedObject.GetName(),
+				cachedObject.GetNamespace(),
+			)
+		}
+	}
+
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	t.InitialSync = true
+	return nil
 }

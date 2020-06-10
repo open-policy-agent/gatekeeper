@@ -128,7 +128,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraintStatus reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraintStatus struct {
 	reader       client.Reader
 	writer       client.Writer

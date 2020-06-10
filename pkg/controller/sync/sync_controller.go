@@ -139,6 +139,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		log.Error(err, "unpacking request", "request", request)
 		return reconcile.Result{}, nil
 	}
+	defer r.tracker.Observe(gvk.Group, gvk.Kind, unpackedRequest.Name, unpackedRequest.Namespace)
 
 	syncKey := r.metricsCache.GetSyncKey(unpackedRequest.Namespace, unpackedRequest.Name)
 	reportMetrics := false
@@ -201,8 +202,6 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 		return reconcile.Result{}, err
 	}
-	r.tracker.ForData(gvk).Observe(instance)
-	log.V(1).Info("[readiness] observed data", "gvk", gvk, "namespace", instance.GetNamespace(), "name", instance.GetName())
 
 	r.metricsCache.AddObject(syncKey, Tags{
 		Kind:   instance.GetKind(),

@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: "some-config-map"
-  namespace: "default"
-spec:
-  foo: bar

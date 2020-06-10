@@ -18,7 +18,6 @@ package readiness
 import (
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -26,14 +25,9 @@ import (
 // provided Manager object.
 // NOTE: Must be called _before_ the manager is started.
 func SetupTracker(mgr manager.Manager) (*Tracker, error) {
-	tracker := NewTracker(mgr.GetAPIReader())
+	tracker := NewTracker(mgr)
 
-	err := mgr.Add(manager.RunnableFunc(func(done <-chan struct{}) error {
-		ctx, cancel := syncutil.ContextForChannel(done)
-		defer cancel()
-
-		return tracker.Run(ctx)
-	}))
+	err := mgr.Add(tracker)
 	if err != nil {
 		return nil, fmt.Errorf("adding tracker to manager: %w", err)
 	}

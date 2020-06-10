@@ -169,6 +169,8 @@ type ReconcileConfig struct {
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync)
 // update is needed for finalizers
 func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	defer r.tracker.Observe("config.gatekeeper.sh", "Config", request.Name, request.Namespace)
+
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -216,10 +218,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 			newSyncOnly.Add(gvk)
 		}
 	}
-
-	// Remove expectations for resources we no longer watch.
-	diff := r.watched.Difference(newSyncOnly)
-	r.removeStaleExpectations(diff)
 
 	// If the watch set has not changed, we're done here.
 	if r.watched.Equals(newSyncOnly) {
@@ -295,13 +293,6 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		}
 	}
 	return nil
-}
-
-// removeStaleExpectations stops tracking data for any resources that are no longer watched.
-func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
-	for _, gvk := range stale.Items() {
-		r.tracker.CancelData(gvk)
-	}
 }
 
 func containsString(s string, items []string) bool {

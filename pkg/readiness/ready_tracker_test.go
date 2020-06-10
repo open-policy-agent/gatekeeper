@@ -16,236 +16,239 @@ limitations under the License.
 package readiness_test
 
 import (
-	"context"
-	"fmt"
-	"net/http"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/onsi/gomega"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
-	"github.com/prometheus/client_golang/prometheus"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/cache"
 )
 
-// setupManager sets up a controller-runtime manager with registered watch manager.
-func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
-	t.Helper()
-
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-	metrics.Registry = prometheus.NewRegistry()
-	mgr, err := manager.New(cfg, manager.Options{
-		HealthProbeBindAddress: "127.0.0.1:29090",
-		MetricsBindAddress:     "0",
-		NewCache:               dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
-		},
-	})
-	if err != nil {
-		t.Fatalf("setting up controller manager: %s", err)
-	}
-	c := mgr.GetCache()
-	dc, ok := c.(watch.RemovableCache)
-	if !ok {
-		t.Fatalf("expected dynamic cache, got: %T", c)
-	}
-	wm, err := watch.New(dc)
-	if err != nil {
-		t.Fatalf("could not create watch manager: %s", err)
-	}
-	if err := mgr.Add(wm); err != nil {
-		t.Fatalf("could not add watch manager to manager: %s", err)
-	}
-	return mgr, wm
-}
-
-func setupOpa(t *testing.T) *opa.Client {
-	// initialize OPA
-	driver := local.New(local.Tracing(false))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("setting up OPA backend: %v", err)
-	}
-	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
-	if err != nil {
-		t.Fatalf("setting up OPA client: %v", err)
-	}
-	return client
-}
-
-func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) error {
-	tracker, err := readiness.SetupTracker(mgr)
-	if err != nil {
-		return fmt.Errorf("setting up tracker: %w", err)
-	}
-
-	// ControllerSwitch will be used to disable controllers during our teardown process,
-	// avoiding conflicts in finalizer cleanup.
-	sw := watch.NewSwitch()
-
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-
-	// Setup all Controllers
-	opts := controller.Dependencies{
-		Opa:              opa,
-		WatchManger:      wm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
-	}
-	if err := controller.AddToManager(mgr, opts); err != nil {
-		return fmt.Errorf("registering controllers: %w", err)
-	}
-	return nil
-}
-
-// Test_Tracker verifies that once an initial set of fixtures are loaded into OPA,
-// the readiness probe reflects that Gatekeeper is ready to enforce policy. Adding
-// additional constraints afterwards will not change the readiness state.
-//
-// Fixtures are loaded from testdata/ and testdata/post.
-// CRDs are loaded from testdata/crds (see TestMain).
-// Corresponding expectations are in testdata_test.go.
 func Test_Tracker(t *testing.T) {
 	g := gomega.NewWithT(t)
+	configStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err := configStore.Add(&configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "this-should-be-ignored",
+			Namespace: "gatekeeper-system",
+		},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: []configv1alpha1.SyncOnlyEntry{
+					{Group: "apps", Version: "v1", Kind: "Deployment"},
+					{Group: "apps", Version: "v1", Kind: "ReplicaSet"},
+				},
+			},
+		},
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-	os.Setenv("POD_NAME", "no-pod")
-	podstatus.DisablePodOwnership()
+	err = configStore.Add(&configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "config",
+			Namespace: "gatekeeper-system",
+		},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: []configv1alpha1.SyncOnlyEntry{
+					{Group: "", Version: "v1", Kind: "Namespace"},
+					{Group: "", Version: "v1", Kind: "Pod"},
+				},
+			},
+		},
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	err = configStore.Add(&configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "config",
+			Namespace: "this-is-a-fake-namespace",
+		},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: []configv1alpha1.SyncOnlyEntry{
+					{Group: "", Version: "v1", Kind: "Event"},
+					{Group: "", Version: "v1", Kind: "Secret"},
+				},
+			},
+		},
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-	// Wire up the rest.
-	mgr, wm := setupManager(t)
-	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient); err != nil {
-		t.Fatalf("setupControllers: %v", err)
+	namespaceStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err = namespaceStore.Add(&metav1.ObjectMeta{
+		Name:      "a",
+		Namespace: "",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	err = namespaceStore.Add(&metav1.ObjectMeta{
+		Name:      "b",
+		Namespace: "",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	err = namespaceStore.Add(&metav1.ObjectMeta{
+		Name:      "c",
+		Namespace: "",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	namespaceInformer := &mockInformer{mockStore: &namespaceStore}
+
+	podStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err = podStore.Add(&metav1.ObjectMeta{
+		Name:      "1",
+		Namespace: "x",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	err = podStore.Add(&metav1.ObjectMeta{
+		Name:      "2",
+		Namespace: "y",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	err = podStore.Add(&metav1.ObjectMeta{
+		Name:      "3",
+		Namespace: "z",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	err = podStore.Add(&metav1.ObjectMeta{
+		Name:      "4",
+		Namespace: "q",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	podInformer := &mockInformer{mockStore: &podStore}
+
+	templateStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err = templateStore.Add(&v1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "require-foo"},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: "RequireFoo",
+					},
+				},
+			},
+		},
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+
+	err = templateStore.Add(&v1beta1.ConstraintTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "require-bar"},
+		Spec: v1beta1.ConstraintTemplateSpec{
+			CRD: v1beta1.CRD{
+				Spec: v1beta1.CRDSpec{
+					Names: v1beta1.Names{
+						Kind: "RequireBar",
+					},
+				},
+			},
+		},
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+
+	fooConstraintStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err = fooConstraintStore.Add(&metav1.ObjectMeta{
+		Name:      "ThisIsAFooConstraint",
+		Namespace: "Foo",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	fooConstraintInformer := &mockInformer{mockStore: &fooConstraintStore}
+
+	barConstraintStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	err = barConstraintStore.Add(&metav1.ObjectMeta{
+		Name:      "ThisIsABarConstraint",
+		Namespace: "Bar",
+	})
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	barConstraintInformer := &mockInformer{mockStore: &barConstraintStore}
+
+	mockCache := &mockCache{
+		informers: map[schema.GroupVersionKind]*mockInformer{
+			schema.GroupVersionKind{
+				Group:   "config.gatekeeper.sh",
+				Kind:    "Config",
+				Version: "v1alpha1",
+			}: &mockInformer{mockStore: &configStore},
+			schema.GroupVersionKind{
+				Group:   "",
+				Kind:    "Namespace",
+				Version: "v1",
+			}: namespaceInformer,
+			schema.GroupVersionKind{
+				Group:   "",
+				Kind:    "Pod",
+				Version: "v1",
+			}: podInformer,
+			schema.GroupVersionKind{
+				Group:   "templates.gatekeeper.sh",
+				Kind:    "ConstraintTemplate",
+				Version: "v1beta1",
+			}: &mockInformer{mockStore: &templateStore},
+			schema.GroupVersionKind{
+				Group:   "constraints.gatekeeper.sh",
+				Kind:    "RequireFoo",
+				Version: "v1beta1",
+			}: fooConstraintInformer,
+			schema.GroupVersionKind{
+				Group:   "constraints.gatekeeper.sh",
+				Kind:    "RequireBar",
+				Version: "v1beta1",
+			}: barConstraintInformer,
+		},
 	}
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
+	mockManager := &mockManager{mockCache: mockCache}
+	tracker := readiness.NewTracker(mockManager)
+	// ensure satisfied returns false before `Start` is called
+	g.Expect(tracker.Satisfied()).Should(gomega.Equal(false))
+	err = tracker.Start(make(chan struct{}))
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
+	g.Expect(tracker.Satisfied()).Should(gomega.Equal(false))
 
-	// creating the gatekeeper-system namespace is necessary because that's where
-	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
-
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
-
-	// Verify cache (tracks testdata fixtures)
-	ctx := context.Background()
-	for _, ct := range testTemplates {
-		_, err := opaClient.GetTemplate(ctx, ct)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for template")
+	expected := [][]string{
+		[]string{"config.gatekeeper.sh", "Config", "config", "gatekeeper-system"},
+		[]string{"this", "is", "extra", "observation"},
+		[]string{"constraints.gatekeeper.sh", "RequireBar", "ThisIsABarConstraint", "Bar"},
+		[]string{"constraints.gatekeeper.sh", "RequireFoo", "ThisIsAFooConstraint", "Foo"},
+		[]string{"templates.gatekeeper.sh", "ConstraintTemplate", "require-bar", ""},
+		[]string{"templates.gatekeeper.sh", "ConstraintTemplate", "require-foo", ""},
+		[]string{"", "Namespace", "a", ""},
+		[]string{"", "Namespace", "b", ""},
+		[]string{"", "Namespace", "c", ""},
+		[]string{"", "Pod", "1", "x"},
+		[]string{"", "Pod", "2", "y"},
+		[]string{"", "Pod", "3", "z"},
+		[]string{"", "Pod", "4", "q"},
 	}
-	for _, c := range testConstraints {
-		_, err := opaClient.GetConstraint(ctx, c)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
+	for _, e := range expected {
+		g.Expect(tracker.Satisfied()).Should(gomega.Equal(false))
+		tracker.Observe(e[0], e[1], e[2], e[3])
 	}
-	// TODO: Verify data if we add the corresponding API to opa.Client.
-	//for _, d := range testData {
-	//	_, err := opaClient.GetData(ctx, c)
-	//	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
-	//}
+	g.Expect(tracker.Satisfied()).Should(gomega.Equal(true))
+	// assert memory is free after first osberved success
+	g.Expect(tracker.Expecting).Should(gomega.Equal(map[string]bool{}))
+	g.Expect(tracker.Seen).Should(gomega.Equal(map[string]bool{}))
+	g.Expect(tracker.Satisfied()).Should(gomega.Equal(true))
 
-	// Add additional templates/constraints and verify that we remain satisfied
-	err = applyFixtures("testdata/post")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying post fixtures")
-
-	g.Eventually(func() (bool, error) {
-		// Verify cache (tracks testdata/post fixtures)
-		ctx := context.Background()
-		for _, ct := range postTemplates {
-			_, err := opaClient.GetTemplate(ctx, ct)
-			if err != nil {
-				return false, err
-			}
-		}
-		for _, c := range postConstraints {
-			_, err := opaClient.GetConstraint(ctx, c)
-			if err != nil {
-				return false, err
-			}
-		}
-
-		return true, nil
-	}, 10*time.Second, 100*time.Millisecond).Should(gomega.BeTrue(), "verifying cache for post-fixtures")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
+	// assert wait for sync calls were made
+	g.Expect(mockCache.waitForCacheSyncCalled).Should(gomega.Equal(true))
+	g.Expect(podInformer.hasSyncedCalled).Should(gomega.Equal(true))
+	g.Expect(namespaceInformer.hasSyncedCalled).Should(gomega.Equal(true))
+	g.Expect(fooConstraintInformer.hasSyncedCalled).Should(gomega.Equal(true))
+	g.Expect(barConstraintInformer.hasSyncedCalled).Should(gomega.Equal(true))
 }
 
-// Verifies that a Config resource referencing bogus (unregistered) GVKs will not halt readiness.
-func Test_Tracker_UnregisteredCachedData(t *testing.T) {
+func Test_Tracker_CheckSatisfied(t *testing.T) {
 	g := gomega.NewWithT(t)
+	tracker := readiness.NewTracker(nil)
 
-	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	err := tracker.CheckSatisfied(nil)
+	g.Expect(err).Should(gomega.HaveOccurred())
 
-	// Apply config resource with bogus GVK reference
-	err = applyFixtures("testdata/bogus-config")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying config")
+	tracker.Ready = true
 
-	// Wire up the rest.
-	mgr, wm := setupManager(t)
-	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient); err != nil {
-		t.Fatalf("setupControllers: %v", err)
-	}
-
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
-	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
-}
-
-// probeIsReady checks whether expectations have been satisfied (via the readiness probe)
-func probeIsReady(ctx context.Context) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:29090/readyz", http.NoBody)
-	if err != nil {
-		return false, fmt.Errorf("constructing http request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-	if err != nil {
-		return false, err
-	}
-
-	return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
+	err = tracker.CheckSatisfied(nil)
+	g.Expect(err).ShouldNot(gomega.HaveOccurred())
 }
