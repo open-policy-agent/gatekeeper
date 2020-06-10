@@ -83,6 +83,7 @@ spec:
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --operation=audit
+        - --operation=status
         - --logtostderr
         imagePullPolicy: "{{ .Values.image.pullPolicy }}"
         image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"

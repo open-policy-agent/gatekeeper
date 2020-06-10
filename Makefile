@@ -63,7 +63,7 @@ all: lint test manager
 
 # Run tests
 native-test: generate fmt vet manifests
-	GO111MODULE=on go test -mod vendor ./pkg/... -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -92,7 +92,7 @@ e2e-bootstrap:
 	# Create a new kind cluster
 	TERM=dumb kind create cluster
 
-e2e-build-load-image: docker-build
+e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
@@ -132,7 +132,7 @@ deploy: patch-image manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./apis/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
@@ -141,12 +141,12 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	GO111MODULE=on go fmt ./api/... ./pkg/...
+	GO111MODULE=on go fmt ./apis/... ./pkg/...
 	GO111MODULE=on go fmt main.go
 
 # Run go vet against code
 vet:
-	GO111MODULE=on go vet -mod vendor ./api/... ./pkg/... ./third_party/...
+	GO111MODULE=on go vet -mod vendor ./apis/... ./pkg/... ./third_party/...
 	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
@@ -154,7 +154,7 @@ lint:
 
 # Generate code
 generate: controller-gen target-template-source
-	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./api/..." paths="./pkg/..."
+	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 
 # Docker Login
 docker-login:
@@ -180,28 +180,31 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
-# Build the docker image
-docker-build: test
-	docker build --pull . -t ${IMG}
-
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx-dev:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+docker-buildx: test
+	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64" \
+		-t $(IMG) \
+		. --load
+
+docker-buildx-dev: test
+	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	fi
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(DEV_TAG) \
+		-t $(REPOSITORY):dev \
 		. --push
 
-docker-buildx-release:
-	export DOCKER_CLI_EXPERIMENTAL=enabled
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --platform "linux/amd64,linux/arm64,linux/arm/v7" --name container-builder --use;\
+docker-buildx-release: test
+	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
+		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
-	docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
 		-t $(REPOSITORY):latest \
 		. --push

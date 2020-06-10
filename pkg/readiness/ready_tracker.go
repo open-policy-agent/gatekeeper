@@ -24,7 +24,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/api/v1alpha1"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"golang.org/x/sync/errgroup"

@@ -1,0 +1,24 @@
+# permissions for end users to edit constrainttemplatepodstatuses.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: constrainttemplatepodstatus-editor-role
+rules:
+- apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - constrainttemplatepodstatuses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - constrainttemplatepodstatuses/status
+  verbs:
+  - get

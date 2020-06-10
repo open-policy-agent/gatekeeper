@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -27,10 +28,11 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	constraintutil "github.com/open-policy-agent/gatekeeper/pkg/util/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
@@ -38,6 +40,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -115,15 +118,20 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Uncommenting the below enables logging of K8s internals like watch.
-	// klog.InitFlags(fs)
-	// fs.Parse([]string{"--alsologtostderr", "-v=10"})
-	// klog.SetOutput(os.Stderr)
+	//fs := flag.NewFlagSet("", flag.PanicOnError)
+	//klog.InitFlags(fs)
+	//fs.Parse([]string{"--alsologtostderr", "-v=10"})
+	//klog.SetOutput(os.Stderr)
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := mgr.GetClient()
 	ctx := context.Background()
+
+	// creating the gatekeeper-system namespace is necessary because that's where
+	// status resources live by default
+	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -137,10 +145,14 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
+	os.Setenv("POD_NAME", "no-pod")
+	podstatus.DisablePodOwnership()
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
+	pod := &corev1.Pod{}
+	pod.Name = "no-pod"
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, func() (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
@@ -153,7 +165,9 @@ violation[{"msg": "denied!"}] {
 	}
 
 	defer testMgrStopped()
+	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
 
+	log.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		err = c.Create(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -177,12 +191,14 @@ violation[{"msg": "denied!"}] {
 		}, timeout).Should(gomega.BeNil())
 	})
 
+	log.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
 		err = c.Create(ctx, newDenyAllCstr())
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		constraintEnforced(c, g, timeout)
 	})
 
+	log.Info("Running test: Constraint actually enforced")
 	t.Run("Constraint actually enforced", func(t *testing.T) {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -207,6 +223,8 @@ violation[{"msg": "denied!"}] {
 		}
 		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 	})
+
+	log.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
 		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
@@ -232,11 +250,24 @@ violation[{"msg": "denied!"}] {
 			}
 			return errors.New("Not established")
 		}, timeout, time.Second).Should(gomega.BeNil())
+
+		g.Eventually(func() error {
+			sList := &podstatus.ConstraintPodStatusList{}
+			if err := c.List(ctx, sList); err != nil {
+				return err
+			}
+			if len(sList.Items) != 0 {
+				return fmt.Errorf("Remaining status items: %+v", sList.Items)
+			}
+			return nil
+		}, timeout).Should(gomega.BeNil())
+
 		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
 		// we need a longer timeout because deleting the CRD interrupts the watch
 		constraintEnforced(c, g, 50*timeout)
 	})
 
+	log.Info("Running test: Templates with Invalid Rego throw errors")
 	t.Run("Templates with Invalid Rego throw errors", func(t *testing.T) {
 		// Create template with invalid rego, should populate parse error in status
 		instanceInvalidRego := &v1beta1.ConstraintTemplate{
@@ -277,7 +308,10 @@ anyrule[}}}//invalid//rego
 				return err
 			}
 			if ct.Name == "invalidrego" {
-				status := util.GetCTHAStatus(ct)
+				status := getCTByPodStatus(ct)
+				if status == nil {
+					return fmt.Errorf("could not retrieve CT status for pod, byPod status: %+v", ct.Status.ByPod)
+				}
 				if len(status.Errors) == 0 {
 					j, err := json.Marshal(status)
 					if err != nil {
@@ -295,6 +329,7 @@ anyrule[}}}//invalid//rego
 		}, timeout).Should(gomega.BeNil())
 	})
 
+	log.Info("Running test: Deleted constraint templates not enforced")
 	t.Run("Deleted constraint templates not enforced", func(t *testing.T) {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -340,12 +375,14 @@ func constraintEnforced(c client.Client, g *gomega.GomegaWithT, timeout time.Dur
 		if err != nil {
 			return err
 		}
-		status, err := constraintutil.GetHAStatus(cstr)
+		status, err := getCByPodStatus(cstr)
 		if err != nil {
 			return err
 		}
 		if !status.Enforced {
-			return errors.New("constraint not enforced")
+			obj, _ := json.MarshalIndent(cstr.Object, "", "  ")
+			// return errors.New("constraint not enforced)
+			return fmt.Errorf("constraint not enforced: \n%s", obj)
 		}
 		return nil
 	}, timeout).Should(gomega.BeNil())
@@ -360,4 +397,52 @@ func newDenyAllCstr() *unstructured.Unstructured {
 	})
 	cstr.SetName("denyallconstraint")
 	return cstr
+}
+
+func getCTByPodStatus(templ *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
+	statuses := templ.Status.ByPod
+	var status *v1beta1.ByPodStatus
+	for _, s := range statuses {
+		if s.ID == util.GetID() {
+			status = s
+			break
+		}
+	}
+	return status
+}
+
+func ignoreNotFound(err error) error {
+	if err != nil && errors2.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func getCByPodStatus(obj *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatusStatus, error) {
+	list, found, err := unstructured.NestedSlice(obj.Object, "status", "byPod")
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("no byPod status is set")
+	}
+	var status *statusv1beta1.ConstraintPodStatusStatus
+	for _, v := range list {
+		j, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		s := &statusv1beta1.ConstraintPodStatusStatus{}
+		if err := json.Unmarshal(j, s); err != nil {
+			return nil, err
+		}
+		if s.ID == util.GetID() {
+			status = s
+			break
+		}
+	}
+	if status == nil {
+		return nil, errors.New("current pod is not listed in byPod status")
+	}
+	return status, nil
 }

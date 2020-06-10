@@ -22,7 +22,7 @@ env:
 
 jobs:
   lint:
-    name: "Lint"
+    name: 'Lint'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -48,7 +48,7 @@ jobs:
           make lint
 
   build_test:
-    name: "Build and Test"
+    name: 'Build and Test'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -76,7 +76,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
   helm_build_test:
-    name: "[Helm] Build and Test"
+    name: '[Helm] Build and Test'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -104,8 +104,8 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
   pre-release:
-    name: "Pre Release"
-    runs-on: "ubuntu-latest"
+    name: 'Pre Release'
+    runs-on: 'ubuntu-latest'
     if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, build_test, helm_build_test]
     timeout-minutes: 30
@@ -120,23 +120,22 @@ jobs:
           if [[ $exists == null ]]
           then
             make docker-login
-            make docker-build IMG=gatekeeper-e2e:latest
-            make docker-push-dev IMG=gatekeeper-e2e:latest DEV_TAG=${GITHUB_SHA::7}
+            make docker-buildx-dev DEV_TAG=${GITHUB_SHA::7}
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
-      - uses: "marvinpinto/action-automatic-releases@v1.0.0"
+      - uses: 'marvinpinto/action-automatic-releases@v1.0.0'
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          repo_token: '${{ secrets.GITHUB_TOKEN }}'
           prerelease: true
           automatic_release_tag: latest
-          title: "Development Build"
+          title: 'Development Build'
 
   tagged-release:
-    name: "Tagged Release"
-    runs-on: "ubuntu-latest"
+    name: 'Tagged Release'
+    runs-on: 'ubuntu-latest'
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, build_test, helm_build_test]
     timeout-minutes: 30
@@ -157,8 +156,7 @@ jobs:
           if [[ $exists == null ]]
           then
             make docker-login
-            make docker-build IMG=gatekeeper-e2e:latest
-            make docker-push-release IMG=gatekeeper-e2e:latest VERSION=${TAG}
+            make docker-buildx-release VERSION=${TAG}
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -175,7 +173,7 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        uses: "marvinpinto/action-automatic-releases@v1.0.0"
+        uses: 'marvinpinto/action-automatic-releases@v1.0.0'
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          repo_token: '${{ secrets.GITHUB_TOKEN }}'
           prerelease: false

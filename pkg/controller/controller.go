@@ -21,6 +21,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -30,6 +31,10 @@ type Injector interface {
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
 	Add(mgr manager.Manager) error
+}
+
+type GetPodInjector interface {
+	InjectGetPod(func() (*corev1.Pod, error))
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -45,6 +50,7 @@ type Dependencies struct {
 	WatchManger      *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
+	GetPod           func() (*corev1.Pod, error)
 }
 
 // AddToManager adds all Controllers to the Manager
@@ -58,6 +64,9 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		a.InjectWatchManager(deps.WatchManger)
 		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
+		if a2, ok := a.(GetPodInjector); ok {
+			a2.InjectGetPod(deps.GetPod)
+		}
 		if err := a.Add(m); err != nil {
 			return err
 		}
