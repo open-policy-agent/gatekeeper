@@ -43,6 +43,20 @@ spec:
         spec:
           description: ConfigSpec defines the desired state of Config
           properties:
+            match:
+              description: Configuration for namespace exclusion
+              items:
+                properties:
+                  excludedNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  operations:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              type: array
             sync:
               description: Configuration for syncing k8s objects
               properties:
@@ -243,8 +257,7 @@ spec:
                 type: object
               type: array
             id:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "make" to regenerate code after modifying
+              description: 'Important: Run "make" to regenerate code after modifying
                 this file'
               type: string
             observedGeneration:

@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -103,6 +104,16 @@ func TestReconcile(t *testing.T) {
 					{Group: "", Version: "v1", Kind: "Pod"},
 				},
 			},
+			Match: []configv1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []string{"foo"},
+					Operations:         []string{"*"},
+				},
+				{
+					ExcludedNamespaces: []string{"bar"},
+					Operations:         []string{"audit", "webhook"},
+				},
+			},
 		},
 	}
 
@@ -126,7 +137,10 @@ func TestReconcile(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
+	configMatchSet := match.NewSet()
+	configMatchSet.Update(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, configMatchSet)
+
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
@@ -167,6 +181,10 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
+	g.Expect(configMatchSet.ExcludedNamespaces[match.Audit]).Should(gomega.Equal([]string{"foo", "bar"}))
+	g.Expect(configMatchSet.ExcludedNamespaces[match.Sync]).Should(gomega.Equal([]string{"foo"}))
+	g.Expect(configMatchSet.ExcludedNamespaces[match.Webhook]).Should(gomega.Equal([]string{"foo", "bar"}))
+
 	// Test finalizer removal
 
 	testMgrStopped()
@@ -199,7 +217,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker)
+	configMatchSet := match.NewSet()
+	configMatchSet.Update(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, configMatchSet)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
@@ -225,7 +245,12 @@ func TestConfig_CacheContents(t *testing.T) {
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
 	err = c.Create(context.TODO(), cm)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
+
+	cm2 := unstructuredFor(configMapGVK, "config-test-2")
+	cm2.SetNamespace("kube-system")
+	err = c.Create(context.TODO(), cm2)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-2")
 
 	defer func() {
 		err = c.Delete(context.TODO(), cm)
@@ -233,9 +258,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	}()
 
 	expected := map[opaKey]interface{}{
-		opaKey{gvk: nsGVK, key: "default"}:                      nil,
-		opaKey{gvk: nsGVK, key: "kube-system"}:                  nil,
-		opaKey{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+		{gvk: nsGVK, key: "default"}:                      nil,
+		{gvk: nsGVK, key: "kube-system"}:                  nil,
+		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
 	}
 	g.Eventually(func() bool {
 		return opa.Contains(expected)
@@ -261,7 +286,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Expect our configMap to return at some point
 	// TODO: In the future it will remain instead of having to repopulate.
 	expected = map[opaKey]interface{}{
-		opaKey{
+		{
 			gvk: configMapGVK,
 			key: "default/config-test-1",
 		}: nil,
@@ -269,6 +294,16 @@ func TestConfig_CacheContents(t *testing.T) {
 	g.Eventually(func() bool {
 		return opa.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
+
+	expected = map[opaKey]interface{}{
+		{
+			gvk: configMapGVK,
+			key: "kube-system/config-test-2",
+		}: nil,
+	}
+	g.Eventually(func() bool {
+		return !opa.Contains(expected)
+	}, 10*time.Second).Should(gomega.BeTrue(), "kube-system namespace is excluded. kube-system/config-test-2 should not be in opa cache")
 
 	// Delete the config resource - expect opa to empty out.
 	g.Expect(opa.Len()).ToNot(gomega.BeZero(), "sanity")
@@ -394,6 +429,12 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 		Spec: configv1alpha1.ConfigSpec{
 			Sync: configv1alpha1.Sync{
 				SyncOnly: entries,
+			},
+			Match: []configv1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []string{"kube-system"},
+					Operations:         []string{"sync"},
+				},
 			},
 		},
 	}

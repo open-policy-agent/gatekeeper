@@ -29,6 +29,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -75,12 +76,20 @@ var (
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, configMatchSet *match.Set) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
 	}
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reader: mgr.GetAPIReader(), reporter: reporter}}
+	wh := &admission.Webhook{
+		Handler: &validationHandler{
+			opa:            opa,
+			client:         mgr.GetClient(),
+			reader:         mgr.GetAPIReader(),
+			reporter:       reporter,
+			configMatchSet: configMatchSet,
+		},
+	}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
@@ -96,6 +105,7 @@ type validationHandler struct {
 	reader client.Reader
 	// for testing
 	injectedConfig *v1alpha1.Config
+	configMatchSet *match.Set
 }
 
 type requestResponse string
@@ -156,6 +166,15 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			}
 		}
 	}()
+
+	if h.configMatchSet != nil && len(h.configMatchSet.ExcludedNamespaces[match.Webhook]) > 0 {
+		for _, ns := range h.configMatchSet.ExcludedNamespaces[match.Webhook] {
+			if ns == req.AdmissionRequest.Namespace {
+				requestResponse = allowResponse
+				return admission.ValidationResponse(true, "")
+			}
+		}
+	}
 
 	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {

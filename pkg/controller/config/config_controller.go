@@ -21,6 +21,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -56,12 +57,13 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
+	ConfigMatchSet   *match.Set
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ConfigMatchSet)
 	if err != nil {
 		return err
 	}
@@ -85,8 +87,12 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
+func (a *Adder) InjectConfigMatchSet(m *match.Set) {
+	a.ConfigMatchSet = m
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, configMatchSet *match.Set) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
@@ -95,10 +101,11 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	syncAdder := syncc.Adder{
-		Opa:          filteredOpa,
-		Events:       events,
-		MetricsCache: syncMetricsCache,
-		Tracker:      tracker,
+		Opa:            filteredOpa,
+		Events:         events,
+		MetricsCache:   syncMetricsCache,
+		Tracker:        tracker,
+		ConfigMatchSet: configMatchSet,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -122,6 +129,7 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		watched:          watchSet,
 		syncMetricsCache: syncMetricsCache,
 		tracker:          tracker,
+		configMatchSet:   configMatchSet,
 	}, nil
 }
 
@@ -157,6 +165,7 @@ type ReconcileConfig struct {
 	watcher          *watch.Registrar
 	watched          *watch.Set
 	tracker          *readiness.Tracker
+	configMatchSet   *match.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -196,6 +205,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 			return reconcile.Result{}, err
 		}
 	}
+
+	r.configMatchSet.Reset()
+	r.configMatchSet.Update(instance.Spec.Match)
 
 	// Actively remove config finalizer. This should automatically remove
 	// the finalizer over time even if state teardown didn't work correctly
@@ -279,6 +291,16 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
+
+			foundExcludedNamespace := false
+			for _, ns := range r.configMatchSet.ExcludedNamespaces[match.Sync] {
+				if ns == u.Items[i].GetNamespace() {
+					foundExcludedNamespace = true
+				}
+			}
+			if foundExcludedNamespace {
+				continue
+			}
 
 			if _, err := r.opa.AddData(context.Background(), &u.Items[i]); err != nil {
 				r.syncMetricsCache.AddObject(syncKey, syncc.Tags{
