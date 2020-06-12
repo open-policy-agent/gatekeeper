@@ -36,13 +36,13 @@ func (s *Set) Update(entry []configv1alpha1.MatchEntry) {
 		for _, ns := range matchEntry.ExcludedNamespaces {
 			for _, op := range matchEntry.Operations {
 				if Operation(op) == Star {
-					for _, v := range allOperations {
-						if !contains(s.ExcludedNamespaces[v], ns) {
-							s.ExcludedNamespaces[v] = append(s.ExcludedNamespaces[v], ns)
+					for _, o := range allOperations {
+						if !s.contains(o, ns) {
+							s.ExcludedNamespaces[o] = append(s.ExcludedNamespaces[o], ns)
 						}
 					}
 				} else {
-					if !contains(s.ExcludedNamespaces[Operation(op)], ns) {
+					if !s.contains(Operation(op), ns) {
 						s.ExcludedNamespaces[Operation(op)] = append(s.ExcludedNamespaces[Operation(op)], ns)
 					}
 				}
@@ -55,8 +55,8 @@ func (s *Set) Reset() {
 	configMapSet.ExcludedNamespaces = make(map[Operation][]string)
 }
 
-func contains(slice []string, val string) bool {
-	for _, item := range slice {
+func (s *Set) contains(op Operation, val string) bool {
+	for _, item := range s.ExcludedNamespaces[op] {
 		if item == val {
 			return true
 		}

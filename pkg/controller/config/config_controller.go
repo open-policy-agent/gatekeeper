@@ -206,9 +206,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 	}
 
-	r.configMatchSet.Reset()
-	r.configMatchSet.Update(instance.Spec.Match)
-
 	// Actively remove config finalizer. This should automatically remove
 	// the finalizer over time even if state teardown didn't work correctly
 	// after a deprecation period, all finalizer code can be removed.
@@ -226,6 +223,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			newSyncOnly.Add(gvk)
+
+			r.configMatchSet.Reset()
+			r.configMatchSet.Update(instance.Spec.Match)
 		}
 	}
 
@@ -268,6 +268,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	if err := r.replayData(context.TODO(), needReplay); err != nil {
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
+
+	r.configMatchSet.Reset()
+	r.configMatchSet.Update(instance.Spec.Match)
 
 	return reconcile.Result{}, nil
 }
