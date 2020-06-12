@@ -2,27 +2,39 @@ package k8spsphostfilesystem
 
 violation[{"msg": msg, "details": {}}] {
     volume := input_hostpath_volumes[_]
-    input_hostpath_violation(volume)
-    msg := sprintf("HostPath volume %v is not allowed, pod: %v. Allowed path: %v", [volume, input.review.object.metadata.name, input.parameters.allowedHostPaths])
+    allowedPaths := get_allowed_paths(input)
+    input_hostpath_violation(allowedPaths, volume)
+    msg := sprintf("HostPath volume %v is not allowed, pod: %v. Allowed path: %v", [volume, input.review.object.metadata.name, allowedPaths])
 }
 
-input_hostpath_violation(volume) {
+input_hostpath_violation(allowedPaths, volume) {
     # An empty list means all host paths are blocked
-    input.parameters.allowedHostPaths == []
+    allowedPaths == []
+}
+input_hostpath_violation(allowedPaths, volume) {
+    not input_hostpath_allowed(allowedPaths, volume)
 }
 
-input_hostpath_violation(volume) {
-    not input_hostpath_allowed(volume)
+get_allowed_paths(arg) = out {
+    not arg.parameters
+    out = []
+}
+get_allowed_paths(arg) = out {
+    not arg.parameters.allowedHostPaths
+    out = []
+}
+get_allowed_paths(arg) = out {
+    out = arg.parameters.allowedHostPaths
 }
 
-input_hostpath_allowed(volume) {
-    allowedHostPath := input.parameters.allowedHostPaths[_]
+input_hostpath_allowed(allowedPaths, volume) {
+    allowedHostPath := allowedPaths[_]
     path_matches(allowedHostPath.pathPrefix, volume.hostPath.path)
     not allowedHostPath.readOnly == true
 }
 
-input_hostpath_allowed(volume) {
-    allowedHostPath := input.parameters.allowedHostPaths[_]
+input_hostpath_allowed(allowedPaths, volume) {
+    allowedHostPath := allowedPaths[_]
     path_matches(allowedHostPath.pathPrefix, volume.hostPath.path)
     allowedHostPath.readOnly
     not writeable_input_volume_mounts(volume.name)

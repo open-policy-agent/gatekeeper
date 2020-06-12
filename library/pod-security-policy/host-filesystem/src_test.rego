@@ -1,7 +1,17 @@
 package k8spsphostfilesystem
 
-test_input_hostpath_block_one {
+test_input_hostpath_block_all {
     input := { "review": input_review, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 1
+}
+test_input_hostpath_block_all_null_params {
+    input := { "review": input_review, "parameters": null }
+    results := violation with input as input
+    count(results) == 1
+}
+test_input_hostpath_block_all_no_params {
+    input := { "review": input_review }
     results := violation with input as input
     count(results) == 1
 }
