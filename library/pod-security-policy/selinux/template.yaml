@@ -7,53 +7,26 @@ spec:
     spec:
       names:
         kind: K8sPSPSELinux
-      validation:
-        # Schema for the `parameters` field
-        openAPIV3Schema:
-          properties:
-            allowedSELinuxOptions:
-                type: object
-                properties:
-                    level:
-                        type: string
-                    role:
-                        type: string
-                    type:
-                        type: string
-                    user:
-                        type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8spspselinux
 
         violation[{"msg": msg, "details": {}}] {
-            c := input_containers[_]
-            not input_seLinuxOptions_allowed(c.securityContext.seLinuxOptions)
+            c := input_security_context[_]
+            # Disallow all custom SELinux options
+            c.securityContext.seLinuxOptions
             msg := sprintf("SELinux option is not allowed, pod: %v. Allowed options: %v", [input.review.object.metadata.name, input.parameters.allowedSELinuxOptions])
         }
 
-        input_seLinuxOptions_allowed(options) {
-            input.parameters.allowedSELinuxOptions.level == options.level
+        input_security_context[c] {
+            c := input.review.object.spec
         }
-
-        input_seLinuxOptions_allowed(options) {
-            input.parameters.allowedSELinuxOptions.role == options.role
-        }
-
-        input_seLinuxOptions_allowed(options) {
-            input.parameters.allowedSELinuxOptions.type == options.type
-        }
-
-        input_seLinuxOptions_allowed(options) {
-            input.parameters.allowedSELinuxOptions.user == options.user
-        }
-
-        input_containers[c] {
+        input_security_context[c] {
             c := input.review.object.spec.containers[_]
             has_field(c.securityContext, "seLinuxOptions")
         }
-        input_containers[c] {
+        input_security_context[c] {
             c := input.review.object.spec.initContainers[_]
             has_field(c.securityContext, "seLinuxOptions")
         }
