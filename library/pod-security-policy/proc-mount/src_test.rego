@@ -10,6 +10,16 @@ test_input_container_proc_mount_not_allowed {
     results := violation with input as input
     count(results) == 1
 }
+test_input_container_proc_mount_not_allowed_null_param {
+    input := { "review": input_review_unmasked, "parameters": null }
+    results := violation with input as input
+    count(results) == 1
+}
+test_input_container_proc_mount_not_allowed_missing_param {
+    input := { "review": input_review_unmasked }
+    results := violation with input as input
+    count(results) == 1
+}
 test_input_container_many_not_proc_mount_allowed {
     input := { "review": input_review_many, "parameters": input_parameters_default}
     results := violation with input as input
