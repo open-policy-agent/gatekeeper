@@ -35,6 +35,11 @@ test_input_container_many_mixed_proc_mount_not_allowed_two {
     results := violation with input as input
     count(results) == 2
 }
+test_input_container_proc_mount_case_insensitive {
+    input := { "review": input_review, "parameters": input_parameters_default_lower}
+    results := violation with input as input
+    count(results) == 0
+}
 test_input_container_not_proc_mount_unmasked {
     input := { "review": input_review, "parameters": input_parameters_unmasked}
     results := violation with input as input
@@ -45,8 +50,8 @@ test_input_container_proc_mount_unmasked {
     results := violation with input as input
     count(results) == 0
 }
-test_input_container_proc_mount_case_insensitive {
-    input := { "review": input_review, "parameters": input_parameters_default_lower}
+test_input_container_many_mixed_proc_mount_allowed_two {
+    input := { "review": input_review_many_mixed_two, "parameters": input_parameters_unmasked}
     results := violation with input as input
     count(results) == 0
 }
