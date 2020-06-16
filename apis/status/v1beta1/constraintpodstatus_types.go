@@ -16,7 +16,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -30,9 +29,10 @@ import (
 )
 
 const (
-	ConstraintMapLabel = "internal.gatekeeper.sh/constraint-map"
-	PodLabel           = "internal.gatekeeper.sh/pod"
-	ConstraintsGroup   = "constraints.gatekeeper.sh"
+	ConstraintNameLabel = "internal.gatekeeper.sh/constraint-name"
+	ConstraintKindLabel = "internal.gatekeeper.sh/constraint-kind"
+	PodLabel            = "internal.gatekeeper.sh/pod"
+	ConstraintsGroup    = "constraints.gatekeeper.sh"
 )
 
 // ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus
@@ -94,15 +94,12 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
-	cmVal, err := StatusLabelValueForConstraint(constraint)
-	if err != nil {
-		return nil, err
-	}
 	obj.SetLabels(map[string]string{
-		ConstraintMapLabel: cmVal,
-		PodLabel:           pod.Name,
+		ConstraintNameLabel: constraint.GetName(),
+		ConstraintKindLabel: constraint.GetKind(),
+		PodLabel:            pod.Name,
 		// the template name is the lower-case of the constraint kind
-		ConstraintTemplateMapLabel: strings.ToLower(constraint.GetKind()),
+		ConstraintTemplateNameLabel: strings.ToLower(constraint.GetKind()),
 	})
 	if PodOwnershipEnabled() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
@@ -110,28 +107,6 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 		}
 	}
 	return obj, nil
-}
-
-// StatusLabelValueForConstraint returns the label value that can be used to
-// select status objects for the specific constraint
-func StatusLabelValueForConstraint(constraint *unstructured.Unstructured) (string, error) {
-	return dashPacker(constraint.GetKind(), constraint.GetName())
-}
-
-// DecodeConstraintLabel returns the Kind and name of the constraint that matches
-// the provided label
-func DecodeConstraintLabel(val string) (KindName, error) {
-	tokens := dashExtractor(val)
-	if len(tokens) != 2 {
-		return KindName{}, fmt.Errorf("could not parse constraint status label, incorrect number of fields: %s", val)
-	}
-	return KindName{Kind: tokens[0], Name: tokens[1]}, nil
-}
-
-// KindName is the kind and name of a constraint
-type KindName struct {
-	Kind string
-	Name string
 }
 
 // KeyForConstraint returns a unique status object name given the Pod ID and

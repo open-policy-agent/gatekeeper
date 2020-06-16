@@ -51,6 +51,14 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 	}
 	schema := &apiextensions.JSONSchemaProps{
 		Properties: map[string]apiextensions.JSONSchemaProps{
+			"metadata": apiextensions.JSONSchemaProps{
+				Properties: map[string]apiextensions.JSONSchemaProps{
+					"name": apiextensions.JSONSchemaProps{
+						Type:      "string",
+						MaxLength: func(i int64) *int64 { return &i }(63),
+					},
+				},
+			},
 			"spec": apiextensions.JSONSchemaProps{
 				Properties: props,
 			},

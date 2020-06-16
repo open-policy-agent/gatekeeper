@@ -507,8 +507,8 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 
 	cstrStatusObjs := &statusv1beta1.ConstraintPodStatusList{}
 	if err := r.List(context.TODO(), cstrStatusObjs, client.MatchingLabels(map[string]string{
-		statusv1beta1.PodLabel:                   util.GetPodName(),
-		statusv1beta1.ConstraintTemplateMapLabel: ctName,
+		statusv1beta1.PodLabel:                    util.GetPodName(),
+		statusv1beta1.ConstraintTemplateNameLabel: ctName,
 	})); err != nil {
 		return err
 	}
