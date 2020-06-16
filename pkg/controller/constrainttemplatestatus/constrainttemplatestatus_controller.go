@@ -81,7 +81,7 @@ type Mapper struct{}
 // Map correlates a ConstraintTemplatePodStatus with its corresponding constraint template
 func (m Mapper) Map(obj handler.MapObject) []reconcile.Request {
 	labels := obj.Meta.GetLabels()
-	name, ok := labels[v1beta1.ConstraintTemplateMapLabel]
+	name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
 	if !ok {
 		log.Error(fmt.Errorf("constraint template status resource with no mapping label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint template status resource")
 		return nil
@@ -158,7 +158,7 @@ func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconc
 	if err := r.reader.List(
 		context.TODO(),
 		sObjs,
-		client.MatchingLabels{v1beta1.ConstraintTemplateMapLabel: request.Name},
+		client.MatchingLabels{v1beta1.ConstraintTemplateNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err

@@ -42,9 +42,10 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	expectedStatus.Status.Operations = operations.AssignedStringList()
 	expectedStatus.SetLabels(
 		map[string]string{
-			ConstraintMapLabel:         "AConstraintKind-a--constraint",
-			PodLabel:                   podName,
-			ConstraintTemplateMapLabel: strings.ToLower(cstrKind),
+			ConstraintNameLabel:         "a-constraint",
+			ConstraintKindLabel:         "AConstraintKind",
+			PodLabel:                    podName,
+			ConstraintTemplateNameLabel: strings.ToLower(cstrKind),
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
@@ -54,8 +55,4 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	cmVal, err := KeyForConstraint(podName, cstr)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status.Name).To(Equal(cmVal))
-	kn, err := DecodeConstraintLabel(status.GetLabels()[ConstraintMapLabel])
-	g.Expect(err).To(BeNil())
-	g.Expect(kn.Kind).To(Equal(cstrKind))
-	g.Expect(kn.Name).To(Equal(cstrName))
 }
