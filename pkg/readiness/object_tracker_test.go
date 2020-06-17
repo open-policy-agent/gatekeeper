@@ -91,7 +91,7 @@ func Test_ObjectTracker_Seen_Before_Expect(t *testing.T) {
 }
 
 // Verify that terminated resources are ignored when calling Expect.
-func Test_ObjectTracker_Termintated_Expect(t *testing.T) {
+func Test_ObjectTracker_Terminated_Expect(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{})
 	ct := makeCT("test-ct")
@@ -160,4 +160,59 @@ func Test_ObjectTracker_CancelBeforeExpect(t *testing.T) {
 	ot.ExpectationsDone()
 
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue())
+}
+
+// Verify that the allSatisfied circuit breaker keeps Satisfied==true and
+// no other operations have any impact.
+func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ot := newObjTracker(schema.GroupVersionKind{})
+
+	const count = 10
+	ct := makeCTSlice("ct-", count)
+	for i := 0; i < len(ct); i++ {
+		ot.Expect(ct[i])
+	}
+
+	g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "should not be satisfied before ExpectationsDone")
+	ot.ExpectationsDone()
+
+	for i := 0; i < len(ct); i++ {
+		ot.Observe(ct[i])
+	}
+
+	g.Expect(ot.Satisfied()).To(gomega.BeTrue())
+
+	// The circuit-breaker should have been tripped. Let's try different operations
+	// and make sure they do not consume additional memory or affect the satisfied state.
+	for i := 0; i < len(ct); i++ {
+		ot.CancelExpect(ct[i])
+		ot.Observe(ct[i])
+	}
+
+	expectNoObserve := makeCTSlice("expectNoObserve-", count)
+	for i := 0; i < len(expectNoObserve); i++ {
+		// Expect resources we won't then observe
+		ot.Expect(expectNoObserve[i])
+	}
+	cancelNoObserve := makeCTSlice("cancelNoObserve-", count)
+	for i := 0; i < len(cancelNoObserve); i++ {
+		// Cancel resources we won't then observe
+		ot.CancelExpect(cancelNoObserve[i])
+	}
+	justObserve := makeCTSlice("justObserve-", count)
+	for i := 0; i < len(justObserve); i++ {
+		// Observe some unexpected resources
+		ot.Observe(justObserve[i])
+	}
+
+	g.Expect(ot.Satisfied()).To(gomega.BeTrue())
+
+	// Peek at internals - we should no be accruing memory from the post-circuit-breaker operations
+	ot.mu.RLock()
+	defer ot.mu.RUnlock()
+	g.Expect(ot.cancelled).To(gomega.BeEmpty())
+	g.Expect(ot.expect).To(gomega.BeEmpty())
+	g.Expect(ot.seen).To(gomega.BeEmpty())
+	g.Expect(ot.satisfied).To(gomega.BeEmpty())
 }
