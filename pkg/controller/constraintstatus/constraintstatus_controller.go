@@ -84,19 +84,19 @@ type Mapper struct {
 // Map correlates a ConstraintPodStatus with its corresponding constraint
 func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
 	labels := obj.Meta.GetLabels()
-	lbl, ok := labels[v1beta1.ConstraintMapLabel]
+	name, ok := labels[v1beta1.ConstraintNameLabel]
 	if !ok {
-		log.Error(fmt.Errorf("constraint status resource with no mapping label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
+		log.Error(fmt.Errorf("constraint status resource with no name label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
 		return nil
 	}
-	kn, err := v1beta1.DecodeConstraintLabel(lbl)
-	if err != nil {
-		log.Error(err, "could not decode status label")
+	kind, ok := labels[v1beta1.ConstraintKindLabel]
+	if !ok {
+		log.Error(fmt.Errorf("constraint status resource with no kind label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
 		return nil
 	}
 	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kn.Kind})
-	u.SetName(kn.Name)
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
+	u.SetName(name)
 	return m.packer.Map(handler.MapObject{Meta: u, Object: u})
 }
 
@@ -181,14 +181,13 @@ func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconc
 	r.log.Info("handling constraint status update", "instance", instance)
 
 	sObjs := &v1beta1.ConstraintPodStatusList{}
-	lblVal, err := v1beta1.StatusLabelValueForConstraint(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
 	if err := r.reader.List(
 		context.TODO(),
 		sObjs,
-		client.MatchingLabels{v1beta1.ConstraintMapLabel: lblVal},
+		client.MatchingLabels{
+			v1beta1.ConstraintNameLabel: instance.GetName(),
+			v1beta1.ConstraintKindLabel: instance.GetKind(),
+		},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err

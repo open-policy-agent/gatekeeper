@@ -43,13 +43,14 @@ type Expectations interface {
 // Expectations are satisfied by calls to Observe().
 // Once all expectations are satisfied, Satisfied() will begin returning true.
 type objectTracker struct {
-	mu        sync.RWMutex
-	gvk       schema.GroupVersionKind
-	cancelled objSet // expectations that have been cancelled
-	expect    objSet // unresolved expectations
-	seen      objSet // observations made before their expectations
-	satisfied objSet // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
-	populated bool   // all expectations have been provided
+	mu           sync.RWMutex
+	gvk          schema.GroupVersionKind
+	cancelled    objSet // expectations that have been cancelled
+	expect       objSet // unresolved expectations
+	seen         objSet // observations made before their expectations
+	satisfied    objSet // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
+	populated    bool   // all expectations have been provided
+	allSatisfied bool   // true once all expectations have been satified. Acts as a circuit-breaker.
 }
 
 func newObjTracker(gvk schema.GroupVersionKind) *objectTracker {
@@ -72,13 +73,9 @@ func (t *objectTracker) Expect(o runtime.Object) {
 		return
 	}
 
-	accessor, err := meta.Accessor(o)
-	if err != nil {
-		return
-	}
-
 	// Don't expect resources which are being terminated.
-	if !accessor.GetDeletionTimestamp().IsZero() {
+	accessor, err := meta.Accessor(o)
+	if err == nil && !accessor.GetDeletionTimestamp().IsZero() {
 		return
 	}
 
@@ -109,6 +106,12 @@ func (t *objectTracker) Expect(o runtime.Object) {
 func (t *objectTracker) CancelExpect(o runtime.Object) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Respect circuit-breaker.
+	if t.allSatisfied {
+		return
+	}
+
 	k, err := objKeyFromObject(o)
 	if err != nil {
 		log.Error(err, "skipping")
@@ -152,6 +155,11 @@ func (t *objectTracker) Observe(o runtime.Object) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// Respect circuit-breaker.
+	if t.allSatisfied {
+		return
+	}
+
 	k, err := objKeyFromObject(o)
 	if err != nil {
 		log.Error(err, "skipping")
@@ -160,6 +168,11 @@ func (t *objectTracker) Observe(o runtime.Object) {
 
 	// Ignore cancelled expectations
 	if _, ok := t.cancelled[k]; ok {
+		return
+	}
+
+	// Ignore satisfied expectations
+	if _, ok := t.satisfied[k]; ok {
 		return
 	}
 
@@ -193,44 +206,58 @@ func (t *objectTracker) Populated() bool {
 // Expectations must be populated before the tracker can be considered satisfied.
 // Expectations are marked as populated by calling ExpectationsDone().
 func (t *objectTracker) Satisfied() bool {
-	satisfied, seenKeys := func() (bool, []objKey) {
+	satisfied, needMutate := func() (bool, bool) {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 
-		if !t.populated {
-			return false, nil
-		}
-
-		if len(t.expect) == 0 {
-			return true, nil
-		}
-
-		// Resolve any expectations where the observation preceded the expect request.
-		var keys []objKey
-		for k := range t.seen {
-			if _, ok := t.expect[k]; !ok {
-				continue
-			}
-			keys = append(keys, k)
-		}
-		return false, keys
+		// We'll only need the write lock in certain conditions:
+		//  1. We haven't tripped the circuit breaker
+		//  2. Expectations have been previously populated
+		//  3. We have expectations and observations - some of these may match can be resolved.
+		needMutate :=
+			!t.allSatisfied &&
+				t.populated &&
+				((len(t.seen) > 0 && len(t.expect) > 0) || // ...are there expectations we can resolve?
+					(len(t.seen) == 0 && len(t.expect) == 0)) // ...is the circuit-breaker ready to flip?
+		return t.allSatisfied, needMutate
 	}()
 
-	if len(seenKeys) == 0 {
-		return satisfied
+	if satisfied {
+		return true
+	}
+
+	// Proceed only if we have state changes to make.
+	if !needMutate {
+		return false
 	}
 
 	// From here we need a write lock to mutate state.
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for _, k := range seenKeys {
+	// Resolve any expectations where the observation preceded the expect request.
+	for k := range t.seen {
+		if _, ok := t.expect[k]; !ok {
+			continue
+		}
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
 	}
 
-	return len(t.expect) == 0
+	// All satisfied if:
+	//  1. Expectations have been previously populated
+	//  2. No expectations remain
+	if t.populated && len(t.expect) == 0 {
+		t.allSatisfied = true
+
+		// Circuit-breaker tripped - free tracking memory
+		t.seen = nil
+		t.expect = nil
+		t.satisfied = nil
+		t.cancelled = nil
+	}
+	return t.allSatisfied
 }
 
 func (t *objectTracker) kinds() []schema.GroupVersionKind {
