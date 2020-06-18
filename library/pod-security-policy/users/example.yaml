@@ -10,3 +10,6 @@ spec:
       image: nginx
       securityContext:
         runAsUser: 250
+        runAsGroup: 250
+        supplementalGroups: 250
+        fsGroup: 250
