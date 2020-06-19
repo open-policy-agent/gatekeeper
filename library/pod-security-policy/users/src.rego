@@ -9,14 +9,12 @@ violation[{"msg": msg}] {
 
 get_type_violation(field, container) = msg {
   field == "runAsUser"
-  has_field(input.parameters, field)
   params := input.parameters[field]
   msg := get_user_violation(params, container)
 }
 
 get_type_violation(field, container) = msg {
   field != "runAsUser"
-  has_field(input.parameters, field)
   params := input.parameters[field]
   msg := get_violation(field, params, container)
 }
@@ -25,13 +23,12 @@ get_type_violation(field, container) = msg {
 get_user_violation(params, container) = msg {
   rule := params.rule
   provided_user := get_field_value("runAsUser", container, input.review)
-  not is_null(provided_user)
-  not accept_users(rule, provided_user)
+=  not accept_users(rule, provided_user)
   msg := sprintf("Container %v is attempting to run as disallowed user %v. Allowed runAsUser: %v", [container.name, provided_user, params])
 }
 
 get_user_violation(params, container) = msg {
-  is_null(get_field_value("runAsUser", container, input.review))
+  not get_field_value("runAsUser", container, input.review)
   params.rule != "RunAsAny"
   msg := sprintf("Container %v is attempting to run without a required securityContext/runAsUser. Allowed runAsUser: %v", [container.name, params])
 }
@@ -49,13 +46,12 @@ accept_users("MustRunAs", provided_user) = res  {
 get_violation(field, params, container) = msg {
   rule := params.rule
   provided_value := get_field_value(field, container, input.review)
-  not is_null(provided_value)
   not accept_value(rule, provided_value, params.ranges)
   msg := sprintf("Container %v is attempting to run as disallowed group %v. Allowed %v: %v", [container.name, provided_value, field, params])
 }
 
 get_violation(field, params, container) = msg {
-  is_null(get_field_value(field, container, input.review))
+  not get_field_value(field, container, input.review)
   params.rule == "MustRunAs"
   msg := sprintf("Container %v is attempting to run without a required securityContext/%v. Allowed %v: %v", [container.name, field, field, params])
 }
@@ -70,14 +66,12 @@ accept_value("MustRunAs", provided_value, ranges) = res { res := is_in_range(pro
 # If container level is provided, that takes precedence
 get_field_value(field, container, review) = out {
   container_value := get_seccontext_field(field, container)
-  not is_null(container_value)
   out := container_value
 }
 
 # If no container level exists, use pod level
 get_field_value(field, container, review) = out {
-  container_value := get_seccontext_field(field, container)
-  is_null(container_value)
+  not get_seccontext_field(field, container)
   review.kind.kind == "Pod"
   pod_value := get_seccontext_field(field, review.object.spec)
   out := pod_value
@@ -89,24 +83,8 @@ is_in_range(val, ranges) = res {
   res := count(matching) > 0
 }
 
-# has_field returns whether an object has a field
-has_field(object, field) = true {
-  object[field]
-}
-
 get_seccontext_field(field, obj) = out {
-  has_field(obj, "securityContext")
-  has_field(obj.securityContext, field)
   out = obj.securityContext[field]
-}
-get_seccontext_field(field, obj) = out {
-  not has_field(obj, "securityContext")
-  out = null
-}
-get_seccontext_field(field, obj) = out {
-  has_field(obj, "securityContext")
-  not has_field(obj.securityContext, field)
-  out = null
 }
 
 input_containers[c] {
