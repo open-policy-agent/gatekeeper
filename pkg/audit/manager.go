@@ -251,13 +251,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				foundExcludedNamespace := false
-				for _, ns := range am.configMatchSet.ExcludedNamespaces[match.Audit] {
-					if ns == obj.GetNamespace() {
-						foundExcludedNamespace = true
-					}
-				}
-				if foundExcludedNamespace {
+				if am.configMatchSet.ExcludedNamespaces[match.Audit][obj.GetNamespace()] {
 					continue
 				}
 

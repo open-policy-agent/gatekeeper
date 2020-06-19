@@ -73,8 +73,8 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a3, ok := a.(GetConfigMatchSetInjector); ok {
-			a3.InjectConfigMatchSet(deps.ConfigMatchSet)
+		if a2, ok := a.(GetConfigMatchSetInjector); ok {
+			a2.InjectConfigMatchSet(deps.ConfigMatchSet)
 		}
 		if err := a.Add(m); err != nil {
 			return err

@@ -223,10 +223,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		for _, entry := range instance.Spec.Sync.SyncOnly {
 			gvk := schema.GroupVersionKind{Group: entry.Group, Version: entry.Version, Kind: entry.Kind}
 			newSyncOnly.Add(gvk)
-
-			r.configMatchSet.Reset()
-			r.configMatchSet.Update(instance.Spec.Match)
 		}
+
+		r.configMatchSet.Replace(instance.Spec.Match)
 	}
 
 	// Remove expectations for resources we no longer watch.
@@ -269,8 +268,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
 
-	r.configMatchSet.Reset()
-	r.configMatchSet.Update(instance.Spec.Match)
+	r.configMatchSet.Replace(instance.Spec.Match)
 
 	return reconcile.Result{}, nil
 }
@@ -295,13 +293,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
 
-			foundExcludedNamespace := false
-			for _, ns := range r.configMatchSet.ExcludedNamespaces[match.Sync] {
-				if ns == u.Items[i].GetNamespace() {
-					foundExcludedNamespace = true
-				}
-			}
-			if foundExcludedNamespace {
+			if r.configMatchSet.ExcludedNamespaces[match.Sync][u.Items[i].GetNamespace()] {
 				continue
 			}
 

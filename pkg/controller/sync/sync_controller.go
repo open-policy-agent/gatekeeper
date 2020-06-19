@@ -138,15 +138,6 @@ type ReconcileSync struct {
 func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	timeStart := time.Now()
 
-	// namespace is excluded from sync
-	if r.configMatchSet != nil && len(r.configMatchSet.ExcludedNamespaces[match.Sync]) > 0 {
-		for _, ns := range r.configMatchSet.ExcludedNamespaces[match.Sync] {
-			if ns == request.Namespace {
-				return reconcile.Result{}, nil
-			}
-		}
-	}
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
@@ -188,6 +179,16 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
+	}
+
+	// namespace is excluded from sync
+	if r.configMatchSet != nil && len(r.configMatchSet.ExcludedNamespaces[match.Sync]) > 0 {
+		if r.configMatchSet.ExcludedNamespaces[match.Sync][request.Namespace] {
+			// cancel expectations
+			t := r.tracker.For(instance.GroupVersionKind())
+			t.CancelExpect(instance)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {

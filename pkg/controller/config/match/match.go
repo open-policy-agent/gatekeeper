@@ -1,6 +1,8 @@
 package match
 
 import (
+	"sync"
+
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 )
 
@@ -14,7 +16,8 @@ const (
 )
 
 type Set struct {
-	ExcludedNamespaces map[Operation][]string
+	mux                sync.RWMutex
+	ExcludedNamespaces map[Operation]map[string]bool
 }
 
 var allOperations = []Operation{
@@ -24,42 +27,51 @@ var allOperations = []Operation{
 }
 
 var configMapSet = &Set{
-	ExcludedNamespaces: make(map[Operation][]string),
+	ExcludedNamespaces: make(map[Operation]map[string]bool),
 }
 
-func NewSet() *Set {
+func GetSet() *Set {
 	return configMapSet
 }
 
-func (s *Set) Update(entry []configv1alpha1.MatchEntry) {
+func newSet() *Set {
+	return &Set{
+		ExcludedNamespaces: make(map[Operation]map[string]bool),
+	}
+}
+
+func (s *Set) update(entry []configv1alpha1.MatchEntry) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
 	for _, matchEntry := range entry {
 		for _, ns := range matchEntry.ExcludedNamespaces {
 			for _, op := range matchEntry.Operations {
+				// adding excluded namespace to all operations for "*"
 				if Operation(op) == Star {
 					for _, o := range allOperations {
-						if !s.contains(o, ns) {
-							s.ExcludedNamespaces[o] = append(s.ExcludedNamespaces[o], ns)
+						if s.ExcludedNamespaces[o] == nil {
+							s.ExcludedNamespaces[o] = make(map[string]bool)
 						}
+						s.ExcludedNamespaces[o][ns] = true
 					}
 				} else {
-					if !s.contains(Operation(op), ns) {
-						s.ExcludedNamespaces[Operation(op)] = append(s.ExcludedNamespaces[Operation(op)], ns)
+					if s.ExcludedNamespaces[Operation(op)] == nil {
+						s.ExcludedNamespaces[Operation(op)] = make(map[string]bool)
 					}
+					s.ExcludedNamespaces[Operation(op)][ns] = true
 				}
 			}
 		}
 	}
 }
 
-func (s *Set) Reset() {
-	configMapSet.ExcludedNamespaces = make(map[Operation][]string)
-}
+func (s *Set) Replace(entry []configv1alpha1.MatchEntry) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
-func (s *Set) contains(op Operation, val string) bool {
-	for _, item := range s.ExcludedNamespaces[op] {
-		if item == val {
-			return true
-		}
-	}
-	return false
+	newConfigMapSet := newSet()
+	newConfigMapSet.update(entry)
+
+	s.ExcludedNamespaces = newConfigMapSet.ExcludedNamespaces
 }

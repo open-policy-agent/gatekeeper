@@ -231,7 +231,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
-	configMatchSet := match.NewSet()
+	configMatchSet := match.GetSet()
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")

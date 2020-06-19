@@ -169,11 +169,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 	// namespace is excluded from webhook using config match
 	if h.configMatchSet != nil && len(h.configMatchSet.ExcludedNamespaces[match.Webhook]) > 0 {
-		for _, ns := range h.configMatchSet.ExcludedNamespaces[match.Webhook] {
-			if ns == req.AdmissionRequest.Namespace {
-				requestResponse = allowResponse
-				return admission.ValidationResponse(true, "")
-			}
+		if h.configMatchSet.ExcludedNamespaces[match.Webhook][req.AdmissionRequest.Namespace] {
+			requestResponse = allowResponse
+			return admission.ValidationResponse(true, "Namespace is ignored from admission because it is specified in config namespace exclusion")
 		}
 	}
 
