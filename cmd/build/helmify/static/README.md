@@ -2,22 +2,22 @@
 
 ## Parameters
 
-| Parameter                 | Description                                                 | Default                                                                    |
-|:--------------------------|:------------------------------------------------------------|:---------------------------------------------------------------------------|
-| auditInterval             | The frequency with which audit is run                       | `60`                                                                       |
-| constraintViolationsLimit | The maximum # of audit violations reported on a constraint  | `20`                                                                       |
-| auditFromCache            | Take the roster of resources to audit from the OPA cache    | `false`                                                                    |
-| disableValidatingWebhook  | Disable ValidatingWebhook                                   | `false`                                                                    |
-| logLevel                  | Minimum log level                                           | `INFO`                                                                     |
-| image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                             |
-| image.repository          | The Docker image repository                                 | `quay.io/open-policy-agent/gatekeeper`                                     |
-| image.release             | The image release tag to use                                | Current release version: `v3.1.0-beta.9`                                   |
-| resources                 | The resource request/limits for the container image         | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                             |
-| nodeSelector              | The node selector to use for pod scheduling                 | `kubernetes.io/os: linux`                                                  |
-| affinity                  | The node affinity to use for pod scheduling                 | `{}`                                                                       |
-| tolerations               | The tolerations to use for pod scheduling                   | `[]`                                                                       |
-| replicas                  | The number of Gatekeeper replicas to deploy for the webhook | `1`                                                                        |
-| podAnnotations            | The annotations to add to the Gatekeeper pods               | `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default`  |
+| Parameter                 | Description                                                 | Default                                                                   |
+| :------------------------ | :---------------------------------------------------------- | :------------------------------------------------------------------------ |
+| auditInterval             | The frequency with which audit is run                       | `60`                                                                      |
+| constraintViolationsLimit | The maximum # of audit violations reported on a constraint  | `20`                                                                      |
+| auditFromCache            | Take the roster of resources to audit from the OPA cache    | `false`                                                                   |
+| disableValidatingWebhook  | Disable ValidatingWebhook                                   | `false`                                                                   |
+| logLevel                  | Minimum log level                                           | `INFO`                                                                    |
+| image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                            |
+| image.repository          | The Docker image repository                                 | `openpolicyagent/gatekeeper`                                              |
+| image.release             | The image release tag to use                                | Current release version: `v3.1.0-beta.9`                                  |
+| resources                 | The resource request/limits for the container image         | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                            |
+| nodeSelector              | The node selector to use for pod scheduling                 | `kubernetes.io/os: linux`                                                 |
+| affinity                  | The node affinity to use for pod scheduling                 | `{}`                                                                      |
+| tolerations               | The tolerations to use for pod scheduling                   | `[]`                                                                      |
+| replicas                  | The number of Gatekeeper replicas to deploy for the webhook | `1`                                                                       |
+| podAnnotations            | The annotations to add to the Gatekeeper pods               | `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default` |
 
 ## Contributing Changes
 
