@@ -47,16 +47,16 @@ var (
 
 // Manager allows us to audit resources periodically
 type Manager struct {
-	client         client.Client
-	opa            *opa.Client
-	stopper        chan struct{}
-	stopped        chan struct{}
-	mgr            manager.Manager
-	ctx            context.Context
-	ucloop         *updateConstraintLoop
-	reporter       *reporter
-	log            logr.Logger
-	configMatchSet *match.Set
+	client            client.Client
+	opa               *opa.Client
+	stopper           chan struct{}
+	stopped           chan struct{}
+	mgr               manager.Manager
+	ctx               context.Context
+	ucloop            *updateConstraintLoop
+	reporter          *reporter
+	log               logr.Logger
+	operationExcluder *match.Set
 }
 
 type auditResult struct {
@@ -104,7 +104,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, configMatchSet *match.Set) (*Manager, error) {
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, operationExcluder *match.Set) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -112,13 +112,13 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, configMatchS
 	}
 
 	am := &Manager{
-		opa:            opa,
-		stopper:        make(chan struct{}),
-		stopped:        make(chan struct{}),
-		mgr:            mgr,
-		ctx:            ctx,
-		reporter:       reporter,
-		configMatchSet: configMatchSet,
+		opa:               opa,
+		stopper:           make(chan struct{}),
+		stopped:           make(chan struct{}),
+		mgr:               mgr,
+		ctx:               ctx,
+		reporter:          reporter,
+		operationExcluder: operationExcluder,
 	}
 	return am, nil
 }
@@ -251,7 +251,7 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
-				if am.configMatchSet.ExcludedNamespaces[match.Audit][obj.GetNamespace()] {
+				if am.skipExcludedNamespace(obj.GetNamespace()) {
 					continue
 				}
 
@@ -430,6 +430,19 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 		}
 	}
 	return nil
+}
+
+func (am *Manager) skipExcludedNamespace(namespace string) bool {
+	am.operationExcluder.Mux.Lock()
+	defer am.operationExcluder.Mux.Unlock()
+
+	if am.operationExcluder != nil {
+		excludedNS := am.operationExcluder.GetExcludedNamespaces(match.Audit)
+		if len(excludedNS) > 0 {
+			return excludedNS[namespace]
+		}
+	}
+	return false
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {

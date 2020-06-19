@@ -137,9 +137,9 @@ func TestReconcile(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	configMatchSet := match.NewSet()
-	configMatchSet.Update(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, configMatchSet)
+	operationExcluder := match.GetSet()
+	operationExcluder.Replace(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, operationExcluder)
 
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
@@ -181,9 +181,12 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	g.Expect(configMatchSet.ExcludedNamespaces[match.Audit]).Should(gomega.Equal([]string{"foo", "bar"}))
-	g.Expect(configMatchSet.ExcludedNamespaces[match.Sync]).Should(gomega.Equal([]string{"foo"}))
-	g.Expect(configMatchSet.ExcludedNamespaces[match.Webhook]).Should(gomega.Equal([]string{"foo", "bar"}))
+	auditExcludedNS := operationExcluder.GetExcludedNamespaces(match.Audit)
+	g.Expect(auditExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
+	syncExcludedNS := operationExcluder.GetExcludedNamespaces(match.Sync)
+	g.Expect(syncExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true}))
+	webhookExcludedNS := operationExcluder.GetExcludedNamespaces(match.Webhook)
+	g.Expect(webhookExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
 
 	// Test finalizer removal
 
@@ -217,9 +220,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	configMatchSet := match.NewSet()
-	configMatchSet.Update(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, configMatchSet)
+	operationExcluder := match.GetSet()
+	operationExcluder.Replace(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, operationExcluder)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)

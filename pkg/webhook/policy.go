@@ -76,18 +76,18 @@ var (
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, configMatchSet *match.Set) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, operationExcluder *match.Set) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
 	}
 	wh := &admission.Webhook{
 		Handler: &validationHandler{
-			opa:            opa,
-			client:         mgr.GetClient(),
-			reader:         mgr.GetAPIReader(),
-			reporter:       reporter,
-			configMatchSet: configMatchSet,
+			opa:               opa,
+			client:            mgr.GetClient(),
+			reader:            mgr.GetAPIReader(),
+			reporter:          reporter,
+			operationExcluder: operationExcluder,
 		},
 	}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
@@ -104,8 +104,8 @@ type validationHandler struct {
 	// obtained from mgr.GetAPIReader()
 	reader client.Reader
 	// for testing
-	injectedConfig *v1alpha1.Config
-	configMatchSet *match.Set
+	injectedConfig    *v1alpha1.Config
+	operationExcluder *match.Set
 }
 
 type requestResponse string
@@ -168,11 +168,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}()
 
 	// namespace is excluded from webhook using config match
-	if h.configMatchSet != nil && len(h.configMatchSet.ExcludedNamespaces[match.Webhook]) > 0 {
-		if h.configMatchSet.ExcludedNamespaces[match.Webhook][req.AdmissionRequest.Namespace] {
-			requestResponse = allowResponse
-			return admission.ValidationResponse(true, "Namespace is ignored from admission because it is specified in config namespace exclusion")
-		}
+	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) {
+		requestResponse = allowResponse
+		return admission.ValidationResponse(true, "Namespace is ignored from admission because it is specified in config namespace exclusion")
 	}
 
 	resp, err := h.reviewRequest(ctx, req)
@@ -360,4 +358,17 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 	}
 	return resp, err
+}
+
+func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
+	h.operationExcluder.Mux.Lock()
+	defer h.operationExcluder.Mux.Unlock()
+
+	if h.operationExcluder != nil {
+		excludedNS := h.operationExcluder.GetExcludedNamespaces(match.Webhook)
+		if len(excludedNS) > 0 {
+			return excludedNS[namespace]
+		}
+	}
+	return false
 }

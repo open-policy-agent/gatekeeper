@@ -16,8 +16,8 @@ const (
 )
 
 type Set struct {
-	mux                sync.RWMutex
-	ExcludedNamespaces map[Operation]map[string]bool
+	Mux                sync.RWMutex
+	excludedNamespaces map[Operation]map[string]bool
 }
 
 var allOperations = []Operation{
@@ -27,7 +27,7 @@ var allOperations = []Operation{
 }
 
 var configMapSet = &Set{
-	ExcludedNamespaces: make(map[Operation]map[string]bool),
+	excludedNamespaces: make(map[Operation]map[string]bool),
 }
 
 func GetSet() *Set {
@@ -36,13 +36,13 @@ func GetSet() *Set {
 
 func newSet() *Set {
 	return &Set{
-		ExcludedNamespaces: make(map[Operation]map[string]bool),
+		excludedNamespaces: make(map[Operation]map[string]bool),
 	}
 }
 
 func (s *Set) update(entry []configv1alpha1.MatchEntry) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.Mux.RLock()
+	defer s.Mux.RUnlock()
 
 	for _, matchEntry := range entry {
 		for _, ns := range matchEntry.ExcludedNamespaces {
@@ -50,16 +50,16 @@ func (s *Set) update(entry []configv1alpha1.MatchEntry) {
 				// adding excluded namespace to all operations for "*"
 				if Operation(op) == Star {
 					for _, o := range allOperations {
-						if s.ExcludedNamespaces[o] == nil {
-							s.ExcludedNamespaces[o] = make(map[string]bool)
+						if s.excludedNamespaces[o] == nil {
+							s.excludedNamespaces[o] = make(map[string]bool)
 						}
-						s.ExcludedNamespaces[o][ns] = true
+						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
-					if s.ExcludedNamespaces[Operation(op)] == nil {
-						s.ExcludedNamespaces[Operation(op)] = make(map[string]bool)
+					if s.excludedNamespaces[Operation(op)] == nil {
+						s.excludedNamespaces[Operation(op)] = make(map[string]bool)
 					}
-					s.ExcludedNamespaces[Operation(op)][ns] = true
+					s.excludedNamespaces[Operation(op)][ns] = true
 				}
 			}
 		}
@@ -67,11 +67,15 @@ func (s *Set) update(entry []configv1alpha1.MatchEntry) {
 }
 
 func (s *Set) Replace(entry []configv1alpha1.MatchEntry) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.Mux.RLock()
+	defer s.Mux.RUnlock()
 
 	newConfigMapSet := newSet()
 	newConfigMapSet.update(entry)
 
-	s.ExcludedNamespaces = newConfigMapSet.ExcludedNamespaces
+	s.excludedNamespaces = newConfigMapSet.excludedNamespaces
+}
+
+func (s *Set) GetExcludedNamespaces(operation Operation) map[string]bool {
+	return s.excludedNamespaces[operation]
 }

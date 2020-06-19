@@ -38,8 +38,8 @@ type GetPodInjector interface {
 	InjectGetPod(func() (*corev1.Pod, error))
 }
 
-type GetConfigMatchSetInjector interface {
-	InjectConfigMatchSet(configMatchSet *match.Set)
+type GetOperationExcluderInjector interface {
+	InjectOperationExcluder(operationExcluder *match.Set)
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -51,12 +51,12 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	Opa              *opa.Client
-	WatchManger      *watch.Manager
-	ControllerSwitch *watch.ControllerSwitch
-	Tracker          *readiness.Tracker
-	GetPod           func() (*corev1.Pod, error)
-	ConfigMatchSet   *match.Set
+	Opa               *opa.Client
+	WatchManger       *watch.Manager
+	ControllerSwitch  *watch.ControllerSwitch
+	Tracker           *readiness.Tracker
+	GetPod            func() (*corev1.Pod, error)
+	OperationExcluder *match.Set
 }
 
 // AddToManager adds all Controllers to the Manager
@@ -73,8 +73,8 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
-		if a2, ok := a.(GetConfigMatchSetInjector); ok {
-			a2.InjectConfigMatchSet(deps.ConfigMatchSet)
+		if a2, ok := a.(GetOperationExcluderInjector); ok {
+			a2.InjectOperationExcluder(deps.OperationExcluder)
 		}
 		if err := a.Add(m); err != nil {
 			return err

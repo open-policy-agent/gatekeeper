@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -102,13 +103,16 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
 
+	operationExcluder := match.GetSet()
+
 	// Setup all Controllers
 	opts := controller.Dependencies{
-		Opa:              opa,
-		WatchManger:      wm,
-		ControllerSwitch: sw,
-		Tracker:          tracker,
-		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
+		Opa:               opa,
+		WatchManger:       wm,
+		ControllerSwitch:  sw,
+		Tracker:           tracker,
+		GetPod:            func() (*corev1.Pod, error) { return pod, nil },
+		OperationExcluder: operationExcluder,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
