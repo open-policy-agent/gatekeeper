@@ -61,7 +61,7 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 	```
 
 1. Pushing the release tag will trigger GitHub Actions to trigger `tagged-release` job.
-This will build the `quay.io/open-policy-agent/gatekeeper` image automatically, Then publish the new release image tag and the `latest` image tag to the `quay.io/open-policy-agent/gatekeeper` repository. Finally, verify step will run e2e tests to verify the new released tag.
+This will build the `openpolicyagent/gatekeeper` image automatically, Then publish the new release image tag and the `latest` image tag to the `openpolicyagent/gatekeeper` repository. Finally, verify step will run e2e tests to verify the new released tag.
 
 ## Publishing
 

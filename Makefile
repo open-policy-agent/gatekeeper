@@ -1,6 +1,5 @@
 # Image URL to use all building/pushing image targets
-REGISTRY ?= quay.io
-REPOSITORY ?= $(REGISTRY)/open-policy-agent/gatekeeper
+REPOSITORY ?= openpolicyagent/gatekeeper
 
 IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
