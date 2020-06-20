@@ -8,6 +8,22 @@ image:
   repository: openpolicyagent/gatekeeper
   release: v3.1.0-beta.9
   pullPolicy: IfNotPresent
+metricsAudit:
+  enabled: false
+  serviceMonitor:
+    enabled: true
+    honorLabels: true
+    interval: 15s
+    path: /metrics
+    scrapeTimeout: 10s
+metricsWebhook:
+  enabled: false
+  serviceMonitor:
+    enabled: true
+    honorLabels: true
+    interval: 15s
+    path: /metrics
+    scrapeTimeout: 10s
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}
 tolerations: []

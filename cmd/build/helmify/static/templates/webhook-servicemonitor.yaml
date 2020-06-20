@@ -1,0 +1,20 @@
+{{- if and (.Values.metricsWebhook.enabled) (.Values.metricsWebhook.serviceMonitor) }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gatekeeper-webhook
+spec:
+  endpoints:
+    - honorLabels: {{ .Values.metricsWebhook.serviceMonitor.honorLabels }}
+      interval: {{ .Values.metricsWebhook.serviceMonitor.interval }}
+      path: {{ .Values.metricsWebhook.serviceMonitor.path }}
+      port: webhook-metrics
+      scrapeTimeout: {{ .Values.metricsWebhook.serviceMonitor.scrapeTimeout }}
+  namespaceSelector:
+    matchNames:
+      - gatekeeper-system
+  selector:
+    matchLabels:
+      gatekeeper.sh/system: "yes"
+      gatekeeper.sh/operation: "webhook"
+{{- end }}

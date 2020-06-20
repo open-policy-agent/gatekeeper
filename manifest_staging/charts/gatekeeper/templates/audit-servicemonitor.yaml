@@ -1,0 +1,20 @@
+{{- if and (.Values.metricsAudit.enabled) (.Values.metricsAudit.serviceMonitor.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gatekeeper-audit
+spec:
+  endpoints:
+    - honorLabels: {{ .Values.metricsAudit.serviceMonitor.honorLabels }}
+      interval: {{ .Values.metricsAudit.serviceMonitor.interval }}
+      path: {{ .Values.metricsAudit.serviceMonitor.path }}
+      port: audit-metrics
+      scrapeTimeout: {{ .Values.metricsAudit.serviceMonitor.scrapeTimeout }}
+  namespaceSelector:
+    matchNames:
+      - gatekeeper-system
+  selector:
+    matchLabels:
+      gatekeeper.sh/system: "yes"
+      gatekeeper.sh/operation: "audit"
+{{- end }}

@@ -1,0 +1,19 @@
+{{- if (.Values.metricsWebhook.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+    gatekeeper.sh/operation: "webhook"
+  name: gatekeeper-webhook-metrics-service
+  namespace: gatekeeper-system
+spec:
+  ports:
+  - port: 8888
+    name: webhook-metrics
+    targetPort: 8888
+  selector:
+    control-plane: controller-manager
+    gatekeeper.sh/operation: webhook
+    gatekeeper.sh/system: "yes"
+{{- end }}
