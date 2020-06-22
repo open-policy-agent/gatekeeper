@@ -233,6 +233,7 @@ type ReconcileConstraintTemplate struct {
 
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/finalizers,verbs=get;update;patch;delete
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
@@ -507,8 +508,8 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 
 	cstrStatusObjs := &statusv1beta1.ConstraintPodStatusList{}
 	if err := r.List(context.TODO(), cstrStatusObjs, client.MatchingLabels(map[string]string{
-		statusv1beta1.PodLabel:                   util.GetPodName(),
-		statusv1beta1.ConstraintTemplateMapLabel: ctName,
+		statusv1beta1.PodLabel:                    util.GetPodName(),
+		statusv1beta1.ConstraintTemplateNameLabel: ctName,
 	})); err != nil {
 		return err
 	}
