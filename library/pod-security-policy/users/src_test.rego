@@ -123,7 +123,7 @@ test_user_two_containers_run_in_range_one_in_range {
   results := violation with input as input
   count(results) == 1
 }
-test_user_two_containers_run_in_range_neither_in_range {
+test_user_two_containers_run_in_range_neither_in_range_two_ranges {
   input := {
     "review": review(null, [ctr("cont1", runAsUser(150)), ctr("cont2", runAsUser(130))], null),
     "parameters": user_mustrunas_two_ranges
@@ -276,7 +276,7 @@ test_group_two_containers_run_in_range_one_in_range {
   results := violation with input as input
   count(results) == 1
 }
-test_group_two_containers_run_in_range_neither_in_range {
+test_group_two_containers_run_in_range_neither_in_range_two_ranges {
   input := {
     "review": review(null, [ctr("cont1", runAsGroup(150)), ctr("cont2", runAsGroup(130))], null),
     "parameters": group_mustrunas_two_ranges
@@ -383,7 +383,7 @@ test_group_one_container_run_in_range_user_between_ranges_mayrun {
   results := violation with input as input
   count(results) == 1
 }
-test_group_two_containers_run_in_range_neither_in_range_mayrun {
+test_group_two_containers_run_in_range_neither_in_range_two_ranges_mayrun {
   input := {
     "review": review(null, [ctr("cont1", runAsGroup(150)), ctr("cont2", runAsGroup(130))], null),
     "parameters": group_mayrunas_two_ranges
@@ -405,44 +405,9 @@ test_group_one_container_pod_defined_run_in_range_container_overrides_user_not_i
 
 
 ## supplementalGroups ##
-test_supplemental_one_container_run_as_rule_any {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(12))], null), "parameters": supplemental_runasany }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_as_rule_any_root_user {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(0))], null), "parameters": supplemental_runasany }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_in_range_user_in_range {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(150))], null), "parameters": supplemental_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_in_range_user_out_of_range {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(10))], null), "parameters": supplemental_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 1
-}
-test_supplemental_one_container_run_in_range_user_lower_edge_of_range {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(100))], null), "parameters": supplemental_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_in_range_user_upper_edge_of_range {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(200))], null), "parameters": supplemental_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_in_range_user_between_ranges {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(200))], null), "parameters": supplemental_mustrunas_two_ranges }
-  results := violation with input as input
-  count(results) == 1
-}
 test_supplemental_two_containers_run_as_rule_any {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(1)), ctr("cont2", supplementalGroups(100))], null),
+    "review": review(supplementalGroups([15]), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": supplemental_runasany
   }
   results := violation with input as input
@@ -450,23 +415,15 @@ test_supplemental_two_containers_run_as_rule_any {
 }
 test_supplemental_two_containers_run_in_range_both_in_range {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150)), ctr("cont2", supplementalGroups(103))], null),
+    "review": review(supplementalGroups([150]), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": supplemental_mustrunas_100_200
   }
   results := violation with input as input
   count(results) == 0
 }
-test_supplemental_two_containers_run_in_range_one_in_range {
+test_supplemental_two_containers_run_in_range_neither_in_range_two_ranges {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150)), ctr("cont2", supplementalGroups(13))], null),
-    "parameters": supplemental_mustrunas_100_200
-  }
-  results := violation with input as input
-  count(results) == 1
-}
-test_supplemental_two_containers_run_in_range_neither_in_range {
-  input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150)), ctr("cont2", supplementalGroups(130))], null),
+    "review": review(supplementalGroups([150]), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": supplemental_mustrunas_two_ranges
   }
   results := violation with input as input
@@ -474,7 +431,7 @@ test_supplemental_two_containers_run_in_range_neither_in_range {
 }
 test_supplemental_one_container_one_initcontainer_run_in_range_user_in_range {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150))], [ctr("init1", supplementalGroups(150))]),
+    "review": review(supplementalGroups([150]), [ctr("cont1", null)], [ctr("init1", null)]),
     "parameters": supplemental_mustrunas_100_200
   }
   results := violation with input as input
@@ -482,11 +439,11 @@ test_supplemental_one_container_one_initcontainer_run_in_range_user_in_range {
 }
 test_supplemental_one_container_one_initcontainer_run_in_range_user_not_in_range {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150))], [ctr("init1", supplementalGroups(250))]),
+    "review": review(supplementalGroups([250]), [ctr("cont1", null)], [ctr("init1", null)]),
     "parameters": supplemental_mustrunas_100_200
   }
   results := violation with input as input
-  count(results) == 1
+  count(results) == 2
 }
 test_supplemental_one_container_empty_security_context {
   input := { "review": review(null, [ctr("cont1", {})], null), "parameters": supplemental_mustrunas_100_200 }
@@ -514,37 +471,29 @@ test_supplemental_one_container_no_security_context_no_pod_security_context {
   count(results) == 1
 }
 test_supplemental_one_container_pod_defined_null_container_run_in_range_user_in_range {
-  input := { "review": review(supplementalGroups(150), [ctr("cont1", null)], null), "parameters": supplemental_mustrunas_100_200}
+  input := { "review": review(supplementalGroups([150]), [ctr("cont1", null)], null), "parameters": supplemental_mustrunas_100_200}
   results := violation with input as input
   count(results) == 0
 }
 test_supplemental_one_container_pod_defined_run_in_range_user_in_range {
-  input := { "review": review(supplementalGroups(150), [ctr("cont1", {})], null), "parameters": supplemental_mustrunas_100_200}
+  input := { "review": review(supplementalGroups([150]), [ctr("cont1", {})], null), "parameters": supplemental_mustrunas_100_200}
   results := violation with input as input
   count(results) == 0
 }
 test_supplemental_one_container_pod_defined_run_in_range_user_not_in_range {
-  input := { "review": review(supplementalGroups(250), [ctr("cont1", {})], null), "parameters": supplemental_mustrunas_100_200 }
+  input := { "review": review(supplementalGroups([250]), [ctr("cont1", {})], null), "parameters": supplemental_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 1
 }
 test_supplemental_one_container_pod_defined_run_in_range_container_overrides_user_in_range {
-  input := { "review": review(supplementalGroups(250), [ctr("cont1", supplementalGroups(150))], null), "parameters": supplemental_mustrunas_100_200 }
+  input := { "review": review(supplementalGroups([250]), [ctr("cont1", supplementalGroups(150))], null), "parameters": supplemental_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 0
 }
 test_supplemental_one_container_pod_defined_run_in_range_container_overrides_user_not_in_range {
-  input := { "review": review(supplementalGroups(150), [ctr("cont1", supplementalGroups(250))], null), "parameters": supplemental_mustrunas_100_200 }
+  input := { "review": review(supplementalGroups([150]), [ctr("cont1", supplementalGroups(250))], null), "parameters": supplemental_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 1
-}
-test_supplemental_input_container_run_as_rule_any_ignore_ranges {
-  input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(10))], null),
-    "parameters": supplementalGroups(rule("RunAsAny", [range(100, 200)]))
-  }
-  results := violation with input as input
-  count(results) == 0
 }
 test_supplemental_one_container_empty_security_context_mayrun {
   input := { "review": review(null, [ctr("cont1", {})], null), "parameters": supplemental_mayrunas_100_200 }
@@ -556,36 +505,34 @@ test_supplemental_one_container_no_security_context_mayrun {
   results := violation with input as input
   count(results) == 0
 }
-test_supplemental_one_container_run_in_range_user_in_range_mayrun {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(150))], null), "parameters": supplemental_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_supplemental_one_container_run_in_range_user_out_of_range_mayrun {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(10))], null), "parameters": supplemental_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 1
-}
-test_supplemental_one_container_run_in_range_user_between_ranges_mayrun {
-  input := { "review": review(null, [ctr("cont1", supplementalGroups(200))], null), "parameters": supplemental_mayrunas_two_ranges }
-  results := violation with input as input
-  count(results) == 1
-}
 test_supplemental_two_containers_run_in_range_neither_in_range_mayrun {
   input := {
-    "review": review(null, [ctr("cont1", supplementalGroups(150)), ctr("cont2", supplementalGroups(130))], null),
+    "review": review(supplementalGroups([230]), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": supplemental_mayrunas_two_ranges
   }
   results := violation with input as input
   count(results) == 2
 }
-test_supplemental_one_container_pod_defined_run_in_range_container_overrides_user_in_range_mayrun {
-  input := { "review": review(supplementalGroups(250), [ctr("cont1", supplementalGroups(150))], null), "parameters": supplemental_mayrunas_100_200 }
+test_supplemental_two_containers_run_in_range_both_in_range_mayrun {
+  input := {
+    "review": review(supplementalGroups([100]), [ctr("cont1", null), ctr("cont2", null)], null),
+    "parameters": supplemental_mayrunas_two_ranges
+  }
   results := violation with input as input
   count(results) == 0
 }
-test_supplemental_one_container_pod_defined_run_in_range_container_overrides_user_not_in_range_mayrun {
-  input := { "review": review(supplementalGroups(150), [ctr("cont1", supplementalGroups(250))], null), "parameters": supplemental_mayrunas_100_200 }
+test_supplemental_one_container_run_in_range_two_ranges_both_in_range {
+  input := { "review": review(supplementalGroups([120, 180]), [ctr("cont1", null)], null), "parameters": supplemental_mustrunas_100_200}
+  results := violation with input as input
+  count(results) == 0
+}
+test_supplemental_one_container_run_in_range_two_ranges_none_in_range {
+  input := { "review": review(supplementalGroups([120, 180]), [ctr("cont1", null)], null), "parameters": supplemental_mustrunas_100_200}
+  results := violation with input as input
+  count(results) == 0
+}
+test_supplemental_one_container_run_in_range_two_ranges_one_in_range {
+  input := { "review": review(supplementalGroups([150, 250]), [ctr("cont1", null)], null), "parameters": supplemental_mustrunas_100_200}
   results := violation with input as input
   count(results) == 1
 }
@@ -593,44 +540,9 @@ test_supplemental_one_container_pod_defined_run_in_range_container_overrides_use
 
 
 ## fsGroup ##
-test_fsgroup_one_container_run_as_rule_any {
-  input := { "review": review(null, [ctr("cont1", fsGroup(12))], null), "parameters": fsgroup_runasany }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_as_rule_any_root_user {
-  input := { "review": review(null, [ctr("cont1", fsGroup(0))], null), "parameters": fsgroup_runasany }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_in_range_user_in_range {
-  input := { "review": review(null, [ctr("cont1", fsGroup(150))], null), "parameters": fsgroup_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_in_range_user_out_of_range {
-  input := { "review": review(null, [ctr("cont1", fsGroup(10))], null), "parameters": fsgroup_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 1
-}
-test_fsgroup_one_container_run_in_range_user_lower_edge_of_range {
-  input := { "review": review(null, [ctr("cont1", fsGroup(100))], null), "parameters": fsgroup_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_in_range_user_upper_edge_of_range {
-  input := { "review": review(null, [ctr("cont1", fsGroup(200))], null), "parameters": fsgroup_mustrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_in_range_user_between_ranges {
-  input := { "review": review(null, [ctr("cont1", fsGroup(200))], null), "parameters": supplemental_mustrunas_two_ranges }
-  results := violation with input as input
-  count(results) == 1
-}
 test_fsgroup_two_containers_run_as_rule_any {
   input := {
-    "review": review(null, [ctr("cont1", fsGroup(1)), ctr("cont2", fsGroup(100))], null),
+    "review": review(fsGroup(15), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": fsgroup_runasany
   }
   results := violation with input as input
@@ -638,31 +550,23 @@ test_fsgroup_two_containers_run_as_rule_any {
 }
 test_fsgroup_two_containers_run_in_range_both_in_range {
   input := {
-    "review": review(null, [ctr("cont1", fsGroup(150)), ctr("cont2", fsGroup(103))], null),
+    "review": review(fsGroup(150), [ctr("cont1", null), ctr("cont2", null)], null),
     "parameters": fsgroup_mustrunas_100_200
   }
   results := violation with input as input
   count(results) == 0
 }
-test_fsgroup_two_containers_run_in_range_one_in_range {
+test_fsgroup_two_containers_run_in_range_neither_in_range_two_ranges {
   input := {
-    "review": review(null, [ctr("cont1", fsGroup(150)), ctr("cont2", fsGroup(13))], null),
-    "parameters": fsgroup_mustrunas_100_200
-  }
-  results := violation with input as input
-  count(results) == 1
-}
-test_fsgroup_two_containers_run_in_range_neither_in_range {
-  input := {
-    "review": review(null, [ctr("cont1", fsGroup(150)), ctr("cont2", fsGroup(130))], null),
-    "parameters": supplemental_mustrunas_two_ranges
+    "review": review(fsGroup(150), [ctr("cont1", null), ctr("cont2", null)], null),
+    "parameters": fsgroup_mustrunas_two_ranges
   }
   results := violation with input as input
   count(results) == 2
 }
 test_fsgroup_one_container_one_initcontainer_run_in_range_user_in_range {
   input := {
-    "review": review(null, [ctr("cont1", fsGroup(150))], [ctr("init1", fsGroup(150))]),
+    "review": review(fsGroup(150), [ctr("cont1", null)], [ctr("init1", null)]),
     "parameters": fsgroup_mustrunas_100_200
   }
   results := violation with input as input
@@ -670,7 +574,7 @@ test_fsgroup_one_container_one_initcontainer_run_in_range_user_in_range {
 }
 test_fsgroup_one_container_one_initcontainer_run_in_range_user_not_in_range {
   input := {
-    "review": review(null, [ctr("cont1", fsGroup(150))], [ctr("init1", fsGroup(250))]),
+    "review": review(fsGroup(250), null, [ctr("init1", null)]),
     "parameters": fsgroup_mustrunas_100_200
   }
   results := violation with input as input
@@ -744,133 +648,103 @@ test_fsgroup_one_container_no_security_context_mayrun {
   results := violation with input as input
   count(results) == 0
 }
-test_fsgroup_one_container_run_in_range_user_in_range_mayrun {
-  input := { "review": review(null, [ctr("cont1", fsGroup(150))], null), "parameters": fsgroup_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_run_in_range_user_out_of_range_mayrun {
-  input := { "review": review(null, [ctr("cont1", fsGroup(10))], null), "parameters": fsgroup_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 1
-}
-test_fsgroup_one_container_run_in_range_user_between_ranges_mayrun {
-  input := { "review": review(null, [ctr("cont1", fsGroup(200))], null), "parameters": fsgroup_mayrunas_two_ranges }
-  results := violation with input as input
-  count(results) == 1
-}
-test_fsgroup_two_containers_run_in_range_neither_in_range_mayrun {
-  input := {
-    "review": review(null, [ctr("cont1", fsGroup(150)), ctr("cont2", fsGroup(130))], null),
-    "parameters": fsgroup_mayrunas_two_ranges
-  }
-  results := violation with input as input
-  count(results) == 2
-}
-test_fsgroup_one_container_pod_defined_run_in_range_container_overrides_user_in_range_mayrun {
-  input := { "review": review(fsGroup(250), [ctr("cont1", fsGroup(150))], null), "parameters": fsgroup_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 0
-}
-test_fsgroup_one_container_pod_defined_run_in_range_container_overrides_user_not_in_range_mayrun {
-  input := { "review": review(fsGroup(150), [ctr("cont1", fsGroup(250))], null), "parameters": fsgroup_mayrunas_100_200 }
-  results := violation with input as input
-  count(results) == 1
-}
-
 
 
 
 ## Mixed Functionality ##
 test_mixed_runAsAny_all_non_root {
-  input := {"review": review(run_as_rule(12, 30, 50, 101), [ctr("cont1", null)], null), "parameters": mixed_runasany }
+  input := {"review": review(run_as_rule(12, 30, [50], 101), [ctr("cont1", null)], null), "parameters": mixed_runasany }
   results := violation with input as input
   count(results) == 0
 }
 test_mixed_runAsAny_all_root {
-  input := {"review": review(run_as_rule(0, 0, 0, 0), [ctr("cont1", null)], null), "parameters": mixed_runasany }
+  input := {"review": review(run_as_rule(0, 0, [0], 0), [ctr("cont1", null)], null), "parameters": mixed_runasany }
   results := violation with input as input
   count(results) == 0
 }
 test_mixed_pod_level_all_defined_all_in_range_mustrun {
-  input := {"review": review(run_as_rule(150, 150, 150, 150), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(run_as_rule(150, 150, [150], 150), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 0
 }
 test_mixed_pod_level_all_defined_none_in_range_mustrun {
-  input := {"review": review(run_as_rule(250, 250, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(run_as_rule(250, 250, [250], 250), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 4
 }
 test_mixed_pod_level_all_defined_mixed_in_range_mustrun {
-  input := {"review": review(run_as_rule(150, 150, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(run_as_rule(150, 150, [250], 250), [ctr("cont1", null)], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 2
 }
 test_mixed_container_level_all_defined_all_in_range_mustrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 150, 150))], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, [150], 150))], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 0
 }
 test_mixed_container_level_all_defined_none_in_range_mustrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(250, 250, 250, 250))], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(250, 250, [250], 250))], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 4
 }
 test_mixed_container_level_all_defined_mixed_in_range_mustrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 250, 250))], null), "parameters": mixed_mustrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, [250], 250))], null), "parameters": mixed_mustrunas_100_200 }
   results := violation with input as input
   count(results) == 2
 }
 test_mixed_pod_level_all_defined_none_in_range_mayrun {
-  input := {"review": review(run_as_rule(250, 250, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_mayrunas_100_200 }
+  input := {"review": review(run_as_rule(250, 250, [250], 250), [ctr("cont1", null)], null), "parameters": mixed_mayrunas_100_200 }
   results := violation with input as input
   count(results) == 3
 }
 test_mixed_pod_level_all_defined_mixed_in_range_mayrun {
-  input := {"review": review(run_as_rule(150, 150, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_mayrunas_100_200 }
+  input := {"review": review(run_as_rule(150, 150, [250], 250), [ctr("cont1", null)], null), "parameters": mixed_mayrunas_100_200 }
   results := violation with input as input
   count(results) == 2
 }
 test_mixed_container_level_all_defined_all_in_range_mayrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 150, 150))], null), "parameters": mixed_mayrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, null, null))], null), "parameters": mixed_mayrunas_100_200 }
   results := violation with input as input
   count(results) == 0
 }
 test_mixed_container_level_all_defined_none_in_range_mayrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(250, 250, 250, 250))], null), "parameters": mixed_mayrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(250, 250, null, null))], null), "parameters": mixed_mayrunas_100_200 }
   results := violation with input as input
-  count(results) == 3
+  count(results) == 1
 }
 test_mixed_container_level_all_defined_mixed_in_range_mayrun {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 250, 250))], null), "parameters": mixed_mayrunas_100_200 }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 250, null, null))], null), "parameters": mixed_mayrunas_100_200 }
   results := violation with input as input
-  count(results) == 2
+  count(results) == 1
 }
 test_mixed_pod_level_all_defined_none_in_range_mixed_rules {
   input := {"review": review(run_as_rule(0, 0, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_all_rules }
   results := violation with input as input
   count(results) == 3
 }
+# violation from  MustRunAs SupplementalGroups and MayRunAs FSGroup, range within 100&200
 test_mixed_pod_level_all_defined_mixed_in_range_mixed_rules {
   input := {"review": review(run_as_rule(150, 150, 250, 250), [ctr("cont1", null)], null), "parameters": mixed_all_rules }
   results := violation with input as input
   count(results) == 2
 }
+# violation from no MustRunAs SupplementalGroups defined (can't define on container level)
 test_mixed_container_level_all_defined_all_in_range_mixed_rules {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 150, 150))], null), "parameters": mixed_all_rules }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, null, null))], null), "parameters": mixed_all_rules }
   results := violation with input as input
-  count(results) == 0
+  count(results) == 1
 }
+# violation from MustRunAsNonRoot RunAsUser rule, and no MustRunAs SupplementalGroups defined (can't define on container level)
 test_mixed_container_level_all_defined_none_in_range_mixed_rules {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(0, 0, 250, 250))], null), "parameters": mixed_all_rules }
-  results := violation with input as input
-  count(results) == 3
-}
-test_mixed_container_level_all_defined_mixed_in_range_mixed_rules {
-  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, 250, 250))], null), "parameters": mixed_all_rules }
+  input := {"review": review(null, [ctr("cont1", run_as_rule(0, 0, null, null))], null), "parameters": mixed_all_rules }
   results := violation with input as input
   count(results) == 2
+}
+# violation from no MustRunAs SupplementalGroups defined (can't define on container level)
+test_mixed_container_level_all_defined_mixed_in_range_mixed_rules {
+  input := {"review": review(null, [ctr("cont1", run_as_rule(150, 150, null, null))], null), "parameters": mixed_all_rules }
+  results := violation with input as input
+  count(results) == 1
 }
 
 

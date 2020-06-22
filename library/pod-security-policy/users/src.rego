@@ -46,8 +46,17 @@ accept_users("MustRunAs", provided_user) = res  {
 get_violation(field, params, container) = msg {
   rule := params.rule
   provided_value := get_field_value(field, container, input.review)
+  not is_array(provided_value)
   not accept_value(rule, provided_value, params.ranges)
   msg := sprintf("Container %v is attempting to run as disallowed group %v. Allowed %v: %v", [container.name, provided_value, field, params])
+}
+# SupplementalGroups is array value
+get_violation(field, params, container) = msg {
+  rule := params.rule
+  array_value := get_field_value(field, container, input.review)
+  provided_value := array_value[_]
+  not accept_value(rule, provided_value, params.ranges)
+  msg := sprintf("Container %v is attempting to run with disallowed supplementalGroups %v. Allowed %v: %v", [container.name, array_value, field, params])
 }
 
 get_violation(field, params, container) = msg {
