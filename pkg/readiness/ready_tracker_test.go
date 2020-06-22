@@ -103,16 +103,16 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
 
-	operationExcluder := match.GetSet()
+	processExcluder := match.GetSet()
 
 	// Setup all Controllers
 	opts := controller.Dependencies{
-		Opa:               opa,
-		WatchManger:       wm,
-		ControllerSwitch:  sw,
-		Tracker:           tracker,
-		GetPod:            func() (*corev1.Pod, error) { return pod, nil },
-		OperationExcluder: operationExcluder,
+		Opa:              opa,
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
+		ProcessExcluder:  processExcluder,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)

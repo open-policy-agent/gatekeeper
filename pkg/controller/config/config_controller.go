@@ -53,17 +53,17 @@ const (
 var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 
 type Adder struct {
-	Opa               *opa.Client
-	WatchManager      *watch.Manager
-	ControllerSwitch  *watch.ControllerSwitch
-	Tracker           *readiness.Tracker
-	OperationExcluder *match.Set
+	Opa              *opa.Client
+	WatchManager     *watch.Manager
+	ControllerSwitch *watch.ControllerSwitch
+	Tracker          *readiness.Tracker
+	ProcessExcluder  *match.Set
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.OperationExcluder)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder)
 	if err != nil {
 		return err
 	}
@@ -87,12 +87,12 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-func (a *Adder) InjectOperationExcluder(m *match.Set) {
-	a.OperationExcluder = m
+func (a *Adder) InjectProcessExcluder(m *match.Set) {
+	a.ProcessExcluder = m
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, operationExcluder *match.Set) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *match.Set) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
@@ -101,11 +101,11 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
 	syncAdder := syncc.Adder{
-		Opa:               filteredOpa,
-		Events:            events,
-		MetricsCache:      syncMetricsCache,
-		Tracker:           tracker,
-		OperationExcluder: operationExcluder,
+		Opa:             filteredOpa,
+		Events:          events,
+		MetricsCache:    syncMetricsCache,
+		Tracker:         tracker,
+		ProcessExcluder: processExcluder,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
@@ -119,17 +119,17 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 		return nil, err
 	}
 	return &ReconcileConfig{
-		reader:            mgr.GetCache(),
-		writer:            mgr.GetClient(),
-		statusClient:      mgr.GetClient(),
-		scheme:            mgr.GetScheme(),
-		opa:               filteredOpa,
-		cs:                cs,
-		watcher:           w,
-		watched:           watchSet,
-		syncMetricsCache:  syncMetricsCache,
-		tracker:           tracker,
-		operationExcluder: operationExcluder,
+		reader:           mgr.GetCache(),
+		writer:           mgr.GetClient(),
+		statusClient:     mgr.GetClient(),
+		scheme:           mgr.GetScheme(),
+		opa:              filteredOpa,
+		cs:               cs,
+		watcher:          w,
+		watched:          watchSet,
+		syncMetricsCache: syncMetricsCache,
+		tracker:          tracker,
+		processExcluder:  processExcluder,
 	}, nil
 }
 
@@ -158,14 +158,14 @@ type ReconcileConfig struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	scheme            *runtime.Scheme
-	opa               syncc.OpaDataClient
-	syncMetricsCache  *syncc.MetricsCache
-	cs                *watch.ControllerSwitch
-	watcher           *watch.Registrar
-	watched           *watch.Set
-	tracker           *readiness.Tracker
-	operationExcluder *match.Set
+	scheme           *runtime.Scheme
+	opa              syncc.OpaDataClient
+	syncMetricsCache *syncc.MetricsCache
+	cs               *watch.ControllerSwitch
+	watcher          *watch.Registrar
+	watched          *watch.Set
+	tracker          *readiness.Tracker
+	processExcluder  *match.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -225,7 +225,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 			newSyncOnly.Add(gvk)
 		}
 
-		r.operationExcluder.Replace(instance.Spec.Match)
+		r.processExcluder.Replace(instance.Spec.Match)
 	}
 
 	// Remove expectations for resources we no longer watch.
@@ -268,7 +268,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
 
-	r.operationExcluder.Replace(instance.Spec.Match)
+	r.processExcluder.Replace(instance.Spec.Match)
 
 	return reconcile.Result{}, nil
 }
@@ -322,14 +322,9 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 }
 
 func (r *ReconcileConfig) skipExcludedNamespace(namespace string) bool {
-	r.operationExcluder.Mux.Lock()
-	defer r.operationExcluder.Mux.Unlock()
-
-	if r.operationExcluder != nil {
-		excludedNS := r.operationExcluder.GetExcludedNamespaces(match.Sync)
-		if len(excludedNS) > 0 {
-			return excludedNS[namespace]
-		}
+	if r.processExcluder != nil {
+		excludedNS := r.processExcluder.GetExcludedNamespaces(match.Sync)
+		return excludedNS[namespace]
 	}
 	return false
 }

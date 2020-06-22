@@ -6,28 +6,28 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 )
 
-type Operation string
+type Process string
 
 const (
-	Audit   = Operation("audit")
-	Sync    = Operation("sync")
-	Webhook = Operation("webhook")
-	Star    = Operation("*")
+	Audit   = Process("audit")
+	Sync    = Process("sync")
+	Webhook = Process("webhook")
+	Star    = Process("*")
 )
 
 type Set struct {
 	Mux                sync.RWMutex
-	excludedNamespaces map[Operation]map[string]bool
+	excludedNamespaces map[Process]map[string]bool
 }
 
-var allOperations = []Operation{
+var allProcesses = []Process{
 	Audit,
 	Webhook,
 	Sync,
 }
 
 var configMapSet = &Set{
-	excludedNamespaces: make(map[Operation]map[string]bool),
+	excludedNamespaces: make(map[Process]map[string]bool),
 }
 
 func GetSet() *Set {
@@ -36,7 +36,7 @@ func GetSet() *Set {
 
 func newSet() *Set {
 	return &Set{
-		excludedNamespaces: make(map[Operation]map[string]bool),
+		excludedNamespaces: make(map[Process]map[string]bool),
 	}
 }
 
@@ -48,18 +48,18 @@ func (s *Set) update(entry []configv1alpha1.MatchEntry) {
 		for _, ns := range matchEntry.ExcludedNamespaces {
 			for _, op := range matchEntry.Operations {
 				// adding excluded namespace to all operations for "*"
-				if Operation(op) == Star {
-					for _, o := range allOperations {
+				if Process(op) == Star {
+					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
 							s.excludedNamespaces[o] = make(map[string]bool)
 						}
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
-					if s.excludedNamespaces[Operation(op)] == nil {
-						s.excludedNamespaces[Operation(op)] = make(map[string]bool)
+					if s.excludedNamespaces[Process(op)] == nil {
+						s.excludedNamespaces[Process(op)] = make(map[string]bool)
 					}
-					s.excludedNamespaces[Operation(op)][ns] = true
+					s.excludedNamespaces[Process(op)][ns] = true
 				}
 			}
 		}
@@ -76,6 +76,14 @@ func (s *Set) Replace(entry []configv1alpha1.MatchEntry) {
 	s.excludedNamespaces = newConfigMapSet.excludedNamespaces
 }
 
-func (s *Set) GetExcludedNamespaces(operation Operation) map[string]bool {
-	return s.excludedNamespaces[operation]
+func (s *Set) GetExcludedNamespaces(process Process) map[string]bool {
+	s.Mux.RLock()
+	defer s.Mux.RUnlock()
+
+	out := make(map[string]bool)
+	for k, v := range s.excludedNamespaces[process] {
+		out[k] = v
+	}
+
+	return out
 }

@@ -231,17 +231,17 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
-	// operationExcluder is used for namespace exclusion for specified operations in config
-	operationExcluder := match.GetSet()
+	// processExcluder is used for namespace exclusion for specified operations in config
+	processExcluder := match.GetSet()
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
 	opts := controller.Dependencies{
-		Opa:               client,
-		WatchManger:       wm,
-		ControllerSwitch:  sw,
-		Tracker:           tracker,
-		OperationExcluder: operationExcluder,
+		Opa:              client,
+		WatchManger:      wm,
+		ControllerSwitch: sw,
+		Tracker:          tracker,
+		ProcessExcluder:  processExcluder,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
@@ -250,14 +250,14 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, operationExcluder); err != nil {
+		if err := webhook.AddToManager(mgr, client, processExcluder); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}
 	}
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		if err := audit.AddToManager(mgr, client, operationExcluder); err != nil {
+		if err := audit.AddToManager(mgr, client, processExcluder); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

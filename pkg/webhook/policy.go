@@ -76,18 +76,18 @@ var (
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, operationExcluder *match.Set) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *match.Set) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
 	}
 	wh := &admission.Webhook{
 		Handler: &validationHandler{
-			opa:               opa,
-			client:            mgr.GetClient(),
-			reader:            mgr.GetAPIReader(),
-			reporter:          reporter,
-			operationExcluder: operationExcluder,
+			opa:             opa,
+			client:          mgr.GetClient(),
+			reader:          mgr.GetAPIReader(),
+			reporter:        reporter,
+			processExcluder: processExcluder,
 		},
 	}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
@@ -104,8 +104,8 @@ type validationHandler struct {
 	// obtained from mgr.GetAPIReader()
 	reader client.Reader
 	// for testing
-	injectedConfig    *v1alpha1.Config
-	operationExcluder *match.Set
+	injectedConfig  *v1alpha1.Config
+	processExcluder *match.Set
 }
 
 type requestResponse string
@@ -361,14 +361,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 }
 
 func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
-	h.operationExcluder.Mux.Lock()
-	defer h.operationExcluder.Mux.Unlock()
-
-	if h.operationExcluder != nil {
-		excludedNS := h.operationExcluder.GetExcludedNamespaces(match.Webhook)
-		if len(excludedNS) > 0 {
-			return excludedNS[namespace]
-		}
+	if h.processExcluder != nil {
+		excludedNS := h.processExcluder.GetExcludedNamespaces(match.Webhook)
+		return excludedNS[namespace]
 	}
 	return false
 }

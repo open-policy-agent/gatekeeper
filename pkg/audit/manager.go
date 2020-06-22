@@ -47,16 +47,16 @@ var (
 
 // Manager allows us to audit resources periodically
 type Manager struct {
-	client            client.Client
-	opa               *opa.Client
-	stopper           chan struct{}
-	stopped           chan struct{}
-	mgr               manager.Manager
-	ctx               context.Context
-	ucloop            *updateConstraintLoop
-	reporter          *reporter
-	log               logr.Logger
-	operationExcluder *match.Set
+	client          client.Client
+	opa             *opa.Client
+	stopper         chan struct{}
+	stopped         chan struct{}
+	mgr             manager.Manager
+	ctx             context.Context
+	ucloop          *updateConstraintLoop
+	reporter        *reporter
+	log             logr.Logger
+	processExcluder *match.Set
 }
 
 type auditResult struct {
@@ -104,7 +104,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, operationExcluder *match.Set) (*Manager, error) {
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *match.Set) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -112,13 +112,13 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, operationExc
 	}
 
 	am := &Manager{
-		opa:               opa,
-		stopper:           make(chan struct{}),
-		stopped:           make(chan struct{}),
-		mgr:               mgr,
-		ctx:               ctx,
-		reporter:          reporter,
-		operationExcluder: operationExcluder,
+		opa:             opa,
+		stopper:         make(chan struct{}),
+		stopped:         make(chan struct{}),
+		mgr:             mgr,
+		ctx:             ctx,
+		reporter:        reporter,
+		processExcluder: processExcluder,
 	}
 	return am, nil
 }
@@ -433,14 +433,9 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 }
 
 func (am *Manager) skipExcludedNamespace(namespace string) bool {
-	am.operationExcluder.Mux.Lock()
-	defer am.operationExcluder.Mux.Unlock()
-
-	if am.operationExcluder != nil {
-		excludedNS := am.operationExcluder.GetExcludedNamespaces(match.Audit)
-		if len(excludedNS) > 0 {
-			return excludedNS[namespace]
-		}
+	if am.processExcluder != nil {
+		excludedNS := am.processExcluder.GetExcludedNamespaces(match.Audit)
+		return excludedNS[namespace]
 	}
 	return false
 }

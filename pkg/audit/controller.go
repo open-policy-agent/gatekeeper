@@ -21,12 +21,12 @@ import (
 )
 
 // AddToManager adds audit manager to the Manager
-func AddToManager(m manager.Manager, opa *opa.Client, operationExcluder *match.Set) error {
+func AddToManager(m manager.Manager, opa *opa.Client, processExcluder *match.Set) error {
 	if *auditInterval == 0 {
 		log.Info("auditing is disabled")
 		return nil
 	}
-	am, err := New(context.Background(), m, opa, operationExcluder)
+	am, err := New(context.Background(), m, opa, processExcluder)
 	if err != nil {
 		return err
 	}

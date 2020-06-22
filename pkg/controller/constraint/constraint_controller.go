@@ -56,14 +56,14 @@ const (
 )
 
 type Adder struct {
-	Opa               *opa.Client
-	ConstraintsCache  *ConstraintsCache
-	WatchManager      *watch.Manager
-	ControllerSwitch  *watch.ControllerSwitch
-	Events            <-chan event.GenericEvent
-	Tracker           *readiness.Tracker
-	GetPod            func() (*corev1.Pod, error)
-	OperationExcluder *match.Set
+	Opa              *opa.Client
+	ConstraintsCache *ConstraintsCache
+	WatchManager     *watch.Manager
+	ControllerSwitch *watch.ControllerSwitch
+	Events           <-chan event.GenericEvent
+	Tracker          *readiness.Tracker
+	GetPod           func() (*corev1.Pod, error)
+	ProcessExcluder  *match.Set
 }
 
 func (a *Adder) InjectOpa(o *opa.Client) {

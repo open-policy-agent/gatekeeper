@@ -43,11 +43,11 @@ import (
 var log = logf.Log.WithName("controller").WithValues("metaKind", "Sync")
 
 type Adder struct {
-	Opa               OpaDataClient
-	Events            <-chan event.GenericEvent
-	MetricsCache      *MetricsCache
-	Tracker           *readiness.Tracker
-	OperationExcluder *match.Set
+	Opa             OpaDataClient
+	Events          <-chan event.GenericEvent
+	MetricsCache    *MetricsCache
+	Tracker         *readiness.Tracker
+	ProcessExcluder *match.Set
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -59,7 +59,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.OperationExcluder)
+	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
 	if err != nil {
 		return err
 	}
@@ -73,17 +73,17 @@ func newReconciler(
 	reporter Reporter,
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
-	operationExcluder *match.Set) (reconcile.Reconciler, error) {
+	processExcluder *match.Set) (reconcile.Reconciler, error) {
 
 	return &ReconcileSync{
-		reader:            mgr.GetCache(),
-		scheme:            mgr.GetScheme(),
-		opa:               opa,
-		log:               log,
-		reporter:          reporter,
-		metricsCache:      metricsCache,
-		tracker:           tracker,
-		operationExcluder: operationExcluder,
+		reader:          mgr.GetCache(),
+		scheme:          mgr.GetScheme(),
+		opa:             opa,
+		log:             log,
+		reporter:        reporter,
+		metricsCache:    metricsCache,
+		tracker:         tracker,
+		processExcluder: processExcluder,
 	}, nil
 }
 
@@ -122,13 +122,13 @@ type Tags struct {
 type ReconcileSync struct {
 	reader client.Reader
 
-	scheme            *runtime.Scheme
-	opa               OpaDataClient
-	log               logr.Logger
-	reporter          Reporter
-	metricsCache      *MetricsCache
-	tracker           *readiness.Tracker
-	operationExcluder *match.Set
+	scheme          *runtime.Scheme
+	opa             OpaDataClient
+	log             logr.Logger
+	reporter        Reporter
+	metricsCache    *MetricsCache
+	tracker         *readiness.Tracker
+	processExcluder *match.Set
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -231,14 +231,9 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 }
 
 func (r *ReconcileSync) skipExcludedNamespace(namespace string) bool {
-	r.operationExcluder.Mux.Lock()
-	defer r.operationExcluder.Mux.Unlock()
-
-	if r.operationExcluder != nil {
-		excludedNS := r.operationExcluder.GetExcludedNamespaces(match.Sync)
-		if len(excludedNS) > 0 {
-			return excludedNS[namespace]
-		}
+	if r.processExcluder != nil {
+		excludedNS := r.processExcluder.GetExcludedNamespaces(match.Sync)
+		return excludedNS[namespace]
 	}
 	return false
 }

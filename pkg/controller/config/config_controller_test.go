@@ -137,9 +137,9 @@ func TestReconcile(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	operationExcluder := match.GetSet()
-	operationExcluder.Replace(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, operationExcluder)
+	processExcluder := match.GetSet()
+	processExcluder.Replace(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
@@ -181,11 +181,11 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := operationExcluder.GetExcludedNamespaces(match.Audit)
+	auditExcludedNS := processExcluder.GetExcludedNamespaces(match.Audit)
 	g.Expect(auditExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
-	syncExcludedNS := operationExcluder.GetExcludedNamespaces(match.Sync)
+	syncExcludedNS := processExcluder.GetExcludedNamespaces(match.Sync)
 	g.Expect(syncExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true}))
-	webhookExcludedNS := operationExcluder.GetExcludedNamespaces(match.Webhook)
+	webhookExcludedNS := processExcluder.GetExcludedNamespaces(match.Webhook)
 	g.Expect(webhookExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
 
 	// Test finalizer removal
@@ -220,9 +220,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	operationExcluder := match.GetSet()
-	operationExcluder.Replace(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, operationExcluder)
+	processExcluder := match.GetSet()
+	processExcluder.Replace(instance.Spec.Match)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
