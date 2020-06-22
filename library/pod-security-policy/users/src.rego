@@ -23,7 +23,7 @@ get_type_violation(field, container) = msg {
 get_user_violation(params, container) = msg {
   rule := params.rule
   provided_user := get_field_value("runAsUser", container, input.review)
-=  not accept_users(rule, provided_user)
+  not accept_users(rule, provided_user)
   msg := sprintf("Container %v is attempting to run as disallowed user %v. Allowed runAsUser: %v", [container.name, provided_user, params])
 }
 
