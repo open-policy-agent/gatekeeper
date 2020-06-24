@@ -6,7 +6,7 @@ metadata:
 spec:
   match:
     - excludedNamespaces: ["excluded-namespace"]
-      operations: ["*"]
+      processes: ["*"]
   sync:
     syncOnly:
       - group: ""

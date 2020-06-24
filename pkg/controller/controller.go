@@ -19,7 +19,7 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +39,7 @@ type GetPodInjector interface {
 }
 
 type GetProcessExcluderInjector interface {
-	InjectProcessExcluder(processExcluder *match.Set)
+	InjectProcessExcluder(processExcluder *processexcluder.Set)
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
@@ -56,7 +56,7 @@ type Dependencies struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
 	GetPod           func() (*corev1.Pod, error)
-	ProcessExcluder  *match.Set
+	ProcessExcluder  *processexcluder.Set
 }
 
 // AddToManager adds all Controllers to the Manager

@@ -1,4 +1,4 @@
-package match
+package processexcluder
 
 import (
 	"sync"
@@ -30,24 +30,24 @@ var configMapSet = &Set{
 	excludedNamespaces: make(map[Process]map[string]bool),
 }
 
-func GetSet() *Set {
+func Get() *Set {
 	return configMapSet
 }
 
-func newSet() *Set {
+func new() *Set {
 	return &Set{
 		excludedNamespaces: make(map[Process]map[string]bool),
 	}
 }
 
 func (s *Set) update(entry []configv1alpha1.MatchEntry) {
-	s.Mux.RLock()
-	defer s.Mux.RUnlock()
+	s.Mux.Lock()
+	defer s.Mux.Unlock()
 
 	for _, matchEntry := range entry {
 		for _, ns := range matchEntry.ExcludedNamespaces {
-			for _, op := range matchEntry.Operations {
-				// adding excluded namespace to all operations for "*"
+			for _, op := range matchEntry.Processes {
+				// adding excluded namespace to all processes for "*"
 				if Process(op) == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
@@ -67,16 +67,16 @@ func (s *Set) update(entry []configv1alpha1.MatchEntry) {
 }
 
 func (s *Set) Replace(entry []configv1alpha1.MatchEntry) {
-	s.Mux.RLock()
-	defer s.Mux.RUnlock()
+	s.Mux.Lock()
+	defer s.Mux.Unlock()
 
-	newConfigMapSet := newSet()
+	newConfigMapSet := new()
 	newConfigMapSet.update(entry)
 
 	s.excludedNamespaces = newConfigMapSet.excludedNamespaces
 }
 
-func (s *Set) GetExcludedNamespaces(process Process) map[string]bool {
+func (s *Set) getExcludedNamespaces(process Process) map[string]bool {
 	s.Mux.RLock()
 	defer s.Mux.RUnlock()
 
@@ -86,4 +86,9 @@ func (s *Set) GetExcludedNamespaces(process Process) map[string]bool {
 	}
 
 	return out
+}
+
+func (s *Set) IsNamespaceExcluded(process Process, namespace string) bool {
+	excludedNS := s.getExcludedNamespaces(process)
+	return excludedNS[namespace]
 }

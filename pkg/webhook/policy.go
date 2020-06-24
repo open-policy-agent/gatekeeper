@@ -29,7 +29,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -76,7 +76,7 @@ var (
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *match.Set) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *processexcluder.Set) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
@@ -105,7 +105,7 @@ type validationHandler struct {
 	reader client.Reader
 	// for testing
 	injectedConfig  *v1alpha1.Config
-	processExcluder *match.Set
+	processExcluder *processexcluder.Set
 }
 
 type requestResponse string
@@ -362,8 +362,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 
 func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
 	if h.processExcluder != nil {
-		excludedNS := h.processExcluder.GetExcludedNamespaces(match.Webhook)
-		return excludedNS[namespace]
+		return h.processExcluder.IsNamespaceExcluded(processexcluder.Webhook, namespace)
 	}
 	return false
 }

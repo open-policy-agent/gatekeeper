@@ -10,7 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -56,7 +56,7 @@ type Manager struct {
 	ucloop          *updateConstraintLoop
 	reporter        *reporter
 	log             logr.Logger
-	processExcluder *match.Set
+	processExcluder *processexcluder.Set
 }
 
 type auditResult struct {
@@ -104,7 +104,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *match.Set) (*Manager, error) {
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *processexcluder.Set) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -434,8 +434,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 
 func (am *Manager) skipExcludedNamespace(namespace string) bool {
 	if am.processExcluder != nil {
-		excludedNS := am.processExcluder.GetExcludedNamespaces(match.Audit)
-		return excludedNS[namespace]
+		return am.processExcluder.IsNamespaceExcluded(processexcluder.Audit, namespace)
 	}
 	return false
 }

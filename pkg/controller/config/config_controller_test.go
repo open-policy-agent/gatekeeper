@@ -27,7 +27,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -107,11 +107,11 @@ func TestReconcile(t *testing.T) {
 			Match: []configv1alpha1.MatchEntry{
 				{
 					ExcludedNamespaces: []string{"foo"},
-					Operations:         []string{"*"},
+					Processes:          []string{"*"},
 				},
 				{
 					ExcludedNamespaces: []string{"bar"},
-					Operations:         []string{"audit", "webhook"},
+					Processes:          []string{"audit", "webhook"},
 				},
 			},
 		},
@@ -137,7 +137,7 @@ func TestReconcile(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	processExcluder := match.GetSet()
+	processExcluder := processexcluder.Get()
 	processExcluder.Replace(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 
@@ -181,11 +181,11 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := processExcluder.GetExcludedNamespaces(match.Audit)
+	auditExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Audit)
 	g.Expect(auditExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
-	syncExcludedNS := processExcluder.GetExcludedNamespaces(match.Sync)
+	syncExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Sync)
 	g.Expect(syncExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true}))
-	webhookExcludedNS := processExcluder.GetExcludedNamespaces(match.Webhook)
+	webhookExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Webhook)
 	g.Expect(webhookExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
 
 	// Test finalizer removal
@@ -220,7 +220,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	processExcluder := match.GetSet()
+	processExcluder := processexcluder.Get()
 	processExcluder.Replace(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())

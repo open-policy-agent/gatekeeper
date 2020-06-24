@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -47,7 +47,7 @@ type Adder struct {
 	Events          <-chan event.GenericEvent
 	MetricsCache    *MetricsCache
 	Tracker         *readiness.Tracker
-	ProcessExcluder *match.Set
+	ProcessExcluder *processexcluder.Set
 }
 
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -73,7 +73,7 @@ func newReconciler(
 	reporter Reporter,
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
-	processExcluder *match.Set) (reconcile.Reconciler, error) {
+	processExcluder *processexcluder.Set) (reconcile.Reconciler, error) {
 
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
@@ -128,7 +128,7 @@ type ReconcileSync struct {
 	reporter        Reporter
 	metricsCache    *MetricsCache
 	tracker         *readiness.Tracker
-	processExcluder *match.Set
+	processExcluder *processexcluder.Set
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -231,11 +231,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 }
 
 func (r *ReconcileSync) skipExcludedNamespace(namespace string) bool {
-	if r.processExcluder != nil {
-		excludedNS := r.processExcluder.GetExcludedNamespaces(match.Sync)
-		return excludedNS[namespace]
-	}
-	return false
+	return r.processExcluder.IsNamespaceExcluded(processexcluder.Sync, namespace)
 }
 
 func NewMetricsCache() *MetricsCache {

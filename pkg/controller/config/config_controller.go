@@ -21,7 +21,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -57,7 +57,7 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
-	ProcessExcluder  *match.Set
+	ProcessExcluder  *processexcluder.Set
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -87,12 +87,12 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-func (a *Adder) InjectProcessExcluder(m *match.Set) {
+func (a *Adder) InjectProcessExcluder(m *processexcluder.Set) {
 	a.ProcessExcluder = m
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *match.Set) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *processexcluder.Set) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
@@ -165,7 +165,7 @@ type ReconcileConfig struct {
 	watcher          *watch.Registrar
 	watched          *watch.Set
 	tracker          *readiness.Tracker
-	processExcluder  *match.Set
+	processExcluder  *processexcluder.Set
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -322,11 +322,7 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 }
 
 func (r *ReconcileConfig) skipExcludedNamespace(namespace string) bool {
-	if r.processExcluder != nil {
-		excludedNS := r.processExcluder.GetExcludedNamespaces(match.Sync)
-		return excludedNS[namespace]
-	}
-	return false
+	return r.processExcluder.IsNamespaceExcluded(processexcluder.Sync, namespace)
 }
 
 func containsString(s string, items []string) bool {

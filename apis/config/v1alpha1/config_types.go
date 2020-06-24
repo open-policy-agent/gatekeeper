@@ -60,7 +60,7 @@ type SyncOnlyEntry struct {
 
 type MatchEntry struct {
 	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
-	Operations         []string `json:"operations,omitempty"`
+	Processes          []string `json:"processes,omitempty"`
 }
 
 // ConfigStatus defines the observed state of Config
