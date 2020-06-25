@@ -181,12 +181,14 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Audit)
-	g.Expect(auditExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
-	syncExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Sync)
-	g.Expect(syncExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true}))
-	webhookExcludedNS := processExcluder.GetExcludedNamespaces(processexcluder.Webhook)
-	g.Expect(webhookExcludedNS).Should(gomega.Equal(map[string]bool{"foo": true, "bar": true}))
+	auditExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Audit, "foo")
+	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
+	syncExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Sync, "foo")
+	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
+	syncNotExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Sync, "bar")
+	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
+	webhookExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Webhook, "foo")
+	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
 
 	// Test finalizer removal
 
@@ -436,7 +438,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			Match: []configv1alpha1.MatchEntry{
 				{
 					ExcludedNamespaces: []string{"kube-system"},
-					Operations:         []string{"sync"},
+					Processes:          []string{"sync"},
 				},
 			},
 		},
