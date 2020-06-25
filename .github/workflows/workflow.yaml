@@ -18,11 +18,11 @@ on:
       - "**.md"
 env:
   GITHUB_REPO: open-policy-agent/gatekeeper
-  IMAGE_REPO: quay.io/open-policy-agent/gatekeeper
+  IMAGE_REPO: openpolicyagent/gatekeeper
 
 jobs:
   lint:
-    name: 'Lint'
+    name: "Lint"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -48,7 +48,7 @@ jobs:
           make lint
 
   build_test:
-    name: 'Build and Test'
+    name: "Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -76,7 +76,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
   helm_build_test:
-    name: '[Helm] Build and Test'
+    name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -104,8 +104,8 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
   pre-release:
-    name: 'Pre Release'
-    runs-on: 'ubuntu-latest'
+    name: "Pre Release"
+    runs-on: "ubuntu-latest"
     if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, build_test, helm_build_test]
     timeout-minutes: 30
@@ -115,7 +115,11 @@ jobs:
 
       - name: make docker-push-dev
         run: |
-          version_list=$(curl https://quay.io/v2/${{ env.GITHUB_REPO }}/tags/list)
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull"
+          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
+          listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
+          authz="Authorization: Bearer $bearerToken"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
           exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
           then
@@ -126,16 +130,9 @@ jobs:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
-      - uses: 'marvinpinto/action-automatic-releases@v1.0.0'
-        with:
-          repo_token: '${{ secrets.GITHUB_TOKEN }}'
-          prerelease: true
-          automatic_release_tag: latest
-          title: 'Development Build'
-
   tagged-release:
-    name: 'Tagged Release'
-    runs-on: 'ubuntu-latest'
+    name: "Tagged Release"
+    runs-on: "ubuntu-latest"
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, build_test, helm_build_test]
     timeout-minutes: 30
@@ -151,8 +148,12 @@ jobs:
 
       - name: Publish release
         run: |
-          version_list=$(curl https://quay.io/v2/${{ env.GITHUB_REPO }}/tags/list)
-          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull"
+          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
+          listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
+          authz="Authorization: Bearer $bearerToken"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
           then
             make docker-login
@@ -173,7 +174,7 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        uses: 'marvinpinto/action-automatic-releases@v1.0.0'
+        uses: "marvinpinto/action-automatic-releases@v1.0.0"
         with:
-          repo_token: '${{ secrets.GITHUB_TOKEN }}'
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
