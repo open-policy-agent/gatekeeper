@@ -75,6 +75,7 @@ type StatusViolation struct {
 	Kind              string `json:"kind"`
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
+	APIVersion        string `json:"apiVersion"`
 	Message           string `json:"message"`
 	EnforcementAction string `json:"enforcementAction"`
 }
@@ -441,6 +442,7 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 				Kind:              ar.rkind,
 				Name:              ar.rname,
 				Namespace:         ar.rnamespace,
+				APIVersion:        ar.capiversion,
 				Message:           msg,
 				EnforcementAction: ar.enforcementAction,
 			})
