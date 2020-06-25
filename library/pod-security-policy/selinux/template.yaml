@@ -1,27 +1,62 @@
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
-  name: k8spspselinux
+  name: k8spspselinuxv2
 spec:
   crd:
     spec:
       names:
-        kind: K8sPSPSELinux
+        kind: K8sPSPSELinuxV2
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            allowedSELinuxOptions:
+              type: array
+              items:
+                type: object
+                properties:
+                  level:
+                      type: string
+                  role:
+                      type: string
+                  type:
+                      type: string
+                  user:
+                      type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8spspselinux
 
+        # Disallow top level custom SELinux options
+        violation[{"msg": msg, "details": {}}] {
+            has_field(input.review.object.spec.securityContext, "seLinuxOptions")
+            not input_seLinuxOptions_allowed(input.review.object.spec.securityContext.seLinuxOptions)
+            msg := sprintf("SELinux options is not allowed, pod: %v. Allowed options: %v", [input.review.object.metadata.name, input.parameters.allowedSELinuxOptions])
+        }
+        # Disallow container level custom SELinux options
         violation[{"msg": msg, "details": {}}] {
             c := input_security_context[_]
-            # Disallow all custom SELinux options
-            c.securityContext.seLinuxOptions
-            msg := sprintf("SELinux option is not allowed, pod: %v. Allowed options: %v", [input.review.object.metadata.name, input.parameters.allowedSELinuxOptions])
+            has_field(c.securityContext, "seLinuxOptions")
+            not input_seLinuxOptions_allowed(c.securityContext.seLinuxOptions)
+            msg := sprintf("SELinux options is not allowed, pod: %v, container %v. Allowed options: %v", [input.review.object.metadata.name, c.name, input.parameters.allowedSELinuxOptions])
+        }
+        input_seLinuxOptions_allowed(options) {
+            field_allowed(options, "level")
+            field_allowed(options, "role")
+            field_allowed(options, "type")
+            field_allowed(options, "user")
         }
 
-        input_security_context[c] {
-            c := input.review.object.spec
+        field_allowed(options, field) {
+            matching := {1 | input.parameters.allowedSELinuxOptions[_][field] == options[field]}
+            count(matching) > 0
         }
+        field_allowed(options, field) {
+            not has_field(options, field)
+        }
+
         input_security_context[c] {
             c := input.review.object.spec.containers[_]
             has_field(c.securityContext, "seLinuxOptions")
