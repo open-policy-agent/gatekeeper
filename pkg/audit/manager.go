@@ -433,10 +433,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 }
 
 func (am *Manager) skipExcludedNamespace(namespace string) bool {
-	if am.processExcluder != nil {
-		return am.processExcluder.IsNamespaceExcluded(processexcluder.Audit, namespace)
-	}
-	return false
+	return am.processExcluder.IsNamespaceExcluded(processexcluder.Audit, namespace)
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {

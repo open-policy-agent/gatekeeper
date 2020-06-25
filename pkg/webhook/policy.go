@@ -167,10 +167,10 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		}
 	}()
 
-	// namespace is excluded from webhook using config match
+	// namespace is excluded from webhook using config
 	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) {
 		requestResponse = allowResponse
-		return admission.ValidationResponse(true, "Namespace is ignored from admission because it is specified in config namespace exclusion")
+		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
 
 	resp, err := h.reviewRequest(ctx, req)
@@ -361,8 +361,5 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 }
 
 func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
-	if h.processExcluder != nil {
-		return h.processExcluder.IsNamespaceExcluded(processexcluder.Webhook, namespace)
-	}
-	return false
+	return h.processExcluder.IsNamespaceExcluded(processexcluder.Webhook, namespace)
 }
