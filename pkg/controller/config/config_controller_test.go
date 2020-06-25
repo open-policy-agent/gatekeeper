@@ -27,7 +27,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -137,8 +136,8 @@ func TestReconcile(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	processExcluder := processexcluder.Get()
-	processExcluder.Replace(instance.Spec.Match)
+	processExcluder := process.Get()
+	process.Replace(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 
 	recFn, requests := SetupTestReconcile(rec)
@@ -181,13 +180,13 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Audit, "foo")
+	auditExcludedNS := process.IsNamespaceExcluded(process.Audit, "foo")
 	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
-	syncExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Sync, "foo")
+	syncExcludedNS := process.IsNamespaceExcluded(process.Sync, "foo")
 	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
-	syncNotExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Sync, "bar")
+	syncNotExcludedNS := process.IsNamespaceExcluded(process.Sync, "bar")
 	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
-	webhookExcludedNS := processExcluder.IsNamespaceExcluded(processexcluder.Webhook, "foo")
+	webhookExcludedNS := process.IsNamespaceExcluded(process.Webhook, "foo")
 	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
 
 	// Test finalizer removal
@@ -222,8 +221,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	processExcluder := processexcluder.Get()
-	processExcluder.Replace(instance.Spec.Match)
+	processExcluder := process.Get()
+	process.Replace(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 

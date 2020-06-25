@@ -28,7 +28,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/processexcluder"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -103,7 +102,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
 
-	processExcluder := processexcluder.Get()
+	processExcluder := process.Get()
 
 	// Setup all Controllers
 	opts := controller.Dependencies{
