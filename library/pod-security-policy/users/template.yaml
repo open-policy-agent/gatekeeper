@@ -125,6 +125,7 @@ spec:
         get_violation(field, params, container) = msg {
           rule := params.rule
           array_value := get_field_value(field, container, input.review)
+          is_array(array_value)
           provided_value := array_value[_]
           not accept_value(rule, provided_value, params.ranges)
           msg := sprintf("Container %v is attempting to run with disallowed supplementalGroups %v. Allowed %v: %v", [container.name, array_value, field, params])
