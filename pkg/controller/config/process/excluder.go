@@ -16,7 +16,7 @@ const (
 )
 
 type Excluder struct {
-	Mux                sync.RWMutex
+	mux                sync.RWMutex
 	excludedNamespaces map[Process]map[string]bool
 }
 
@@ -41,8 +41,8 @@ func new() *Excluder {
 }
 
 func (s *Excluder) update(entry []configv1alpha1.MatchEntry) {
-	s.Mux.Lock()
-	defer s.Mux.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	for _, matchEntry := range entry {
 		for _, ns := range matchEntry.ExcludedNamespaces {
@@ -67,8 +67,8 @@ func (s *Excluder) update(entry []configv1alpha1.MatchEntry) {
 }
 
 func (s *Excluder) Replace(entry []configv1alpha1.MatchEntry) {
-	s.Mux.Lock()
-	defer s.Mux.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	newConfigMapSet := new()
 	newConfigMapSet.update(entry)
@@ -77,8 +77,8 @@ func (s *Excluder) Replace(entry []configv1alpha1.MatchEntry) {
 }
 
 func (s *Excluder) getExcludedNamespaces(process Process) map[string]bool {
-	s.Mux.RLock()
-	defer s.Mux.RUnlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 
 	out := make(map[string]bool)
 	for k, v := range s.excludedNamespaces[process] {
