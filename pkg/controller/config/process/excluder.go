@@ -1,6 +1,7 @@
 package process
 
 import (
+	"reflect"
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -26,21 +27,21 @@ var allProcesses = []Process{
 	Sync,
 }
 
-var configMapSet = &Excluder{
+var processExcluder = &Excluder{
 	excludedNamespaces: make(map[Process]map[string]bool),
 }
 
 func Get() *Excluder {
-	return configMapSet
+	return processExcluder
 }
 
-func new() *Excluder {
+func New() *Excluder {
 	return &Excluder{
 		excludedNamespaces: make(map[Process]map[string]bool),
 	}
 }
 
-func (s *Excluder) update(entry []configv1alpha1.MatchEntry) {
+func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
@@ -66,14 +67,16 @@ func (s *Excluder) update(entry []configv1alpha1.MatchEntry) {
 	}
 }
 
-func (s *Excluder) Replace(entry []configv1alpha1.MatchEntry) {
+func (s *Excluder) Replace(new *Excluder) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
+	s.excludedNamespaces = new.excludedNamespaces
+}
 
-	newConfigMapSet := new()
-	newConfigMapSet.update(entry)
-
-	s.excludedNamespaces = newConfigMapSet.excludedNamespaces
+func (s *Excluder) Equals(new *Excluder) bool {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
 func (s *Excluder) getExcludedNamespaces(process Process) map[string]bool {
@@ -84,7 +87,6 @@ func (s *Excluder) getExcludedNamespaces(process Process) map[string]bool {
 	for k, v := range s.excludedNamespaces[process] {
 		out[k] = v
 	}
-
 	return out
 }
 

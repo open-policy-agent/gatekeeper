@@ -138,7 +138,7 @@ func TestReconcile(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
-	processExcluder.Replace(instance.Spec.Match)
+	processExcluder.Add(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 
 	recFn, requests := SetupTestReconcile(rec)
@@ -223,7 +223,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
-	processExcluder.Replace(instance.Spec.Match)
+	processExcluder.Add(instance.Spec.Match)
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 

@@ -217,6 +217,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	newSyncOnly := watch.NewSet()
+	newExcluder := process.New()
 	// If the config is being deleted the user is saying they don't want to
 	// sync anything
 	if exists && instance.GetDeletionTimestamp().IsZero() {
@@ -225,7 +226,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 			newSyncOnly.Add(gvk)
 		}
 
-		r.processExcluder.Replace(instance.Spec.Match)
+		newExcluder.Add(instance.Spec.Match)
 	}
 
 	// Remove expectations for resources we no longer watch.
@@ -233,7 +234,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	r.removeStaleExpectations(diff)
 
 	// If the watch set has not changed, we're done here.
-	if r.watched.Equals(newSyncOnly) {
+	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
 		return reconcile.Result{}, nil
 	}
 
@@ -243,6 +244,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	// to drop events from no-longer-watched resources that may be in its queue.
 	needReplay := r.watched.Union(newSyncOnly)
 	r.watched.Replace(newSyncOnly)
+
+	// swapping with the new excluder
+	r.processExcluder.Replace(newExcluder)
 
 	// *Note the following steps are not transactional with respect to admission control*
 
@@ -267,8 +271,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	if err := r.replayData(context.TODO(), needReplay); err != nil {
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
-
-	r.processExcluder.Replace(instance.Spec.Match)
 
 	return reconcile.Result{}, nil
 }
