@@ -79,18 +79,8 @@ func (s *Excluder) Equals(new *Excluder) bool {
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
-func (s *Excluder) getExcludedNamespaces(process Process) map[string]bool {
+func (s *Excluder) IsNamespaceExcluded(process Process, namespace string) bool {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-
-	out := make(map[string]bool)
-	for k, v := range s.excludedNamespaces[process] {
-		out[k] = v
-	}
-	return out
-}
-
-func (s *Excluder) IsNamespaceExcluded(process Process, namespace string) bool {
-	excludedNS := s.getExcludedNamespaces(process)
-	return excludedNS[namespace]
+	return s.excludedNamespaces[process][namespace]
 }
