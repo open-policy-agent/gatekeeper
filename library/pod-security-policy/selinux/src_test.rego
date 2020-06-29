@@ -12,10 +12,10 @@ test_input_seLinux_options_allowed_in_list_subset {
     count(results) == 1
 }
 
-test_input_seLinux_options_allowed_in_list {
+test_input_seLinux_options_allowed_in_list_split_list {
     input := { "review": input_review, "parameters": input_parameters_in_list_split_two}
     results := violation with input as input
-    count(results) == 0
+    count(results) == 1
 }
 
 test_input_seLinux_option_not_allowed_not_in_list {
@@ -69,7 +69,7 @@ test_input_seLinux_options_subset_allowed_in_list_split_subset {
 test_input_seLinux_options_allowed_in_list_split_subset {
     input := { "review": input_review, "parameters": input_parameters_in_list_split_subset}
     results := violation with input as input
-    count(results) == 0
+    count(results) == 1
 }
 
 
