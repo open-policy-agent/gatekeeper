@@ -11,7 +11,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
@@ -109,7 +109,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
@@ -192,7 +192,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.2.4
   creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
@@ -631,7 +631,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-beta.9
+        image: openpolicyagent/gatekeeper:v3.1.0-beta.10
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -712,7 +712,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-beta.9
+        image: openpolicyagent/gatekeeper:v3.1.0-beta.10
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
