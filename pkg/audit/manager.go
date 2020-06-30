@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"strconv"
 	"strings"
 	"time"
 
@@ -607,7 +608,7 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
 		logging.ConstraintStatus, "enforced",
-		logging.ConstraintViolations, string(totalViolations),
+		logging.ConstraintViolations, strconv.FormatInt(totalViolations, 10),
 	)
 }
 
