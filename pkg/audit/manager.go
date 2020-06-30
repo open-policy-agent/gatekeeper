@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -46,15 +47,16 @@ var (
 
 // Manager allows us to audit resources periodically
 type Manager struct {
-	client   client.Client
-	opa      *opa.Client
-	stopper  chan struct{}
-	stopped  chan struct{}
-	mgr      manager.Manager
-	ctx      context.Context
-	ucloop   *updateConstraintLoop
-	reporter *reporter
-	log      logr.Logger
+	client          client.Client
+	opa             *opa.Client
+	stopper         chan struct{}
+	stopped         chan struct{}
+	mgr             manager.Manager
+	ctx             context.Context
+	ucloop          *updateConstraintLoop
+	reporter        *reporter
+	log             logr.Logger
+	processExcluder *process.Excluder
 }
 
 type auditResult struct {
@@ -102,7 +104,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, error) {
+func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -110,12 +112,13 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client) (*Manager, e
 	}
 
 	am := &Manager{
-		opa:      opa,
-		stopper:  make(chan struct{}),
-		stopped:  make(chan struct{}),
-		mgr:      mgr,
-		ctx:      ctx,
-		reporter: reporter,
+		opa:             opa,
+		stopper:         make(chan struct{}),
+		stopped:         make(chan struct{}),
+		mgr:             mgr,
+		ctx:             ctx,
+		reporter:        reporter,
+		processExcluder: processExcluder,
 	}
 	return am, nil
 }
@@ -248,6 +251,10 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 			}
 
 			for _, obj := range objList.Items {
+				if am.skipExcludedNamespace(obj.GetNamespace()) {
+					continue
+				}
+
 				ns := corev1.Namespace{}
 				if obj.GetNamespace() != "" {
 					ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
@@ -423,6 +430,10 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 		}
 	}
 	return nil
+}
+
+func (am *Manager) skipExcludedNamespace(namespace string) bool {
+	return am.processExcluder.IsNamespaceExcluded(process.Audit, namespace)
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {

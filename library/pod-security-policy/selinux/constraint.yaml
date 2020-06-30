@@ -1,7 +1,7 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sPSPSELinux
+kind: K8sPSPSELinuxV2
 metadata:
-  name: psp-selinux
+  name: psp-selinux-v2
 spec:
   match:
     kinds:
@@ -9,7 +9,7 @@ spec:
         kinds: ["Pod"]
   parameters:
     allowedSELinuxOptions:
-        level: s0:c123,c456
+      - level: s0:c123,c456
         role: object_r
         type: svirt_sandbox_file_t
         user: system_u

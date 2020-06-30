@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/pkg/errors"
 	types "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -50,7 +51,7 @@ func (l nsSet) Set(s string) error {
 // +kubebuilder:webhook:verbs=CREATE;UPDATE,path=/v1/admitlabel,mutating=false,failurePolicy=fail,groups="",resources=namespaces,versions=*,name=check-ignore-label.gatekeeper.sh
 
 // AddLabelWebhook registers the label webhook server with the manager
-func AddLabelWebhook(mgr manager.Manager, _ *opa.Client) error {
+func AddLabelWebhook(mgr manager.Manager, _ *opa.Client, _ *process.Excluder) error {
 	wh := &admission.Webhook{Handler: &namespaceLabelHandler{}}
 	mgr.GetWebhookServer().Register("/v1/admitlabel", wh)
 	return nil

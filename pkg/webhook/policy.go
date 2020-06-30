@@ -29,6 +29,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -75,12 +76,20 @@ var (
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
 	}
-	wh := &admission.Webhook{Handler: &validationHandler{opa: opa, client: mgr.GetClient(), reader: mgr.GetAPIReader(), reporter: reporter}}
+	wh := &admission.Webhook{
+		Handler: &validationHandler{
+			opa:             opa,
+			client:          mgr.GetClient(),
+			reader:          mgr.GetAPIReader(),
+			reporter:        reporter,
+			processExcluder: processExcluder,
+		},
+	}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
@@ -95,7 +104,8 @@ type validationHandler struct {
 	// obtained from mgr.GetAPIReader()
 	reader client.Reader
 	// for testing
-	injectedConfig *v1alpha1.Config
+	injectedConfig  *v1alpha1.Config
+	processExcluder *process.Excluder
 }
 
 type requestResponse string
@@ -156,6 +166,12 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 			}
 		}
 	}()
+
+	// namespace is excluded from webhook using config
+	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) {
+		requestResponse = allowResponse
+		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
+	}
 
 	resp, err := h.reviewRequest(ctx, req)
 	if err != nil {
@@ -342,4 +358,8 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 	}
 	return resp, err
+}
+
+func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
+	return h.processExcluder.IsNamespaceExcluded(process.Webhook, namespace)
 }
