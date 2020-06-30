@@ -1,21 +1,34 @@
 package k8spspflexvolumes
 
-has_field(object, field) = true {
-    object[field]
-}
-
-test_input_flexvolume_allowed_all {
-    input := { "review": input_review, "parameters": input_parameters_wildcard}
+test_input_flexvolume_empty_params {
+    input := { "review": input_review, "parameters": input_parameters_empty}
     results := violation with input as input
-    count(results) == 0
+    count(results) == 1
+}
+test_input_flexvolume_many_empty_params{
+    input := { "review": input_review_many, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 2
 }
 test_input_no_flexvolume_is_allowed {
-    input := { "review": input_review_no_flexvolume, "parameters": input_parameters_in_list}
+    input := { "review": input_review_no_flexvolume, "parameters": input_parameter_in_list}
     results := violation with input as input
     count(results) == 0
 }
-test_input_flexvolume_is_allowed {
+
+test_input_flexvolume_allowed {
+    input := { "review": input_review, "parameters": input_parameter_in_list}
+    results := violation with input as input
+    count(results) == 0
+}
+test_input_flexvolume_many_is_allowed {
     input := { "review": input_review_many, "parameters": input_parameters_in_list}
+    results := violation with input as input
+    count(results) == 0
+}
+
+test_input_flexvolume_many_is_allowed_no_flexvolume {
+    input := { "review": input_review_many_no_flexvolume, "parameters": input_parameters_in_list}
     results := violation with input as input
     count(results) == 0
 }
@@ -26,6 +39,16 @@ test_input_flexvolume_not_allowed {
     count(results) == 1
 }
 test_input_flexvolume_many_not_allowed {
+    input := { "review": input_review_many_not_allowed, "parameters": input_parameters_not_in_list}
+    results := violation with input as input
+    count(results) == 2
+}
+test_input_flexvolume_many_one_allowed {
+    input := { "review": input_review_many, "parameters": input_parameter_in_list}
+    results := violation with input as input
+    count(results) == 1
+}
+test_input_flexvolume_many_mixed_allowed {
     input := { "review": input_review_many, "parameters": input_parameters_not_in_list}
     results := violation with input as input
     count(results) == 1
@@ -38,8 +61,13 @@ input_review = {
         },
         "spec": {
             "containers": input_containers_one,
-            "volumes": input_volumes
-      }
+            "volumes": [{
+                "name": "cache-volume",
+                "flexVolume": {
+                    "driver": "example/lvm"
+                }
+            }]
+        }
     }
 }
 
@@ -50,7 +78,6 @@ input_review_no_flexvolume = {
         },
         "spec": {
             "containers": input_containers_one,
-            "volumes": []
       }
     }
 }
@@ -67,8 +94,31 @@ input_review_many = {
     }
 }
 
-input_containers_one = [
-{
+input_review_many_no_flexvolume = {
+    "object": {
+        "metadata": {
+            "name": "nginx"
+        },
+        "spec": {
+            "containers": input_containers_many,
+            "volumes": input_volumes_many_no_flexvolume
+      }
+    }
+}
+
+input_review_many_not_allowed = {
+    "object": {
+        "metadata": {
+            "name": "nginx"
+        },
+        "spec": {
+            "containers": input_containers_many,
+            "volumes": input_volumes_not_allowed
+      }
+    }
+}
+
+input_containers_one = [{
     "name": "nginx",
     "image": "nginx",
     "volumeMounts":[
@@ -100,14 +150,6 @@ input_containers_many = [
     }]
 }]
 
-input_volumes = [
-{
-    "name": "cache-volume",
-    "flexVolume": {
-        "driver": "example/lvm"
-    }
-}]
-
 input_volumes_many = [
 {
     "name": "cache-volume",
@@ -120,28 +162,61 @@ input_volumes_many = [
     "flexVolume": {
         "driver": "example/cifs"
     }
+},
+{
+    "name": "certs",
+    "secret": {
+        "secretName": "cert-data"
+    }
 }]
 
-input_parameters_wildcard = {
+input_volumes_many_no_flexvolume = [
+{
+    "name": "certs",
+    "secret": {
+        "secretName": "cert-data"
+    }
+},
+{
+    "name": "data",
+    "hostPath": {
+        "path": "/tmp/data",
+        "type": "File"
+    }
+}]
+
+input_volumes_not_allowed = [
+{
+    "name": "cache-volume",
+    "flexVolume": {
+        "driver": "example/lvm"
+    }
+},
+{
+    "name": "cache-volume2",
+    "flexVolume": {
+        "driver": "example/other"
+    }
+}]
+
+input_parameters_empty = {
     "allowedFlexVolumes": []
+}
+
+input_parameter_in_list = {
+    "allowedFlexVolumes": [{"driver": "example/lvm"}]
 }
 
 input_parameters_in_list = {
     "allowedFlexVolumes": [
-    {
-        "driver": "example/lvm"
-    },
-    {
-        "driver": "example/cifs"
-    }]
+        {"driver": "example/lvm"},
+        {"driver": "example/cifs"}
+    ]
 }
 
 input_parameters_not_in_list = {
     "allowedFlexVolumes": [
-    {
-        "driver": "example/testdriver"
-    },
-    {
-        "driver": "example/cifs"
-    }]
+        {"driver": "example/testdriver"},
+        {"driver": "example/cifs"}
+    ]
 }
