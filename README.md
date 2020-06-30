@@ -411,6 +411,21 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
 
+
+### Enable Delete Operations
+Delete operations needs to be enable by adding "DELETE" to the list of operations that call the webhook in the
+ manifest that deploys gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/master/deploy/gatekeeper.yaml#L596)
+ 
+ So you have
+ ```YAML
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+```
+ 
+You can now also check for deletes.
+
 #### Viewing the Request Object
 
 A simple way to view the request object is to use a constraint/template that
