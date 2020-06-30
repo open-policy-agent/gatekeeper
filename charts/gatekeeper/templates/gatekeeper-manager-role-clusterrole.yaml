@@ -63,6 +63,24 @@ rules:
   - update
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+- apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates
@@ -74,6 +92,15 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates/finalizers
+  verbs:
+  - delete
+  - get
+  - patch
+  - update
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
