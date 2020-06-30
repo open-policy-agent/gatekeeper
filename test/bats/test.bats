@@ -117,13 +117,15 @@ teardown() {
 
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8scontainerlimits.constraints.gatekeeper.sh container-must-have-limits -o yaml | grep 'id: gatekeeper-controller-manager'"
 
-  run kubectl apply -f ${BATS_TESTS_DIR}/bad/opa_no_limits.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/opa_no_limits.yaml -n good-ns
   assert_match 'denied the request' "$output"
   assert_failure
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/opa.yaml
   assert_success
+}
 
+@test "deployment test" {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_deployment.yaml
   assert_success
 
@@ -165,4 +167,12 @@ teardown() {
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
   [[ "$totalViolations" -eq 6 ]]
+}
+
+@test "config namespace exclusion test" {
+  run kubectl create ns excluded-namespace
+  assert_success
+
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/opa_no_limits.yaml -n excluded-namespace
+  assert_success
 }

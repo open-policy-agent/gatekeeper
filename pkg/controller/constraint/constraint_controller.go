@@ -24,6 +24,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -62,6 +63,7 @@ type Adder struct {
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
 	GetPod           func() (*corev1.Pod, error)
+	ProcessExcluder  *process.Excluder
 }
 
 func (a *Adder) InjectOpa(o *opa.Client) {

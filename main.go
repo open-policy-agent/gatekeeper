@@ -29,6 +29,7 @@ import (
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -230,6 +231,9 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
+	// processExcluder is used for namespace exclusion for specified processes in config
+	processExcluder := process.Get()
+
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
 	opts := controller.Dependencies{
@@ -237,22 +241,23 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
+		ProcessExcluder:  processExcluder,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
-		setupLog.Error(err, "unable to register controllers to the manager")
+		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}
 
 	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client); err != nil {
+		if err := webhook.AddToManager(mgr, client, processExcluder); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}
 	}
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		if err := audit.AddToManager(mgr, client); err != nil {
+		if err := audit.AddToManager(mgr, client, processExcluder); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

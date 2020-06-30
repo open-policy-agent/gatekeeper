@@ -16,16 +16,17 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // AddToManager adds audit manager to the Manager
-func AddToManager(m manager.Manager, opa *opa.Client) error {
+func AddToManager(m manager.Manager, opa *opa.Client, processExcluder *process.Excluder) error {
 	if *auditInterval == 0 {
 		log.Info("auditing is disabled")
 		return nil
 	}
-	am, err := New(context.Background(), m, opa)
+	am, err := New(context.Background(), m, opa, processExcluder)
 	if err != nil {
 		return err
 	}

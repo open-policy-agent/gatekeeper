@@ -34,6 +34,20 @@ spec:
         spec:
           description: ConfigSpec defines the desired state of Config
           properties:
+            match:
+              description: Configuration for namespace exclusion
+              items:
+                properties:
+                  excludedNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  processes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              type: array
             sync:
               description: Configuration for syncing k8s objects
               properties:
