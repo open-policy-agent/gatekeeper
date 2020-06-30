@@ -108,6 +108,174 @@ status:
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: constraintpodstatuses.status.gatekeeper.sh
+spec:
+  group: status.gatekeeper.sh
+  names:
+    kind: ConstraintPodStatus
+    listKind: ConstraintPodStatusList
+    plural: constraintpodstatuses
+    singular: constraintpodstatus
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      description: ConstraintPodStatus is the Schema for the constraintpodstatuses
+        API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        status:
+          description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus
+          properties:
+            constraintUID:
+              description: Storing the constraint UID allows us to detect drift, such
+                as when a constraint has been recreated after its CRD was deleted
+                out from under it, interrupting the watch
+              type: string
+            enforced:
+              type: boolean
+            errors:
+              items:
+                description: Error represents a single error caught while adding a
+                  constraint to OPA
+                properties:
+                  code:
+                    type: string
+                  location:
+                    type: string
+                  message:
+                    type: string
+                required:
+                - code
+                - message
+                type: object
+              type: array
+            id:
+              type: string
+            observedGeneration:
+              format: int64
+              type: integer
+            operations:
+              items:
+                type: string
+              type: array
+          type: object
+      type: object
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: constrainttemplatepodstatuses.status.gatekeeper.sh
+spec:
+  group: status.gatekeeper.sh
+  names:
+    kind: ConstraintTemplatePodStatus
+    listKind: ConstraintTemplatePodStatusList
+    plural: constrainttemplatepodstatuses
+    singular: constrainttemplatepodstatus
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses
+        API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        status:
+          description: ConstraintTemplatePodStatusStatus defines the observed state
+            of ConstraintTemplatePodStatus
+          properties:
+            errors:
+              items:
+                description: CreateCRDError represents a single error caught during
+                  parsing, compiling, etc.
+                properties:
+                  code:
+                    type: string
+                  location:
+                    type: string
+                  message:
+                    type: string
+                required:
+                - code
+                - message
+                type: object
+              type: array
+            id:
+              description: 'Important: Run "make" to regenerate code after modifying
+                this file'
+              type: string
+            observedGeneration:
+              format: int64
+              type: integer
+            operations:
+              items:
+                type: string
+              type: array
+            templateUID:
+              description: UID is a type that holds unique ID values, including UUIDs.  Because
+                we don't ONLY use UUIDs, this is an alias to string.  Being a type
+                captures intent and helps make sure that UIDs and names do not get
+                conflated.
+              type: string
+          type: object
+      type: object
+  version: v1beta1
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
   creationTimestamp: null
   labels:
     controller-tools.k8s.io: "1.0"
@@ -305,6 +473,24 @@ rules:
   - update
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+- apiGroups:
+  - status.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - templates.gatekeeper.sh
   resources:
   - constrainttemplates
@@ -316,6 +502,15 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - templates.gatekeeper.sh
+  resources:
+  - constrainttemplates/finalizers
+  verbs:
+  - delete
+  - get
+  - patch
+  - update
 - apiGroups:
   - templates.gatekeeper.sh
   resources:
@@ -422,6 +617,7 @@ spec:
       containers:
       - args:
         - --operation=audit
+        - --operation=status
         - --logtostderr
         command:
         - /manager
@@ -435,7 +631,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
+        image: openpolicyagent/gatekeeper:v3.1.0-beta.10
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -516,7 +712,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/open-policy-agent/gatekeeper:v3.1.0-beta.9
+        image: openpolicyagent/gatekeeper:v3.1.0-beta.10
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
