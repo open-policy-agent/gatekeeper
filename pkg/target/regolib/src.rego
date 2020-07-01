@@ -309,6 +309,7 @@ matches_namespaces(match) {
 
 # Always match cluster scoped resources, unless resource is namespace
 matches_namespaces(match) {
+  has_field(match, "namespaces")
   not is_ns(input.review.kind)
   not has_field(input.review, "namespace")
 }
@@ -326,6 +327,7 @@ does_not_match_excludednamespaces(match) {
 
 # Always match cluster scoped resources, unless resource is namespace
 does_not_match_excludednamespaces(match) {
+  has_field(match, "excludedNamespaces")
   not is_ns(input.review.kind)
   not has_field(input.review, "namespace")
 }
@@ -343,6 +345,7 @@ matches_nsselector(match) {
 
 # Always match cluster scoped resources, unless resource is namespace
 matches_nsselector(match) {
+  has_field(match, "namespaceSelector")
   not is_ns(input.review.kind)
   not has_field(input.review, "namespace")
 }
