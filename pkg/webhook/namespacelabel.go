@@ -53,6 +53,11 @@ func (l nsSet) Set(s string) error {
 // AddLabelWebhook registers the label webhook server with the manager
 func AddLabelWebhook(mgr manager.Manager, _ *opa.Client, _ *process.Excluder) error {
 	wh := &admission.Webhook{Handler: &namespaceLabelHandler{}}
+	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
+	// Otherwise we risk having unstable logger names for the webhook.
+	if err := wh.InjectLogger(log); err != nil {
+		return err
+	}
 	mgr.GetWebhookServer().Register("/v1/admitlabel", wh)
 	return nil
 }
