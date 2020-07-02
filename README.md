@@ -413,9 +413,10 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 
 ### Enable Delete Operations
-Delete operations needs to be enable by adding "DELETE" to the list of operations that call the webhook in the
- manifest that deploys gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/master/deploy/gatekeeper.yaml#L596)
- 
+Delete operations needs to be enable by adding "DELETE" to the list of operations that call the validation.gatekeeper.sh webhook in the manifest that deploys gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/master/deploy/gatekeeper.yaml#L596)
+
+Note: For admission webhooks registered for DELETE operations, use Kubernetes v1.15.0+
+
  So you have
  ```YAML
     operations:
@@ -423,8 +424,8 @@ Delete operations needs to be enable by adding "DELETE" to the list of operation
     - UPDATE
     - DELETE
 ```
- 
-You can now also check for deletes.
+
+You can now check for deletes.
 
 #### Viewing the Request Object
 
