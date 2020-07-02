@@ -92,7 +92,9 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
-	wh.InjectLogger(log)
+	if err := wh.InjectLogger(log); err != nil {
+		return err
+	}
 	mgr.GetWebhookServer().Register("/v1/admit", wh)
 	return nil
 }
