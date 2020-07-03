@@ -146,9 +146,17 @@ var DefaultBuiltins = [...]*Builtin{
 	// Tokens
 	JWTDecode,
 	JWTVerifyRS256,
+	JWTVerifyRS384,
+	JWTVerifyRS512,
 	JWTVerifyPS256,
+	JWTVerifyPS384,
+	JWTVerifyPS512,
 	JWTVerifyES256,
+	JWTVerifyES384,
+	JWTVerifyES512,
 	JWTVerifyHS256,
+	JWTVerifyHS384,
+	JWTVerifyHS512,
 	JWTDecodeVerify,
 	JWTEncodeSignRaw,
 	JWTEncodeSign,
@@ -168,9 +176,11 @@ var DefaultBuiltins = [...]*Builtin{
 	CryptoMd5,
 	CryptoSha1,
 	CryptoSha256,
+	CryptoX509ParseCertificateRequest,
 
 	// Graphs
 	WalkBuiltin,
+	ReachableBuiltin,
 
 	// Sort
 	Sort,
@@ -210,6 +220,9 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Units
 	UnitsParseBytes,
+
+	// UUIDs
+	UUIDRFC4122,
 }
 
 // BuiltinMap provides a convenient mapping of built-in names to
@@ -222,6 +235,7 @@ var BuiltinMap map[string]*Builtin
 var IgnoreDuringPartialEval = []*Builtin{
 	NowNanos,
 	HTTPSend,
+	UUIDRFC4122,
 }
 
 /**
@@ -982,6 +996,20 @@ var UnitsParseBytes = &Builtin{
 	),
 }
 
+//
+/**
+ * Type
+ */
+
+// UUIDRFC4122 returns a version 4 UUID string.
+var UUIDRFC4122 = &Builtin{
+	Name: "uuid.rfc4122",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
+	),
+}
+
 /**
  * JSON
  */
@@ -1248,9 +1276,57 @@ var JWTVerifyRS256 = &Builtin{
 	),
 }
 
+// JWTVerifyRS384 verifies if a RS384 JWT signature is valid or not.
+var JWTVerifyRS384 = &Builtin{
+	Name: "io.jwt.verify_rs384",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyRS512 verifies if a RS512 JWT signature is valid or not.
+var JWTVerifyRS512 = &Builtin{
+	Name: "io.jwt.verify_rs512",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
 // JWTVerifyPS256 verifies if a PS256 JWT signature is valid or not.
 var JWTVerifyPS256 = &Builtin{
 	Name: "io.jwt.verify_ps256",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyPS384 verifies if a PS384 JWT signature is valid or not.
+var JWTVerifyPS384 = &Builtin{
+	Name: "io.jwt.verify_ps384",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyPS512 verifies if a PS512 JWT signature is valid or not.
+var JWTVerifyPS512 = &Builtin{
+	Name: "io.jwt.verify_ps512",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,
@@ -1272,9 +1348,57 @@ var JWTVerifyES256 = &Builtin{
 	),
 }
 
+// JWTVerifyES384 verifies if a ES384 JWT signature is valid or not.
+var JWTVerifyES384 = &Builtin{
+	Name: "io.jwt.verify_es384",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyES512 verifies if a ES512 JWT signature is valid or not.
+var JWTVerifyES512 = &Builtin{
+	Name: "io.jwt.verify_es512",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
 // JWTVerifyHS256 verifies if a HS256 (secret) JWT signature is valid or not.
 var JWTVerifyHS256 = &Builtin{
 	Name: "io.jwt.verify_hs256",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyHS384 verifies if a HS384 (secret) JWT signature is valid or not.
+var JWTVerifyHS384 = &Builtin{
+	Name: "io.jwt.verify_hs384",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// JWTVerifyHS512 verifies if a HS512 (secret) JWT signature is valid or not.
+var JWTVerifyHS512 = &Builtin{
+	Name: "io.jwt.verify_hs512",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,
@@ -1443,6 +1567,16 @@ var CryptoX509ParseCertificates = &Builtin{
 	),
 }
 
+// CryptoX509ParseCertificateRequest returns a PKCS #10 certificate signing
+// request from the given PEM-encoded PKCS#10 certificate signing request.
+var CryptoX509ParseCertificateRequest = &Builtin{
+	Name: "crypto.x509.parse_certificate_request",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
+	),
+}
+
 // CryptoMd5 returns a string representing the input string hashed with the md5 function
 var CryptoMd5 = &Builtin{
 	Name: "crypto.md5",
@@ -1488,6 +1622,26 @@ var WalkBuiltin = &Builtin{
 			},
 			nil,
 		),
+	),
+}
+
+// ReachableBuiltin computes the set of reachable nodes in the graph from a set
+// of starting nodes.
+var ReachableBuiltin = &Builtin{
+	Name: "graph.reachable",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(
+				nil,
+				types.NewDynamicProperty(
+					types.A,
+					types.NewAny(
+						types.NewSet(types.A),
+						types.NewArray(nil, types.A)),
+				)),
+			types.NewAny(types.NewSet(types.A), types.NewArray(nil, types.A)),
+		),
+		types.NewSet(types.A),
 	),
 }
 

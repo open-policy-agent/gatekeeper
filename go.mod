@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
+	github.com/coreos/etcd v3.3.15+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0
@@ -13,7 +14,7 @@ require (
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200609232535-dd99544a3119
-	github.com/open-policy-agent/opa v0.19.1
+	github.com/open-policy-agent/opa v0.21.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0
 	go.opencensus.io v0.22.2
