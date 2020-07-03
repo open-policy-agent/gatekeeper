@@ -313,8 +313,32 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 	return false, nil
 }
 
-// traceSwitch returns true if a request should be traced
 func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Request) (*rtypes.Responses, error) {
+	return h.withTracing(ctx, req, func(tracing opa.QueryOpt) (*rtypes.Responses, error) {
+		review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
+		if req.AdmissionRequest.Namespace != "" {
+			ns := &corev1.Namespace{}
+			if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+				if !k8serrors.IsNotFound(err) {
+					return nil, err
+				}
+				// bypass cached client and ask api-server directly
+				err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+				if err != nil {
+					return nil, err
+				}
+			}
+			review.Namespace = ns
+		}
+
+		resp, err := h.opa.Review(ctx, review, tracing)
+
+		return resp, err
+	})
+}
+
+// traceSwitch returns true if a request should be traced
+func (h *validationHandler) withTracing(ctx context.Context, req admission.Request, fn func(traceEnabled opa.QueryOpt) (*rtypes.Responses, error)) (*rtypes.Responses, error) {
 	cfg, _ := h.getConfig(ctx)
 	traceEnabled := false
 	dump := false
@@ -334,23 +358,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 			}
 		}
 	}
-	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
-	if req.AdmissionRequest.Namespace != "" {
-		ns := &corev1.Namespace{}
-		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return nil, err
-			}
-			// bypass cached client and ask api-server directly
-			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
-			if err != nil {
-				return nil, err
-			}
-		}
-		review.Namespace = ns
-	}
 
-	resp, err := h.opa.Review(ctx, review, opa.Tracing(traceEnabled))
+	resp, err := fn(opa.Tracing(traceEnabled))
+
 	if traceEnabled {
 		log.Info(resp.TraceDump())
 	}
@@ -362,6 +372,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 			log.Info(dump)
 		}
 	}
+
 	return resp, err
 }
 
