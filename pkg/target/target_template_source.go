@@ -169,12 +169,12 @@ matches_scope(match) {
 
 matches_scope(match) {
   match.scope == "Namespaced"
-  has_field(input.review, "namespace")
+  get_default(input.review, "namespace", "") != ""
 }
 
 matches_scope(match) {
   match.scope == "Cluster"
-  not has_field(input.review, "namespace")
+  get_default(input.review, "namespace", "") == ""
 }
 
 ########################
@@ -308,18 +308,24 @@ get_ns_name[out] {
   out := input.review.namespace
 }
 
+always_match_ns_selectors(match) {
+  not is_ns(input.review.kind)
+  get_default(input.review, "namespace", "") == ""
+}
+
 matches_namespaces(match) {
   not has_field(match, "namespaces")
 }
 
 # Always match cluster scoped resources, unless resource is namespace
 matches_namespaces(match) {
-  not is_ns(input.review.kind)
-  not has_field(input.review, "namespace")
+  has_field(match, "namespaces")
+  always_match_ns_selectors(match)
 }
 
 matches_namespaces(match) {
   has_field(match, "namespaces")
+  not always_match_ns_selectors(match)
   get_ns_name[ns]
   nss := {n | n = match.namespaces[_]}
   count({ns} - nss) == 0
@@ -331,12 +337,13 @@ does_not_match_excludednamespaces(match) {
 
 # Always match cluster scoped resources, unless resource is namespace
 does_not_match_excludednamespaces(match) {
-  not is_ns(input.review.kind)
-  not has_field(input.review, "namespace")
+  has_field(match, "excludedNamespaces")
+  always_match_ns_selectors(match)
 }
 
 does_not_match_excludednamespaces(match) {
   has_field(match, "excludedNamespaces")
+  not always_match_ns_selectors(match)
   get_ns_name[ns]
   nss := {n | n = match.excludedNamespaces[_]}
   count({ns} - nss) != 0
@@ -348,12 +355,13 @@ matches_nsselector(match) {
 
 # Always match cluster scoped resources, unless resource is namespace
 matches_nsselector(match) {
-  not is_ns(input.review.kind)
-  not has_field(input.review, "namespace")
+  has_field(match, "namespaceSelector")
+  always_match_ns_selectors(match)
 }
 
 matches_nsselector(match) {
   not is_ns(input.review.kind)
+  not always_match_ns_selectors(match)
   has_field(match, "namespaceSelector")
   get_ns[ns]
   matches_namespace_selector(match, ns)
@@ -362,6 +370,7 @@ matches_nsselector(match) {
 # if we are matching against a namespace, match against either the old or new object
 matches_nsselector(match) {
   is_ns(input.review.kind)
+  not always_match_ns_selectors(match)
   has_field(match, "namespaceSelector")
   any_labelselector_match(get_default(match, "namespaceSelector", {}))
 }
