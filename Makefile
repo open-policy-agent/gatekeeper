@@ -248,7 +248,7 @@ promote-staging-manifest:
 	@rm -rf charts
 	@cp -r manifest_staging/charts .
 	@helm package ./charts/gatekeeper -d ./charts/gatekeeper
-	@helm repo index ./charts/gatekeeper --url https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/charts/gatekeeper/
+	@helm repo index ./charts/gatekeeper --url "https://raw.githubusercontent.com/open-policy-agent/gatekeeper/${NEWVERSION}/charts/gatekeeper/"
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
