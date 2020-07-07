@@ -173,6 +173,9 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
+			// cancel expectations
+			t := r.tracker.ForData(instance.GroupVersionKind())
+			t.CancelExpect(instance)
 			r.metricsCache.DeleteObject(syncKey)
 			reportMetrics = true
 			return reconcile.Result{}, nil
@@ -193,6 +196,9 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
+		// cancel expectations
+		t := r.tracker.ForData(instance.GroupVersionKind())
+		t.CancelExpect(instance)
 		r.metricsCache.DeleteObject(syncKey)
 		reportMetrics = true
 		return reconcile.Result{}, nil

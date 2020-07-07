@@ -295,6 +295,10 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
 
+		//cancel expectations
+		t := r.tracker.For(instance.GroupVersionKind())
+		t.CancelExpect(instance)
+
 		sName, err := constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), instance)
 		if err != nil {
 			return reconcile.Result{}, err
