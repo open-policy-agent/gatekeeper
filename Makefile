@@ -5,7 +5,7 @@ IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 
-VERSION := v3.1.0-beta.9
+VERSION := v3.1.0-beta.10
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.7.0
@@ -248,7 +248,7 @@ promote-staging-manifest:
 	@rm -rf charts
 	@cp -r manifest_staging/charts .
 	@helm package ./charts/gatekeeper -d ./charts/gatekeeper
-	@helm repo index ./charts/gatekeeper --url https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/charts/gatekeeper/
+	@helm repo index ./charts/gatekeeper --url "https://raw.githubusercontent.com/open-policy-agent/gatekeeper/${NEWVERSION}/charts/gatekeeper/"
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:

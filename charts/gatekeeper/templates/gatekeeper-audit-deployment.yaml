@@ -42,6 +42,7 @@ spec:
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --operation=audit
+        - --operation=status
         - --logtostderr
         command:
         - /manager

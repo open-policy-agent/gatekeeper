@@ -28,6 +28,9 @@ type ConfigSpec struct {
 
 	// Configuration for validation
 	Validation Validation `json:"validation,omitempty"`
+
+	// Configuration for namespace exclusion
+	Match []MatchEntry `json:"match,omitempty"`
 }
 
 type Validation struct {
@@ -53,6 +56,11 @@ type SyncOnlyEntry struct {
 	Group   string `json:"group,omitempty"`
 	Version string `json:"version,omitempty"`
 	Kind    string `json:"kind,omitempty"`
+}
+
+type MatchEntry struct {
+	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
+	Processes          []string `json:"processes,omitempty"`
 }
 
 // ConfigStatus defines the observed state of Config
