@@ -295,7 +295,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
 
-		//cancel expectations
+		// cancel expectations
 		t := r.tracker.For(instance.GroupVersionKind())
 		t.CancelExpect(instance)
 
