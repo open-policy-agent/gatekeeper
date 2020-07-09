@@ -634,7 +634,12 @@ func TestGetDenyMessages(t *testing.T) {
 					},
 				},
 			}
-			msgs := handler.getDenyMessages(tt.Result, review)
+			ref := &corev1.ObjectReference{
+				Kind:      "Deployment",
+				Namespace: "gatekeeper-system",
+				Name:      "test",
+			}
+			msgs := handler.getDenyMessages(tt.Result, review, ref)
 			if len(msgs) != tt.ExpectedMsgCount {
 				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
 			}
