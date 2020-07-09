@@ -94,6 +94,14 @@ func setExcludedNamespaceName(name string) buildArg {
 	}
 }
 
+func setScope(scope string) buildArg {
+	return func(obj *unstructured.Unstructured) {
+		if err := unstructured.SetNestedField(obj.Object, scope, "spec", "match", "scope"); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func makeConstraint(o ...buildArg) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetName("my-constraint")
@@ -220,6 +228,45 @@ func TestConstraintEnforcement(t *testing.T) {
 			allowed: false,
 		},
 		{
+			name: "match everything with scope as wildcard",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			ns:   makeNamespace("my-ns", map[string]string{"ns": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("*"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: false,
+		},
+		{
+			name: "match everything with scope as namespaced",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			ns:   makeNamespace("my-ns", map[string]string{"ns": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("Namespaced"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: false,
+		},
+		{
+			name: "match everything with scope as cluster",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			ns:   makeNamespace("my-ns", map[string]string{"ns": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("Cluster"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: true,
+		},
+		{
 			name: "match everything but kind",
 			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
 			ns:   makeNamespace("my-ns", map[string]string{"ns": "label"}),
@@ -267,6 +314,53 @@ func TestConstraintEnforcement(t *testing.T) {
 			),
 			allowed: true,
 		},
+		{
+			name: "match everything cluster scoped",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: false,
+		},
+		{
+			name: "match everything cluster scoped wildcard as scope",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("*"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: false,
+		},
+		{
+			name: "do not match everything cluster scoped namespaced as scope",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("Namespaced"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: true,
+		},
+		{
+			name: "match everything cluster scoped with cluster as scope",
+			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			constraint: makeConstraint(
+				setKinds([]string{"some"}, []string{"Thing"}),
+				setScope("Cluster"),
+				setNamespaceName("my-ns"),
+				setLabelSelector("obj", "label"),
+				setNamespaceSelector("ns", "label"),
+			),
+			allowed: false,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -306,8 +400,12 @@ func TestConstraintEnforcement(t *testing.T) {
 				Object: runtime.RawExtension{
 					Raw: objData,
 				},
-				Namespace: tc.ns.Name,
 			}
+
+			if tc.ns != nil {
+				req.Namespace = tc.ns.Name
+			}
+
 			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
 			res, err := c.Review(context.Background(), fullReq, client.Tracing(true))
 			if err != nil {
@@ -331,8 +429,12 @@ func TestConstraintEnforcement(t *testing.T) {
 				OldObject: runtime.RawExtension{
 					Raw: objData,
 				},
-				Namespace: tc.ns.Name,
 			}
+
+			if tc.ns != nil {
+				req2.Namespace = tc.ns.Name
+			}
+
 			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
 			res2, err := c.Review(context.Background(), fullReq2, client.Tracing(true))
 			if err != nil {
