@@ -1,23 +1,20 @@
 package k8spspforbiddensysctls
 
 violation[{"msg": msg, "details": {}}] {
-    sysctls := {x | x = input.review.object.spec.securityContext.sysctls[_][name]}
-    count(sysctls) > 0
-    input_sysctls(sysctls)
-    msg := sprintf("One of the sysctls %v is not allowed, pod: %v. Forbidden sysctls: %v", [sysctls, input.review.object.metadata.name, input.parameters.forbiddenSysctls])
+    sysctl := input.review.object.spec.securityContext.sysctls[_].name
+    forbidden_sysctl(sysctl)
+    msg := sprintf("The sysctl %v is not allowed, pod: %v. Forbidden sysctls: %v", [sysctl, input.review.object.metadata.name, input.parameters.forbiddenSysctls])
 }
 
 # * may be used to forbid all sysctls
-input_sysctls(sysctls) {
+forbidden_sysctl(sysctl) {
     input.parameters.forbiddenSysctls[_] == "*"
 }
 
-input_sysctls(sysctls) {
-    forbidden_sysctls := {x | x = input.parameters.forbiddenSysctls[_]}
-    test := sysctls & forbidden_sysctls
-    count(test) > 0
+forbidden_sysctl(sysctl) {
+    input.parameters.forbiddenSysctls[_] == sysctl
 }
 
-input_sysctls(sysctls) {
-    startswith(sysctls[_], trim(input.parameters.forbiddenSysctls[_], "*"))
+forbidden_sysctl(sysctl) {
+    startswith(sysctl, trim(input.parameters.forbiddenSysctls[_], "*"))
 }
