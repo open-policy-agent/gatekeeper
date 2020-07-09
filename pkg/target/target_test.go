@@ -39,19 +39,19 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
-  	"name": "ns-must-have-gk"
+		"name": "ns-must-have-gk"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
+		"match": {
+			"kinds": [
+				{
 					"apiGroups": [""],
-        	"kinds": ["Namespace"]
+					"kinds": ["Namespace"]
 				}
 			]
 		},
-  	"parameters": {
-    	"labels": ["gatekeeper"]
+		"parameters": {
+			"labels": ["gatekeeper"]
 		}
 	}
 }
@@ -65,14 +65,14 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
-  	"name": "ns-must-have-gk"
+		"name": "ns-must-have-gk"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
+		"match": {
+			"kinds": [
+				{
 					"apiGroups": [""],
-        	"kinds": ["Namespace"]
+					"kinds": ["Namespace"]
 				}
 			],
 			"labelSelector": {
@@ -83,8 +83,8 @@ func TestValidateConstraint(t *testing.T) {
 				}]
 			}
 		},
-  	"parameters": {
-    	"labels": ["gatekeeper"]
+		"parameters": {
+			"labels": ["gatekeeper"]
 		}
 	}
 }
@@ -98,14 +98,14 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sRequiredLabel",
 	"metadata": {
-  	"name": "ns-must-have-gk"
+		"name": "ns-must-have-gk"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
+		"match": {
+			"kinds": [
+				{
 					"apiGroups": [""],
-        	"kinds": ["Namespace"]
+					"kinds": ["Namespace"]
 				}
 			],
 			"labelSelector": {
@@ -116,8 +116,8 @@ func TestValidateConstraint(t *testing.T) {
 				}]
 			}
 		},
-  	"parameters": {
-    	"labels": ["gatekeeper"]
+		"parameters": {
+			"labels": ["gatekeeper"]
 		}
 	}
 }
@@ -131,25 +131,26 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
-  	"name": "prod-nslabels-is-openpolicyagent"
+		"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
-			"apiGroups": [""],
-        	"kinds": ["Pod"]
-		}],
-		"labelSelector": {
-			"matchExpressions": [{
-	     		"key": "someKey",
-				"operator": "In",
-				"values": ["some value"]
-			}]
-		}
-	},
-  	"parameters": {
-    	"repos": ["openpolicyagent"]
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			],
+			"labelSelector": {
+				"matchExpressions": [{
+					"key": "someKey",
+					"operator": "In",
+					"values": ["some value"]
+				}]
+			}
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
 		}
 	}
 }
@@ -163,25 +164,26 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
-  	"name": "prod-nslabels-is-openpolicyagent"
+		"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
-			"apiGroups": [""],
-        	"kinds": ["Pod"]
-		}],
-		"namespaceSelector": {
-			"matchExpressions": [{
-	     		"key": "someKey",
-				"operator": "In",
-				"values": ["some value"]
-			}]
-		}
-	},
-  	"parameters": {
-    	"repos": ["openpolicyagent"]
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			],
+			"namespaceSelector": {
+				"matchExpressions": [{
+					"key": "someKey",
+					"operator": "In",
+					"values": ["some value"]
+				}]
+			}
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
 		}
 	}
 }
@@ -195,25 +197,26 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
-  	"name": "prod-nslabels-is-openpolicyagent"
+		"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-  	"match": {
-    	"kinds": [
-      	{
-			"apiGroups": [""],
-        	"kinds": ["Pod"]
-		}],
-		"namespaceSelector": {
-			"matchExpressions": [{
-	     		"key": "someKey",
-				"operator": "Blah",
-				"values": ["some value"]
-			}]
-		}
-	},
-  	"parameters": {
-    	"repos": ["openpolicyagent"]
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			],
+			"namespaceSelector": {
+				"matchExpressions": [{
+				 		"key": "someKey",
+					"operator": "Blah",
+					"values": ["some value"]
+				}]
+			}
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
 		}
 	}
 }
@@ -227,19 +230,20 @@ func TestValidateConstraint(t *testing.T) {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
 	"kind": "K8sAllowedRepos",
 	"metadata": {
-  	"name": "prod-nslabels-is-openpolicyagent"
+		"name": "prod-nslabels-is-openpolicyagent"
 	},
 	"spec": {
-	"enforcementAction": "dryrun",
-  	"match": {
-    	"kinds": [
-      	{
-			"apiGroups": [""],
-        	"kinds": ["Pod"]
-		}]
-	},
-  	"parameters": {
-    	"repos": ["openpolicyagent"]
+		"enforcementAction": "dryrun",
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			]
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
 		}
 	}
 }
@@ -284,7 +288,7 @@ func TestHandleViolation(t *testing.T) {
 	},
 	"name": "somename",
 	"operation": "CREATE",
-  "object": {
+	"object": {
 		"metadata": {"name": "somename"},
 		"spec": {"value": "yep"}
 	}
@@ -310,7 +314,7 @@ func TestHandleViolation(t *testing.T) {
 	},
 	"name": "somename",
 	"operation": "CREATE",
-  "object": {
+	"object": {
 		"metadata": {"name": "somename"},
 		"spec": {"value": "yep"}
 	}
