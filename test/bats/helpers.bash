@@ -79,3 +79,11 @@ compare_generation() {
 
   [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.status.byPod[0].observedGeneration')" = "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.metadata.generation')" ]]
 }
+
+compare_count() {
+  kind="$1"
+  constraint="$2"
+  podcount="$3"
+
+  [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o yaml | grep -c 'id: gatekeeper-controller-manager')" = $podcount ]]
+}
