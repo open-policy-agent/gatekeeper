@@ -74,6 +74,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
+	emitDenyEvents                     = flag.Bool("emit-deny-events", false, "emit Kubernetes events in gatekeeper namespace with detailed info on each deny")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
@@ -97,15 +98,29 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	recorder := eventBroadcaster.NewRecorder(
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
-
+	client := mgr.GetClient()
+	var ref *corev1.ObjectReference
+	if *emitDenyEvents {
+		gkDeploy := &appsv1.Deployment{}
+		deploy := types.NamespacedName{Namespace: util.GetNamespace(), Name: "gatekeeper-controller-manager"}
+		err = client.Get(context.Background(), deploy, gkDeploy)
+		if err != nil {
+			return err
+		}
+		ref, err = reference.GetReference(scheme.Scheme, gkDeploy)
+		if err != nil {
+			return err
+		}
+	}
 	wh := &admission.Webhook{
 		Handler: &validationHandler{
 			opa:             opa,
-			client:          mgr.GetClient(),
+			client:          client,
 			reader:          mgr.GetAPIReader(),
 			reporter:        reporter,
 			processExcluder: processExcluder,
 			eventRecorder:   recorder,
+			reference:       ref,
 		},
 	}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
@@ -130,6 +145,7 @@ type validationHandler struct {
 	injectedConfig  *v1alpha1.Config
 	processExcluder *process.Excluder
 	eventRecorder   record.EventRecorder
+	reference       *corev1.ObjectReference
 }
 
 type requestResponse string
@@ -210,18 +226,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-
-	gkDeploy := &appsv1.Deployment{}
-	deploy := types.NamespacedName{Namespace: util.GetNamespace(), Name: "gatekeeper-controller-manager"}
-	err = h.client.Get(ctx, deploy, gkDeploy)
-	if err != nil {
-		log.Error(err, "error getting gatekeeper deployment object")
-	}
-	ref, err := reference.GetReference(scheme.Scheme, gkDeploy)
-	if err != nil {
-		log.Error(err, "error getting gatekeeper deployment reference")
-	}
-	msgs := h.getDenyMessages(res, req, ref)
+	msgs := h.getDenyMessages(res, req)
 	if len(msgs) > 0 {
 		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
 		if vResp.Result == nil {
@@ -236,10 +241,10 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return admission.ValidationResponse(true, "")
 }
 
-func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request, ref *corev1.ObjectReference) []string {
+func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
 	var msgs []string
 	var resourceName string
-	if len(res) > 0 {
+	if len(res) > 0 && (*logDenies || *emitDenyEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
 			// On a CREATE operation, the client may omit name and
@@ -265,7 +270,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
-			if ref != nil && ref.Name == "gatekeeper-controller-manager" {
+			if *emitDenyEvents && h.reference != nil {
 				annotations := map[string]string{
 					"process":            "admission",
 					"event_type":         "violation",
@@ -283,7 +288,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					eventMsg = "Dryrun violation"
 					reason = "DryrunViolation"
 				}
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s: [Namespace: %s Kind: %s Name: %s] by constraint %s %s", eventMsg, req.AdmissionRequest.Namespace, req.AdmissionRequest.Kind.Kind, resourceName, r.Constraint.GetName(), r.Msg)
+				h.eventRecorder.AnnotatedEventf(h.reference, annotations, corev1.EventTypeWarning, reason, "%s: [Namespace: %s Kind: %s Name: %s] by constraint %s %s", eventMsg, req.AdmissionRequest.Namespace, req.AdmissionRequest.Kind.Kind, resourceName, r.Constraint.GetName(), r.Msg)
 			}
 
 		}
