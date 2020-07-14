@@ -3,6 +3,7 @@ package topdown
 import (
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,36 +30,42 @@ func (f *queryIDFactory) Next() uint64 {
 }
 
 type eval struct {
-	ctx             context.Context
-	queryID         uint64
-	queryIDFact     *queryIDFactory
-	parent          *eval
-	caller          *eval
-	cancel          Cancel
-	query           ast.Body
-	queryCompiler   ast.QueryCompiler
-	index           int
-	indexing        bool
-	bindings        *bindings
-	store           storage.Store
-	baseCache       *baseCache
-	txn             storage.Transaction
-	compiler        *ast.Compiler
-	input           *ast.Term
-	data            *ast.Term
-	targetStack     *refStack
-	tracers         []Tracer
-	instr           *Instrumentation
-	builtins        map[string]*Builtin
-	builtinCache    builtins.Cache
-	virtualCache    *virtualCache
-	saveSet         *saveSet
-	saveStack       *saveStack
-	saveSupport     *saveSupport
-	saveNamespace   *ast.Term
-	disableInlining [][]ast.Ref
-	genvarprefix    string
-	runtime         *ast.Term
+	ctx                context.Context
+	seed               io.Reader
+	queryID            uint64
+	queryIDFact        *queryIDFactory
+	parent             *eval
+	caller             *eval
+	cancel             Cancel
+	query              ast.Body
+	queryCompiler      ast.QueryCompiler
+	index              int
+	indexing           bool
+	bindings           *bindings
+	store              storage.Store
+	baseCache          *baseCache
+	txn                storage.Transaction
+	compiler           *ast.Compiler
+	input              *ast.Term
+	data               *ast.Term
+	targetStack        *refStack
+	tracers            []QueryTracer
+	traceEnabled       bool
+	plugTraceVars      bool
+	instr              *Instrumentation
+	builtins           map[string]*Builtin
+	builtinCache       builtins.Cache
+	virtualCache       *virtualCache
+	comprehensionCache *comprehensionCache
+	saveSet            *saveSet
+	saveStack          *saveStack
+	saveSupport        *saveSupport
+	saveNamespace      *ast.Term
+	skipSaveNamespace  bool
+	inliningControl    *inliningControl
+	genvarprefix       string
+	genvarid           int
+	runtime            *ast.Term
 }
 
 func (e *eval) Run(iter evalIterator) error {
@@ -129,7 +136,7 @@ func (e *eval) unknown(x interface{}, b *bindings) bool {
 		x = ast.NewTerm(v)
 	}
 
-	return saveRequired(e.compiler, e.saveSet, b, x, false)
+	return saveRequired(e.compiler, e.inliningControl, true, e.saveSet, b, x, false)
 }
 
 func (e *eval) traceEnter(x ast.Node) {
@@ -162,60 +169,63 @@ func (e *eval) traceIndex(x ast.Node, msg string) {
 
 func (e *eval) traceEvent(op Op, x ast.Node, msg string) {
 
-	if !traceIsEnabled(e.tracers) {
+	if !e.traceEnabled {
 		return
 	}
-
-	locals := ast.NewValueMap()
-	localMeta := map[ast.Var]VarMetadata{}
-
-	e.bindings.Iter(nil, func(k, v *ast.Term) error {
-		original := k.Value.(ast.Var)
-		rewritten, _ := e.rewrittenVar(original)
-		localMeta[original] = VarMetadata{
-			Name:     rewritten,
-			Location: k.Loc(),
-		}
-
-		// For backwards compatibility save a copy of the values too..
-		locals.Put(k.Value, v.Value)
-		return nil
-	})
-
-	ast.WalkTerms(x, func(term *ast.Term) bool {
-		if v, ok := term.Value.(ast.Var); ok {
-			if _, ok := localMeta[v]; !ok {
-				if rewritten, ok := e.rewrittenVar(v); ok {
-					localMeta[v] = VarMetadata{
-						Name:     rewritten,
-						Location: term.Loc(),
-					}
-				}
-			}
-		}
-		return false
-	})
 
 	var parentID uint64
 	if e.parent != nil {
 		parentID = e.parent.queryID
 	}
 
-	evt := &Event{
-		QueryID:       e.queryID,
-		ParentID:      parentID,
-		Op:            op,
-		Node:          x,
-		Location:      x.Loc(),
-		Locals:        locals,
-		LocalMetadata: localMeta,
-		Message:       msg,
+	evt := Event{
+		QueryID:  e.queryID,
+		ParentID: parentID,
+		Op:       op,
+		Node:     x,
+		Location: x.Loc(),
+		Message:  msg,
+	}
+
+	// Skip plugging the local variables, unless any of the tracers
+	// had required it via their configuration. If any required the
+	// variable bindings then we will plug and give values for all
+	// tracers.
+	if e.plugTraceVars {
+
+		evt.Locals = ast.NewValueMap()
+		evt.LocalMetadata = map[ast.Var]VarMetadata{}
+
+		e.bindings.Iter(nil, func(k, v *ast.Term) error {
+			original := k.Value.(ast.Var)
+			rewritten, _ := e.rewrittenVar(original)
+			evt.LocalMetadata[original] = VarMetadata{
+				Name:     rewritten,
+				Location: k.Loc(),
+			}
+
+			// For backwards compatibility save a copy of the values too..
+			evt.Locals.Put(k.Value, v.Value)
+			return nil
+		})
+
+		ast.WalkTerms(x, func(term *ast.Term) bool {
+			if v, ok := term.Value.(ast.Var); ok {
+				if _, ok := evt.LocalMetadata[v]; !ok {
+					if rewritten, ok := e.rewrittenVar(v); ok {
+						evt.LocalMetadata[v] = VarMetadata{
+							Name:     rewritten,
+							Location: term.Loc(),
+						}
+					}
+				}
+			}
+			return false
+		})
 	}
 
 	for i := range e.tracers {
-		if e.tracers[i].Enabled() {
-			e.tracers[i].Trace(evt)
-		}
+		e.tracers[i].TraceEvent(evt)
 	}
 }
 
@@ -382,7 +392,6 @@ func (e *eval) evalWith(iter evalIterator) error {
 	}
 
 	input, err := mergeTermWithValues(e.input, pairsInput)
-
 	if err != nil {
 		return &Error{
 			Code:     ConflictErr,
@@ -430,17 +439,19 @@ func (e *eval) evalWithPush(input *ast.Term, data *ast.Term, targets []ast.Ref, 
 		e.data = data
 	}
 
+	e.comprehensionCache.Push()
 	e.virtualCache.Push()
 	e.targetStack.Push(targets)
-	e.disableInlining = append(e.disableInlining, disable)
+	e.inliningControl.PushDisable(disable, true)
 
 	return oldInput, oldData
 }
 
 func (e *eval) evalWithPop(input *ast.Term, data *ast.Term) {
-	e.disableInlining = e.disableInlining[:len(e.disableInlining)-1]
+	e.inliningControl.PopDisable()
 	e.targetStack.Pop()
 	e.virtualCache.Pop()
+	e.comprehensionCache.Pop()
 	e.data = data
 	e.input = input
 }
@@ -463,7 +474,7 @@ func (e *eval) evalNotPartial(iter evalIterator) error {
 	// Run partial evaluation, plugging the result and applying copy propagation to
 	// each result. Since the result may require support, push a new query onto the
 	// save stack to avoid mutating the current save query.
-	p := copypropagation.New(unknowns).WithEnsureNonEmptyBody(true)
+	p := copypropagation.New(unknowns).WithEnsureNonEmptyBody(true).WithCompiler(e.compiler)
 	var savedQueries []ast.Body
 	e.saveStack.PushQuery(nil)
 
@@ -592,14 +603,16 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 	}
 
 	bctx := BuiltinContext{
-		Context:  e.ctx,
-		Cancel:   e.cancel,
-		Runtime:  e.runtime,
-		Cache:    e.builtinCache,
-		Location: e.query[e.index].Location,
-		Tracers:  e.tracers,
-		QueryID:  e.queryID,
-		ParentID: parentID,
+		Context:      e.ctx,
+		Seed:         e.seed,
+		Cancel:       e.cancel,
+		Runtime:      e.runtime,
+		Cache:        e.builtinCache,
+		Location:     e.query[e.index].Location,
+		QueryTracers: e.tracers,
+		TraceEnabled: e.traceEnabled,
+		QueryID:      e.queryID,
+		ParentID:     parentID,
 	}
 
 	eval := evalBuiltin{
@@ -796,7 +809,6 @@ func (e *eval) biunifyRef(a, b *ast.Term, b1, b2 *bindings, iter unifyIterator) 
 
 	if ref[0].Equal(ast.DefaultRootDocument) {
 		node := e.compiler.RuleTree.Child(ref[0].Value)
-
 		eval := evalTree{
 			e:         e,
 			ref:       ref,
@@ -847,6 +859,16 @@ func (e *eval) biunifyComprehension(a, b *ast.Term, b1, b2 *bindings, swap bool,
 		return e.biunifyComprehensionPartial(a, b, b1, b2, swap, iter)
 	}
 
+	value, err := e.buildComprehensionCache(a)
+
+	if err != nil {
+		return err
+	} else if value != nil {
+		return e.biunify(value, b, b1, b2, iter)
+	} else {
+		e.instr.counterIncr(evalOpComprehensionCacheMiss)
+	}
+
 	switch a := a.Value.(type) {
 	case *ast.ArrayComprehension:
 		return e.biunifyComprehensionArray(a, b, b1, b2, iter)
@@ -856,7 +878,106 @@ func (e *eval) biunifyComprehension(a, b *ast.Term, b1, b2 *bindings, swap bool,
 		return e.biunifyComprehensionObject(a, b, b1, b2, iter)
 	}
 
-	return fmt.Errorf("illegal comprehension %T", a)
+	return internalErr(e.query[e.index].Location, "illegal comprehension type")
+}
+
+func (e *eval) buildComprehensionCache(a *ast.Term) (*ast.Term, error) {
+
+	index := e.comprehensionIndex(a)
+	if index == nil {
+		e.instr.counterIncr(evalOpComprehensionCacheSkip)
+		return nil, nil
+	}
+
+	cache, ok := e.comprehensionCache.Elem(a)
+	if !ok {
+		var err error
+		switch x := a.Value.(type) {
+		case *ast.ArrayComprehension:
+			cache, err = e.buildComprehensionCacheArray(x, index.Keys)
+		case *ast.SetComprehension:
+			cache, err = e.buildComprehensionCacheSet(x, index.Keys)
+		case *ast.ObjectComprehension:
+			cache, err = e.buildComprehensionCacheObject(x, index.Keys)
+		default:
+			err = internalErr(e.query[e.index].Location, "illegal comprehension type")
+		}
+		if err != nil {
+			return nil, err
+		}
+		e.comprehensionCache.Set(a, cache)
+		e.instr.counterIncr(evalOpComprehensionCacheBuild)
+	} else {
+		e.instr.counterIncr(evalOpComprehensionCacheHit)
+	}
+
+	values := make([]*ast.Term, len(index.Keys))
+
+	for i := range index.Keys {
+		values[i] = e.bindings.Plug(index.Keys[i])
+	}
+
+	return cache.Get(values), nil
+}
+
+func (e *eval) buildComprehensionCacheArray(x *ast.ArrayComprehension, keys []*ast.Term) (*comprehensionCacheElem, error) {
+	child := e.child(x.Body)
+	node := newComprehensionCacheElem()
+	return node, child.Run(func(child *eval) error {
+		values := make([]*ast.Term, len(keys))
+		for i := range keys {
+			values[i] = child.bindings.Plug(keys[i])
+		}
+		head := child.bindings.Plug(x.Term)
+		cached := node.Get(values)
+		if cached != nil {
+			cached.Value = append(cached.Value.(ast.Array), head)
+		} else {
+			node.Put(values, ast.ArrayTerm(head))
+		}
+		return nil
+	})
+}
+
+func (e *eval) buildComprehensionCacheSet(x *ast.SetComprehension, keys []*ast.Term) (*comprehensionCacheElem, error) {
+	child := e.child(x.Body)
+	node := newComprehensionCacheElem()
+	return node, child.Run(func(child *eval) error {
+		values := make([]*ast.Term, len(keys))
+		for i := range keys {
+			values[i] = child.bindings.Plug(keys[i])
+		}
+		head := child.bindings.Plug(x.Term)
+		cached := node.Get(values)
+		if cached != nil {
+			set := cached.Value.(ast.Set)
+			set.Add(head)
+		} else {
+			node.Put(values, ast.SetTerm(head))
+		}
+		return nil
+	})
+}
+
+func (e *eval) buildComprehensionCacheObject(x *ast.ObjectComprehension, keys []*ast.Term) (*comprehensionCacheElem, error) {
+	child := e.child(x.Body)
+	node := newComprehensionCacheElem()
+	return node, child.Run(func(child *eval) error {
+		values := make([]*ast.Term, len(keys))
+		for i := range keys {
+			values[i] = child.bindings.Plug(keys[i])
+		}
+		headKey := child.bindings.Plug(x.Key)
+		headValue := child.bindings.Plug(x.Value)
+		cached := node.Get(values)
+		if cached != nil {
+			obj := cached.Value.(ast.Object)
+			obj.Insert(headKey, headValue)
+		} else {
+			node.Put(values, ast.ObjectTerm(ast.Item(headKey, headValue)))
+		}
+		return nil
+	})
 }
 
 func (e *eval) biunifyComprehensionPartial(a, b *ast.Term, b1, b2 *bindings, swap bool, iter unifyIterator) error {
@@ -1099,7 +1220,7 @@ func (e *eval) getRules(ref ast.Ref) (*ast.IndexResult, error) {
 func (e *eval) Resolve(ref ast.Ref) (ast.Value, error) {
 	e.instr.startTimer(evalOpResolve)
 
-	if e.saveSet.Contains(ast.NewTerm(ref), nil) {
+	if e.inliningControl.Disabled(ref, true) || e.saveSet.Contains(ast.NewTerm(ref), nil) {
 		e.instr.stopTimer(evalOpResolve)
 		return nil, ast.UnknownValueErr{}
 	}
@@ -1411,8 +1532,12 @@ func (e evalTree) finish(iter unifyIterator) error {
 
 	// During partial evaluation it may not be possible to compute the value
 	// for this reference if it refers to a virtual document so save the entire
-	// expression. See "save: full extent" test case for an example.
-	if e.node != nil && e.e.unknown(e.ref, e.e.bindings) {
+	// expression. See "save: full extent" test case for an example. We also
+	// need to account for the inlining controls here to prevent base documents
+	// from being inlined when they should not be.
+	save := e.e.unknown(e.ref, e.e.bindings)
+
+	if save {
 		return e.e.saveUnify(ast.NewTerm(e.plugged), e.rterm, e.bindings, e.rbindings, iter)
 	}
 
@@ -1458,6 +1583,11 @@ func (e evalTree) next(iter unifyIterator, plugged *ast.Term) error {
 }
 
 func (e evalTree) enumerate(iter unifyIterator) error {
+
+	if e.e.inliningControl.Disabled(e.plugged[:e.pos], true) {
+		return e.e.saveUnify(ast.NewTerm(e.plugged), e.rterm, e.bindings, e.rbindings, iter)
+	}
+
 	doc, err := e.e.Resolve(e.plugged[:e.pos])
 	if err != nil {
 		return err
@@ -1675,7 +1805,7 @@ func (e evalVirtualPartial) eval(iter unifyIterator) error {
 
 	var cacheKey ast.Ref
 
-	if e.ir.Kind == ast.PartialObjectDoc {
+	if !e.e.unknown(e.ref[:e.pos+1], e.bindings) && e.ir.Kind == ast.PartialObjectDoc {
 		plugged := e.bindings.Plug(e.ref[e.pos+1])
 
 		if plugged.IsGround() {
@@ -1693,9 +1823,7 @@ func (e evalVirtualPartial) eval(iter unifyIterator) error {
 		}
 	}
 
-	generateSupport := anyRefSetContainsPrefix(e.e.disableInlining, e.plugged[:e.pos+1])
-
-	if generateSupport {
+	if e.e.inliningControl.Disabled(e.plugged[:e.pos+1], false) {
 		return e.partialEvalSupport(iter)
 	}
 
@@ -1783,7 +1911,7 @@ func (e evalVirtualPartial) evalOneRule(iter unifyIterator, rule *ast.Rule, cach
 
 func (e evalVirtualPartial) partialEvalSupport(iter unifyIterator) error {
 
-	path := e.plugged[:e.pos+1].Insert(e.e.saveNamespace, 1)
+	path, term := e.e.savePackagePathAndTerm(e.plugged[:e.pos+1], e.ref)
 
 	if !e.e.saveSupport.Exists(path) {
 		for i := range e.ir.Rules {
@@ -1794,8 +1922,7 @@ func (e evalVirtualPartial) partialEvalSupport(iter unifyIterator) error {
 		}
 	}
 
-	rewritten := ast.NewTerm(e.ref.Insert(e.e.saveNamespace, 1))
-	return e.e.saveUnify(rewritten, e.rterm, e.bindings, e.rbindings, iter)
+	return e.e.saveUnify(term, e.rterm, e.bindings, e.rbindings, iter)
 }
 
 func (e evalVirtualPartial) partialEvalSupportRule(iter unifyIterator, rule *ast.Rule, path ast.Ref) error {
@@ -1822,7 +1949,7 @@ func (e evalVirtualPartial) partialEvalSupportRule(iter unifyIterator, rule *ast
 		}
 
 		head := ast.NewHead(rule.Head.Name, key, value)
-		p := copypropagation.New(head.Vars()).WithEnsureNonEmptyBody(true)
+		p := copypropagation.New(head.Vars()).WithEnsureNonEmptyBody(true).WithCompiler(e.e.compiler)
 
 		e.e.saveSupport.Insert(path, &ast.Rule{
 			Head:    head,
@@ -1908,9 +2035,7 @@ func (e evalVirtualComplete) eval(iter unifyIterator) error {
 		generateSupport = !ast.IsConstant(rterm.Value) || e.ir.Default.Head.Value.Equal(rterm)
 	}
 
-	generateSupport = generateSupport || anyRefSetContainsPrefix(e.e.disableInlining, e.plugged[:e.pos+1])
-
-	if generateSupport {
+	if generateSupport || e.e.inliningControl.Disabled(e.plugged[:e.pos+1], false) {
 		return e.partialEvalSupport(iter)
 	}
 
@@ -2020,7 +2145,7 @@ func (e evalVirtualComplete) partialEval(iter unifyIterator) error {
 
 func (e evalVirtualComplete) partialEvalSupport(iter unifyIterator) error {
 
-	path := e.plugged[:e.pos+1].Insert(e.e.saveNamespace, 1)
+	path, term := e.e.savePackagePathAndTerm(e.plugged[:e.pos+1], e.ref)
 
 	if !e.e.saveSupport.Exists(path) {
 
@@ -2039,8 +2164,7 @@ func (e evalVirtualComplete) partialEvalSupport(iter unifyIterator) error {
 		}
 	}
 
-	rewritten := ast.NewTerm(e.ref.Insert(e.e.saveNamespace, 1))
-	return e.e.saveUnify(rewritten, e.rterm, e.bindings, e.rbindings, iter)
+	return e.e.saveUnify(term, e.rterm, e.bindings, e.rbindings, iter)
 }
 
 func (e evalVirtualComplete) partialEvalSupportRule(iter unifyIterator, rule *ast.Rule, path ast.Ref) error {
@@ -2057,7 +2181,7 @@ func (e evalVirtualComplete) partialEvalSupportRule(iter unifyIterator, rule *as
 		plugged := current.Plug(e.e.caller.bindings)
 
 		head := ast.NewHead(rule.Head.Name, nil, child.bindings.PlugNamespaced(rule.Head.Value, e.e.caller.bindings))
-		p := copypropagation.New(head.Vars()).WithEnsureNonEmptyBody(true)
+		p := copypropagation.New(head.Vars()).WithEnsureNonEmptyBody(true).WithCompiler(e.e.compiler)
 
 		e.e.saveSupport.Insert(path, &ast.Rule{
 			Head:    head,
@@ -2213,15 +2337,37 @@ func (e evalTerm) get(plugged *ast.Term) (*ast.Term, *bindings) {
 
 func (e evalTerm) save(iter unifyIterator) error {
 
-	suffix := e.ref[e.pos:]
-	ref := make(ast.Ref, len(suffix)+1)
-	ref[0] = e.term
+	v := e.e.generateVar(fmt.Sprintf("ref_%d", e.e.genvarid))
+	e.e.genvarid++
 
-	for i := 0; i < len(suffix); i++ {
-		ref[i+1] = suffix[i]
+	return e.e.biunify(e.term, v, e.termbindings, e.bindings, func() error {
+
+		suffix := e.ref[e.pos:]
+		ref := make(ast.Ref, len(suffix)+1)
+		ref[0] = v
+		for i := 0; i < len(suffix); i++ {
+			ref[i+1] = suffix[i]
+		}
+
+		return e.e.biunify(ast.NewTerm(ref), e.rterm, e.bindings, e.rbindings, iter)
+	})
+
+}
+
+func (e *eval) comprehensionIndex(term *ast.Term) *ast.ComprehensionIndex {
+	if e.queryCompiler != nil {
+		return e.queryCompiler.ComprehensionIndex(term)
+	}
+	return e.compiler.ComprehensionIndex(term)
+}
+
+func (e *eval) savePackagePathAndTerm(plugged, ref ast.Ref) (ast.Ref, *ast.Term) {
+
+	if e.skipSaveNamespace {
+		return plugged, ast.NewTerm(ref)
 	}
 
-	return e.e.biunify(ast.NewTerm(ref), e.rterm, e.termbindings, e.rbindings, iter)
+	return plugged.Insert(e.saveNamespace, 1), ast.NewTerm(ref.Insert(e.saveNamespace, 1))
 }
 
 func applyCopyPropagation(p *copypropagation.CopyPropagator, instr *Instrumentation, body ast.Body) ast.Body {
@@ -2363,17 +2509,6 @@ func mergeObjects(objA, objB ast.Object) (result ast.Object, ok bool) {
 		}
 	})
 	return result, true
-}
-
-func anyRefSetContainsPrefix(s [][]ast.Ref, prefix ast.Ref) bool {
-	for _, refs := range s {
-		for _, ref := range refs {
-			if ref.HasPrefix(prefix) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func refContainsNonScalar(ref ast.Ref) bool {
