@@ -189,7 +189,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// namespace is excluded from sync
 	if r.skipExcludedNamespace(request.Namespace) {
 		// cancel expectations
-		t := r.tracker.For(instance.GroupVersionKind())
+		t := r.tracker.ForData(instance.GroupVersionKind())
 		t.CancelExpect(instance)
 		return reconcile.Result{}, nil
 	}

@@ -309,3 +309,16 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	nn := types.NamespacedName{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
 	return objKey{namespacedName: nn, gvk: gvk}, nil
 }
+
+type TestExpectations interface {
+	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+func (t *objectTracker) ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+	for k := range t.expect {
+		if k.gvk.String() == gvk.String() && k.namespacedName.String() == nsName.String() {
+			return true
+		}
+	}
+	return false
+}
