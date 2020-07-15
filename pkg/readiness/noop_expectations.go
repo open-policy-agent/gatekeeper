@@ -36,3 +36,7 @@ func (n noopExpectations) Observe(o runtime.Object) {
 func (n noopExpectations) Satisfied() bool {
 	return true
 }
+
+func (n noopExpectations) Populated() bool {
+	return true
+}
