@@ -48,6 +48,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -159,6 +160,8 @@ violation[{"msg": "denied!"}] {
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, events, func() (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
+	cstr := newDenyAllCstr()
+
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
@@ -169,7 +172,15 @@ violation[{"msg": "denied!"}] {
 	}
 
 	defer testMgrStopped()
-	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
+	// Clean up to remove the crd, constraint and constraint template
+	defer func() {
+		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
+
+		g.Expect(deleteObject(ctx, c, cstr, timeout)).To(gomega.BeNil())
+		g.Expect(deleteObject(ctx, c, crd, timeout)).To(gomega.BeNil())
+		g.Expect(deleteObject(ctx, c, instance, timeout)).To(gomega.BeNil())
+	}()
 
 	log.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
@@ -197,7 +208,7 @@ violation[{"msg": "denied!"}] {
 
 	log.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
-		err = c.Create(ctx, newDenyAllCstr())
+		err = c.Create(ctx, cstr)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		constraintEnforced(c, g, timeout)
 	})
@@ -372,6 +383,7 @@ anyrule[}}}//invalid//rego
 	})
 }
 
+// tests that expectations forconstraint gets cancelled when it gets deleted
 func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when constraint gets deleted")
 
@@ -409,10 +421,7 @@ violation[{"msg": "denied!"}] {
 	err := c.Create(context.TODO(), instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	defer func() {
-		err = c.Delete(context.TODO(), instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}()
+	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
 
 	gvk := schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
@@ -429,6 +438,10 @@ violation[{"msg": "denied!"}] {
 	cstr := newDenyAllCstr()
 	err = c.Create(context.Background(), cstr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// creating the gatekeeper-system namespace is necessary because that's where
+	// status resources live by default
+	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
 
 	// Set up tracker
 	tracker, err := readiness.SetupTracker(mgr)
@@ -458,6 +471,32 @@ violation[{"msg": "denied!"}] {
 
 	// start manager that will start tracker and controller
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
+
+	// get the object tracker for the constraint
+	tr, ok := tracker.For(gvk).(testExpectations)
+	if !ok {
+		t.Fatalf("unexpected tracker, got %T", tr)
+	}
+	// ensure that expectations are set for the constraint gvk
+	g.Eventually(func() bool {
+		return tr.ExpectedContains(gvk, types.NamespacedName{Name: "denyallconstraint"})
+	}, timeout).Should(gomega.BeTrue())
+
+	// Delete the constraint , the delete event will be reconciled by controller
+	// to cancel the expectation set for it by tracker
+	g.Expect(c.Delete(context.TODO(), cstr)).NotTo(gomega.HaveOccurred())
+
+	// set event channel to receive request for constraint
+	events <- event.GenericEvent{
+		Meta:   cstr,
+		Object: cstr,
+	}
+
+	// Check readiness tracker is satisfied post-reconcile
+	g.Eventually(func() bool {
+		return tracker.For(gvk).Satisfied()
+	}, timeout).Should(gomega.BeTrue())
+
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -465,32 +504,7 @@ violation[{"msg": "denied!"}] {
 			mgrStopped.Wait()
 		})
 	}
-
 	defer testMgrStopped()
-
-	// ensure that expectations are set for the constraint gvk
-	g.Eventually(func() bool {
-		isExist := tracker.For(gvk).(readiness.TestExpectations).ExpectedContains(gvk, types.NamespacedName{Name: "denyallconstraint"})
-		return isExist
-	}, timeout).Should(gomega.BeTrue())
-
-	// set event channel to receive request for constraint
-	go func() {
-		events <- event.GenericEvent{
-			Meta:   cstr,
-			Object: cstr,
-		}
-	}()
-
-	// Delete the constraint , the delete event will be reconciled by controller
-	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(context.TODO(), cstr)).NotTo(gomega.HaveOccurred())
-
-	// Check readiness tracker is satisfied post-reconcile
-	g.Eventually(func() bool {
-		isSatisfied := tracker.For(gvk).Satisfied()
-		return isSatisfied
-	}, timeout).Should(gomega.BeTrue())
 
 }
 
@@ -535,13 +549,6 @@ func getCTByPodStatus(templ *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
 		}
 	}
 	return status
-}
-
-func ignoreNotFound(err error) error {
-	if err != nil && errors2.IsNotFound(err) {
-		return nil
-	}
-	return err
 }
 
 func getCByPodStatus(obj *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatusStatus, error) {
@@ -602,7 +609,7 @@ func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1beta1.C
 func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd runtime.Object) error {
 	err := client.Create(ctx, crd)
 	if err != nil {
-		return fmt.Errorf("creating %+v: %w", gvk, err)
+		return err
 	}
 
 	u := &unstructured.UnstructuredList{}
@@ -614,4 +621,40 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 		return client.List(ctx, u)
 	}, 5*time.Second, 100*time.Millisecond).ShouldNot(gomega.HaveOccurred())
 	return nil
+}
+
+func deleteObject(ctx context.Context, c client.Client, obj runtime.Object, timeout time.Duration) error {
+	err := c.Delete(ctx, obj)
+	if err != nil {
+		if errors2.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	err = wait.Poll(time.Second, timeout, func() (bool, error) {
+		// Get the object name
+		name, _ := client.ObjectKeyFromObject(obj)
+		err := c.Get(ctx, name, obj)
+		if err != nil {
+			if errors2.IsGone(err) || errors2.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		}
+		return false, err
+	})
+	return err
+}
+
+func ignoreNotFound(err error) error {
+	if err != nil && errors2.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// This interface is getting used by tests to check the private objects of objectTracker
+type testExpectations interface {
+	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

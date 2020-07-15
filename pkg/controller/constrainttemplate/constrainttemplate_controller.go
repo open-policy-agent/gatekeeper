@@ -107,6 +107,9 @@ func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
+// cstrEvents is the channel from which constraint controller will receive the events
+// regEvents is the channel registered by Registrar to put the events in
+// cstrEvents and regEvents point to same event channel except for testing
 func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func() (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()

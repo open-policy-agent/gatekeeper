@@ -199,17 +199,18 @@ func TestReconcile(t *testing.T) {
 	cs.Stop()
 }
 
+// tests that expectations for sync only resource gets cancelled when it gets deleted
 func TestConfig_DeleteSyncResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when sync only resource gets deleted")
 
 	g := gomega.NewGomegaWithT(t)
 
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := mgr.GetClient()
 
-	// Create the Config object and expect the Reconcile to be created when controller starts
+	// create the Config object and expect the Reconcile to be created when controller starts
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "config",
@@ -232,7 +233,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
-	// Create the pod that is a sync only resource in config obj
+	// create the pod that is a sync only resource in config obj
 	pod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -253,11 +254,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 	g.Expect(c.Create(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
 
-	// Set up tracker
+	// set up tracker
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	// Events channel will be used to receive events from dynamic watches
+	// events channel will be used to receive events from dynamic watches
 	events := make(chan event.GenericEvent, 1024)
 
 	// set up controller and add it to the manager
@@ -274,11 +275,21 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		})
 	}()
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+
+	// get the object tracker for the synconly pod resource
+	tr, ok := tracker.ForData(gvk).(testExpectations)
+	if !ok {
+		t.Fatalf("unexpected tracker, got %T", tr)
+	}
+
 	// ensure that expectations are set for the constraint gvk
 	g.Eventually(func() bool {
-		isExist := tracker.ForData(gvk).(readiness.TestExpectations).ExpectedContains(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
-		return isExist
+		return tr.ExpectedContains(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
 	}, timeout).Should(gomega.BeTrue())
+
+	// delete the pod , the delete event will be reconciled by sync controller
+	// to cancel the expectation set for it by tracker
+	g.Expect(c.Delete(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
 
 	// register events for the pod to go in the event channel
 	podObj := &corev1.Pod{
@@ -291,21 +302,15 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	go func() {
-		events <- event.GenericEvent{
-			Meta:   podObj,
-			Object: podObj,
-		}
-	}()
 
-	// Delete the pod , the delete event will be reconciled by sync controller
-	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
+	events <- event.GenericEvent{
+		Meta:   podObj,
+		Object: podObj,
+	}
 
-	// Check readiness tracker is satisfied post-reconcile
+	// check readiness tracker is satisfied post-reconcile
 	g.Eventually(func() bool {
-		isStaisfied := tracker.ForData(gvk).Satisfied()
-		return isStaisfied
+		return tracker.ForData(gvk).Satisfied()
 	}, timeout).Should(gomega.BeTrue())
 }
 
@@ -593,4 +598,9 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 	u.SetGroupVersionKind(gvk)
 	u.SetName(name)
 	return u
+}
+
+// This interface is getting used by tests to check the private objects of objectTracker
+type testExpectations interface {
+	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

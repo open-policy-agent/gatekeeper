@@ -95,6 +95,9 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
+// events is the channel from which sync controller will receive the events
+// regEvents is the channel registered by Registrar to put the events in
+// events and regEvents point to same event channel except for testing
 func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, regEvents chan<- event.GenericEvent) (reconcile.Reconciler, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
