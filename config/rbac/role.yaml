@@ -7,13 +7,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
   - '*'
   resources:
   - '*'
@@ -121,6 +114,13 @@ metadata:
   name: manager-role
   namespace: gatekeeper-system
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - ""
   resources:
