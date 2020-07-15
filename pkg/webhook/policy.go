@@ -66,6 +66,7 @@ var log = logf.Log.WithName("webhook")
 
 const (
 	serviceAccountName = "gatekeeper-admin"
+	deploymentName     = "gatekeeper-controller-manager"
 )
 
 var (
@@ -102,7 +103,7 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	var ref *corev1.ObjectReference
 	if *emitDenyEvents {
 		gkDeploy := &appsv1.Deployment{}
-		deploy := types.NamespacedName{Namespace: util.GetNamespace(), Name: "gatekeeper-controller-manager"}
+		deploy := types.NamespacedName{Namespace: util.GetNamespace(), Name: deploymentName}
 		err = client.Get(context.Background(), deploy, gkDeploy)
 		if err != nil {
 			return err

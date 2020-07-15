@@ -89,6 +89,9 @@ teardown() {
   assert_match 'denied the request' "$output"
   assert_failure
 
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
+
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
   assert_success
 
@@ -103,7 +106,8 @@ teardown() {
 
   CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
 
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind==\"K8sRequiredLabels\" ) | .metadata.annotations'"
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
 }
 
 @test "container limits test" {
@@ -129,8 +133,6 @@ teardown() {
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/opa.yaml
   assert_success
-
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind==\"K8sContainerLimits\" ) | .metadata.annotations'"
 }
 
 @test "deployment test" {
