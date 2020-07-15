@@ -102,6 +102,8 @@ teardown() {
   assert_success
 
   CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
+
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind==\"K8sRequiredLabels\" ) | .metadata.annotations'"
 }
 
 @test "container limits test" {
@@ -127,6 +129,8 @@ teardown() {
 
   run kubectl apply -f ${BATS_TESTS_DIR}/good/opa.yaml
   assert_success
+
+  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind==\"K8sContainerLimits\" ) | .metadata.annotations'"
 }
 
 @test "deployment test" {
