@@ -175,6 +175,14 @@ teardown() {
   [[ "$totalViolations" -eq 6 ]]
 }
 
+@test "emit events test" {
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
+
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
+}
+
 @test "config namespace exclusion test" {
   run kubectl create ns excluded-namespace
   assert_success

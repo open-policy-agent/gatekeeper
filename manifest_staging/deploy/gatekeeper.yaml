@@ -416,6 +416,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
   - create
@@ -724,6 +731,7 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
+        - --emit-deny-events
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
         command:
