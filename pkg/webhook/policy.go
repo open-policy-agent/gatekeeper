@@ -34,6 +34,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,6 +43,11 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -60,6 +66,7 @@ var log = logf.Log.WithName("webhook")
 
 const (
 	serviceAccountName = "gatekeeper-admin"
+	deploymentName     = "gatekeeper-controller-manager"
 )
 
 var (
@@ -68,6 +75,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
+	emitDenyEvents                     = flag.Bool("emit-deny-events", false, "emit Kubernetes events in gatekeeper namespace with detailed info on each deny")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
@@ -81,13 +89,39 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	if err != nil {
 		return err
 	}
+	eventBroadcaster := record.NewBroadcaster()
+
+	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+	recorder := eventBroadcaster.NewRecorder(
+		scheme.Scheme,
+		corev1.EventSource{Component: "gatekeeper-webhook"})
+	client := mgr.GetClient()
+	var ref *corev1.ObjectReference
+	if *emitDenyEvents {
+		gkDeploy := &appsv1.Deployment{}
+		deploy := types.NamespacedName{Namespace: util.GetNamespace(), Name: deploymentName}
+		err = client.Get(context.Background(), deploy, gkDeploy)
+		if err != nil {
+			return err
+		}
+		ref, err = reference.GetReference(scheme.Scheme, gkDeploy)
+		if err != nil {
+			return err
+		}
+	}
 	wh := &admission.Webhook{
 		Handler: &validationHandler{
 			opa:             opa,
-			client:          mgr.GetClient(),
+			client:          client,
 			reader:          mgr.GetAPIReader(),
 			reporter:        reporter,
 			processExcluder: processExcluder,
+			eventRecorder:   recorder,
+			reference:       ref,
 		},
 	}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
@@ -111,6 +145,8 @@ type validationHandler struct {
 	// for testing
 	injectedConfig  *v1alpha1.Config
 	processExcluder *process.Excluder
+	eventRecorder   record.EventRecorder
+	reference       *corev1.ObjectReference
 }
 
 type requestResponse string
@@ -209,7 +245,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
 	var msgs []string
 	var resourceName string
-	if len(res) > 0 && *logDenies {
+	if len(res) > 0 && (*logDenies || *emitDenyEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
 			// On a CREATE operation, the client may omit name and
@@ -235,6 +271,27 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
+			if *emitDenyEvents && h.reference != nil {
+				annotations := map[string]string{
+					"process":            "admission",
+					"event_type":         "violation",
+					"constraint_name":    r.Constraint.GetName(),
+					"constraint_kind":    r.Constraint.GetKind(),
+					"constraint_action":  r.EnforcementAction,
+					"resource_kind":      req.AdmissionRequest.Kind.Kind,
+					"resource_namespace": req.AdmissionRequest.Namespace,
+					"resource_name":      resourceName,
+					"request_username":   req.AdmissionRequest.UserInfo.Username,
+				}
+				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
+				reason := "FailedAdmission"
+				if r.EnforcementAction == "dryrun" {
+					eventMsg = "Dryrun violation"
+					reason = "DryrunViolation"
+				}
+				h.eventRecorder.AnnotatedEventf(h.reference, annotations, corev1.EventTypeWarning, reason, "%s: [Namespace: %s Kind: %s Name: %s] by constraint %s %s", eventMsg, req.AdmissionRequest.Namespace, req.AdmissionRequest.Kind.Kind, resourceName, r.Constraint.GetName(), r.Msg)
+			}
+
 		}
 		// only deny enforcementAction should prompt deny admission response
 		if r.EnforcementAction == "deny" {

@@ -29,6 +29,7 @@ var AddToManagerFuncs []func(manager.Manager, *client.Client, *process.Excluder)
 // DISABLED +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 
 // +kubebuilder:rbac:groups="",namespace=gatekeeper-system,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=gatekeeper-system,resources=events,verbs=create;patch
 
 // AddToManager adds all Controllers to the Manager
 func AddToManager(m manager.Manager, opa *client.Client, processExcluder *process.Excluder) error {
