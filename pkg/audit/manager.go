@@ -155,6 +155,14 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 
+	// get all constraint kinds
+	rs, err := am.getAllConstraintKinds()
+	if err != nil {
+		// if no constraint is found with the constraint apiversion, then return
+		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
+		return nil
+	}
+
 	var resp *constraintTypes.Responses
 	var res []*constraintTypes.Result
 
@@ -183,13 +191,6 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err := am.reporter.reportTotalViolations(k, v); err != nil {
 			am.log.Error(err, "failed to report total violations")
 		}
-	}
-	// get all constraint kinds
-	rs, err := am.getAllConstraintKinds()
-	if err != nil {
-		// if no constraint is found with the constraint apiversion, then return
-		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
-		return nil
 	}
 	// update constraints for each kind
 	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
