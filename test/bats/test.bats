@@ -89,9 +89,6 @@ teardown() {
   assert_match 'denied the request' "$output"
   assert_failure
 
-  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
-  [[ "$events" -eq 1 ]]
-
   run kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_ns_must_have_gatekeeper-dryrun.yaml
   assert_success
 
@@ -105,9 +102,6 @@ teardown() {
   assert_success
 
   CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
-
-  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
-  [[ "$events" -eq 1 ]]
 }
 
 @test "container limits test" {
@@ -179,6 +173,14 @@ teardown() {
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
   [[ "$totalViolations" -eq 6 ]]
+}
+
+@test "emit events test" {
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
+
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -eq 1 ]]
 }
 
 @test "config namespace exclusion test" {
