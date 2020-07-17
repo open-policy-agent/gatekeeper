@@ -292,6 +292,11 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		}
 		logRemoval(r.log, instance, enforcementAction)
+
+		// cancel expectations
+		t := r.tracker.For(instance.GroupVersionKind())
+		t.CancelExpect(instance)
+
 		r.constraintsCache.deleteConstraintKey(constraintKey)
 		reportMetrics = true
 

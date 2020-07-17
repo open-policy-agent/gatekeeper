@@ -34,6 +34,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,6 +46,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -139,7 +141,8 @@ func TestReconcile(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
+	events := make(chan event.GenericEvent, 1024)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
 
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
@@ -196,6 +199,148 @@ func TestReconcile(t *testing.T) {
 	cs.Stop()
 }
 
+// tests that expectations for sync only resource gets cancelled when it gets deleted
+func TestConfig_DeleteSyncResources(t *testing.T) {
+	log.Info("Running test: Cancel the expectations when sync only resource gets deleted")
+
+	g := gomega.NewGomegaWithT(t)
+
+	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// channel when it is finished.
+	mgr, wm := setupManager(t)
+	c := mgr.GetClient()
+
+	// create the Config object and expect the Reconcile to be created when controller starts
+	instance := &configv1alpha1.Config{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "config",
+			Namespace:  "gatekeeper-system",
+			Finalizers: []string{finalizerName},
+		},
+		Spec: configv1alpha1.ConfigSpec{
+			Sync: configv1alpha1.Sync{
+				SyncOnly: []configv1alpha1.SyncOnlyEntry{
+					{Group: "", Version: "v1", Kind: "Pod"},
+				},
+			},
+		},
+	}
+	err := c.Create(context.TODO(), instance)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	defer func() {
+		err = c.Delete(context.TODO(), instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
+
+	// create the pod that is a sync only resource in config obj
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testpod",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "nginx",
+					Image: "nginx",
+				},
+			},
+		},
+	}
+	g.Expect(c.Create(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
+
+	// set up tracker
+	tracker, err := readiness.SetupTracker(mgr)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// events channel will be used to receive events from dynamic watches
+	events := make(chan event.GenericEvent, 1024)
+
+	// set up controller and add it to the manager
+	err = setupController(mgr, wm, tracker, events)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// start manager that will start tracker and controller
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	once := gosync.Once{}
+	defer func() {
+		once.Do(func() {
+			close(stopMgr)
+			mgrStopped.Wait()
+		})
+	}()
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+
+	// get the object tracker for the synconly pod resource
+	tr, ok := tracker.ForData(gvk).(testExpectations)
+	if !ok {
+		t.Fatalf("unexpected tracker, got %T", tr)
+	}
+
+	// ensure that expectations are set for the constraint gvk
+	g.Eventually(func() bool {
+		return tr.ExpectedContains(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
+	}, timeout).Should(gomega.BeTrue())
+
+	// delete the pod , the delete event will be reconciled by sync controller
+	// to cancel the expectation set for it by tracker
+	g.Expect(c.Delete(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
+
+	// register events for the pod to go in the event channel
+	podObj := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testpod",
+			Namespace: "default",
+		},
+	}
+
+	events <- event.GenericEvent{
+		Meta:   podObj,
+		Object: podObj,
+	}
+
+	// check readiness tracker is satisfied post-reconcile
+	g.Eventually(func() bool {
+		return tracker.ForData(gvk).Satisfied()
+	}, timeout).Should(gomega.BeTrue())
+}
+
+func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events <-chan event.GenericEvent) error {
+	// initialize OPA
+	driver := local.New(local.Tracing(true))
+	backend, err := opa.NewBackend(opa.Driver(driver))
+	if err != nil {
+		return fmt.Errorf("unable to set up OPA backend: %w", err)
+	}
+
+	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	if err != nil {
+		return fmt.Errorf("unable to set up OPA backend client: %w", err)
+	}
+
+	// ControllerSwitch will be used to disable controllers during our teardown process,
+	// avoiding conflicts in finalizer cleanup.
+	cs := watch.NewSwitch()
+
+	processExcluder := process.Get()
+
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, nil)
+	err = add(mgr, rec)
+	if err != nil {
+		return fmt.Errorf("adding reconciler to manager: %w", err)
+	}
+	return nil
+}
+
 // Verify the Opa cache is populated based on the config resource.
 func TestConfig_CacheContents(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
@@ -224,7 +369,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder)
+
+	events := make(chan event.GenericEvent, 1024)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
@@ -451,4 +598,9 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 	u.SetGroupVersionKind(gvk)
 	u.SetName(name)
 	return u
+}
+
+// This interface is getting used by tests to check the private objects of objectTracker
+type testExpectations interface {
+	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
