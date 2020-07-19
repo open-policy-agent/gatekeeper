@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
-  namespace: gatekeeper-system
+  namespace: {{ .Release.Namespace | quote }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
