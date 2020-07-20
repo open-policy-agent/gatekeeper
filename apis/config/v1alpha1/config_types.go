@@ -31,6 +31,9 @@ type ConfigSpec struct {
 
 	// Configuration for namespace exclusion
 	Match []MatchEntry `json:"match,omitempty"`
+
+	// Configuration for readiness tracker
+	Readiness ReadinessSpec `json:"readiness,omitempty"`
 }
 
 type Validation struct {
@@ -61,6 +64,10 @@ type SyncOnlyEntry struct {
 type MatchEntry struct {
 	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
 	Processes          []string `json:"processes,omitempty"`
+}
+
+type ReadinessSpec struct {
+	StatsEnabled bool `json:"statsEnabled,omitempty"`
 }
 
 // ConfigStatus defines the observed state of Config

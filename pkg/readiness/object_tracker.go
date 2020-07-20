@@ -16,6 +16,7 @@ limitations under the License.
 package readiness
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -228,6 +229,7 @@ func (t *objectTracker) Satisfied() bool {
 
 	// Proceed only if we have state changes to make.
 	if !needMutate {
+		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 		return false
 	}
 
@@ -236,6 +238,7 @@ func (t *objectTracker) Satisfied() bool {
 	defer t.mu.Unlock()
 
 	// Resolve any expectations where the observation preceded the expect request.
+	var resolveCount int
 	for k := range t.seen {
 		if _, ok := t.expect[k]; !ok {
 			continue
@@ -243,13 +246,17 @@ func (t *objectTracker) Satisfied() bool {
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
+		resolveCount++
 	}
+	log.V(1).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
+	log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 
 	// All satisfied if:
 	//  1. Expectations have been previously populated
 	//  2. No expectations remain
 	if t.populated && len(t.expect) == 0 {
 		t.allSatisfied = true
+		log.V(1).Info("all expectations satisfied", "gvk", t.gvk)
 
 		// Circuit-breaker tripped - free tracking memory
 		t.seen = nil

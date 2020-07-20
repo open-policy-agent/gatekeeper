@@ -412,13 +412,26 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
 
+Verbose logging specific to pod readiness tracking can be enabled using the `statsEnabled` flag of the Config resource:
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  readiness:
+    statsEnabled: true
+```
+
 
 ### Enable Delete Operations
 To enable Delete operations for the `validation.gatekeeper.sh` admission webhook, add "DELETE" to the list of operations in the `gatekeeper-validating-webhook-configuration` ValidatingWebhookConfiguration as seen in this deployment manifest of gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/v3.1.0-beta.10/deploy/gatekeeper.yaml#L792-L794)
 Note: For admission webhooks registered for DELETE operations, use Kubernetes v1.15.0+
 
  So you have
- ```YAML
+ ```yaml
     operations:
     - CREATE
     - UPDATE

@@ -16,6 +16,8 @@ limitations under the License.
 package readiness
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -26,3 +28,8 @@ type objKey struct {
 }
 
 type objSet map[objKey]struct{}
+
+func (k objKey) String() string {
+	return fmt.Sprintf("%s [%s]", k.namespacedName.String(), k.gvk.String())
+
+}
