@@ -77,7 +77,9 @@ type Adder struct {
 // Add creates a new ConstraintTemplate Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.GetPod)
+	// events will be used to receive events from dynamic watches registered
+	events := make(chan event.GenericEvent, 1024)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, events, events, a.GetPod)
 	if err != nil {
 		return err
 	}
@@ -105,13 +107,14 @@ func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+// cstrEvents is the channel from which constraint controller will receive the events
+// regEvents is the channel registered by Registrar to put the events in
+// cstrEvents and regEvents point to same event channel except for testing
+func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func() (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
-	// cstrEvents will be used to receive events from dynamic watches registered
 	// via the registrar below.
-	cstrEvents := make(chan event.GenericEvent, 1024)
 	constraintAdder := constraint.Adder{
 		Opa:              opa,
 		ConstraintsCache: constraintsCache,
@@ -150,11 +153,11 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 		}
 	}
 
-	w, err := wm.NewRegistrar(ctrlName, cstrEvents)
+	w, err := wm.NewRegistrar(ctrlName, regEvents)
 	if err != nil {
 		return nil, err
 	}
-	statusW, err := wm.NewRegistrar(ctrlName+"-status", cstrEvents)
+	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
 	if err != nil {
 		return nil, err
 	}
