@@ -44,14 +44,15 @@ type Expectations interface {
 // Expectations are satisfied by calls to Observe().
 // Once all expectations are satisfied, Satisfied() will begin returning true.
 type objectTracker struct {
-	mu           sync.RWMutex
-	gvk          schema.GroupVersionKind
-	cancelled    objSet // expectations that have been cancelled
-	expect       objSet // unresolved expectations
-	seen         objSet // observations made before their expectations
-	satisfied    objSet // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
-	populated    bool   // all expectations have been provided
-	allSatisfied bool   // true once all expectations have been satified. Acts as a circuit-breaker.
+	mu            sync.RWMutex
+	gvk           schema.GroupVersionKind
+	cancelled     objSet                    // expectations that have been cancelled
+	expect        objSet                    // unresolved expectations
+	seen          objSet                    // observations made before their expectations
+	satisfied     objSet                    // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
+	populated     bool                      // all expectations have been provided
+	allSatisfied  bool                      // true once all expectations have been satified. Acts as a circuit-breaker.
+	kindsSnapshot []schema.GroupVersionKind // Snapshot of kinds before freeing memory in Satisfied.
 }
 
 func newObjTracker(gvk schema.GroupVersionKind) *objectTracker {
@@ -259,6 +260,7 @@ func (t *objectTracker) Satisfied() bool {
 		log.V(1).Info("all expectations satisfied", "gvk", t.gvk)
 
 		// Circuit-breaker tripped - free tracking memory
+		t.kindsSnapshot = t.kindsNoLock() // Take snapshot as kinds() depends on the maps we're about to clear.
 		t.seen = nil
 		t.expect = nil
 		t.satisfied = nil
@@ -270,18 +272,31 @@ func (t *objectTracker) Satisfied() bool {
 func (t *objectTracker) kinds() []schema.GroupVersionKind {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	return t.kindsNoLock()
+}
 
-	l := len(t.satisfied) + len(t.expect)
-	if l == 0 {
+func (t *objectTracker) kindsNoLock() []schema.GroupVersionKind {
+	if t.kindsSnapshot != nil {
+		out := make([]schema.GroupVersionKind, len(t.kindsSnapshot))
+		copy(out, t.kindsSnapshot)
+		return out
+	}
+
+	m := make(map[schema.GroupVersionKind]struct{})
+	for k := range t.satisfied {
+		m[k.gvk] = struct{}{}
+	}
+	for k := range t.expect {
+		m[k.gvk] = struct{}{}
+	}
+
+	if len(m) == 0 {
 		return nil
 	}
 
-	out := make([]schema.GroupVersionKind, 0, l)
-	for k := range t.satisfied {
-		out = append(out, k.gvk)
-	}
-	for k := range t.expect {
-		out = append(out, k.gvk)
+	out := make([]schema.GroupVersionKind, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
 	return out
 }
