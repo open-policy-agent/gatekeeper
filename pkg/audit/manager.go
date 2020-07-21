@@ -37,11 +37,13 @@ const (
 	msgSize                          = 256
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
+	defaultListLimit                 = 100
 )
 
 var (
-	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable ")
-	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified ")
+	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
+	auditListLimit            = flag.Uint64("audit-list-limit", defaultListLimit, "Kubernetes API chunking List results limit when retrieving cluster resources using discovery client. defaulted to 100 if unspecified, 0 to disable chunking")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emptyAuditResults         []auditResult
 )
@@ -156,7 +158,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// get all constraint kinds
-	rs, err := am.getAllConstraintKinds()
+	resourceList, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
 		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
@@ -166,6 +168,10 @@ func (am *Manager) audit(ctx context.Context) error {
 	var resp *constraintTypes.Responses
 	var res []*constraintTypes.Result
 
+	updateLists := make(map[string][]auditResult)
+	totalViolationsPerConstraint := make(map[string]int64)
+	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+
 	if *auditFromCache {
 		am.log.Info("Auditing from cache")
 		resp, err = am.opa.Audit(ctx)
@@ -174,38 +180,45 @@ func (am *Manager) audit(ctx context.Context) error {
 		}
 		res = resp.Results()
 		am.log.Info("Audit opa.Audit() results", "violations", len(res))
-	} else {
-		am.log.Info("Auditing via discovery client")
-		res, err = am.auditResources(ctx)
+
+		err := am.getUpdateListsFromAuditResponses(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
 		if err != nil {
 			return err
 		}
-		am.log.Info("Audit discovery client results", "violations", len(res))
+	} else {
+		am.log.Info("Auditing via discovery client")
+		err := am.auditResources(ctx, resourceList, timestamp, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+		if err != nil {
+			return err
+		}
 	}
 
-	updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, err := am.getUpdateListsFromAuditResponses(res)
-	if err != nil {
-		return err
-	}
 	for k, v := range totalViolationsPerEnforcementAction {
 		if err := am.reporter.reportTotalViolations(k, v); err != nil {
 			am.log.Error(err, "failed to report total violations")
 		}
 	}
+
 	// update constraints for each kind
-	return am.writeAuditResults(ctx, rs, updateLists, timestamp, totalViolationsPerConstraint)
+	return am.writeAuditResults(ctx, resourceList, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
 // Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
-func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Result, error) {
+func (am *Manager) auditResources(
+	ctx context.Context,
+	resourceList []schema.GroupVersionKind,
+	timestamp string,
+	updateLists map[string][]auditResult,
+	totalViolationsPerConstraint map[string]int64,
+	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool)
@@ -233,58 +246,70 @@ func (am *Manager) auditResources(ctx context.Context) ([]*constraintTypes.Resul
 		}
 	}
 
-	var responses []*constraintTypes.Result
 	var errs opa.Errors
 	nsCache := newNSCache()
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
 			objList := &unstructured.UnstructuredList{}
-			objList.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   gv.Group,
-				Version: gv.Version,
-				Kind:    kind + "List",
-			})
-
-			err := am.client.List(ctx, objList)
-			if err != nil {
-				am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
-				continue
+			opts := &client.ListOptions{
+				Limit: int64(*auditListLimit),
 			}
 
-			for _, obj := range objList.Items {
-				if am.skipExcludedNamespace(obj.GetNamespace()) {
+			for {
+				objList.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   gv.Group,
+					Version: gv.Version,
+					Kind:    kind + "List",
+				})
+
+				err := am.client.List(ctx, objList, opts)
+				if err != nil {
+					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					continue
 				}
 
-				ns := corev1.Namespace{}
-				if obj.GetNamespace() != "" {
-					ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
-					if err != nil {
-						am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+				for _, obj := range objList.Items {
+					if am.skipExcludedNamespace(obj.GetNamespace()) {
 						continue
+					}
+
+					ns := corev1.Namespace{}
+					if obj.GetNamespace() != "" {
+						ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
+						if err != nil {
+							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+							continue
+						}
+					}
+
+					augmentedObj := target.AugmentedUnstructured{
+						Object:    obj,
+						Namespace: &ns,
+					}
+					resp, err := am.opa.Review(ctx, augmentedObj)
+					if err != nil {
+						errs = append(errs, err)
+					} else if len(resp.Results()) > 0 {
+						err = am.getUpdateListsFromAuditResponses(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+						if err != nil {
+							return err
+						}
 					}
 				}
 
-				augmentedObj := target.AugmentedUnstructured{
-					Object:    obj,
-					Namespace: &ns,
-				}
-				resp, err := am.opa.Review(ctx, augmentedObj)
-
-				if err != nil {
-					errs = append(errs, err)
-				} else if len(resp.Results()) > 0 {
-					responses = append(responses, resp.Results()...)
+				opts.Continue = objList.GetContinue()
+				if opts.Continue == "" {
+					break
 				}
 			}
 		}
 	}
 
 	if len(errs) > 0 {
-		return responses, errs
+		return errs
 	}
-	return responses, nil
+	return nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
@@ -343,10 +368,10 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	return ret, nil
 }
 
-func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Result) (map[string][]auditResult, map[string]int64, map[util.EnforcementAction]int64, error) {
-	updateLists := make(map[string][]auditResult)
-	totalViolationsPerConstraint := make(map[string]int64)
-	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+func (am *Manager) getUpdateListsFromAuditResponses(
+	updateLists map[string][]auditResult,
+	res []*constraintTypes.Result,
+	totalViolationsPerConstraint map[string]int64, totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
 	// resetting total violations per enforcement action
 	for _, action := range util.KnownEnforcementActions {
 		totalViolationsPerEnforcementAction[action] = 0
@@ -363,34 +388,37 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 		message := r.Msg
 		resource, ok := r.Resource.(*unstructured.Unstructured)
 		if !ok {
-			return nil, nil, nil, errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
+			return errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
 		}
 		rname := resource.GetName()
 		rkind := resource.GetKind()
 		rnamespace := resource.GetNamespace()
-		result := auditResult{
-			cgvk:              gvk,
-			capiversion:       apiVersion,
-			cname:             name,
-			cnamespace:        namespace,
-			rkind:             rkind,
-			rname:             rname,
-			rnamespace:        rnamespace,
-			message:           message,
-			enforcementAction: enforcementAction,
-			constraint:        r.Constraint,
+		// append audit results only if it is below violations limit
+		if uint(len(updateLists[selfLink])) < *constraintViolationsLimit {
+			result := auditResult{
+				cgvk:              gvk,
+				capiversion:       apiVersion,
+				cname:             name,
+				cnamespace:        namespace,
+				rkind:             rkind,
+				rname:             rname,
+				rnamespace:        rnamespace,
+				message:           message,
+				enforcementAction: enforcementAction,
+				constraint:        r.Constraint,
+			}
+			updateLists[selfLink] = append(updateLists[selfLink], result)
 		}
-		updateLists[selfLink] = append(updateLists[selfLink], result)
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, r.EnforcementAction, result)
+		logViolation(am.log, r.Constraint, r.EnforcementAction, rkind, rnamespace, rname, message)
 	}
 	// log constraints with violations
 	for link := range updateLists {
 		ar := updateLists[link][0]
 		logConstraint(am.log, ar.constraint, ar.enforcementAction, totalViolationsPerConstraint[link])
 	}
-	return updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, nil
+	return nil
 }
 
 func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) error {
@@ -613,16 +641,16 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 	)
 }
 
-func logViolation(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction string, violation auditResult) {
+func logViolation(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction, rkind, rnamespace, rname, message string) {
 	l.Info(
-		violation.message,
+		message,
 		logging.EventType, "violation_audited",
 		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
-		logging.ResourceKind, violation.rkind,
-		logging.ResourceNamespace, violation.rnamespace,
-		logging.ResourceName, violation.rname,
+		logging.ResourceKind, rkind,
+		logging.ResourceNamespace, rnamespace,
+		logging.ResourceName, rname,
 	)
 }
