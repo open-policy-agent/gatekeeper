@@ -4,7 +4,7 @@ constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
 logLevel: INFO
-emitDenyEvents: false
+emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper

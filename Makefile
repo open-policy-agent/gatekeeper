@@ -35,7 +35,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        args:\
 \n        - --port=8443\
 \n        - --logtostderr\
-\n        - --emit-deny-events\
+\n        - --emit-admission-events\
 \n        - --exempt-namespace=gatekeeper-system\
 \n        - --operation=webhook\
 \n---\
@@ -118,7 +118,7 @@ e2e-helm-deploy:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitDenyEvents=true --set emitAuditEvents=true
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true
 
 # Build manager binary
 manager: generate fmt vet

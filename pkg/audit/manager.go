@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
-
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -396,6 +395,7 @@ func (am *Manager) getUpdateListsFromAuditResponses(res []*constraintTypes.Resul
 			enforcementAction: enforcementAction,
 			constraint:        r.Constraint,
 		}
+
 		updateLists[selfLink] = append(updateLists[selfLink], result)
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
@@ -660,16 +660,16 @@ func emitEvent(constraint *unstructured.Unstructured, enforcementAction string, 
 		logging.ResourceName:        violation.rname,
 	}
 	reason := "AuditViolation"
-	ref := getViolationRef(gkNamespace, violation.rkind, violation.rname, timestamp)
+	ref := getViolationRef(gkNamespace, violation.rkind, violation.rname, violation.rnamespace, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace())
 
 	eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Timestamp: %s, Resource Namespace: %s, Constraint: %s, Message: %s", timestamp, violation.rnamespace, constraint.GetName(), violation.message)
 }
 
-func getViolationRef(gkNamespace, kind, name, timestamp string) *corev1.ObjectReference {
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
 	return &corev1.ObjectReference{
-		Kind:      kind,
-		Name:      name,
-		UID:       types.UID(name + timestamp),
+		Kind:      rkind,
+		Name:      rname,
+		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
 		Namespace: gkNamespace,
 	}
 }

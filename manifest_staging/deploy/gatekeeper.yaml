@@ -732,7 +732,7 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
-        - --emit-deny-events=false
+        - --emit-admission-events=false
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
         command:

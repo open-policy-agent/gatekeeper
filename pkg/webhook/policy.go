@@ -72,7 +72,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
-	emitDenyEvents                     = flag.Bool("emit-deny-events", false, "emit Kubernetes events in gatekeeper namespace with detailed info on each deny")
+	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "emit Kubernetes events in gatekeeper namespace for each admission violation")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
@@ -224,7 +224,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
 	var msgs []string
 	var resourceName string
-	if len(res) > 0 && (*logDenies || *emitDenyEvents) {
+	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
 			// On a CREATE operation, the client may omit name and
@@ -250,7 +250,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
-			if *emitDenyEvents {
+			if *emitAdmissionEvents {
 				annotations := map[string]string{
 					"process":            "admission",
 					"event_type":         "violation",
@@ -268,8 +268,8 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					eventMsg = "Dryrun violation"
 					reason = "DryrunViolation"
 				}
-				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName)
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, req.AdmissionRequest.Namespace, r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace())
+				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
 			}
 
 		}
@@ -411,13 +411,11 @@ func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
 	return h.processExcluder.IsNamespaceExcluded(process.Webhook, namespace)
 }
 
-func getViolationRef(gkNamespace, kind, name string) *corev1.ObjectReference {
-	now := time.Now()
-	timestamp := now.UTC().Format(time.RFC3339)
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
 	return &corev1.ObjectReference{
-		Kind:      kind,
-		Name:      name,
-		UID:       types.UID(name + timestamp),
+		Kind:      rkind,
+		Name:      rname,
+		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
 		Namespace: gkNamespace,
 	}
 }
