@@ -1,102 +1,10 @@
 package watch
 
 import (
-	"reflect"
 	"testing"
 
 	"go.opencensus.io/stats/view"
 )
-
-func TestLastRestartCheck(t *testing.T) {
-	const expectedTime float64 = 11
-	const expectedRowLength = 1
-
-	fakeNow := func() float64 {
-		return float64(expectedTime)
-	}
-
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
-	}
-	r.now = fakeNow
-	err = r.reportRestartCheck()
-	if err != nil {
-		t.Errorf("reportRestartCheck error %v", err)
-	}
-	row := checkData(t, lastRestartCheckMetricName, expectedRowLength)
-	value, ok := row.Data.(*view.LastValueData)
-	if !ok {
-		t.Error("reportRestartCheck should have aggregation LastValue()")
-	}
-	if len(row.Tags) != 0 {
-		t.Errorf("reportRestartCheck tags is non-empty, got: %v", row.Tags)
-	}
-	if value.Value != expectedTime {
-		t.Errorf("Metric: %v - Expected %v, got %v", lastRestartCheckMetricName, expectedTime, value.Value)
-	}
-}
-
-func TestLastRestart(t *testing.T) {
-	const expectedTime float64 = 11
-	const expectedRowLength = 1
-
-	fakeNow := func() float64 {
-		return float64(expectedTime)
-	}
-
-	if err := reset(); err != nil {
-		t.Errorf("Could not reset stats: %v", err)
-	}
-
-	r, err := newStatsReporter()
-	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
-	}
-	r.now = fakeNow
-	if err := r.reportRestart(); err != nil {
-		t.Errorf("reportRestart error %v", err)
-	}
-	row := checkData(t, lastRestartMetricName, expectedRowLength)
-	value, ok := row.Data.(*view.LastValueData)
-	if !ok {
-		t.Error("reportRestart should have aggregation LastValue()")
-	}
-	if len(row.Tags) != 0 {
-		t.Errorf("reportRestart tags is non-empty, got: %v", row.Tags)
-	}
-	if value.Value != expectedTime {
-		t.Errorf("Metric: %v - Expected %v, got %v", lastRestartMetricName, expectedTime, value.Value)
-	}
-
-	countRow := checkData(t, totalRestartsMetricName, expectedRowLength)
-	countValue, ok := countRow.Data.(*view.CountData)
-	if !ok {
-		t.Fatalf("totalRestarts should have type CountData: %s", reflect.TypeOf(countRow.Data))
-	}
-	if len(countRow.Tags) != 0 {
-		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
-	}
-	if countValue.Value != 1 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestartsMetricName, 1, countValue.Value)
-	}
-
-	if err = r.reportRestart(); err != nil {
-		t.Errorf("reportRestart error %v", err)
-	}
-
-	countRow2 := checkData(t, totalRestartsMetricName, expectedRowLength)
-	countValue2, ok := countRow2.Data.(*view.CountData)
-	if !ok {
-		t.Fatalf("totalRestarts should have type CountData: %s", reflect.TypeOf(countRow2.Data))
-	}
-	if len(countRow2.Tags) != 0 {
-		t.Errorf("totalRestarts tags is non-empty, got: %v", row.Tags)
-	}
-	if countValue2.Value != 2 {
-		t.Errorf("Metric: %v - Expected %v, got %v", totalRestartsMetricName, 2, countValue2.Value)
-	}
-}
 
 func TestGauges(t *testing.T) {
 	r, err := newStatsReporter()
@@ -114,10 +22,6 @@ func TestGauges(t *testing.T) {
 		{
 			name: gvkIntentCountMetricName,
 			fn:   r.reportGvkIntentCount,
-		},
-		{
-			name: isRunningMetricName,
-			fn:   r.reportIsRunning,
 		},
 	}
 	for _, tt := range tc {
