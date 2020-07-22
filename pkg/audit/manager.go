@@ -181,13 +181,13 @@ func (am *Manager) audit(ctx context.Context) error {
 		res = resp.Results()
 		am.log.Info("Audit opa.Audit() results", "violations", len(res))
 
-		err := am.getUpdateListsFromAuditResponses(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+		err := am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
 		if err != nil {
 			return err
 		}
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, resourceList, timestamp, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+		err := am.auditResources(ctx, resourceList, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
 		if err != nil {
 			return err
 		}
@@ -207,7 +207,6 @@ func (am *Manager) audit(ctx context.Context) error {
 func (am *Manager) auditResources(
 	ctx context.Context,
 	resourceList []schema.GroupVersionKind,
-	timestamp string,
 	updateLists map[string][]auditResult,
 	totalViolationsPerConstraint map[string]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
@@ -291,7 +290,7 @@ func (am *Manager) auditResources(
 					if err != nil {
 						errs = append(errs, err)
 					} else if len(resp.Results()) > 0 {
-						err = am.getUpdateListsFromAuditResponses(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
+						err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction)
 						if err != nil {
 							return err
 						}
@@ -368,7 +367,7 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	return ret, nil
 }
 
-func (am *Manager) getUpdateListsFromAuditResponses(
+func (am *Manager) addAuditResponsesToUpdateLists(
 	updateLists map[string][]auditResult,
 	res []*constraintTypes.Result,
 	totalViolationsPerConstraint map[string]int64, totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
