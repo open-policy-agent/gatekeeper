@@ -8,6 +8,8 @@
 | constraintViolationsLimit | The maximum # of audit violations reported on a constraint  | `20`                                                                      |
 | auditFromCache            | Take the roster of resources to audit from the OPA cache    | `false`                                                                   |
 | disableValidatingWebhook  | Disable ValidatingWebhook                                   | `false`                                                                   |
+| emitDenyEvents            | Emit K8s events in gatekeeper namespace for admission denies| `false`                                                                   |
+| emitAuditEvents           | Emit K8s events in gatekeeper namespace for audit violations| `false`                                                                   |
 | logLevel                  | Minimum log level                                           | `INFO`                                                                    |
 | image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                            |
 | image.repository          | Image repository                                            | `openpolicyagent/gatekeeper`                                              |

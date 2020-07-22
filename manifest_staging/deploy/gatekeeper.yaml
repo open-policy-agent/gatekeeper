@@ -639,7 +639,7 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
-        - --emit-audit-events
+        - --emit-audit-events=false
         - --logtostderr
         command:
         - /manager
@@ -732,7 +732,7 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
-        - --emit-deny-events
+        - --emit-deny-events=false
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
         command:
