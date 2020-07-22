@@ -18,9 +18,8 @@ package readiness
 import (
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // SetupTracker sets up a readiness tracker and registers it to run under control of the
