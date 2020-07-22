@@ -1,4 +1,4 @@
-replicas: 1
+replicas: 3
 auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
@@ -6,7 +6,7 @@ disableValidatingWebhook: false
 logLevel: INFO
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.1.0-beta.9
+  release: v3.1.0-beta.10
   pullPolicy: IfNotPresent
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}

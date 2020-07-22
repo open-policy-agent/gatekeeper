@@ -19,6 +19,7 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +38,10 @@ type GetPodInjector interface {
 	InjectGetPod(func() (*corev1.Pod, error))
 }
 
+type GetProcessExcluderInjector interface {
+	InjectProcessExcluder(processExcluder *process.Excluder)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync
 var Injectors []Injector
@@ -51,6 +56,7 @@ type Dependencies struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
 	GetPod           func() (*corev1.Pod, error)
+	ProcessExcluder  *process.Excluder
 }
 
 // AddToManager adds all Controllers to the Manager
@@ -66,6 +72,9 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		a.InjectTracker(deps.Tracker)
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
+		}
+		if a2, ok := a.(GetProcessExcluderInjector); ok {
+			a2.InjectProcessExcluder(deps.ProcessExcluder)
 		}
 		if err := a.Add(m); err != nil {
 			return err

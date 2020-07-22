@@ -305,6 +305,14 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
 			"labelSelector":     labelSelectorSchema,
 			"namespaceSelector": labelSelectorSchema,
+			"scope": apiextensions.JSONSchemaProps{
+				Type: "string",
+				Enum: []apiextensions.JSON{
+					"*",
+					"Cluster",
+					"Namespaced",
+				},
+			},
 		},
 	}
 }

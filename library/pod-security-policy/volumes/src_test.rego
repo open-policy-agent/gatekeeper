@@ -6,6 +6,37 @@ test_input_volume_type_allowed_all {
     count(results) == 0
 }
 
+test_input_volume_type_allowed_all_many_volumes {
+    input := { "review": input_review_many, "parameters": input_parameters_wildcard}
+    results := violation with input as input
+    count(results) == 0
+}
+test_input_volume_type_none_allowed {
+    input := { "review": input_review, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 1
+}
+test_input_volume_type_none_allowed_many_volumes {
+    input := { "review": input_review_many, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 2
+}
+test_input_volume_type_allowed_all_no_volumes {
+    input := { "review": input_review_no_volumes, "parameters": input_parameters_wildcard}
+    results := violation with input as input
+    count(results) == 0
+}
+test_input_volume_type_none_allowed_no_volumes {
+    input := { "review": input_review_no_volumes, "parameters": input_parameters_empty}
+    results := violation with input as input
+    count(results) == 0
+}
+test_input_volume_type_allowed_in_list_no_volumes {
+    input := { "review": input_review_no_volumes, "parameters": input_parameters_in_list}
+    results := violation with input as input
+    count(results) == 0
+}
+
 test_input_volume_type_allowed_in_list {
     input := { "review": input_review, "parameters": input_parameters_in_list}
     results := violation with input as input
@@ -15,7 +46,7 @@ test_input_volume_type_allowed_in_list {
 test_input_volume_type_allowed_not_in_list {
     input := { "review": input_review, "parameters": input_parameters_not_in_list}
     results := violation with input as input
-    count(results) > 0
+    count(results) == 1
 }
 
 test_input_volume_type_allowed_in_list_many_volumes {
@@ -27,7 +58,13 @@ test_input_volume_type_allowed_in_list_many_volumes {
 test_input_volume_type_allowed_not_all_in_list_many_volumes {
     input := { "review": input_review_many, "parameters": input_parameters_not_in_list}
     results := violation with input as input
-    count(results) > 0
+    count(results) == 2
+}
+
+test_input_volume_type_allowed_in_list_many_volumes_mixed {
+    input := { "review": input_review_many, "parameters": input_parameters_mixed}
+    results := violation with input as input
+    count(results) == 1
 }
 
 input_review = {
@@ -54,6 +91,17 @@ input_review_many = {
     }
 }
 
+input_review_no_volumes = {
+    "object": {
+        "metadata": {
+            "name": "nginx"
+        },
+        "spec": {
+            "containers": input_containers_no_volumes,
+      }
+    }
+}
+
 input_containers = [
 {
     "name": "nginx",
@@ -63,6 +111,12 @@ input_containers = [
         "mountPath": "/cache",
         "name": "cache-volume"
     }]
+}]
+
+input_containers_no_volumes = [
+{
+    "name": "nginx",
+    "image": "nginx"
 }]
 
 input_containers_many = [
@@ -105,6 +159,10 @@ input_volumes_many = [
     "emptyDir": {}
 }]
 
+input_parameters_empty = {
+     "volumes": []
+}
+
 input_parameters_wildcard = {
      "volumes": [
          "*"
@@ -118,9 +176,16 @@ input_parameters_in_list = {
     ]
 }
 
-input_parameters_not_in_list = {
+input_parameters_mixed = {
      "volumes": [
          "configMap",
          "emptyDir"
+    ]
+}
+
+input_parameters_not_in_list = {
+     "volumes": [
+         "configMap",
+         "secret"
     ]
 }

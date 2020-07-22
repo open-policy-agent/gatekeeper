@@ -1,7 +1,5 @@
 # Gatekeeper
 
-[![Build Status](https://travis-ci.org/open-policy-agent/gatekeeper.svg?branch=master)](https://travis-ci.org/open-policy-agent/gatekeeper) [![Docker Repository on Quay](https://quay.io/repository/open-policy-agent/gatekeeper/status "Docker Repository on Quay")](https://quay.io/repository/open-policy-agent/gatekeeper)
-
 ## Want to help?
 Join us to help define the direction and implementation of this project!
 
@@ -249,12 +247,13 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+   * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to `*`)
    * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
    * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
    * `labelSelector` is a standard Kubernetes label selector.
    * `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](#replicating-data) for more details.
 
-Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything).
+Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything). Also understand `namespaces`, `excludedNamespaces`, and `namespaceSelector` will match on cluster scoped resources which are not namespaced. To avoid this adjust the `scope` to `Namespaced`.
 
 ### Replicating Data
 
@@ -412,6 +411,21 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 ### Debugging
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
+
+
+### Enable Delete Operations
+To enable Delete operations for the `validation.gatekeeper.sh` admission webhook, add "DELETE" to the list of operations in the `gatekeeper-validating-webhook-configuration` ValidatingWebhookConfiguration as seen in this deployment manifest of gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/v3.1.0-beta.10/deploy/gatekeeper.yaml#L792-L794)
+Note: For admission webhooks registered for DELETE operations, use Kubernetes v1.15.0+
+
+ So you have
+ ```YAML
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+```
+
+You can now check for deletes.
 
 #### Viewing the Request Object
 

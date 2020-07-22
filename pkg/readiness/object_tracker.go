@@ -309,3 +309,17 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	nn := types.NamespacedName{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}
 	return objKey{namespacedName: nn, gvk: gvk}, nil
 }
+
+// this method is currently used only by tests
+// checks if objectTracker.expected contains the object with the gvk and namespaced name
+func (t *objectTracker) ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for k := range t.expect {
+		if k.gvk.String() == gvk.String() && k.namespacedName.String() == nsName.String() {
+			return true
+		}
+	}
+	return false
+}
