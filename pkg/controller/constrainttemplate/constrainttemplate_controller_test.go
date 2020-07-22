@@ -489,7 +489,7 @@ violation[{"msg": "denied!"}] {
 	}
 	// ensure that expectations are set for the constraint gvk
 	g.Eventually(func() bool {
-		return tr.DidExpect(gvk, types.NamespacedName{Name: "denyallconstraint"})
+		return tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
 	}, timeout).Should(gomega.BeTrue(), "waiting for expectations")
 
 	// Delete the constraint , the delete event will be reconciled by controller
@@ -656,5 +656,5 @@ func ignoreNotFound(err error) error {
 
 // This interface is getting used by tests to check the private objects of objectTracker
 type testExpectations interface {
-	DidExpect(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

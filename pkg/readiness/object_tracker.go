@@ -332,10 +332,10 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	return objKey{namespacedName: nn, gvk: gvk}, nil
 }
 
-// DidExpect returns true if the gvk/name combination was previously expected by the tracker.
+// IsExpecting returns true if the gvk/name combination was previously expected by the tracker.
 // Only valid until allSatisfied==true as tracking memory is freed at that point.
 // For testing only.
-func (t *objectTracker) DidExpect(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+func (t *objectTracker) IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
