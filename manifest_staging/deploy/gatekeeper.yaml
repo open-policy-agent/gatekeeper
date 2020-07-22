@@ -639,6 +639,7 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
+        - --emit-audit-events
         - --logtostderr
         command:
         - /manager
