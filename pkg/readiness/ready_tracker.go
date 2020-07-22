@@ -174,7 +174,9 @@ func (t *Tracker) Satisfied(ctx context.Context) bool {
 // Run runs the tracker and blocks until it completes.
 // The provided context can be cancelled to signal a shutdown request.
 func (t *Tracker) Run(ctx context.Context) error {
-	// Any failure in the errgroup will cancel all other goroutines in the group.
+	// Any failure in the errgroup will cancel goroutines in the group using gctx.
+	// The odd one out is the statsPrinter which is meant to outlive the tracking
+	// routines.
 	grp, gctx := errgroup.WithContext(ctx)
 	t.constraintTrackers = syncutil.RunnerWithContext(gctx)
 	close(t.ready) // The constraintTrackers SingleRunner is ready.
@@ -190,8 +192,8 @@ func (t *Tracker) Run(ctx context.Context) error {
 		return nil
 	})
 
-	_ = t.constraintTrackers.Wait()
 	_ = grp.Wait()
+	_ = t.constraintTrackers.Wait() // Must appear after grp.Wait() - allows trackConstraintTemplates() time to schedule its sub-tasks.
 	return nil
 }
 
@@ -389,12 +391,12 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 		case <-time.After(statsPeriod):
 		}
 
-		if t.Satisfied(ctx) {
-			return
-		}
-
 		if !t.statsEnabled.Get() {
 			continue
+		}
+
+		if t.Satisfied(ctx) {
+			return
 		}
 
 		if unsat := t.templates.unsatisfied(); len(unsat) > 0 {

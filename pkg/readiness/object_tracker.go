@@ -51,7 +51,7 @@ type objectTracker struct {
 	seen          objSet                    // observations made before their expectations
 	satisfied     objSet                    // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
 	populated     bool                      // all expectations have been provided
-	allSatisfied  bool                      // true once all expectations have been satified. Acts as a circuit-breaker.
+	allSatisfied  bool                      // true once all expectations have been satisfied. Acts as a circuit-breaker.
 	kindsSnapshot []schema.GroupVersionKind // Snapshot of kinds before freeing memory in Satisfied.
 }
 
@@ -332,16 +332,19 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	return objKey{namespacedName: nn, gvk: gvk}, nil
 }
 
-// this method is currently used only by tests
-// checks if objectTracker.expected contains the object with the gvk and namespaced name
-func (t *objectTracker) ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+// DidExpect returns true if the gvk/name combination was previously expected by the tracker.
+// Only valid until allSatisfied==true as tracking memory is freed at that point.
+// For testing only.
+func (t *objectTracker) DidExpect(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for k := range t.expect {
-		if k.gvk.String() == gvk.String() && k.namespacedName.String() == nsName.String() {
-			return true
-		}
+	k := objKey{gvk: gvk, namespacedName: nsName}
+	if _, ok := t.expect[k]; ok {
+		return true
+	}
+	if _, ok := t.satisfied[k]; ok {
+		return true
 	}
 	return false
 }
