@@ -98,7 +98,7 @@ func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 	defer r.intentMux.Unlock()
 
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(int64(len(r.get()))); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 	}()
@@ -117,7 +117,7 @@ func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(int64(len(r.get()))); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 
@@ -131,7 +131,7 @@ func (r *recordKeeper) Remove(parentName string, gvk schema.GroupVersionKind) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(int64(len(r.get()))); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 	}()
@@ -164,15 +164,15 @@ func (r *recordKeeper) Get() vitalsByGVK {
 	return managedKinds
 }
 
-// get returns all managed vitals, merged across registrars.
-func (r *recordKeeper) get() vitalsByGVK {
-	managedKinds := make(vitalsByGVK)
+// count returns total gvk count across all registrars
+func (r *recordKeeper) count() int {
+	managedKinds := make(map[schema.GroupVersionKind]bool)
 	for _, registrar := range r.intent {
-		for gvk, v := range registrar {
-			managedKinds[gvk] = v
+		for gvk := range registrar {
+			managedKinds[gvk] = true
 		}
 	}
-	return managedKinds
+	return len(managedKinds)
 }
 
 // GetGVK returns all managed kinds, merged across registrars.
