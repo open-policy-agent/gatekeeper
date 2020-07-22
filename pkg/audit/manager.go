@@ -171,6 +171,10 @@ func (am *Manager) audit(ctx context.Context) error {
 	updateLists := make(map[string][]auditResult)
 	totalViolationsPerConstraint := make(map[string]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
+	// resetting total violations per enforcement action
+	for _, action := range util.KnownEnforcementActions {
+		totalViolationsPerEnforcementAction[action] = 0
+	}
 
 	if *auditFromCache {
 		am.log.Info("Auditing from cache")
@@ -191,6 +195,12 @@ func (am *Manager) audit(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// log constraints with violations
+	for link := range updateLists {
+		ar := updateLists[link][0]
+		logConstraint(am.log, ar.constraint, ar.enforcementAction, totalViolationsPerConstraint[link])
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
@@ -371,11 +381,6 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	updateLists map[string][]auditResult,
 	res []*constraintTypes.Result,
 	totalViolationsPerConstraint map[string]int64, totalViolationsPerEnforcementAction map[util.EnforcementAction]int64) error {
-	// resetting total violations per enforcement action
-	for _, action := range util.KnownEnforcementActions {
-		totalViolationsPerEnforcementAction[action] = 0
-	}
-
 	for _, r := range res {
 		selfLink := r.Constraint.GetSelfLink()
 		totalViolationsPerConstraint[selfLink]++
@@ -411,11 +416,6 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
 		logViolation(am.log, r.Constraint, r.EnforcementAction, rkind, rnamespace, rname, message)
-	}
-	// log constraints with violations
-	for link := range updateLists {
-		ar := updateLists[link][0]
-		logConstraint(am.log, ar.constraint, ar.enforcementAction, totalViolationsPerConstraint[link])
 	}
 	return nil
 }
