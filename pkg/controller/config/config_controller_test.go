@@ -31,6 +31,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -122,7 +123,7 @@ func TestReconcile(t *testing.T) {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -208,7 +209,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
 	// create the Config object and expect the Reconcile to be created when controller starts
 	instance := &configv1alpha1.Config{
@@ -361,7 +362,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
