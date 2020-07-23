@@ -18,6 +18,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -84,6 +86,8 @@ var (
 	port                = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
 	certDir             = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
+	enableProfile       = flag.Bool("enable-pprof", false, "enable pprof profiling")
+	profilePort         = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
 )
 
 func init() {
@@ -102,6 +106,14 @@ func main() {
 	if !ok {
 		setupLog.Error(fmt.Errorf("invalid log level encoder: %v", *logLevelEncoder), "Invalid log level encoder")
 		os.Exit(1)
+	}
+
+	if *enableProfile {
+		setupLog.Info("Starting profiling on port %s", *profilePort)
+		go func() {
+			addr := fmt.Sprintf("%s:%d", "localhost", *profilePort)
+			setupLog.Error(http.ListenAndServe(addr, nil), "unable to start profiling server")
+		}()
 	}
 
 	switch *logLevel {
