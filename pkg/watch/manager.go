@@ -71,10 +71,14 @@ func New(c RemovableCache) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	recordKeeper, err := newRecordKeeper()
+	if err != nil {
+		return nil, err
+	}
 	wm := &Manager{
 		cache:          c,
 		stopped:        make(chan struct{}),
-		managedKinds:   newRecordKeeper(),
+		managedKinds:   recordKeeper,
 		watchedKinds:   make(vitalsByGVK),
 		metrics:        metrics,
 		events:         make(chan interface{}, 1024),
@@ -190,6 +194,9 @@ func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
 		registrars: map[*Registrar]bool{r: true},
 	}
 	wm.watchedKinds[gvk] = watchers.merge(wv)
+	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
+	}
 	return nil
 }
 
@@ -225,6 +232,9 @@ func (wm *Manager) doRemoveWatch(r *Registrar, gvk schema.GroupVersionKind) erro
 		return fmt.Errorf("removing %+v: %w", gvk, err)
 	}
 	delete(wm.watchedKinds, gvk)
+	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
+	}
 	return nil
 }
 
@@ -254,6 +264,10 @@ func (wm *Manager) replaceWatches(r *Registrar) error {
 		if err := wm.doAddWatch(r, gvk); err != nil {
 			errlist = append(errlist, fmt.Errorf("adding watch for %+v %w", gvk, err))
 		}
+	}
+
+	if err := wm.metrics.reportGvkCount(int64(len(wm.watchedKinds))); err != nil {
+		log.Error(err, "while trying to report gvk count metric")
 	}
 
 	if errlist != nil {
