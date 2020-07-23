@@ -264,6 +264,7 @@ func (am *Manager) auditResources(
 			opts := &client.ListOptions{
 				Limit: int64(*auditListLimit),
 			}
+			resourceVersion := ""
 
 			for {
 				objList.SetGroupVersionKind(schema.GroupVersionKind{
@@ -271,6 +272,7 @@ func (am *Manager) auditResources(
 					Version: gv.Version,
 					Kind:    kind + "List",
 				})
+				objList.SetResourceVersion(resourceVersion)
 
 				err := am.client.List(ctx, objList, opts)
 				if err != nil {
@@ -307,6 +309,7 @@ func (am *Manager) auditResources(
 					}
 				}
 
+				resourceVersion = objList.GetResourceVersion()
 				opts.Continue = objList.GetContinue()
 				if opts.Continue == "" {
 					break
