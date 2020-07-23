@@ -86,8 +86,8 @@ var (
 	port                = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
 	certDir             = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
-	enableProfile       = flag.Bool("enable-profile", false, "enable pprof profiling")
-	profilePort         = flag.Int("profile-port", 6060, "port for profiling. defaulted to 6060 if unspecified ")
+	enableProfile       = flag.Bool("enable-pprof", false, "enable pprof profiling")
+	profilePort         = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
 )
 
 func init() {
