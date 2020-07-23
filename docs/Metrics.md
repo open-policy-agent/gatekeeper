@@ -119,25 +119,6 @@
     Aggregation: `LastValue`
 
 ## Watch
-Note that these are not working at this time (https://github.com/open-policy-agent/gatekeeper/issues/561)
-
-- Name: `watch_manager_last_restart_time`
-
-    Description: `Timestamp of last watch manager restart`
-
-    Aggregation: `LastValue`
-
-- Name: `watch_manager_last_restart_check_time`
-
-    Description: `Timestamp of last time watch manager checked if it needed to restart`
-
-    Aggregation: `Count`
-
-- Name: `watch_manager_restart_attempts`
-
-    Description: `Timestamp of last sync operation`
-
-    Aggregation: `LastValue`
 
 - Name: `watch_manager_watched_gvk`
 
@@ -148,11 +129,5 @@ Note that these are not working at this time (https://github.com/open-policy-age
 - Name: `watch_manager_intended_watch_gvk`
 
     Description: `Total number of GroupVersionKinds with a registered watch intent`
-
-    Aggregation: `LastValue`
-
-- Name: `watch_manager_is_running`
-
-    Description: `Whether the watch manager is running. This is expected to be 1 the majority of the time with brief periods of downtime due to the watch manager being paused or restarted`
 
     Aggregation: `LastValue`

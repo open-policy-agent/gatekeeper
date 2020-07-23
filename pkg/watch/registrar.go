@@ -55,6 +55,7 @@ type recordKeeper struct {
 	intentMux  sync.RWMutex
 	registrars map[string]*Registrar
 	mgr        *Manager
+	metrics    *reporter
 }
 
 func (r *recordKeeper) NewRegistrar(parentName string, events chan<- event.GenericEvent) (*Registrar, error) {
@@ -95,6 +96,13 @@ func (r *recordKeeper) RemoveRegistrar(parentName string) error {
 func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
+
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+	}()
+
 	if _, ok := r.intent[parentName]; !ok {
 		r.intent[parentName] = make(vitalsByGVK)
 	}
@@ -108,6 +116,13 @@ func (r *recordKeeper) Update(parentName string, m vitalsByGVK) {
 func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.GroupVersionKind]vitals) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+
+	}()
+
 	r.intent[reg.parentName] = roster
 }
 
@@ -115,6 +130,12 @@ func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.
 func (r *recordKeeper) Remove(parentName string, gvk schema.GroupVersionKind) {
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
+	defer func() {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
+			log.Error(err, "while reporting gvk intent count metric")
+		}
+	}()
+
 	delete(r.intent[parentName], gvk)
 }
 
@@ -143,6 +164,17 @@ func (r *recordKeeper) Get() vitalsByGVK {
 	return managedKinds
 }
 
+// count returns total gvk count across all registrars
+func (r *recordKeeper) count() int {
+	managedKinds := make(map[schema.GroupVersionKind]bool)
+	for _, registrar := range r.intent {
+		for gvk := range registrar {
+			managedKinds[gvk] = true
+		}
+	}
+	return len(managedKinds)
+}
+
 // GetGVK returns all managed kinds, merged across registrars.
 func (r *recordKeeper) GetGVK() []schema.GroupVersionKind {
 	var gvks []schema.GroupVersionKind
@@ -154,11 +186,16 @@ func (r *recordKeeper) GetGVK() []schema.GroupVersionKind {
 	return gvks
 }
 
-func newRecordKeeper() *recordKeeper {
+func newRecordKeeper() (*recordKeeper, error) {
+	metrics, err := newStatsReporter()
+	if err != nil {
+		return nil, err
+	}
 	return &recordKeeper{
 		intent:     make(map[string]vitalsByGVK),
 		registrars: make(map[string]*Registrar),
-	}
+		metrics:    metrics,
+	}, nil
 }
 
 // A Registrar allows a parent to add/remove child watches
