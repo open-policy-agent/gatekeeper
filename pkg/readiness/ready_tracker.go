@@ -257,9 +257,8 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) 
 		if err != nil {
 			return errors.Wrapf(err, "while getting key for %v in collectForObjectTracker", o)
 		}
-		if _, ok := unsatisfiedmap[k]; ok {
-			delete(unsatisfiedmap, k)
-		}
+		// delete is a no-op if the key isn't found
+		delete(unsatisfiedmap, k)
 	}
 
 	// now remove the expectations for deleted objects
@@ -293,7 +292,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 
 	// collect deleted but expected constraints
 	for _, gvk := range t.constraints.Keys() {
-		// retrive the expectations for this key
+		// retrieve the expectations for this key
 		es := t.constraints.Get(gvk)
 		err = t.collectForObjectTracker(ctx, es)
 		if err != nil {
@@ -304,7 +303,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 
 	// collect data expects
 	for _, gvk := range t.data.Keys() {
-		// retrive the expectations for this key
+		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
 		err = t.collectForObjectTracker(ctx, es)
 		if err != nil {
