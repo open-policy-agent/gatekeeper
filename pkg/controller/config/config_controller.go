@@ -221,6 +221,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	newSyncOnly := watch.NewSet()
 	newExcluder := process.New()
+	var statsEnabled bool
 	// If the config is being deleted the user is saying they don't want to
 	// sync anything
 	if exists && instance.GetDeletionTimestamp().IsZero() {
@@ -230,6 +231,16 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		}
 
 		newExcluder.Add(instance.Spec.Match)
+		statsEnabled = instance.Spec.Readiness.StatsEnabled
+	}
+
+	// Enable verbose readiness stats if requested.
+	if statsEnabled {
+		log.Info("enabling readiness stats")
+		r.tracker.EnableStats(ctx)
+	} else {
+		log.Info("disabling readiness stats")
+		r.tracker.DisableStats(ctx)
 	}
 
 	// Remove expectations for resources we no longer watch.

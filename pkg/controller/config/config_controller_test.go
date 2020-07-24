@@ -284,7 +284,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// ensure that expectations are set for the constraint gvk
 	g.Eventually(func() bool {
-		return tr.ExpectedContains(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
+		return tr.IsExpecting(gvk, types.NamespacedName{Name: "testpod", Namespace: "default"})
 	}, timeout).Should(gomega.BeTrue())
 
 	// delete the pod , the delete event will be reconciled by sync controller
@@ -602,5 +602,5 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 
 // This interface is getting used by tests to check the private objects of objectTracker
 type testExpectations interface {
-	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
