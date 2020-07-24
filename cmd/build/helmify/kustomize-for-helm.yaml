@@ -53,7 +53,7 @@ spec:
           args:
             - --port=8443
             - --logtostderr
-            - --emit-deny-events
+            - --emit-admission-events={{ .Values.emitAdmissionEvents }}
             - --log-level={{ .Values.logLevel }}
             - --exempt-namespace=gatekeeper-system
             - --operation=webhook
@@ -83,6 +83,7 @@ spec:
         - --log-level={{ .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
+        - --emit-audit-events={{ .Values.emitAuditEvents }}
         - --operation=audit
         - --operation=status
         - --logtostderr

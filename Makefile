@@ -32,6 +32,12 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n      containers:\
 \n      - image: <your image file>\
 \n        name: manager\
+\n        args:\
+\n        - --port=8443\
+\n        - --logtostderr\
+\n        - --emit-admission-events\
+\n        - --exempt-namespace=gatekeeper-system\
+\n        - --operation=webhook\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -43,7 +49,12 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
-\n        name: auditcontainer"
+\n        name: auditcontainer\
+\n        args:\
+\n        - --emit-audit-events\
+\n        - --operation=audit\
+\n        - --operation=status\
+\n        - --logtostderr"
 
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
@@ -107,7 +118,7 @@ e2e-helm-deploy:
 	cd .staging/helm && tar -xvf helmbin.tar.gz
 	./.staging/helm/linux-amd64/helm init --wait --history-max=5
 	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE}
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true
 
 # Build manager binary
 manager: generate fmt vet
