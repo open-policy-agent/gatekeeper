@@ -3,6 +3,7 @@ auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
+auditChunkSize: 0
 logLevel: INFO
 emitAdmissionEvents: false
 emitAuditEvents: false
