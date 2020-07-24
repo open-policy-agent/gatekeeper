@@ -580,14 +580,14 @@ func (ucloop *updateConstraintLoop) update() {
 					failure = true
 					log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
 				}
+				totalViolations := ucloop.tv[latestItem.GetSelfLink()]
 				if constraintAuditResults, ok := ucloop.ul[latestItem.GetSelfLink()]; !ok {
-					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, 0)
+					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						failure = true
 						log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
 					}
 				} else {
-					totalViolations := ucloop.tv[latestItem.GetSelfLink()]
 					// update the constraint
 					err := ucloop.updateConstraintStatus(ctx, &latestItem, constraintAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
