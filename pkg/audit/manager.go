@@ -281,13 +281,14 @@ func (am *Manager) auditResources(
 				}
 
 				for _, obj := range objList.Items {
-					if am.skipExcludedNamespace(obj.GetNamespace()) {
+					objNamespace := obj.GetNamespace()
+					if am.skipExcludedNamespace(objNamespace) {
 						continue
 					}
 
 					ns := corev1.Namespace{}
-					if obj.GetNamespace() != "" {
-						ns, err = nsCache.Get(ctx, am.client, obj.GetNamespace())
+					if objNamespace != "" {
+						ns, err = nsCache.Get(ctx, am.client, objNamespace)
 						if err != nil {
 							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
 							continue
