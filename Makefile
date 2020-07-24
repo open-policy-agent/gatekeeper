@@ -5,7 +5,7 @@ IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 
-VERSION := v3.1.0-beta.10
+VERSION := v3.1.0-beta.11
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.7.0
