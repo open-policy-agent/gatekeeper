@@ -35,6 +35,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -129,7 +130,7 @@ violation[{"msg": "denied!"}] {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 	ctx := context.Background()
 
 	// creating the gatekeeper-system namespace is necessary because that's where
@@ -383,7 +384,7 @@ anyrule[}}}//invalid//rego
 	})
 }
 
-// tests that expectations forconstraint gets cancelled when it gets deleted
+// Tests that expectations for constraints are cancelled if the corresponding constraint is deleted.
 func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when constraint gets deleted")
 
@@ -391,7 +392,7 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 
 	// Setup the Manager
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 	ctx := context.Background()
 
 	// Create the constraint template object and expect the Reconcile to be created when controller starts
@@ -431,7 +432,7 @@ violation[{"msg": "denied!"}] {
 
 	// Install constraint CRD
 	crd := makeCRD(gvk, "denyall")
-	err = applyCRD(ctx, g, mgr.GetClient(), gvk, crd)
+	err = applyCRD(ctx, g, c, gvk, crd)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying CRD")
 
 	// Create the constraint for constraint template
@@ -459,7 +460,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	os.Setenv("POD_NAME", "no-pod")
+	_ = os.Setenv("POD_NAME", "no-pod")
 	podstatus.DisablePodOwnership()
 	cs := watch.NewSwitch()
 	pod := &corev1.Pod{}
@@ -472,15 +473,25 @@ violation[{"msg": "denied!"}] {
 	// start manager that will start tracker and controller
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
 
+	once := sync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			close(stopMgr)
+			mgrStopped.Wait()
+		})
+	}
+	defer testMgrStopped()
+
 	// get the object tracker for the constraint
-	tr, ok := tracker.For(gvk).(testExpectations)
+	ot := tracker.For(gvk)
+	tr, ok := ot.(testExpectations)
 	if !ok {
-		t.Fatalf("unexpected tracker, got %T", tr)
+		t.Fatalf("unexpected tracker, got %T", ot)
 	}
 	// ensure that expectations are set for the constraint gvk
 	g.Eventually(func() bool {
-		return tr.ExpectedContains(gvk, types.NamespacedName{Name: "denyallconstraint"})
-	}, timeout).Should(gomega.BeTrue())
+		return tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
+	}, timeout).Should(gomega.BeTrue(), "waiting for expectations")
 
 	// Delete the constraint , the delete event will be reconciled by controller
 	// to cancel the expectation set for it by tracker
@@ -496,16 +507,6 @@ violation[{"msg": "denied!"}] {
 	g.Eventually(func() bool {
 		return tracker.For(gvk).Satisfied()
 	}, timeout).Should(gomega.BeTrue())
-
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			close(stopMgr)
-			mgrStopped.Wait()
-		})
-	}
-	defer testMgrStopped()
-
 }
 
 func constraintEnforced(c client.Client, g *gomega.GomegaWithT, timeout time.Duration) {
@@ -656,5 +657,5 @@ func ignoreNotFound(err error) error {
 
 // This interface is getting used by tests to check the private objects of objectTracker
 type testExpectations interface {
-	ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

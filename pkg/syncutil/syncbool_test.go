@@ -13,23 +13,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package readiness
+package syncutil_test
 
 import (
-	"fmt"
+	"testing"
+	"time"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 )
 
-type objKey struct {
-	gvk            schema.GroupVersionKind
-	namespacedName types.NamespacedName
-}
+// Verifies changes are visible across goroutines.
+func Test_SyncBool(t *testing.T) {
+	var b syncutil.SyncBool
+	done := make(chan struct{})
 
-type objSet map[objKey]struct{}
+	go func() {
+		defer close(done)
 
-func (k objKey) String() string {
-	return fmt.Sprintf("%s [%s]", k.namespacedName.String(), k.gvk.String())
+		for b.Get() == false {
+		}
+	}()
 
+	go func() {
+		b.Set(true)
+	}()
+
+	select {
+	case <-time.After(10 * time.Millisecond):
+		t.Errorf("failed waiting for flag visibility across goroutines")
+	case <-done:
+		// Success
+	}
 }

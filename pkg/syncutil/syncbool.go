@@ -13,23 +13,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package readiness
+package syncutil
 
-import (
-	"fmt"
+import "sync/atomic"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-)
-
-type objKey struct {
-	gvk            schema.GroupVersionKind
-	namespacedName types.NamespacedName
+// SyncBool represents a synchronized boolean flag.
+// Its methods are safe to call concurrently.
+type SyncBool struct {
+	val int32
 }
 
-type objSet map[objKey]struct{}
+// Set sets the values of the flag.
+func (b *SyncBool) Set(v bool) {
+	if v {
+		atomic.StoreInt32(&b.val, 1)
+	} else {
+		atomic.StoreInt32(&b.val, 0)
+	}
+}
 
-func (k objKey) String() string {
-	return fmt.Sprintf("%s [%s]", k.namespacedName.String(), k.gvk.String())
-
+// Get returns the current value of the flag.
+func (b *SyncBool) Get() bool {
+	v := atomic.LoadInt32(&b.val)
+	return v == 1
 }

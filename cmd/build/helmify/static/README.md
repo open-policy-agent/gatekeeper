@@ -9,6 +9,8 @@
 | auditFromCache            | Take the roster of resources to audit from the OPA cache    | `false`                                                                   |
 | auditChunkSize            | (alpha) Chunk size for listing cluster resources for audit  | `0`                                                                       |
 | disableValidatingWebhook  | Disable ValidatingWebhook                                   | `false`                                                                   |
+| emitAdmissionEvents       | Emit K8s events in gatekeeper namespace for admission violations (alpha feature)| `false`                                                                   |
+| emitAuditEvents           | Emit K8s events in gatekeeper namespace for audit violations (alpha feature)| `false`                                                                   |
 | logLevel                  | Minimum log level                                           | `INFO`                                                                    |
 | image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                            |
 | image.repository          | Image repository                                            | `openpolicyagent/gatekeeper`                                              |

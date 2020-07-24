@@ -5,6 +5,8 @@ auditFromCache: false
 disableValidatingWebhook: false
 auditChunkSize: 0
 logLevel: INFO
+emitAdmissionEvents: false
+emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
   release: v3.1.0-beta.10
