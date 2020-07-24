@@ -37,13 +37,13 @@ const (
 	msgSize                          = 256
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
-	defaultListLimit                 = 100
+	defaultListLimit                 = 0
 )
 
 var (
 	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
 	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "Kubernetes API chunking List results  when retrieving cluster resources using discovery client. defaulted to 100 if unspecified, 0 to disable chunking")
+	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emptyAuditResults         []auditResult
 )
