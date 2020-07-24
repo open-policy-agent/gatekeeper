@@ -56,6 +56,12 @@ spec:
                     type: array
                 type: object
               type: array
+            readiness:
+              description: Configuration for readiness tracker
+              properties:
+                statsEnabled:
+                  type: boolean
+              type: object
             sync:
               description: Configuration for syncing k8s objects
               properties:
