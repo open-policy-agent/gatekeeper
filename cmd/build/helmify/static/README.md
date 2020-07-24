@@ -7,6 +7,7 @@
 | auditInterval             | The frequency with which audit is run                       | `60`                                                                      |
 | constraintViolationsLimit | The maximum # of audit violations reported on a constraint  | `20`                                                                      |
 | auditFromCache            | Take the roster of resources to audit from the OPA cache    | `false`                                                                   |
+| auditChunkSize            | (alpha) Chunk size for listing cluster resources for audit  | `0`                                                                       |
 | disableValidatingWebhook  | Disable ValidatingWebhook                                   | `false`                                                                   |
 | logLevel                  | Minimum log level                                           | `INFO`                                                                    |
 | image.pullPolicy          | The image pull policy                                       | `IfNotPresent`                                                            |
