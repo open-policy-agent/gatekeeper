@@ -208,11 +208,38 @@ func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
 
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue())
 
-	// Peek at internals - we should no be accruing memory from the post-circuit-breaker operations
+	// Peek at internals - we should not be accruing memory from the post-circuit-breaker operations
 	ot.mu.RLock()
 	defer ot.mu.RUnlock()
 	g.Expect(ot.cancelled).To(gomega.BeEmpty())
 	g.Expect(ot.expect).To(gomega.BeEmpty())
 	g.Expect(ot.seen).To(gomega.BeEmpty())
 	g.Expect(ot.satisfied).To(gomega.BeEmpty())
+}
+
+// Verifies the kinds internal method and that it retains it values even after
+// the circuit-breaker trips (which releases memory it depends on).
+func Test_ObjectTracker_kinds(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ot := newObjTracker(schema.GroupVersionKind{})
+
+	const count = 10
+	ct := makeCTSlice("ct-", count)
+	for i := 0; i < len(ct); i++ {
+		ot.Expect(ct[i])
+	}
+	ot.ExpectationsDone()
+
+	kindsBefore := ot.kinds()
+
+	for i := 0; i < len(ct); i++ {
+		ot.Observe(ct[i])
+	}
+
+	g.Expect(ot.Satisfied()).Should(gomega.BeTrue(), "should be satisfied")
+
+	kindsAfter := ot.kinds()
+
+	g.Expect(kindsBefore).ShouldNot(gomega.BeEmpty(), "expected non-empty kinds")
+	g.Expect(kindsAfter).Should(gomega.Equal(kindsBefore), "expected kinds to match")
 }

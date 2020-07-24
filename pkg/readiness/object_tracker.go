@@ -16,6 +16,7 @@ limitations under the License.
 package readiness
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -43,14 +44,15 @@ type Expectations interface {
 // Expectations are satisfied by calls to Observe().
 // Once all expectations are satisfied, Satisfied() will begin returning true.
 type objectTracker struct {
-	mu           sync.RWMutex
-	gvk          schema.GroupVersionKind
-	cancelled    objSet // expectations that have been cancelled
-	expect       objSet // unresolved expectations
-	seen         objSet // observations made before their expectations
-	satisfied    objSet // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
-	populated    bool   // all expectations have been provided
-	allSatisfied bool   // true once all expectations have been satified. Acts as a circuit-breaker.
+	mu            sync.RWMutex
+	gvk           schema.GroupVersionKind
+	cancelled     objSet                    // expectations that have been cancelled
+	expect        objSet                    // unresolved expectations
+	seen          objSet                    // observations made before their expectations
+	satisfied     objSet                    // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
+	populated     bool                      // all expectations have been provided
+	allSatisfied  bool                      // true once all expectations have been satisfied. Acts as a circuit-breaker.
+	kindsSnapshot []schema.GroupVersionKind // Snapshot of kinds before freeing memory in Satisfied.
 }
 
 func newObjTracker(gvk schema.GroupVersionKind) *objectTracker {
@@ -228,6 +230,7 @@ func (t *objectTracker) Satisfied() bool {
 
 	// Proceed only if we have state changes to make.
 	if !needMutate {
+		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 		return false
 	}
 
@@ -236,6 +239,7 @@ func (t *objectTracker) Satisfied() bool {
 	defer t.mu.Unlock()
 
 	// Resolve any expectations where the observation preceded the expect request.
+	var resolveCount int
 	for k := range t.seen {
 		if _, ok := t.expect[k]; !ok {
 			continue
@@ -243,15 +247,20 @@ func (t *objectTracker) Satisfied() bool {
 		delete(t.seen, k)
 		delete(t.expect, k)
 		t.satisfied[k] = struct{}{}
+		resolveCount++
 	}
+	log.V(1).Info("resolved pre-observations", "gvk", t.gvk, "count", resolveCount)
+	log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
 
 	// All satisfied if:
 	//  1. Expectations have been previously populated
 	//  2. No expectations remain
 	if t.populated && len(t.expect) == 0 {
 		t.allSatisfied = true
+		log.V(1).Info("all expectations satisfied", "gvk", t.gvk)
 
 		// Circuit-breaker tripped - free tracking memory
+		t.kindsSnapshot = t.kindsNoLock() // Take snapshot as kinds() depends on the maps we're about to clear.
 		t.seen = nil
 		t.expect = nil
 		t.satisfied = nil
@@ -263,18 +272,31 @@ func (t *objectTracker) Satisfied() bool {
 func (t *objectTracker) kinds() []schema.GroupVersionKind {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	return t.kindsNoLock()
+}
 
-	l := len(t.satisfied) + len(t.expect)
-	if l == 0 {
+func (t *objectTracker) kindsNoLock() []schema.GroupVersionKind {
+	if t.kindsSnapshot != nil {
+		out := make([]schema.GroupVersionKind, len(t.kindsSnapshot))
+		copy(out, t.kindsSnapshot)
+		return out
+	}
+
+	m := make(map[schema.GroupVersionKind]struct{})
+	for k := range t.satisfied {
+		m[k.gvk] = struct{}{}
+	}
+	for k := range t.expect {
+		m[k.gvk] = struct{}{}
+	}
+
+	if len(m) == 0 {
 		return nil
 	}
 
-	out := make([]schema.GroupVersionKind, 0, l)
-	for k := range t.satisfied {
-		out = append(out, k.gvk)
-	}
-	for k := range t.expect {
-		out = append(out, k.gvk)
+	out := make([]schema.GroupVersionKind, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
 	return out
 }
@@ -310,16 +332,19 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 	return objKey{namespacedName: nn, gvk: gvk}, nil
 }
 
-// this method is currently used only by tests
-// checks if objectTracker.expected contains the object with the gvk and namespaced name
-func (t *objectTracker) ExpectedContains(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
+// IsExpecting returns true if the gvk/name combination was previously expected by the tracker.
+// Only valid until allSatisfied==true as tracking memory is freed at that point.
+// For testing only.
+func (t *objectTracker) IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for k := range t.expect {
-		if k.gvk.String() == gvk.String() && k.namespacedName.String() == nsName.String() {
-			return true
-		}
+	k := objKey{gvk: gvk, namespacedName: nsName}
+	if _, ok := t.expect[k]; ok {
+		return true
+	}
+	if _, ok := t.satisfied[k]; ok {
+		return true
 	}
 	return false
 }
