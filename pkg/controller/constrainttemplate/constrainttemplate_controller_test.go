@@ -35,6 +35,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -129,7 +130,7 @@ violation[{"msg": "denied!"}] {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 	ctx := context.Background()
 
 	// creating the gatekeeper-system namespace is necessary because that's where
@@ -391,7 +392,7 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 
 	// Setup the Manager
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 	ctx := context.Background()
 
 	// Create the constraint template object and expect the Reconcile to be created when controller starts
@@ -431,7 +432,7 @@ violation[{"msg": "denied!"}] {
 
 	// Install constraint CRD
 	crd := makeCRD(gvk, "denyall")
-	err = applyCRD(ctx, g, mgr.GetClient(), gvk, crd)
+	err = applyCRD(ctx, g, c, gvk, crd)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying CRD")
 
 	// Create the constraint for constraint template

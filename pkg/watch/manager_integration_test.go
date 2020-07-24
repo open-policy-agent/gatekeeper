@@ -26,6 +26,7 @@ import (
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
@@ -225,7 +226,7 @@ loop:
 func TestRegistrar_Reconnect(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -257,7 +258,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	}
 	const plural = "testresources"
 	crd := makeCRD(gvk, plural)
-	err = applyCRD(ctx, g, mgr.GetClient(), gvk, crd)
+	err = applyCRD(ctx, g, c, gvk, crd)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying CRD")
 
 	err = r.AddWatch(gvk)
@@ -284,7 +285,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 
 	// Create the CRD and resource again, expect our previous watch to pick them up automatically.
 	crd = makeCRD(gvk, plural)
-	err = applyCRD(ctx, g, mgr.GetClient(), gvk, crd)
+	err = applyCRD(ctx, g, c, gvk, crd)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "reapplying CRD")
 	u = unstructuredFor(gvk, "test-add-again")
 	err = c.Create(ctx, u)
@@ -302,7 +303,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 func Test_Registrar_Replay(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := mgr.GetClient()
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
