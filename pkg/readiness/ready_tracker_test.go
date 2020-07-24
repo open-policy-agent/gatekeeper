@@ -248,7 +248,6 @@ func Test_CollectDeleted(t *testing.T) {
 	type test struct {
 		description string
 		gvk         schema.GroupVersionKind
-		numExpected int
 		tracker     readiness.Expectations
 	}
 
@@ -291,9 +290,9 @@ func Test_CollectDeleted(t *testing.T) {
 	// note: state can leak betweek these test cases because we do not reset the environment
 	// between them to keep the test short. Trackers are mostly independent per GVK.
 	tests := []test{
-		{description: "constraints", gvk: cgvk, numExpected: 1},
-		{description: "data (configmaps)", gvk: cmgvk, numExpected: 2, tracker: cmtracker},
-		{description: "templates", gvk: ctgvk, numExpected: 3},
+		{description: "constraints", gvk: cgvk},
+		{description: "data (configmaps)", gvk: cmgvk, tracker: cmtracker},
+		{description: "templates", gvk: ctgvk},
 		// no need to check Config here since it is not actually Expected for readiness
 		// (the objects identified in a Config's syncOnly are Expected, tested in data case above)
 	}
@@ -315,7 +314,7 @@ func Test_CollectDeleted(t *testing.T) {
 		ul.SetGroupVersionKind(tc.gvk)
 		err = client.List(ctx, ul)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
-		g.Expect(len(ul.Items)).To(gomega.Equal(tc.numExpected), "expecting %d %s", tc.numExpected, tc.description)
+		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
 
 		for _, i := range ul.Items {
 			err = client.Delete(ctx, &i)

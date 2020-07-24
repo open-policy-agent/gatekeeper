@@ -296,7 +296,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 		es := t.constraints.Get(gvk)
 		err = t.collectForObjectTracker(ctx, es)
 		if err != nil {
-			log.Error(err, "while collecting for the Constraint type %v", gvk)
+			log.Error(err, "while collecting for the Constraint type", "gvk", gvk)
 			continue
 		}
 	}
@@ -307,7 +307,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 		es := t.data.Get(gvk)
 		err = t.collectForObjectTracker(ctx, es)
 		if err != nil {
-			log.Error(err, "while collecting for the Data type %v", gvk)
+			log.Error(err, "while collecting for the Data type", "gvk", gvk)
 			continue
 		}
 	}
