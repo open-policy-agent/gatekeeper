@@ -645,7 +645,6 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
-        - --emit-audit-events=false
         - --logtostderr
         command:
         - /manager
@@ -738,7 +737,6 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
-        - --emit-admission-events=false
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
         command:
