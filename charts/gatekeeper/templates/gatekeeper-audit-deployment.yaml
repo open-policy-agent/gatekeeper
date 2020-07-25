@@ -41,6 +41,8 @@ spec:
         - --log-level={{ .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
+        - --audit-chunk-size={{ .Values.auditChunkSize }}
+        - --emit-audit-events={{ .Values.emitAuditEvents }}
         - --operation=audit
         - --operation=status
         - --logtostderr

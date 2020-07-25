@@ -181,6 +181,9 @@ teardown() {
 
   events=$(kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -eq 1 ]]
+
+  events=$(kubectl get events -n gatekeeper-system --field-selector reason=AuditViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  [[ "$events" -ge 6 ]]
 }
 
 @test "config namespace exclusion test" {
