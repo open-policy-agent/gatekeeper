@@ -78,7 +78,7 @@ spec:
     spec:
       containers:
         - name: auditcontainer
-        args:
+          args:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
