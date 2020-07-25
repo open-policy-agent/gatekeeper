@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -180,6 +181,7 @@ type ReconcileConstraint struct {
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
 	getPod           func() (*corev1.Pod, error)
+	pod *corev1.Pod
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -317,14 +319,28 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 }
 
 func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
+	if r.pod != nil {
+		return r.pod.DeepCopy(), nil
+	}
 	ns := util.GetNamespace()
 	name := util.GetPodName()
 	key := types.NamespacedName{Namespace: ns, Name: name}
 	pod := &corev1.Pod{}
-	if err := r.reader.Get(context.TODO(), key, pod); err != nil {
+	// use unstructured to avoid inadvertently creating a watch on pods
+	uPod := &unstructured.Unstructured{}
+	gvk, err := apiutil.GVKForObject(pod, r.scheme)
+	if err != nil {
 		return nil, err
 	}
-	return pod, nil
+	uPod.SetGroupVersionKind(gvk)
+	if err := r.reader.Get(context.TODO(), key, uPod); err != nil {
+		return nil, err
+	}
+	if err := r.scheme.Convert(uPod, pod, nil); err != nil {
+		return nil, err
+	}
+	r.pod = pod
+	return pod.DeepCopy(), nil
 }
 
 func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
