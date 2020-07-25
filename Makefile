@@ -263,9 +263,7 @@ promote-staging-manifest:
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
-	-kubectl delete -n gatekeeper-system Config config
-	sleep 5
-	kubectl delete ns gatekeeper-system
+	kustomize build config/overlays/dev | kubectl delete -f -
 
 # find or download controller-gen
 # download controller-gen if necessary

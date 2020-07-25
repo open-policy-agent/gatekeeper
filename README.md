@@ -125,19 +125,6 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 
 ### Uninstallation
 
-Before uninstalling Gatekeeper, be sure to clean up old `Constraints`, `ConstraintTemplates`, and
-the `Config` resource in the `gatekeeper-system` namespace. This will make sure all finalizers
-are removed by Gatekeeper. Otherwise the finalizers will need to be removed manually.
-
-#### Before Uninstall, Clean Up Old Constraints
-
-Currently the uninstall mechanism only removes the Gatekeeper system, it does not remove any `ConstraintTemplate`, `Constraint`, and `Config` resources that have been created by the user, nor does it remove their accompanying `CRDs`.
-
-When Gatekeeper is running it is possible to remove unwanted constraints by:
-   * Deleting all instances of the constraint resource
-   * Deleting the `ConstraintTemplate` resource, which should automatically clean up the `CRD`
-   * Deleting the `Config` resource removes finalizers on synced resources
-
 #### Uninstall Gatekeeper
 
 ##### Using Prebuilt Image
@@ -161,14 +148,6 @@ If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
 ```sh
 helm delete <release name> --purge
 ```
-
-##### Manually Removing Constraints
-
-If Gatekeeper is no longer running and there are extra constraints in the cluster, then the finalizers, CRDs and other artifacts must be removed manually:
-
-   * Delete all instances of the constraint resource
-   * Executing `kubectl patch  crd constrainttemplates.templates.gatekeeper.sh -p '{"metadata":{"finalizers":[]}}' --type=merge`. Note that this will remove all finalizers on every CRD. If this is not something you want to do, the finalizers must be removed individually.
-   * Delete the `CRD` and `ConstraintTemplate` resources associated with the unwanted constraint.
 
 ## How to Use Gatekeeper
 
