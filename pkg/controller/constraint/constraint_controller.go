@@ -119,9 +119,10 @@ func newReconciler(
 	tracker *readiness.Tracker) *ReconcileConstraint {
 	r := &ReconcileConstraint{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
-		writer:       mgr.GetClient(),
-		statusClient: mgr.GetClient(),
-		reader:       mgr.GetCache(),
+		writer:         mgr.GetClient(),
+		statusClient:   mgr.GetClient(),
+		standardClient: mgr.GetClient(),
+		reader:         mgr.GetCache(),
 
 		cs:               cs,
 		scheme:           mgr.GetScheme(),
@@ -169,9 +170,10 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
-	reader       client.Reader
-	writer       client.Writer
-	statusClient client.StatusClient
+	reader         client.Reader
+	writer         client.Writer
+	statusClient   client.StatusClient
+	standardClient client.Client
 
 	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
@@ -333,7 +335,7 @@ func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
 		return nil, err
 	}
 	uPod.SetGroupVersionKind(gvk)
-	if err := r.reader.Get(context.TODO(), key, uPod); err != nil {
+	if err := r.standardClient.Get(context.TODO(), key, uPod); err != nil {
 		return nil, err
 	}
 	if err := r.scheme.Convert(uPod, pod, nil); err != nil {
