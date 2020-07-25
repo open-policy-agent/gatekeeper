@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.4
+    controller-gen.kubebuilder.io/version: v0.3.0
     helm.sh/hook: crd-install
     helm.sh/hook-delete-policy: before-hook-creation
   creationTimestamp: null
@@ -42,6 +42,26 @@ spec:
         spec:
           description: ConfigSpec defines the desired state of Config
           properties:
+            match:
+              description: Configuration for namespace exclusion
+              items:
+                properties:
+                  excludedNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  processes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              type: array
+            readiness:
+              description: Configuration for readiness tracker
+              properties:
+                statsEnabled:
+                  type: boolean
+              type: object
             sync:
               description: Configuration for syncing k8s objects
               properties:
