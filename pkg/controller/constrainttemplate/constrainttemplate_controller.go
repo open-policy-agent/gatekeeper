@@ -233,7 +233,7 @@ type ReconcileConstraintTemplate struct {
 	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker
-	pod *corev1.Pod
+	pod           *corev1.Pod
 	getPod        func() (*corev1.Pod, error)
 }
 

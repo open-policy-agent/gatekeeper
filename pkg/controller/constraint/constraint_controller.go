@@ -181,7 +181,7 @@ type ReconcileConstraint struct {
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
 	getPod           func() (*corev1.Pod, error)
-	pod *corev1.Pod
+	pod              *corev1.Pod
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
