@@ -47,7 +47,8 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 
 	```
 	git checkout -b release-<NEW VERSION>
-	git commit -a -s -m "Prepare <NEW VERSION> release"
+	git add --all
+	git commit -s -m "Prepare <NEW VERSION> release"
 	git push <YOUR FORK>
 	```
 
