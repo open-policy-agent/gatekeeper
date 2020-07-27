@@ -81,8 +81,7 @@ type defaultPodGetter struct {
 }
 
 func (g *defaultPodGetter) GetPod() (*corev1.Pod, error) {
-	var pod *corev1.Pod
-	pod = func() *corev1.Pod {
+	pod := func() *corev1.Pod {
 		g.mux.RLock()
 		defer g.mux.RUnlock()
 		return g.pod
@@ -102,7 +101,7 @@ func (g *defaultPodGetter) GetPod() (*corev1.Pod, error) {
 	key := types.NamespacedName{Namespace: ns, Name: name}
 	// use unstructured to avoid inadvertently creating a watch on pods
 	uPod := &unstructured.Unstructured{}
-	gvk, err := apiutil.GVKForObject(pod, r.scheme)
+	gvk, err := apiutil.GVKForObject(pod, g.scheme)
 	if err != nil {
 		return nil, err
 	}
