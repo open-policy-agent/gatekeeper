@@ -96,6 +96,7 @@ func (g *defaultPodGetter) GetPod() (*corev1.Pod, error) {
 	if g.pod != nil {
 		return g.pod.DeepCopy(), nil
 	}
+	pod = &corev1.Pod{}
 	ns := util.GetNamespace()
 	name := util.GetPodName()
 	key := types.NamespacedName{Namespace: ns, Name: name}
