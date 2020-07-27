@@ -39,12 +39,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -233,7 +231,6 @@ type ReconcileConstraintTemplate struct {
 	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker
-	pod           *corev1.Pod
 	getPod        func() (*corev1.Pod, error)
 }
 
@@ -488,28 +485,9 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 }
 
 func (r *ReconcileConstraintTemplate) defaultGetPod() (*corev1.Pod, error) {
-	if r.pod != nil {
-		return r.pod.DeepCopy(), nil
-	}
-	ns := util.GetNamespace()
-	name := util.GetPodName()
-	key := types.NamespacedName{Namespace: ns, Name: name}
-	pod := &corev1.Pod{}
-	// use unstructured to avoid inadvertently creating a watch on pods
-	uPod := &unstructured.Unstructured{}
-	gvk, err := apiutil.GVKForObject(pod, r.scheme)
-	if err != nil {
-		return nil, err
-	}
-	uPod.SetGroupVersionKind(gvk)
-	if err := r.Get(context.TODO(), key, uPod); err != nil {
-		return nil, err
-	}
-	if err := r.scheme.Convert(uPod, pod, nil); err != nil {
-		return nil, err
-	}
-	r.pod = pod
-	return pod.DeepCopy(), nil
+	// require injection of GetPod in order to control what client we use to
+	// guarantee we don't inadvertently create a watch
+	panic("GetPod must be injected")
 }
 
 func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {

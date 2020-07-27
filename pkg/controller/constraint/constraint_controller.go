@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -119,10 +118,9 @@ func newReconciler(
 	tracker *readiness.Tracker) *ReconcileConstraint {
 	r := &ReconcileConstraint{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
-		writer:         mgr.GetClient(),
-		statusClient:   mgr.GetClient(),
-		standardClient: mgr.GetClient(),
-		reader:         mgr.GetCache(),
+		writer:       mgr.GetClient(),
+		statusClient: mgr.GetClient(),
+		reader:       mgr.GetCache(),
 
 		cs:               cs,
 		scheme:           mgr.GetScheme(),
@@ -170,10 +168,9 @@ var _ reconcile.Reconciler = &ReconcileConstraint{}
 
 // ReconcileSync reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
-	reader         client.Reader
-	writer         client.Writer
-	statusClient   client.StatusClient
-	standardClient client.Client
+	reader       client.Reader
+	writer       client.Writer
+	statusClient client.StatusClient
 
 	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
@@ -183,7 +180,6 @@ type ReconcileConstraint struct {
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
 	getPod           func() (*corev1.Pod, error)
-	pod              *corev1.Pod
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -321,28 +317,9 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 }
 
 func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
-	if r.pod != nil {
-		return r.pod.DeepCopy(), nil
-	}
-	ns := util.GetNamespace()
-	name := util.GetPodName()
-	key := types.NamespacedName{Namespace: ns, Name: name}
-	pod := &corev1.Pod{}
-	// use unstructured to avoid inadvertently creating a watch on pods
-	uPod := &unstructured.Unstructured{}
-	gvk, err := apiutil.GVKForObject(pod, r.scheme)
-	if err != nil {
-		return nil, err
-	}
-	uPod.SetGroupVersionKind(gvk)
-	if err := r.standardClient.Get(context.TODO(), key, uPod); err != nil {
-		return nil, err
-	}
-	if err := r.scheme.Convert(uPod, pod, nil); err != nil {
-		return nil, err
-	}
-	r.pod = pod
-	return pod.DeepCopy(), nil
+	// require injection of GetPod in order to control what client we use to
+	// guarantee we don't inadvertently create a watch
+	panic("GetPod must be injected")
 }
 
 func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
