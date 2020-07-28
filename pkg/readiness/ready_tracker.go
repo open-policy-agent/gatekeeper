@@ -228,7 +228,7 @@ func (t *Tracker) Run(ctx context.Context) error {
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
 // `es`, which must be an objectTracker, and removes those expectations
-func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) error {
+func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind)) error {
 	if es == nil {
 		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")
 	}
@@ -277,6 +277,9 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) 
 		u.SetNamespace(k.namespacedName.Namespace)
 		u.SetGroupVersionKind(k.gvk)
 		ot.CancelExpect(u)
+		if cleanup != nil {
+			cleanup(gvk)
+		}
 	}
 
 	return nil
@@ -288,13 +291,21 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) 
 // Errors are handled and logged, but do not block collection for other trackers.
 func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	tt := t.templates
-	err := t.collectForObjectTracker(ctx, tt)
+	cleanupTemplate := func(gvk schema.GroupVersionKind) {
+		// note that this GVK is already the GVK of the constraint
+		t.constraints.Remove(gvk)
+		t.constraintTrackers.Cancel(gvk.String())
+	}
+	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate)
 	if err != nil {
 		log.Error(err, "while collecting for the ConstraintTemplate tracker")
 	}
 
 	ct := t.config
-	err = t.collectForObjectTracker(ctx, ct)
+	cleanupData := func(gvk schema.GroupVersionKind) {
+		t.data.Remove(gvk)
+	}
+	err = t.collectForObjectTracker(ctx, ct, cleanupData)
 	if err != nil {
 		log.Error(err, "while collecting for the Config tracker")
 	}
@@ -303,7 +314,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.constraints.Keys() {
 		// retrieve the expectations for this key
 		es := t.constraints.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es)
+		err = t.collectForObjectTracker(ctx, es, nil)
 		if err != nil {
 			log.Error(err, "while collecting for the Constraint type", "gvk", gvk)
 			continue
@@ -314,7 +325,7 @@ func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
 	for _, gvk := range t.data.Keys() {
 		// retrieve the expectations for this key
 		es := t.data.Get(gvk)
-		err = t.collectForObjectTracker(ctx, es)
+		err = t.collectForObjectTracker(ctx, es, nil)
 		if err != nil {
 			log.Error(err, "while collecting for the Data type", "gvk", gvk)
 			continue
