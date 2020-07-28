@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -47,6 +48,34 @@ const (
 // Lister lists resources from a cache.
 type Lister interface {
 	List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error
+}
+
+// backoffLister wraps a Lister's List call with a backoff loop
+type backoffLister struct {
+	lister Lister
+}
+
+func newBackoffLister(lister Lister) *backoffLister {
+	return &backoffLister{
+		lister,
+	}
+}
+
+func (b *backoffLister) List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
+	listfunc := func() (bool, error) {
+		err := b.lister.List(ctx, out, opts...)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return wait.ExponentialBackoff(wait.Backoff{
+		Steps:    1,
+		Duration: 10 * time.Millisecond,
+		Factor:   5.0,
+		Jitter:   0.1,
+	}, listfunc)
 }
 
 // Tracker tracks readiness for templates, constraints and data.
@@ -69,7 +98,7 @@ type Tracker struct {
 // NewTracker creates a new Tracker and initializes the internal trackers
 func NewTracker(lister Lister) *Tracker {
 	return &Tracker{
-		lister:             lister,
+		lister:             newBackoffLister(lister),
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
 		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config")),
 		constraints:        newTrackerMap(),
