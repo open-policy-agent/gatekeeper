@@ -287,7 +287,7 @@ func Test_CollectDeleted(t *testing.T) {
 	ctgvk, err := apiutil.GVKForObject(ct, mgr.GetScheme())
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "retrieving ConstraintTemplate GVK")
 
-	// note: state can leak betweek these test cases because we do not reset the environment
+	// note: state can leak between these test cases because we do not reset the environment
 	// between them to keep the test short. Trackers are mostly independent per GVK.
 	tests := []test{
 		{description: "constraints", gvk: cgvk},

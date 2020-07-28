@@ -195,24 +195,30 @@ func (t *Tracker) Run(ctx context.Context) error {
 
 	// start deleted object polling. Periodically collects
 	// objects that are expected by the Tracker, but are deleted
-	ticker := time.NewTicker(500 * time.Millisecond)
 	grp.Go(func() error {
-		// wait 'holdoff' ticks before proceeding, hoping
+		// wait before proceeding, hoping
 		// that the tracker will be satisfied by then
-		holdoff := 4
-		for i := 0; i < holdoff; _, i = <-ticker.C, i+1 {
-		}
-		for ; true; <-ticker.C {
-			if t.Satisfied(ctx) {
-				log.Info("readiness satisfied, no further collection")
-				ticker.Stop()
-				return nil
-			}
-			t.collectInvalidExpectations(ctx)
+		timer := time.NewTimer(2000 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
 		}
 
-		// effectively dead code to satisfy return type
-		return nil
+		ticker := time.NewTicker(500 * time.Millisecond)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				if t.Satisfied(ctx) {
+					log.Info("readiness satisfied, no further collection")
+					ticker.Stop()
+					return nil
+				}
+				t.collectInvalidExpectations(ctx)
+			}
+		}
 	})
 
 	_ = grp.Wait()
@@ -225,15 +231,17 @@ func (t *Tracker) Run(ctx context.Context) error {
 func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) error {
 	if es == nil {
 		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")
-	} else if !es.Populated() || es.Satisfied() {
-		log.Info("Expectations unpopulated or already satisfied, skipping collection")
+	}
+
+	if !es.Populated() || es.Satisfied() {
+		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection")
 		return nil
 	}
 
 	// es must be an objectTracker so we can fetch `unsatisfied` expectations and get GVK
 	ot, ok := es.(*objectTracker)
 	if !ok {
-		return fmt.Errorf("Expectations was not an objectTracker in collectForObjectTracker")
+		return fmt.Errorf("expectations was not an objectTracker in collectForObjectTracker")
 	}
 
 	// there is only ever one GVK for the unsatisfied expectations of a particular objectTracker.
@@ -244,7 +252,7 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations) 
 		return errors.Wrapf(err, "while listing %v in collectForObjectTracker", gvk)
 	}
 
-	// identify objects in `unsatisfied` that are were not found above.
+	// identify objects in `unsatisfied` that were not found above.
 	// The expectations for these objects should be collected since the
 	// tracker is waiting for them, but they no longer exist.
 	unsatisfied := ot.unsatisfied()
