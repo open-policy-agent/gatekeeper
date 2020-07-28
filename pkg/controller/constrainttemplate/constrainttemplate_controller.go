@@ -485,14 +485,9 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 }
 
 func (r *ReconcileConstraintTemplate) defaultGetPod() (*corev1.Pod, error) {
-	ns := util.GetNamespace()
-	name := util.GetPodName()
-	key := types.NamespacedName{Namespace: ns, Name: name}
-	pod := &corev1.Pod{}
-	if err := r.Get(context.TODO(), key, pod); err != nil {
-		return nil, err
-	}
-	return pod, nil
+	// require injection of GetPod in order to control what client we use to
+	// guarantee we don't inadvertently create a watch
+	panic("GetPod must be injected")
 }
 
 func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
