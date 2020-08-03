@@ -13,7 +13,8 @@ spec:
             ratio:
               type: string
   targets:
-    - rego: |
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
         package k8scontainerratios
 
         missing(obj, field) = true {
@@ -244,5 +245,4 @@ spec:
           mem_ratio := input.parameters.ratio
           to_number(mem_limits) > to_number(mem_ratio) * to_number(mem_requests)
           msg := sprintf("container <%v> memory limit <%v> is higher than the maximum allowed ratio of <%v>", [container.name, mem_limits_orig, mem_ratio])
-    }
-  target: admission.k8s.gatekeeper.sh
+        }
