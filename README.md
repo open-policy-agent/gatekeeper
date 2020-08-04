@@ -359,7 +359,34 @@ status:
 ```
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
-### Exempting Namespaces from the Gatekeeper Admission Webhook
+### Exempting Namespaces from Gatekeeper
+
+Config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](#constraints) instead.
+
+```yaml
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  match:
+    - excludedNamespaces: ["kube-system", "gatekeeper-system"]
+      processes: ["*"]
+    - excludedNamespaces: ["audit-excluded-ns"]
+      processes: ["audit"]
+    - excludedNamespaces: ["audit-webhook-sync-excluded-ns"]
+      processes: ["audit", "webhook", "sync"]
+...
+```
+
+Available processes:
+- `audit` process exclusion will exclude resources from specified namespace(s) in audit results.
+- `webhook` process exclusion will exclude resources from specified namespace(s) from the admission webhook.
+- `sync` process exclusion will exclude resources from specified namespace(s) from being synced into OPA.
+- `*` includes all current processes above and includes any future processes.
+
+#### Exempting Namespaces from the Gatekeeper Admission Webhook using `--exempt-namespace` flag
 
 Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints is
 necessary to exclude them from audit.
