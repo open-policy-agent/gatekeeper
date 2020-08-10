@@ -50,7 +50,7 @@ var (
 	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
-	constraintMatchKindOnly   = flag.Bool("constraint-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
+	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	emptyAuditResults         []auditResult
 )
 
@@ -276,7 +276,7 @@ func (am *Manager) auditResources(
 	nsCache := newNSCache()
 
 	constraintsList := make(map[string]bool)
-	if *constraintMatchKindOnly {
+	if *auditMatchKindOnly {
 		constraintList := &unstructured.UnstructuredList{}
 		for _, c := range resourceList {
 			constraintList.SetGroupVersionKind(c)
