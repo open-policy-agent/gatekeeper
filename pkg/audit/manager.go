@@ -50,6 +50,7 @@ var (
 	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
+	constraintMatchKindOnly   = flag.Bool("constraint-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	emptyAuditResults         []auditResult
 )
 
@@ -274,62 +275,107 @@ func (am *Manager) auditResources(
 	var errs opa.Errors
 	nsCache := newNSCache()
 
-	for gv, gvKinds := range clusterAPIResources {
-		for kind := range gvKinds {
-			objList := &unstructured.UnstructuredList{}
-			opts := &client.ListOptions{
-				Limit: int64(*auditChunkSize),
+	constraintsList := make(map[string]bool)
+	if *constraintMatchKindOnly {
+		constraintList := &unstructured.UnstructuredList{}
+		for _, c := range resourceList {
+			constraintList.SetGroupVersionKind(c)
+			if err = am.client.List(ctx, constraintList); err != nil {
+				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+				continue
 			}
-			resourceVersion := ""
-
-			for {
-				objList.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   gv.Group,
-					Version: gv.Version,
-					Kind:    kind + "List",
-				})
-				objList.SetResourceVersion(resourceVersion)
-
-				err := am.client.List(ctx, objList, opts)
+			for _, constraint := range constraintList.Items {
+				kinds, found, err := unstructured.NestedSlice(constraint.Object, "spec", "match", "kinds")
 				if err != nil {
-					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					am.log.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
 					continue
 				}
+				if found {
+					for _, k := range kinds {
+						kind, ok := k.(map[string]interface{})
+						if !ok {
+							am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
+							continue
+						}
+						kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
+						if err != nil {
+							am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+							continue
+						}
+						for _, kk := range kindsKind {
+							// adding constraint match kind to list
+							constraintsList[kk.(string)] = true
+						}
+					}
+				} else {
+					// if constraint doesn't have match kinds defined, we will look at all kinds
+					constraintsList["*"] = true
+				}
+			}
+		}
+	} else {
+		constraintsList["*"] = true
+	}
 
-				for _, obj := range objList.Items {
-					objNamespace := obj.GetNamespace()
-					if am.skipExcludedNamespace(objNamespace) {
+	for gv, gvKinds := range clusterAPIResources {
+		for kind := range gvKinds {
+			_, found := constraintsList[kind]
+			if found || constraintsList["*"] {
+				objList := &unstructured.UnstructuredList{}
+				opts := &client.ListOptions{
+					Limit: int64(*auditChunkSize),
+				}
+				resourceVersion := ""
+
+				for {
+					objList.SetGroupVersionKind(schema.GroupVersionKind{
+						Group:   gv.Group,
+						Version: gv.Version,
+						Kind:    kind + "List",
+					})
+					objList.SetResourceVersion(resourceVersion)
+
+					err := am.client.List(ctx, objList, opts)
+					if err != nil {
+						am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 						continue
 					}
 
-					ns := corev1.Namespace{}
-					if objNamespace != "" {
-						ns, err = nsCache.Get(ctx, am.client, objNamespace)
-						if err != nil {
-							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+					for _, obj := range objList.Items {
+						objNamespace := obj.GetNamespace()
+						if am.skipExcludedNamespace(objNamespace) {
 							continue
 						}
-					}
 
-					augmentedObj := target.AugmentedUnstructured{
-						Object:    obj,
-						Namespace: &ns,
-					}
-					resp, err := am.opa.Review(ctx, augmentedObj)
-					if err != nil {
-						errs = append(errs, err)
-					} else if len(resp.Results()) > 0 {
-						err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+						ns := corev1.Namespace{}
+						if objNamespace != "" {
+							ns, err = nsCache.Get(ctx, am.client, objNamespace)
+							if err != nil {
+								am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
+								continue
+							}
+						}
+
+						augmentedObj := target.AugmentedUnstructured{
+							Object:    obj,
+							Namespace: &ns,
+						}
+						resp, err := am.opa.Review(ctx, augmentedObj)
 						if err != nil {
-							return err
+							errs = append(errs, err)
+						} else if len(resp.Results()) > 0 {
+							err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+							if err != nil {
+								return err
+							}
 						}
 					}
-				}
 
-				resourceVersion = objList.GetResourceVersion()
-				opts.Continue = objList.GetContinue()
-				if opts.Continue == "" {
-					break
+					resourceVersion = objList.GetResourceVersion()
+					opts.Continue = objList.GetContinue()
+					if opts.Continue == "" {
+						break
+					}
 				}
 			}
 		}
