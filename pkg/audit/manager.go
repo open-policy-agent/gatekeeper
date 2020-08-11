@@ -174,7 +174,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// get all constraint kinds
-	resourceList, err := am.getAllConstraintKinds()
+	constraintsGVK, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
 		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
@@ -207,7 +207,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		}
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, resourceList, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		err := am.auditResources(ctx, constraintsGVK, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 		if err != nil {
 			return err
 		}
@@ -226,13 +226,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// update constraints for each kind
-	return am.writeAuditResults(ctx, resourceList, updateLists, timestamp, totalViolationsPerConstraint)
+	return am.writeAuditResults(ctx, constraintsGVK, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
 // Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
 func (am *Manager) auditResources(
 	ctx context.Context,
-	resourceList []schema.GroupVersionKind,
+	constraintsGVK []schema.GroupVersionKind,
 	updateLists map[string][]auditResult,
 	totalViolationsPerConstraint map[string]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
@@ -275,10 +275,11 @@ func (am *Manager) auditResources(
 	var errs opa.Errors
 	nsCache := newNSCache()
 
-	constraintsList := make(map[string]bool)
+	matchedKinds := make(map[string]bool)
 	if *auditMatchKindOnly {
 		constraintList := &unstructured.UnstructuredList{}
-		for _, c := range resourceList {
+	constraintsLoop:
+		for _, c := range constraintsGVK {
 			constraintList.SetGroupVersionKind(c)
 			if err = am.client.List(ctx, constraintList); err != nil {
 				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
@@ -288,7 +289,9 @@ func (am *Manager) auditResources(
 				kinds, found, err := unstructured.NestedSlice(constraint.Object, "spec", "match", "kinds")
 				if err != nil {
 					am.log.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
-					continue
+					// looking at all kinds if there is an error
+					matchedKinds["*"] = true
+					break constraintsLoop
 				}
 				if found {
 					for _, k := range kinds {
@@ -303,79 +306,86 @@ func (am *Manager) auditResources(
 							continue
 						}
 						for _, kk := range kindsKind {
-							// adding constraint match kind to list
-							constraintsList[kk.(string)] = true
+							if kk.(string) == "" {
+								// no need to continue, all kinds are included
+								matchedKinds["*"] = true
+								break constraintsLoop
+							}
+							// adding constraint match kind to matchedKinds list
+							matchedKinds[kk.(string)] = true
 						}
 					}
 				} else {
 					// if constraint doesn't have match kinds defined, we will look at all kinds
-					constraintsList["*"] = true
+					matchedKinds["*"] = true
 				}
 			}
 		}
 	} else {
-		constraintsList["*"] = true
+		matchedKinds["*"] = true
 	}
 
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
-			_, found := constraintsList[kind]
-			if found || constraintsList["*"] {
-				objList := &unstructured.UnstructuredList{}
-				opts := &client.ListOptions{
-					Limit: int64(*auditChunkSize),
+			_, matchAll := matchedKinds["*"]
+			if _, found := matchedKinds[kind]; !found && !matchAll {
+				continue
+			}
+
+			objList := &unstructured.UnstructuredList{}
+			opts := &client.ListOptions{
+				Limit: int64(*auditChunkSize),
+			}
+			resourceVersion := ""
+
+			for {
+				objList.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   gv.Group,
+					Version: gv.Version,
+					Kind:    kind + "List",
+				})
+				objList.SetResourceVersion(resourceVersion)
+
+				err := am.client.List(ctx, objList, opts)
+				if err != nil {
+					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+					continue
 				}
-				resourceVersion := ""
 
-				for {
-					objList.SetGroupVersionKind(schema.GroupVersionKind{
-						Group:   gv.Group,
-						Version: gv.Version,
-						Kind:    kind + "List",
-					})
-					objList.SetResourceVersion(resourceVersion)
-
-					err := am.client.List(ctx, objList, opts)
-					if err != nil {
-						am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
+				for _, obj := range objList.Items {
+					objNamespace := obj.GetNamespace()
+					if am.skipExcludedNamespace(objNamespace) {
 						continue
 					}
 
-					for _, obj := range objList.Items {
-						objNamespace := obj.GetNamespace()
-						if am.skipExcludedNamespace(objNamespace) {
+					ns := corev1.Namespace{}
+					if objNamespace != "" {
+						ns, err = nsCache.Get(ctx, am.client, objNamespace)
+						if err != nil {
+							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
 							continue
 						}
+					}
 
-						ns := corev1.Namespace{}
-						if objNamespace != "" {
-							ns, err = nsCache.Get(ctx, am.client, objNamespace)
-							if err != nil {
-								am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
-								continue
-							}
-						}
-
-						augmentedObj := target.AugmentedUnstructured{
-							Object:    obj,
-							Namespace: &ns,
-						}
-						resp, err := am.opa.Review(ctx, augmentedObj)
+					augmentedObj := target.AugmentedUnstructured{
+						Object:    obj,
+						Namespace: &ns,
+					}
+					resp, err := am.opa.Review(ctx, augmentedObj)
+					if err != nil {
+						errs = append(errs, err)
+					} else if len(resp.Results()) > 0 {
+						err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 						if err != nil {
-							errs = append(errs, err)
-						} else if len(resp.Results()) > 0 {
-							err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-							if err != nil {
-								return err
-							}
+							return err
 						}
 					}
+				}
 
-					resourceVersion = objList.GetResourceVersion()
-					opts.Continue = objList.GetContinue()
-					if opts.Continue == "" {
-						break
-					}
+				resourceVersion = objList.GetResourceVersion()
+				opts.Continue = objList.GetContinue()
+				if opts.Continue == "" {
+					break
 				}
 			}
 		}
