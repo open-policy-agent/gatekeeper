@@ -306,7 +306,7 @@ func (am *Manager) auditResources(
 							continue
 						}
 						for _, kk := range kindsKind {
-							if kk.(string) == "" {
+							if kk.(string) == "" || kk.(string) == "*" {
 								// no need to continue, all kinds are included
 								matchedKinds["*"] = true
 								break constraintsLoop
@@ -318,6 +318,7 @@ func (am *Manager) auditResources(
 				} else {
 					// if constraint doesn't have match kinds defined, we will look at all kinds
 					matchedKinds["*"] = true
+					break constraintsLoop
 				}
 			}
 		}
