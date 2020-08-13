@@ -50,6 +50,7 @@ var (
 	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
+	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	emptyAuditResults         []auditResult
 )
 
@@ -173,7 +174,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// get all constraint kinds
-	resourceList, err := am.getAllConstraintKinds()
+	constraintsGVK, err := am.getAllConstraintKinds()
 	if err != nil {
 		// if no constraint is found with the constraint apiversion, then return
 		am.log.Info("no constraint is found with apiversion", "constraint apiversion", constraintsGV)
@@ -206,7 +207,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		}
 	} else {
 		am.log.Info("Auditing via discovery client")
-		err := am.auditResources(ctx, resourceList, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		err := am.auditResources(ctx, constraintsGVK, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 		if err != nil {
 			return err
 		}
@@ -225,13 +226,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// update constraints for each kind
-	return am.writeAuditResults(ctx, resourceList, updateLists, timestamp, totalViolationsPerConstraint)
+	return am.writeAuditResults(ctx, constraintsGVK, updateLists, timestamp, totalViolationsPerConstraint)
 }
 
 // Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
 func (am *Manager) auditResources(
 	ctx context.Context,
-	resourceList []schema.GroupVersionKind,
+	constraintsGVK []schema.GroupVersionKind,
 	updateLists map[string][]auditResult,
 	totalViolationsPerConstraint map[string]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
@@ -274,8 +275,64 @@ func (am *Manager) auditResources(
 	var errs opa.Errors
 	nsCache := newNSCache()
 
+	matchedKinds := make(map[string]bool)
+	if *auditMatchKindOnly {
+		constraintList := &unstructured.UnstructuredList{}
+	constraintsLoop:
+		for _, c := range constraintsGVK {
+			constraintList.SetGroupVersionKind(c)
+			if err = am.client.List(ctx, constraintList); err != nil {
+				am.log.Error(err, "Unable to list objects for gvk", "group", c.Group, "version", c.Version, "kind", c.Kind)
+				continue
+			}
+			for _, constraint := range constraintList.Items {
+				kinds, found, err := unstructured.NestedSlice(constraint.Object, "spec", "match", "kinds")
+				if err != nil {
+					am.log.Error(err, "Unable to return spec.match.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+					// looking at all kinds if there is an error
+					matchedKinds["*"] = true
+					break constraintsLoop
+				}
+				if found {
+					for _, k := range kinds {
+						kind, ok := k.(map[string]interface{})
+						if !ok {
+							am.log.Error(errors.New("could not cast kind as map[string]"), "kind", k)
+							continue
+						}
+						kindsKind, _, err := unstructured.NestedSlice(kind, "kinds")
+						if err != nil {
+							am.log.Error(err, "Unable to return kinds.kinds field", "group", c.Group, "version", c.Version, "kind", c.Kind)
+							continue
+						}
+						for _, kk := range kindsKind {
+							if kk.(string) == "" || kk.(string) == "*" {
+								// no need to continue, all kinds are included
+								matchedKinds["*"] = true
+								break constraintsLoop
+							}
+							// adding constraint match kind to matchedKinds list
+							matchedKinds[kk.(string)] = true
+						}
+					}
+				} else {
+					// if constraint doesn't have match kinds defined, we will look at all kinds
+					matchedKinds["*"] = true
+					break constraintsLoop
+				}
+			}
+		}
+	} else {
+		matchedKinds["*"] = true
+	}
+
 	for gv, gvKinds := range clusterAPIResources {
 		for kind := range gvKinds {
+			_, matchAll := matchedKinds["*"]
+			if _, found := matchedKinds[kind]; !found && !matchAll {
+				continue
+			}
+
 			objList := &unstructured.UnstructuredList{}
 			opts := &client.ListOptions{
 				Limit: int64(*auditChunkSize),
