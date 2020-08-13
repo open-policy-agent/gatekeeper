@@ -327,6 +327,7 @@ func (am *Manager) auditResources(
 	}
 
 	for gv, gvKinds := range clusterAPIResources {
+	kindsLoop:
 		for kind := range gvKinds {
 			_, matchAll := matchedKinds["*"]
 			if _, found := matchedKinds[kind]; !found && !matchAll {
@@ -350,7 +351,7 @@ func (am *Manager) auditResources(
 				err := am.client.List(ctx, objList, opts)
 				if err != nil {
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
-					continue
+					continue kindsLoop
 				}
 
 				for _, obj := range objList.Items {
