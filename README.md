@@ -1,6 +1,7 @@
 # Gatekeeper
 
-## Want to help?
+## How to Contribute
+
 Join us to help define the direction and implementation of this project!
 
 - Join the [`#kubernetes-policy`](https://openpolicyagent.slack.com/messages/CDTN970AX)
@@ -12,13 +13,14 @@ Join us to help define the direction and implementation of this project!
 - Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
   to file bugs, request features, or ask questions asynchronously.
 
-## How is Gatekeeper different from OPA?
+## Comparing Gatekeeper to Open Policy Agent (OPA)
+
 Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
 
-   * An extensible, parameterized policy library
-   * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
-   * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
-   * Audit functionality
+- An extensible, parameterized policy library
+- Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
+- Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
+- Audit functionality
 
 ## Goals
 
@@ -87,33 +89,45 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
-   * Make sure that:
-       * You have Docker version 19.03 or later installed.
-       * [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
-       * Your kubectl context is set to the desired installation cluster.
-       * You have a container registry you can write to that is readable by the target cluster.
-   * Clone the Gatekeeper repository to your local system:
-     ```sh
-     git clone https://github.com/open-policy-agent/gatekeeper.git
-     ```
-   * `cd` to the repository directory.
-   * Define your destination Docker image location:
-      ```sh
-      export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
-      ```
-   * Build and push your Docker image:
-      ```sh
-      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-      make docker-push-release REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-      ```
-   * Finally, deploy:
-     ```sh
-     make deploy REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-     ```
+Prerequisites
 
-#### Deploying via Helm ####
+- You have Docker version 19.03 or later installed.
+- [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md) are installed.
+- Your kubectl context is set to the desired installation cluster.
+- You have a container registry you can write to that is readable by the target cluster.
 
-A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm installed and Tiller initialized on your cluster you can deploy via
+Installation
+
+- Clone the Gatekeeper repository to your local system:
+
+```sh
+git clone https://github.com/open-policy-agent/gatekeeper.git
+```
+
+- `cd` to the repository directory.
+- Define your destination Docker image location:
+
+```sh
+  export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
+  ```
+
+- Build and push your Docker image:
+
+```sh
+  make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+  make docker-push-release REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+  ```
+
+- Finally, deploy:
+
+  ```sh
+  make deploy REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+  ```
+
+#### Deploying via Helm
+
+A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm installed and Tiller initialized on your cluster you can deploy via the following:
+
 ```sh
 helm repo add gatekeeper https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/charts/gatekeeper
 helm install gatekeeper/gatekeeper --devel
@@ -139,12 +153,13 @@ If you used a prebuilt image to deploy Gatekeeper, then you can delete all the G
 
 If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
-   * cd to the repository directory
-   * run `make uninstall`
+- cd to the repository directory
+- run `make uninstall`
 
 ##### Using Helm
 
 If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
+
 ```sh
 helm delete <release name> --purge
 ```
@@ -225,12 +240,12 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
 
-   * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
-   * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to `*`)
-   * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
-   * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
-   * `labelSelector` is a standard Kubernetes label selector.
-   * `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](#replicating-data) for more details.
+- `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+- `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to `*`)
+- `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
+- `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
+- `labelSelector` is a standard Kubernetes label selector.
+- `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](#replicating-data) for more details.
 
 Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything). Also understand `namespaces`, `excludedNamespaces`, and `namespaceSelector` will match on cluster scoped resources which are not namespaced. To avoid this adjust the `scope` to `Namespaced`.
 
@@ -269,10 +284,10 @@ Once data is synced into OPA, rules can access the cached data under the `data.i
 
 The `data.inventory` document has the following format:
 
-  * For cluster-scoped objects: `data.inventory.cluster[<groupVersion>][<kind>][<name>]`
-     * Example referencing the Gatekeeper namespace: `data.inventory.cluster["v1"].Namespace["gatekeeper"]`
-  * For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
-     * Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-d4c98b788-j7d92"]`
+- For cluster-scoped objects: `data.inventory.cluster[<groupVersion>][<kind>][<name>]`
+  - Example referencing the Gatekeeper namespace: `data.inventory.cluster["v1"].Namespace["gatekeeper"]`
+- For namespace-scoped objects: `data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]`
+  - Example referencing the Gatekeeper pod: `data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-d4c98b788-j7d92"]`
 
 ### Audit
 
@@ -330,6 +345,7 @@ When rolling out new constraints to running clusters, the dry run functionality 
 To use the dry run feature, add `enforcementAction: dryrun` to the constraint spec to ensure no actual changes are made as a result of the constraint. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation.
 
 For example:
+
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
@@ -357,6 +373,7 @@ status:
     name: gatekeeper-system
 
 ```
+
 > NOTE: The supported enforcementActions are [`deny`, `dryrun`] for constraints. Update the `--disable-enforcementaction-validation=true` flag if the desire is to disable enforcementAction validation against the list of supported enforcementActions.
 
 ### Exempting Namespaces from Gatekeeper
@@ -381,6 +398,7 @@ spec:
 ```
 
 Available processes:
+
 - `audit` process exclusion will exclude resources from specified namespace(s) in audit results.
 - `webhook` process exclusion will exclude resources from specified namespace(s) from the admission webhook.
 - `sync` process exclusion will exclude resources from specified namespace(s) from being synced into OPA.
@@ -401,6 +419,7 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
             - key: admission.gatekeeper.sh/ignore
               operator: DoesNotExist
         ```
+
       the default Gatekeeper manifest should already have added this. The default name for the
       webhook configuration is `gatekeeper-validating-webhook-configuration` and the default
       name for the webhook that needs the namespace selector is `validation.gatekeeper.sh`
@@ -418,12 +437,13 @@ If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you
 
 > NOTE: Verbose logging with DEBUG level can be turned on with `--log-level=DEBUG`.  By default, the `--log-level` flag is set to minimum log level `INFO`. Acceptable values for minimum log level are [`DEBUG`, `INFO`, `WARNING`, `ERROR`]. In production, this flag should not be set to `DEBUG`.
 
-
 ### Enable Delete Operations
+
 To enable Delete operations for the `validation.gatekeeper.sh` admission webhook, add "DELETE" to the list of operations in the `gatekeeper-validating-webhook-configuration` ValidatingWebhookConfiguration as seen in this deployment manifest of gatekeeper: [here](https://github.com/open-policy-agent/gatekeeper/blob/v3.1.0-beta.10/deploy/gatekeeper.yaml#L792-L794)
 Note: For admission webhooks registered for DELETE operations, use Kubernetes v1.15.0+
 
  So you have
+
  ```YAML
     operations:
     - CREATE
@@ -478,9 +498,9 @@ spec:
 
 In debugging decisions and constraints, a few pieces of information can be helpful:
 
-   * Cached data and existing rules at the time of the request
-   * A trace of the evaluation
-   * The input document being evaluated
+- Cached data and existing rules at the time of the request
+- A trace of the evaluation
+- The input document being evaluated
 
 Writing out this information for every request would be very expensive, and it would be hard
 to find the relevant logs for a given request. Instead, Gatekeeper allows users to specify
@@ -517,7 +537,6 @@ spec:
 ```
 
 Traces will be written to the stdout logs of the Gatekeeper controller.
-
 
 If there is an error in the Rego in the ConstraintTemplate, there are cases where it is still created via `kubectl apply -f [CONSTRAINT_TEMPLATE_FILENAME].yaml`.
 
@@ -581,11 +600,12 @@ By default, firewall rules restrict the cluster master communication to nodes on
 Two ways of working around this:
 
 - create a new firewall rule from master to private nodes to open port `8443` (or any other custom port)
-  - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
+  - <https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules>
 - make the pod to run on privileged port 443 (need to run pod as root)
   - update Gatekeeper deployment manifest spec:
     - remove `securityContext` settings that force the pods not to run as root
     - update port from `8443` to `443`
+
     ```yaml
     containers:
     - args:
@@ -598,6 +618,7 @@ Two ways of working around this:
 
   - update Gatekeeper service manifest spec:
     - update `targetPort` from `8443` to `443`
+  
     ```yaml
     ports:
     - port: 443
@@ -606,34 +627,12 @@ Two ways of working around this:
 
 ## Kick The Tires
 
-The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
+- The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with.
+- The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario.
+  
+Both folders have a handy demo script to step you through the demos.
 
-
-# FAQ
-
-## Finalizers
-
-### How can I remove finalizers? Why are they hanging around?
-
-If Gatekeeper is running, it should automatically clean up the finalizer. If it
-isn't this is a misbehavior that should be investigated. Please file a bug with
-as much data as you can gather. Including logs, memory usage and utilization, CPU usage and
-utilization and any other information that may be helpful.
-
-If Gatekeeper is not running:
-
-* If it did not have a clean exit, Gatekeeper's garbage collection routine would
-  have been unable to run. Reasons for an unclean exit are:
-  * The service account was deleted before the Pod exited, blocking the GC
-    process (this can happen if you delete the gatekeeer-system namespace
-    before deleting the deployment or deleting the manifest all at
-    once).
-  * The container was sent a hard kill signal
-  * The container had a panic
-
-Finalizers can be removed manually via `kubectl edit` or `kubectl patch`
-
-# Security
+## Security
 
 Please report vulnerabilities by email to [open-policy-agent-security](mailto:open-policy-agent-security@googlegroups.com).
 We will send a confirmation message to acknowledge that we have received the
@@ -641,3 +640,7 @@ report and then we will send additional messages to follow up once the issue
 has been investigated.
 
 For details on the security release process please refer to the [open-policy-agent/opa/SECURITY.md](https://github.com/open-policy-agent/opa/blob/master/SECURITY.md) file.
+
+## Frequently Asked Questions
+
+See [FAQ](FAQ.md)
