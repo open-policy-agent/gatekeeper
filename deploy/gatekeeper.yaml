@@ -628,13 +628,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-beta.12
+        image: openpolicyagent/gatekeeper:v3.1.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
             path: /healthz
             port: 9090
-        name: auditcontainer
+        name: manager
         ports:
         - containerPort: 8888
           name: metrics
@@ -721,7 +721,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-beta.12
+        image: openpolicyagent/gatekeeper:v3.1.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

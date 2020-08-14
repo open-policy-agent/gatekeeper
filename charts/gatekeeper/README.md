@@ -14,7 +14,7 @@
 | logLevel                  | Minimum log level                                                                | `INFO`                                                                    |
 | image.pullPolicy          | The image pull policy                                                            | `IfNotPresent`                                                            |
 | image.repository          | Image repository                                                                 | `openpolicyagent/gatekeeper`                                              |
-| image.release             | The image release tag to use                                                     | Current release version: `v3.1.0-beta.12`                                 |
+| image.release             | The image release tag to use                                                     | Current release version: `v3.1.0-rc.1`                                 |
 | resources                 | The resource request/limits for the container image                              | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                            |
 | nodeSelector              | The node selector to use for pod scheduling                                      | `kubernetes.io/os: linux`                                                 |
 | affinity                  | The node affinity to use for pod scheduling                                      | `{}`                                                                      |
