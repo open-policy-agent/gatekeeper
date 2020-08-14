@@ -77,7 +77,7 @@ spec:
       annotations: HELMSUBST_ANNOTATIONS
     spec:
       containers:
-        - name: auditcontainer
+        - name: manager
           args:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ .Values.logLevel }}
