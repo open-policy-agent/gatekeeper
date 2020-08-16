@@ -21,7 +21,9 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,6 +39,7 @@ type Expectations interface {
 	ExpectationsDone()
 	Observe(o runtime.Object)
 	Satisfied() bool
+	Populated() bool
 }
 
 // objectTracker tracks expectations for runtime.Objects.
@@ -323,6 +326,21 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 			Group:   constraintGroup,
 			Version: v1beta1.SchemeGroupVersion.Version,
 			Kind:    v.Spec.CRD.Spec.Names.Kind,
+		}
+	case *unstructured.Unstructured:
+		ugvk := obj.GetObjectKind().GroupVersionKind()
+		if ugvk.GroupVersion() == v1beta1.SchemeGroupVersion && ugvk.Kind == "ConstraintTemplate" {
+			cKind, found, err := unstructured.NestedString(v.Object, "spec", "crd", "spec", "names", "kind")
+			if !found || err != nil {
+				return objKey{}, errors.Wrapf(err, "retrieving nested CRD Kind field for unstructured. Found: %v Object: %v", found, obj)
+			}
+			gvk = schema.GroupVersionKind{
+				Group:   constraintGroup,
+				Version: v1beta1.SchemeGroupVersion.Version,
+				Kind:    cKind,
+			}
+		} else {
+			gvk = ugvk
 		}
 	default:
 		gvk = obj.GetObjectKind().GroupVersionKind()

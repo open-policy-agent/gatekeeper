@@ -174,7 +174,10 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        uses: "marvinpinto/action-automatic-releases@v1.0.0"
+        # using latest due to breaking change
+        # TODO: pin to a tagged version when it's out
+        # https://github.com/marvinpinto/actions/issues/39
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false

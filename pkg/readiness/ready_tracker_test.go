@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -36,6 +37,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -234,6 +237,95 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 		defer cancel()
 		return probeIsReady(ctx)
 	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+}
+
+// Test_CollectDeleted adds resources and starts the readiness tracker, then
+// deletes the expected resources and ensures that the trackers watching these
+// resources correctly identify the deletions and remove the corresponding expectations.
+// Note that the main controllers are not running in order to target testing to the
+// readiness tracker.
+func Test_CollectDeleted(t *testing.T) {
+	type test struct {
+		description string
+		gvk         schema.GroupVersionKind
+		tracker     readiness.Expectations
+	}
+
+	g := gomega.NewWithT(t)
+
+	err := applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	mgr, _ := setupManager(t)
+	tracker, err := readiness.SetupTracker(mgr)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
+
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	client := mgr.GetClient()
+	ctx := context.Background()
+
+	g.Expect(tracker.Satisfied(ctx)).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
+
+	// set up expected GVKs for tests
+	cgvk := schema.GroupVersionKind{
+		Group:   "constraints.gatekeeper.sh",
+		Version: "v1beta1",
+		Kind:    "K8sRequiredLabels",
+	}
+
+	cm := &corev1.ConfigMap{}
+	cmgvk, err := apiutil.GVKForObject(cm, mgr.GetScheme())
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "retrieving ConfigMap GVK")
+	cmtracker := tracker.ForData(cmgvk)
+
+	ct := &v1beta1.ConstraintTemplate{}
+	ctgvk, err := apiutil.GVKForObject(ct, mgr.GetScheme())
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "retrieving ConstraintTemplate GVK")
+
+	// note: state can leak between these test cases because we do not reset the environment
+	// between them to keep the test short. Trackers are mostly independent per GVK.
+	tests := []test{
+		{description: "constraints", gvk: cgvk},
+		{description: "data (configmaps)", gvk: cmgvk, tracker: cmtracker},
+		{description: "templates", gvk: ctgvk},
+		// no need to check Config here since it is not actually Expected for readiness
+		// (the objects identified in a Config's syncOnly are Expected, tested in data case above)
+	}
+
+	for _, tc := range tests {
+		var tt readiness.Expectations
+		if tc.tracker != nil {
+			tt = tc.tracker
+		} else {
+			tt = tracker.For(tc.gvk)
+		}
+
+		g.Eventually(func() (bool, error) {
+			return tt.Populated() && !tt.Satisfied(), nil
+		}, 10*time.Second, 1*time.Second).
+			Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly", tc.description)
+
+		ul := &unstructured.UnstructuredList{}
+		ul.SetGroupVersionKind(tc.gvk)
+		err = client.List(ctx, ul)
+		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
+		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
+
+		for _, i := range ul.Items {
+			err = client.Delete(ctx, &i)
+			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, i.GetName())
+		}
+
+		g.Eventually(func() (bool, error) {
+			return tt.Satisfied(), nil
+		}, 10*time.Second, 1*time.Second).
+			Should(gomega.BeTrue(), "checking the tracker collects deletes of %s", tc.description)
+	}
 }
 
 // probeIsReady checks whether expectations have been satisfied (via the readiness probe)

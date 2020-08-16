@@ -21,8 +21,6 @@ webhooks:
   name: validation.gatekeeper.sh
   namespaceSelector:
     matchExpressions:
-    - key: control-plane
-      operator: DoesNotExist
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
   rules:

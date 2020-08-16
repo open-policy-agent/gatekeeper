@@ -5,7 +5,7 @@ IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 
-VERSION := v3.1.0-beta.11
+VERSION := v3.1.0-rc.1
 
 USE_LOCAL_IMG ?= false
 KIND_VERSION=0.7.0
@@ -49,7 +49,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n    spec:\
 \n      containers:\
 \n      - image: <your image file>\
-\n        name: auditcontainer\
+\n        name: manager\
 \n        args:\
 \n        - --emit-audit-events\
 \n        - --operation=audit\
@@ -228,7 +228,6 @@ patch-image:
 	@bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
 ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
-	@sed -i '/^        name: auditcontainer/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
 

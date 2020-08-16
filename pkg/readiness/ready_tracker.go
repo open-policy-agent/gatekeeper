@@ -17,7 +17,6 @@ package readiness
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -28,6 +27,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -66,6 +66,7 @@ type Tracker struct {
 	statsEnabled       syncutil.SyncBool
 }
 
+// NewTracker creates a new Tracker and initializes the internal trackers
 func NewTracker(lister Lister) *Tracker {
 	return &Tracker{
 		lister:             lister,
@@ -192,9 +193,144 @@ func (t *Tracker) Run(ctx context.Context) error {
 		return nil
 	})
 
+	// start deleted object polling. Periodically collects
+	// objects that are expected by the Tracker, but are deleted
+	grp.Go(func() error {
+		// wait before proceeding, hoping
+		// that the tracker will be satisfied by then
+		timer := time.NewTimer(2000 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+		}
+
+		ticker := time.NewTicker(500 * time.Millisecond)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				if t.Satisfied(ctx) {
+					log.Info("readiness satisfied, no further collection")
+					ticker.Stop()
+					return nil
+				}
+				t.collectInvalidExpectations(ctx)
+			}
+		}
+	})
+
 	_ = grp.Wait()
 	_ = t.constraintTrackers.Wait() // Must appear after grp.Wait() - allows trackConstraintTemplates() time to schedule its sub-tasks.
 	return nil
+}
+
+// collectForObjectTracker identifies objects that are unsatisfied for the provided
+// `es`, which must be an objectTracker, and removes those expectations
+func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind)) error {
+	if es == nil {
+		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")
+	}
+
+	if !es.Populated() || es.Satisfied() {
+		log.V(1).Info("Expectations unpopulated or already satisfied, skipping collection")
+		return nil
+	}
+
+	// es must be an objectTracker so we can fetch `unsatisfied` expectations and get GVK
+	ot, ok := es.(*objectTracker)
+	if !ok {
+		return fmt.Errorf("expectations was not an objectTracker in collectForObjectTracker")
+	}
+
+	// there is only ever one GVK for the unsatisfied expectations of a particular objectTracker.
+	gvk := ot.gvk
+	ul := &unstructured.UnstructuredList{}
+	ul.SetGroupVersionKind(gvk)
+	lister := retryLister(t.lister, retryUnlessUnregistered)
+	if err := lister.List(ctx, ul); err != nil {
+		return errors.Wrapf(err, "while listing %v in collectForObjectTracker", gvk)
+	}
+
+	// identify objects in `unsatisfied` that were not found above.
+	// The expectations for these objects should be collected since the
+	// tracker is waiting for them, but they no longer exist.
+	unsatisfied := ot.unsatisfied()
+	unsatisfiedmap := make(map[objKey]struct{})
+	for _, o := range unsatisfied {
+		unsatisfiedmap[o] = struct{}{}
+	}
+	for _, o := range ul.Items {
+		k, err := objKeyFromObject(&o)
+		if err != nil {
+			return errors.Wrapf(err, "while getting key for %v in collectForObjectTracker", o)
+		}
+		// delete is a no-op if the key isn't found
+		delete(unsatisfiedmap, k)
+	}
+
+	// now remove the expectations for deleted objects
+	for k := range unsatisfiedmap {
+		u := &unstructured.Unstructured{}
+		u.SetName(k.namespacedName.Name)
+		u.SetNamespace(k.namespacedName.Namespace)
+		u.SetGroupVersionKind(k.gvk)
+		ot.CancelExpect(u)
+		if cleanup != nil {
+			cleanup(gvk)
+		}
+	}
+
+	return nil
+}
+
+// collectInvalidExpectations searches for any unsatisfied expectations
+// for this tracker for which the expected object has been deleted, and
+// cancels those expectations.
+// Errors are handled and logged, but do not block collection for other trackers.
+func (t *Tracker) collectInvalidExpectations(ctx context.Context) {
+	tt := t.templates
+	cleanupTemplate := func(gvk schema.GroupVersionKind) {
+		// note that this GVK is already the GVK of the constraint
+		t.constraints.Remove(gvk)
+		t.constraintTrackers.Cancel(gvk.String())
+	}
+	err := t.collectForObjectTracker(ctx, tt, cleanupTemplate)
+	if err != nil {
+		log.Error(err, "while collecting for the ConstraintTemplate tracker")
+	}
+
+	ct := t.config
+	cleanupData := func(gvk schema.GroupVersionKind) {
+		t.data.Remove(gvk)
+	}
+	err = t.collectForObjectTracker(ctx, ct, cleanupData)
+	if err != nil {
+		log.Error(err, "while collecting for the Config tracker")
+	}
+
+	// collect deleted but expected constraints
+	for _, gvk := range t.constraints.Keys() {
+		// retrieve the expectations for this key
+		es := t.constraints.Get(gvk)
+		err = t.collectForObjectTracker(ctx, es, nil)
+		if err != nil {
+			log.Error(err, "while collecting for the Constraint type", "gvk", gvk)
+			continue
+		}
+	}
+
+	// collect data expects
+	for _, gvk := range t.data.Keys() {
+		// retrieve the expectations for this key
+		es := t.data.Get(gvk)
+		err = t.collectForObjectTracker(ctx, es, nil)
+		if err != nil {
+			log.Error(err, "while collecting for the Data type", "gvk", gvk)
+			continue
+		}
+	}
 }
 
 func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
