@@ -255,13 +255,13 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			//		Schema: &apiextensions.JSONSchemaProps{Type: "string"},
 			//	},
 			//},
-			"matchExpressions": apiextensions.JSONSchemaProps{
+			"matchExpressions": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
 						Properties: map[string]apiextensions.JSONSchemaProps{
-							"key": apiextensions.JSONSchemaProps{Type: "string"},
-							"operator": apiextensions.JSONSchemaProps{
+							"key": {Type: "string"},
+							"operator": {
 								Type: "string",
 								Enum: []apiextensions.JSON{
 									"In",
@@ -270,7 +270,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 									"DoesNotExist",
 								},
 							},
-							"values": apiextensions.JSONSchemaProps{
+							"values": {
 								Type: "array",
 								Items: &apiextensions.JSONSchemaPropsOrArray{
 									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
@@ -284,7 +284,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	}
 	return apiextensions.JSONSchemaProps{
 		Properties: map[string]apiextensions.JSONSchemaProps{
-			"kinds": apiextensions.JSONSchemaProps{
+			"kinds": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
@@ -295,17 +295,17 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					},
 				},
 			},
-			"namespaces": apiextensions.JSONSchemaProps{
+			"namespaces": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
-			"excludedNamespaces": apiextensions.JSONSchemaProps{
+			"excludedNamespaces": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
 			"labelSelector":     labelSelectorSchema,
 			"namespaceSelector": labelSelectorSchema,
-			"scope": apiextensions.JSONSchemaProps{
+			"scope": {
 				Type: "string",
 				Enum: []apiextensions.JSON{
 					"*",
