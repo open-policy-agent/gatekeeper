@@ -26,6 +26,4 @@ RUN curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/k
 WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
 COPY .    .
 
-RUN make controller-gen
-
 ENTRYPOINT ["make", "native-test"]

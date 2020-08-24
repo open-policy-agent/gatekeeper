@@ -72,7 +72,7 @@ endif
 all: lint test manager
 
 # Run tests
-native-test: generate fmt vet manifests
+native-test:
 	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -coverprofile cover.out
 
 # Hook to run docker tests
@@ -94,7 +94,7 @@ e2e-bootstrap:
 	# Download and install kubectl
 	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
-	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/kustomize && chmod +x ${GITHUB_WORKSPACE}/bin/kustomize
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz  && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
 	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
 	# Check for existing kind cluster
@@ -148,16 +148,6 @@ manifests: controller-gen
 	mkdir -p manifest_staging/charts/gatekeeper
 	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
 	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
-
-# Run go fmt against code
-fmt:
-	GO111MODULE=on go fmt ./apis/... ./pkg/...
-	GO111MODULE=on go fmt main.go
-
-# Run go vet against code
-vet:
-	GO111MODULE=on go vet -mod vendor ./apis/... ./pkg/... ./third_party/...
-	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
 	golangci-lint -v run ./... --timeout 5m
