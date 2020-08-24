@@ -8,9 +8,9 @@ DEV_TAG ?= dev
 VERSION := v3.1.0
 
 USE_LOCAL_IMG ?= false
-KIND_VERSION=0.7.0
-KUSTOMIZE_VERSION=3.0.2
-HELM_VERSION=v2.15.2
+KIND_VERSION=0.8.1
+KUSTOMIZE_VERSION=3.7.0
+HELM_VERSION=v2.16.10
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -190,13 +190,13 @@ docker-push-release:  docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
-docker-build: test
+docker-build:
 	docker build --pull . -t ${IMG}
 
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx: test
+docker-buildx:
 	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -204,7 +204,7 @@ docker-buildx: test
 		-t $(IMG) \
 		. --load
 
-docker-buildx-dev: test
+docker-buildx-dev:
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -213,7 +213,7 @@ docker-buildx-dev: test
 		-t $(REPOSITORY):dev \
 		. --push
 
-docker-buildx-release: test
+docker-buildx-release:
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -269,6 +269,7 @@ uninstall:
 controller-gen:
 ifeq (, $(shell which controller-gen))
 	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0
+	go mod vendor
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
