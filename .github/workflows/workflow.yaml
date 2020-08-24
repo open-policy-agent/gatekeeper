@@ -41,7 +41,7 @@ jobs:
           echo ::add-path::$GITHUB_WORKSPACE/bin
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
         env:
-          GOLANGCILINT_VERSION: 1.24.0
+          GOLANGCILINT_VERSION: 1.30.0
 
       - name: Make lint
         run: |
@@ -66,8 +66,6 @@ jobs:
             tar -zxvf kustomize_v${version}_linux_${arch}.tar.gz &&\
             chmod +x kustomize &&\
             sudo mv kustomize /usr/local/bin
-          make controller-gen
-          make vendor
           make native-test
       - name: Codecov Upload
         uses: codecov/codecov-action@v1

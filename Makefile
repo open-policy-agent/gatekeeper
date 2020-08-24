@@ -94,7 +94,7 @@ e2e-bootstrap:
 	# Download and install kubectl
 	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
-	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz  && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
 	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
 	# Check for existing kind cluster
@@ -121,15 +121,15 @@ e2e-helm-deploy:
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true
 
 # Build manager binary
-manager: generate fmt vet
+manager: generate
 	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
 
 # Build manager binary
-manager-osx: generate fmt vet
+manager-osx: generate
 	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+run: generate manifests
 	GO111MODULE=on go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
@@ -171,12 +171,12 @@ docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):latest
 
 # Push for Dev
-docker-push-dev:  docker-tag-dev
+docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):$(DEV_TAG)
 	@docker push $(REPOSITORY):dev
 
 # Push for Release
-docker-push-release:  docker-tag-release
+docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
@@ -259,7 +259,7 @@ uninstall:
 controller-gen:
 ifeq (, $(shell which controller-gen))
 	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0
-	go mod vendor
+	go mod tidy
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
