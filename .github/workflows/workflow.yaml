@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory
@@ -41,21 +41,48 @@ jobs:
           echo ::add-path::$GITHUB_WORKSPACE/bin
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
         env:
-          GOLANGCILINT_VERSION: 1.24.0
+          GOLANGCILINT_VERSION: 1.30.0
 
       - name: Make lint
         run: |
           make lint
+
+  test:
+    name: "Unit test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Unit test
+        run: |
+          arch=amd64
+          version=2.3.1
+          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${version}/kubebuilder_${version}_linux_${arch}.tar.gz" &&\
+            tar -zxvf kubebuilder_${version}_linux_${arch}.tar.gz &&\
+            sudo mv kubebuilder_${version}_linux_${arch} /usr/local/kubebuilder
+          version=3.7.0
+          curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${version}/kustomize_v${version}_linux_${arch}.tar.gz" &&\
+            tar -zxvf kustomize_v${version}_linux_${arch}.tar.gz &&\
+            chmod +x kustomize &&\
+            sudo mv kustomize /usr/local/bin
+          make native-test
+      - name: Codecov Upload
+        uses: codecov/codecov-action@v1
+        with:
+          flags: unittests
+          file: ./cover.out
+          fail_ci_if_error: false
 
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory
@@ -80,10 +107,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory

@@ -13,7 +13,9 @@ linters:
     - ineffassign
     - golint
     - goconst
-    - goimports #- unused, https://github.com/golangci/golangci-lint/issues/337#issuecomment-536721714
+    - gofmt
+    - goimports
+    - unused
     - varcheck
     - deadcode
     - misspell
