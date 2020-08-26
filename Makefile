@@ -149,7 +149,7 @@ manifests: controller-gen
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
-	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
+	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
 	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # Run go fmt against code

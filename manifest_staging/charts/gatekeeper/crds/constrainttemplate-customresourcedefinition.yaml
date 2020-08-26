@@ -6,8 +6,12 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
   creationTimestamp: null
   labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
     controller-tools.k8s.io: "1.0"
     gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
   group: templates.gatekeeper.sh
@@ -15,7 +19,7 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
     shortNames:
-      - constraints
+    - constraints
   scope: Cluster
   subresources:
     status: {}
@@ -23,10 +27,10 @@ spec:
     openAPIV3Schema:
       properties:
         apiVersion:
-          description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources"
+          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
+          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -78,8 +82,8 @@ spec:
                         message:
                           type: string
                       required:
-                        - code
-                        - message
+                      - code
+                      - message
                       type: object
                     type: array
                   id:
@@ -95,9 +99,9 @@ spec:
           type: object
   version: v1beta1
   versions:
-    - name: v1beta1
-      served: true
-      storage: true
-    - name: v1alpha1
-      served: true
-      storage: false
+  - name: v1beta1
+    served: true
+    storage: true
+  - name: v1alpha1
+    served: true
+    storage: false
