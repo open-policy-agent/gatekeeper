@@ -106,6 +106,9 @@ jobs:
     name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        HELM_VERSION: ["2.16.10", "3.3.0"]
     steps:
       - name: Set up Go 1.14
         uses: actions/setup-go@v2
@@ -125,7 +128,7 @@ jobs:
       - name: Run e2e
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
-          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }}
           make test-e2e
           echo -e '\n\n======= manager logs =======\n\n'
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
