@@ -113,7 +113,6 @@ e2e-helm-deploy:
 	mkdir -p .staging/helm
 	curl https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
-	# install Tiller for Helm v2
 	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
 		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
 		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
