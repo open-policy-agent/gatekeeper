@@ -58,10 +58,6 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
-  selector:
-    matchLabels:
-      app: gatekeeper
-      release: RELEASE_NAME
   template:
     metadata:
       annotations: HELMSUBST_ANNOTATIONS
@@ -86,10 +82,6 @@ metadata:
   name: gatekeeper-audit
   namespace: gatekeeper-system
 spec:
-  selector:
-    matchLabels:
-      app: gatekeeper
-      release: RELEASE_NAME
   template:
     metadata:
       annotations: HELMSUBST_ANNOTATIONS
