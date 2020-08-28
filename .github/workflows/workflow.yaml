@@ -208,3 +208,11 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+
+      - name: Publish Helm chart
+        uses: stefanprodan/helm-gh-pages@v1.2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: charts
+          target_dir: charts
+          linting: off
