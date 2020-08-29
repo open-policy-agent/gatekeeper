@@ -32,7 +32,7 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 1. Promote staging manifest to release.
 
 	```
-	make promote-staging-manifest NEWVERSION=v3.0.4-beta.x
+	make promote-staging-manifest
 	```
 
 1. Preview the changes:
