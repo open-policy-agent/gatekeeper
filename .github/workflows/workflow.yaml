@@ -180,7 +180,7 @@ jobs:
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
           version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
             make docker-login
