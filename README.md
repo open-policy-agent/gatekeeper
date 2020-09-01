@@ -115,7 +115,7 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm installed and Tiller initialized on your cluster you can deploy via
 ```sh
-helm repo add gatekeeper https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/charts/gatekeeper
+helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
 helm install gatekeeper/gatekeeper --devel
 ```
 
