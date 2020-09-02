@@ -23,6 +23,8 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 	git clone git@github.com:open-policy-agent/gatekeeper.git
 	```
 
+1. If this is a patch release for a release branch, check out applicable branch, such as `release-3.1`. If not, branch should be `master`
+
 1. Execute the release-patch target to generate patch. Give the semantic version of the release:
 
 	```
@@ -47,16 +49,15 @@ Publishing involves creating a release tag and creating a new *Release* on GitHu
 
 	```
 	git checkout -b release-<NEW VERSION>
-	git add charts/gatekeeper
 	git commit -a -s -m "Prepare <NEW VERSION> release"
 	git push <YOUR FORK>
 	```
 
-1. Once the PR is merged to master, tag master with release version and push tags to remote repository.
+2. Once the PR is merged to `master` or `release` branch (`<BRANCH NAME>` below), tag that commit with release version and push tags to remote repository.
 
 	```
-	git checkout master
-	git pull origin master
+	git checkout <BRANCH NAME>
+	git pull origin <BRANCH NAME>
 	git tag -a <NEW VERSION> -m '<NEW VERSION>'
 	git push origin <NEW VERSION>
 	```
