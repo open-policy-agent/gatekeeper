@@ -17,7 +17,7 @@ import (
 
 var (
 	outputDir  = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
-	useCRDsDir = flag.Bool("use-crds-dir", false, `Use the "crds" subdirectory, which requires Helm v3`)
+	useCRDsDir = flag.Bool("use-crds-dir", true, `Use the "crds" subdirectory, which requires Helm v3`)
 )
 
 var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
