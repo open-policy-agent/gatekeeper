@@ -136,8 +136,8 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, build_test, helm_build_test]
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-')) && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
+    needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
@@ -164,7 +164,7 @@ jobs:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, build_test, helm_build_test]
+    needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
@@ -183,7 +183,7 @@ jobs:
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
           version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
             make docker-login
@@ -211,3 +211,11 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+
+      - name: Publish Helm chart
+        uses: stefanprodan/helm-gh-pages@v1.2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: charts
+          target_dir: charts
+          linting: off
