@@ -272,6 +272,9 @@ func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
 			CommonName:   cr.CAName,
 			Organization: []string{cr.CAOrganization},
 		},
+		DNSNames: []string{
+			cr.CAName,
+		},
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,

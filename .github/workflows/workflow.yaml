@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set up Go 1.14
+      - name: Set up Go 1.15
         uses: actions/setup-go@v2
         with:
-          go-version: 1.14
+          go-version: 1.15
         id: go
 
       - name: Check out code into the Go module directory
@@ -79,10 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Set up Go 1.14
+      - name: Set up Go 1.15
         uses: actions/setup-go@v2
         with:
-          go-version: 1.14
+          go-version: 1.15
         id: go
 
       - name: Check out code into the Go module directory
@@ -110,10 +110,10 @@ jobs:
       matrix:
         HELM_VERSION: ["2.16.10", "3.3.0"]
     steps:
-      - name: Set up Go 1.14
+      - name: Set up Go 1.15
         uses: actions/setup-go@v2
         with:
-          go-version: 1.14
+          go-version: 1.15
         id: go
 
       - name: Check out code into the Go module directory
