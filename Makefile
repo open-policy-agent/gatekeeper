@@ -4,13 +4,15 @@ REPOSITORY ?= openpolicyagent/gatekeeper
 IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
+USE_LOCAL_IMG ?= false
 
 VERSION := v3.1.0
 
-USE_LOCAL_IMG ?= false
-KIND_VERSION=0.7.0
-KUSTOMIZE_VERSION=3.0.2
-HELM_VERSION=v2.15.2
+KIND_VERSION ?= 0.8.1
+# note: k8s version pinned since KIND image availability lags k8s releases
+KUBERNETES_VERSION ?= v1.19.0
+KUSTOMIZE_VERSION ?= 3.7.0
+HELM_VERSION ?= 2.16.10
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -92,7 +94,7 @@ e2e-bootstrap:
 	# Download and install kind
 	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output ${GITHUB_WORKSPACE}/bin/kind && chmod +x ${GITHUB_WORKSPACE}/bin/kind
 	# Download and install kubectl
-	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
+	curl -L https://storage.googleapis.com/kubernetes-release/release/${KUBERNETES_VERSION}/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/kustomize && chmod +x ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
@@ -100,7 +102,7 @@ e2e-bootstrap:
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
-	TERM=dumb kind create cluster
+	TERM=dumb kind create cluster --image kindest/node:${KUBERNETES_VERSION}
 
 e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG}
