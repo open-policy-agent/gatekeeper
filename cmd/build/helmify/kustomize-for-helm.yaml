@@ -3,9 +3,6 @@ kind: Service
 metadata:
   name: gatekeeper-webhook-service
   namespace: gatekeeper-system
-spec:
-  selector:
-    app: GATEKEEPER_APP_LABEL
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -33,6 +30,24 @@ spec:
     shortNames:
       - constraints # add shortName to CRD until https://github.com/kubernetes-sigs/kubebuilder/issues/404 is solved
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: constrainttemplatepodstatuses.status.gatekeeper.sh
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+status: null
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: constraintpodstatuses.status.gatekeeper.sh
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+status: null
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,10 +55,6 @@ metadata:
   namespace: gatekeeper-system
 spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
-  selector:
-    matchLabels:
-      app: gatekeeper
-      release: RELEASE_NAME
   template:
     metadata:
       annotations: HELMSUBST_ANNOTATIONS
@@ -68,10 +79,6 @@ metadata:
   name: gatekeeper-audit
   namespace: gatekeeper-system
 spec:
-  selector:
-    matchLabels:
-      app: gatekeeper
-      release: RELEASE_NAME
   template:
     metadata:
       annotations: HELMSUBST_ANNOTATIONS

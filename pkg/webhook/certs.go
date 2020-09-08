@@ -309,6 +309,9 @@ func (cr *CertRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, erro
 		Subject: pkix.Name{
 			CommonName: cr.DNSName,
 		},
+		DNSNames: []string{
+			cr.DNSName,
+		},
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
