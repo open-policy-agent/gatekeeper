@@ -125,7 +125,7 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 
 #### Policy library
 
-See the [Gatekeeper policy library repository](https://www.github.com/open-policy-agent/gatekeeper-policy-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
+See the [Gatekeeper policy library repository](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
 
 ### Uninstallation
 
