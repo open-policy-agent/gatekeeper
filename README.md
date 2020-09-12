@@ -123,6 +123,10 @@ Please note that this chart is not compatible with Helm 3 at this time.
 
 You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
+#### Policy library
+
+See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
+
 ### Uninstallation
 
 #### Uninstall Gatekeeper
