@@ -36,8 +36,7 @@ Generally, design docs are on Google docs:
 These docs may not be design docs in themselves, but seek to influence design
 decisions
 
-* [Mutation
-  Dynamics](https://docs.google.com/document/d/1WKj-9xYYVO9IckQVZHYVFCziRVS6zxCfvJxWbkbLcOM/view#)
+* [Mutation Dynamics](https://docs.google.com/document/d/1WKj-9xYYVO9IckQVZHYVFCziRVS6zxCfvJxWbkbLcOM/view#)
    * A dissection of the mutation problem space, attempting to break down the
      salient behavioral elements and figure out what's needed for a
      user-friendly set of mutation primitives.
