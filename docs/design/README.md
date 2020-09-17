@@ -23,6 +23,7 @@ Generally, design docs are on Google docs:
 * [Dry-Run Design Doc](https://docs.google.com/document/d/17nJDJxjY_XHV8zrMNdOi2hFgfm6XKGJi0QyznsbhQ70/edit#heading=h.z0bjqzl81dpe)
 * [Constraint Framework Client Interface](https://docs.google.com/document/d/1NDOgu8F_yQqrxRRVTDiCXGXMsajA3Jtp-lwGrZsDFcI/edit#)
 * [Logging Design Doc](https://docs.google.com/document/d/1ap7AKOupNcR_42s8mkSh5FV9eteXTd4VCqelKst73VY/edit)
+* [Namespace Exclusion Design doc](https://docs.google.com/document/d/1yHuXFs_HQL5N9yT9QVi6AMyflWPtZS4Pg-uXczdqgZ8/edit?usp=sharing)
 
 ## Roadmap (in development)
 * [GA Development Path](https://docs.google.com/document/d/1Lolr_jUkVlGSyk4iGhajx1LXWsWRXhLeu3L7s3lLDGY/edit#heading=h.9aae3wnhx5k3)
