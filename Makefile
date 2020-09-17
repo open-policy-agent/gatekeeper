@@ -4,13 +4,13 @@ REPOSITORY ?= openpolicyagent/gatekeeper
 IMG := $(REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
+USE_LOCAL_IMG ?= false
 
 VERSION := v3.1.0
 
-USE_LOCAL_IMG ?= false
-KIND_VERSION=0.7.0
-KUSTOMIZE_VERSION=3.0.2
-HELM_VERSION=v2.15.2
+KIND_VERSION ?= 0.8.1
+KUSTOMIZE_VERSION ?= 3.7.0
+HELM_VERSION ?= 2.16.10
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -72,7 +72,7 @@ endif
 all: lint test manager
 
 # Run tests
-native-test: generate fmt vet manifests
+native-test:
 	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -coverprofile cover.out
 
 # Hook to run docker tests
@@ -94,7 +94,7 @@ e2e-bootstrap:
 	# Download and install kubectl
 	curl -L https://storage.googleapis.com/kubernetes-release/release/$$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o ${GITHUB_WORKSPACE}/bin/kubectl && chmod +x ${GITHUB_WORKSPACE}/bin/kubectl
 	# Download and install kustomize
-	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/v${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/kustomize && chmod +x ${GITHUB_WORKSPACE}/bin/kustomize
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
 	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
 	# Check for existing kind cluster
@@ -109,27 +109,29 @@ e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
 
 e2e-helm-deploy:
-	# tiller needs enough permissions to create CRDs
-	kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default
-	# Download and install helm
 	rm -rf .staging/helm
 	mkdir -p .staging/helm
-	curl https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
+	curl https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
-	./.staging/helm/linux-amd64/helm init --wait --history-max=5
-	kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s
-	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=tiger --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true
+	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
+		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
+		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
+		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+	else\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+	fi;
 
 # Build manager binary
-manager: generate fmt vet
+manager: generate
 	GO111MODULE=on go build -mod vendor -o bin/manager -ldflags $(LDFLAGS) main.go
 
 # Build manager binary
-manager-osx: generate fmt vet
+manager-osx: generate
 	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+run: generate manifests
 	GO111MODULE=on go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
@@ -146,18 +148,8 @@ manifests: controller-gen
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
-	kustomize build config/default  -o manifest_staging/deploy/gatekeeper.yaml
+	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
 	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
-
-# Run go fmt against code
-fmt:
-	GO111MODULE=on go fmt ./apis/... ./pkg/...
-	GO111MODULE=on go fmt main.go
-
-# Run go vet against code
-vet:
-	GO111MODULE=on go vet -mod vendor ./apis/... ./pkg/... ./third_party/...
-	GO111MODULE=on go vet -mod vendor main.go
 
 lint:
 	golangci-lint -v run ./... --timeout 5m
@@ -181,22 +173,22 @@ docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):latest
 
 # Push for Dev
-docker-push-dev:  docker-tag-dev
+docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):$(DEV_TAG)
 	@docker push $(REPOSITORY):dev
 
 # Push for Release
-docker-push-release:  docker-tag-release
+docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(REPOSITORY):latest
 
-docker-build: test
+docker-build:
 	docker build --pull . -t ${IMG}
 
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx: test
+docker-buildx:
 	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -204,7 +196,7 @@ docker-buildx: test
 		-t $(IMG) \
 		. --load
 
-docker-buildx-dev: test
+docker-buildx-dev:
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -213,7 +205,7 @@ docker-buildx-dev: test
 		-t $(REPOSITORY):dev \
 		. --push
 
-docker-buildx-release: test
+docker-buildx-release:
 	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
 		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
 	fi
@@ -245,7 +237,7 @@ release-manifest:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
 	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
-	@sed -i "s/version: .*/version: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/version: .*/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
 	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./cmd/build/helmify/static/values.yaml
@@ -257,8 +249,6 @@ promote-staging-manifest:
 	@cp -r manifest_staging/deploy .
 	@rm -rf charts
 	@cp -r manifest_staging/charts .
-	@helm package ./charts/gatekeeper -d ./charts/gatekeeper
-	@helm repo index ./charts/gatekeeper --url "https://raw.githubusercontent.com/open-policy-agent/gatekeeper/${NEWVERSION}/charts/gatekeeper/"
 
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
@@ -269,6 +259,7 @@ uninstall:
 controller-gen:
 ifeq (, $(shell which controller-gen))
 	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0
+	go mod tidy
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)

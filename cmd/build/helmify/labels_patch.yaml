@@ -1,0 +1,4 @@
+- op: replace
+  path: /metadata/labels
+  value:
+    gatekeeper.sh/system: "yes"

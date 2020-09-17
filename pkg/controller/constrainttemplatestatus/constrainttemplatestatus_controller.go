@@ -86,7 +86,7 @@ func (m Mapper) Map(obj handler.MapObject) []reconcile.Request {
 		log.Error(fmt.Errorf("constraint template status resource with no mapping label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint template status resource")
 		return nil
 	}
-	return []reconcile.Request{reconcile.Request{NamespacedName: types.NamespacedName{Name: name}}}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name}}}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

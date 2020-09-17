@@ -1,11 +1,5 @@
 package main
 
-// #!/bin/bash
-// scriptdir="$(dirname "$0")"
-// cd "$scriptdir"
-// cp ./../../deploy/gatekeeper.yaml ${PWD}/helm-modifications/_temp.yaml
-// kustomize build helm-modifications -o templates/gatekeeper.yaml
-
 var replacements = map[string]string{
 	"HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES": `
 {{ toYaml .Values.resources | indent 10 }}`,

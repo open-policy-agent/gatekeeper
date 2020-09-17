@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory
@@ -41,21 +41,48 @@ jobs:
           echo ::add-path::$GITHUB_WORKSPACE/bin
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
         env:
-          GOLANGCILINT_VERSION: 1.24.0
+          GOLANGCILINT_VERSION: 1.30.0
 
       - name: Make lint
         run: |
           make lint
+
+  test:
+    name: "Unit test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Unit test
+        run: |
+          arch=amd64
+          version=2.3.1
+          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${version}/kubebuilder_${version}_linux_${arch}.tar.gz" &&\
+            tar -zxvf kubebuilder_${version}_linux_${arch}.tar.gz &&\
+            sudo mv kubebuilder_${version}_linux_${arch} /usr/local/kubebuilder
+          version=3.7.0
+          curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${version}/kustomize_v${version}_linux_${arch}.tar.gz" &&\
+            tar -zxvf kustomize_v${version}_linux_${arch}.tar.gz &&\
+            chmod +x kustomize &&\
+            sudo mv kustomize /usr/local/bin
+          make native-test
+      - name: Codecov Upload
+        uses: codecov/codecov-action@v1
+        with:
+          flags: unittests
+          file: ./cover.out
+          fail_ci_if_error: false
 
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory
@@ -79,11 +106,14 @@ jobs:
     name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        HELM_VERSION: ["2.16.10", "3.3.0"]
     steps:
-      - name: Set up Go 1.13
-        uses: actions/setup-go@v2-beta
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.14
         id: go
 
       - name: Check out code into the Go module directory
@@ -98,7 +128,7 @@ jobs:
       - name: Run e2e
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
-          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }}
           make test-e2e
           echo -e '\n\n======= manager logs =======\n\n'
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager
@@ -106,8 +136,8 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, build_test, helm_build_test]
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-')) && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
+    needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
@@ -134,7 +164,7 @@ jobs:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, build_test, helm_build_test]
+    needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
@@ -153,7 +183,7 @@ jobs:
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
           version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
           then
             make docker-login
@@ -181,3 +211,11 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+
+      - name: Publish Helm chart
+        uses: stefanprodan/helm-gh-pages@v1.2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: charts
+          target_dir: charts
+          linting: off
