@@ -113,7 +113,8 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 #### Deploying via Helm ####
 
-A basic Helm chart exists in `charts/gatekeeper`. If you have Helm installed, you can deploy via
+A basic Helm chart exists in `charts/gatekeeper`. If you have Helm installed, you can deploy via the following instructions for Helm v3:
+
 ```sh
 helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
 helm install gatekeeper/gatekeeper --generate-name
