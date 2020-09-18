@@ -631,6 +631,25 @@ Two ways of working around this:
       targetPort: 443
     ```
 
+### Running on OpenShift 4.x
+
+When running on OpenShift, the `nouid` scc must be used to keep a restricted profile but being able to set the UserID.
+
+In order to use it, the following section must be added to the gatekeeper-manager-role Role:
+
+```yaml
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+    - anyuid
+  resources:
+    - securitycontextconstraints
+  verbs:
+    - use
+```
+
+With this restricted profile, it won't be possible to set the `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default` annotation. On the other hand, given the limited amount of privileges provided by the anyuid scc, the annotation can be removed.
+
 ## Kick The Tires
 
 The [demo/basic](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/basic) directory contains the above examples of simple constraints, templates and configs to play with. The [demo/agilebank](https://github.com/open-policy-agent/gatekeeper/tree/master/demo/agilebank) directory contains more complex examples based on a slightly more realistic scenario. Both folders have a handy demo script to step you through the demos.
