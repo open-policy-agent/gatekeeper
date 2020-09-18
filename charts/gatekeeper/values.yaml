@@ -9,7 +9,7 @@ emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.1.0
+  release: v3.1.1
   pullPolicy: IfNotPresent
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}
@@ -23,3 +23,5 @@ resources:
   requests:
     cpu: 100m
     memory: 256Mi
+customResourceDefinitions:
+  create: true
