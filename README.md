@@ -154,6 +154,17 @@ If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
 helm delete <release name>
 ```
 
+Helm v3 will not cleanup Gatekeeper installed CRDs. Run the following to uninstall Gatekeeper CRDs:
+```sh
+kubectl delete crd \
+  configs.config.gatekeeper.sh \
+  constraintpodstatuses.status.gatekeeper.sh \
+  constrainttemplatepodstatuses.status.gatekeeper.sh \
+  constrainttemplates.templates.gatekeeper.sh
+```
+
+This operation will also delete any user installed config changes, and constraint templates and constraints.
+
 ## How to Use Gatekeeper
 
 Gatekeeper uses the [OPA Constraint Framework](https://github.com/open-policy-agent/frameworks/tree/master/constraint) to describe and enforce policy. Look there for more detailed information on their semantics and advanced usage.
