@@ -120,7 +120,7 @@ helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
 helm install gatekeeper/gatekeeper --generate-name
 ```
 
-Please note that this chart is compatible with Helm v3 starting with Gatekeeper v3.1.1.
+Please note that this chart is compatible with Helm v3 starting with Gatekeeper v3.1.1. When using Helm v3, it is expected to see warnings regarding to `crd-install` hook. This is due to maintaining backwards compatibility with Helm v2 and should not impact the chart deployment.
 
 You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
