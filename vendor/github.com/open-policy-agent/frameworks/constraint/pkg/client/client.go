@@ -309,9 +309,8 @@ func (c *Client) createTemplateArtifacts(templ *templates.ConstraintTemplate) (*
 		return nil, err
 	}
 
-	req := ruleArities{
-		"violation": 1,
-	}
+	req := map[string]struct{}{"violation": struct{}{}}
+
 	if err := requireRulesModule(entryPoint, req); err != nil {
 		return nil, fmt.Errorf("Invalid rego: %s", err)
 	}
@@ -693,10 +692,10 @@ func (c *Client) init() error {
 			return err
 		}
 		lib := libBuf.String()
-		req := ruleArities{
-			"autoreject_review":                1,
-			"matching_reviews_and_constraints": 2,
-			"matching_constraints":             1,
+		req := map[string]struct{}{
+			"autoreject_review":                struct{}{},
+			"matching_reviews_and_constraints": struct{}{},
+			"matching_constraints":             struct{}{},
 		}
 		path := fmt.Sprintf("%s.library", hooks)
 		libModule, err := parseModule(path, lib)
