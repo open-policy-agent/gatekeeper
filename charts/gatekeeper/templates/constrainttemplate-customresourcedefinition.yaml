@@ -18,8 +18,6 @@ spec:
   names:
     kind: ConstraintTemplate
     plural: constrainttemplates
-    shortNames:
-    - constraints
   scope: Cluster
   subresources:
     status: {}
