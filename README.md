@@ -113,13 +113,14 @@ Currently the most reliable way of installing Gatekeeper is to build and install
 
 #### Deploying via Helm ####
 
-A basic Helm v2 template exists in `charts/gatekeeper`. If you have Helm installed and Tiller initialized on your cluster you can deploy via
+A basic Helm chart exists in `charts/gatekeeper`. If you have Helm installed, you can deploy via the following instructions for Helm v3:
+
 ```sh
-helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
-helm install gatekeeper/gatekeeper --devel
+helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts --force-update
+helm install gatekeeper/gatekeeper --generate-name
 ```
 
-Please note that this chart is not compatible with Helm 3 at this time.
+Please note that this chart is compatible with Helm v3 starting with Gatekeeper v3.1.1. When using Helm v3, it is expected to see warnings regarding to `crd-install` hook. This is due to maintaining backwards compatibility with Helm v2 and should not impact the chart deployment.
 
 You can alter the variables in `charts/gatekeeper/values.yaml` to customize your deployment. To regenerate the base template, run `make manifests`.
 
@@ -150,8 +151,19 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
 If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
 ```sh
-helm delete <release name> --purge
+helm delete <release name>
 ```
+
+Helm v3 will not cleanup Gatekeeper installed CRDs. Run the following to uninstall Gatekeeper CRDs:
+```sh
+kubectl delete crd \
+  configs.config.gatekeeper.sh \
+  constraintpodstatuses.status.gatekeeper.sh \
+  constrainttemplatepodstatuses.status.gatekeeper.sh \
+  constrainttemplates.templates.gatekeeper.sh
+```
+
+This operation will also delete any user installed config changes, and constraint templates and constraints.
 
 ## How to Use Gatekeeper
 
@@ -343,7 +355,7 @@ spec:
 ...
 ```
 
-If any of the [constraints](#Constraints) do not specify `kinds`, it will be equivalent to not setting ``--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
+If any of the [constraints](#Constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
 
 ### Log denies
 
