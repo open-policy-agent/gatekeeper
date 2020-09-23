@@ -144,7 +144,7 @@ type Options struct {
 	// wait to force acquire leadership. This is measured against time of
 	// last observed ack. Default is 15 seconds.
 	LeaseDuration *time.Duration
-	// RenewDeadline is the duration that the acting master will retry
+	// RenewDeadline is the duration that the acting controlplane will retry
 	// refreshing leadership before giving up. Default is 10 seconds.
 	RenewDeadline *time.Duration
 	// RetryPeriod is the duration the LeaderElector clients should wait
@@ -343,8 +343,8 @@ func New(config *rest.Config, options Options) (Manager, error) {
 	}, nil
 }
 
-// defaultNewClient creates the default caching client
-func defaultNewClient(cache cache.Cache, config *rest.Config, options client.Options) (client.Client, error) {
+// DefaultNewClient creates the default caching client
+func DefaultNewClient(cache cache.Cache, config *rest.Config, options client.Options) (client.Client, error) {
 	// Create the Client for Write operations.
 	c, err := client.New(config, options)
 	if err != nil {
@@ -389,7 +389,7 @@ func setOptionsDefaults(options Options) Options {
 
 	// Allow newClient to be mocked
 	if options.NewClient == nil {
-		options.NewClient = defaultNewClient
+		options.NewClient = DefaultNewClient
 	}
 
 	// Allow newCache to be mocked

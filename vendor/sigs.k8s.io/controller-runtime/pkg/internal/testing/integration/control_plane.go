@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 
@@ -42,17 +43,20 @@ func (f *ControlPlane) Start() error {
 
 // Stop will stop your control plane processes, and clean up their data.
 func (f *ControlPlane) Stop() error {
+	var errList []error
+
 	if f.APIServer != nil {
 		if err := f.APIServer.Stop(); err != nil {
-			return err
+			errList = append(errList, err)
 		}
 	}
 	if f.Etcd != nil {
 		if err := f.Etcd.Stop(); err != nil {
-			return err
+			errList = append(errList, err)
 		}
 	}
-	return nil
+
+	return utilerrors.NewAggregate(errList)
 }
 
 // APIURL returns the URL you should connect to to talk to your API.
