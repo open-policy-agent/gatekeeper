@@ -96,6 +96,7 @@ func (h *crdHelper) createCRD(
 				ShortNames: templ.Spec.CRD.Spec.Names.ShortNames,
 				Categories: []string{
 					"constraint",
+					"constraints",
 				},
 			},
 			Validation: &apiextensions.CustomResourceValidation{
