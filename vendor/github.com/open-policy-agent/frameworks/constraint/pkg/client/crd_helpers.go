@@ -96,6 +96,7 @@ func (h *crdHelper) createCRD(
 				ShortNames: templ.Spec.CRD.Spec.Names.ShortNames,
 				Categories: []string{
 					"constraint",
+					"constraints",
 				},
 			},
 			Validation: &apiextensions.CustomResourceValidation{
@@ -132,6 +133,7 @@ func (h *crdHelper) createCRD(
 		return nil, err
 	}
 	crd2.ObjectMeta.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, constraintGroup)
+	crd2.ObjectMeta.Labels = map[string]string{"gatekeeper.sh/constraint": "yes"}
 	return crd2, nil
 }
 
