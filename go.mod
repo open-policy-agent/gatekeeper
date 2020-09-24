@@ -11,7 +11,7 @@ require (
 	github.com/google/go-cmp v0.3.1
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200919011008-0a87f65d4444
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200921183631-5630119f92ad
 	github.com/open-policy-agent/opa v0.21.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0
