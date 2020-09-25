@@ -1,7 +1,14 @@
 ARG BUILDPLATFORM="linux/amd64"
-FROM --platform=$BUILDPLATFORM golang:1.15-alpine as builder
+ARG BUILDERIMAGE="golang:1.15-alpine"
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
+
+FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
 
 ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 ENV GO111MODULE=on\
     CGO_ENABLED=0
@@ -15,14 +22,12 @@ COPY main.go main.go
 COPY apis/ apis/
 COPY go.mod .
 
-RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
-    export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
+RUN export GOOS=$TARGETOS && \
+    export GOARCH=$TARGETARCH && \
     GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3); export GOARM=${GOARM:1} && \
     go build -mod vendor -a -o manager main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM $BASEIMAGE
 
 WORKDIR /
 
