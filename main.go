@@ -38,6 +38,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/upgrade"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/pkg/version"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -132,8 +133,10 @@ func main() {
 		eCfg.EncodeLevel = encoder
 		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg))))
 	}
+	config := ctrl.GetConfigOrDie()
+	config.UserAgent = version.GetUserAgent()
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
 		MetricsBindAddress:     *metricsAddr,
