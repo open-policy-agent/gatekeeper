@@ -358,7 +358,7 @@ func readWebhooks(path string) ([]runtime.Object, []runtime.Object, error) {
 	var mutHooks []runtime.Object
 	var valHooks []runtime.Object
 	for _, file := range files {
-		// Only parse whitelisted file types
+		// Only parse allowlisted file types
 		if !resourceExtensions.Has(filepath.Ext(file.Name())) {
 			continue
 		}

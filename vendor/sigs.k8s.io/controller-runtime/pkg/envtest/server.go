@@ -72,6 +72,15 @@ func defaultAssetPath(binary string) string {
 
 }
 
+// ControlPlane is the re-exported ControlPlane type from the internal integration package
+type ControlPlane = integration.ControlPlane
+
+// APIServer is the re-exported APIServer type from the internal integration package
+type APIServer = integration.APIServer
+
+// Etcd is the re-exported Etcd type from the internal integration package
+type Etcd = integration.Etcd
+
 // Environment creates a Kubernetes test environment that will start / stop the Kubernetes control plane and
 // install extension APIs
 type Environment struct {
