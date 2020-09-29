@@ -2,6 +2,7 @@ resources:
 - role.yaml
 - role_binding.yaml
 - service_account.yaml
+- podsecuritypolicy.yaml
 # - leader_election_role.yaml
 # - leader_election_role_binding.yaml
 # Comment the following 3 lines if you want to disable
