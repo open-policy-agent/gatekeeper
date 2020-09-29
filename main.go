@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-logr/zapr"
+	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	api "github.com/open-policy-agent/gatekeeper/apis"
@@ -154,7 +155,7 @@ func main() {
 	setupFinished := make(chan struct{})
 	if !*disableCertRotation && operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up cert rotation")
-		if err := webhook.AddRotator(mgr, &webhook.CertRotator{
+		if err := rotator.AddRotator(mgr, &rotator.CertRotator{
 			SecretKey: types.NamespacedName{
 				Namespace: util.GetNamespace(),
 				Name:      secretName,
@@ -163,8 +164,9 @@ func main() {
 			CAName:         caName,
 			CAOrganization: caOrganization,
 			DNSName:        dnsName,
-			CertsMounted:   setupFinished,
-		}, vwhName); err != nil {
+			IsReady:        setupFinished,
+			VWHName:        vwhName,
+		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)
 		}
