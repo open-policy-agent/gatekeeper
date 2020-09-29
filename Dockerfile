@@ -9,6 +9,7 @@ FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
 ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
+ARG LDFLAGS
 
 ENV GO111MODULE=on\
     CGO_ENABLED=0
@@ -25,7 +26,7 @@ COPY go.mod .
 RUN export GOOS=$TARGETOS && \
     export GOARCH=$TARGETARCH && \
     GOARM=$(echo ${TARGETPLATFORM} | cut -d / -f3); export GOARM=${GOARM:1} && \
-    go build -mod vendor -a -o manager main.go
+    go build -mod vendor -a -ldflags "${LDFLAGS:--X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest}" -o manager main.go
 
 FROM $BASEIMAGE
 
