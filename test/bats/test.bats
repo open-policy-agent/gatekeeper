@@ -12,6 +12,7 @@ teardown() {
 }
 
 @test "gatekeeper-controller-manager is running" {
+
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
   assert_success
 }
