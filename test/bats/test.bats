@@ -12,6 +12,7 @@ teardown() {
 }
 
 @test "gatekeeper-controller-manager is running" {
+
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
   assert_success
 }
@@ -22,9 +23,11 @@ teardown() {
 }
 
 @test "namespace label webhook is serving" {
+
   cert=$(mktemp)
-  CLEAN_CMD="${CLEAN_CMD}; rm ${CERT}"
-  wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
+  CLEAN_CMD="${CLEAN_CMD}; rm ${cert}"
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "get_ca_cert ${cert}"
+  assert_success
 
   kubectl port-forward -n gatekeeper-system deployment/gatekeeper-controller-manager 8443:8443 &
   FORWARDING_PID=$!
