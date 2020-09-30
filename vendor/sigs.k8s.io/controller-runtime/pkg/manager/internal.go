@@ -155,7 +155,7 @@ type controllerManager struct {
 	// leaseDuration is the duration that non-leader candidates will
 	// wait to force acquire leadership.
 	leaseDuration time.Duration
-	// renewDeadline is the duration that the acting master will retry
+	// renewDeadline is the duration that the acting controlplane will retry
 	// refreshing leadership before giving up.
 	renewDeadline time.Duration
 	// retryPeriod is the duration the LeaderElector clients should wait
