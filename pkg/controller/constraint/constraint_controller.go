@@ -354,6 +354,9 @@ func logAddition(l logr.Logger, constraint *unstructured.Unstructured, enforceme
 	l.Info(
 		"constraint added to OPA",
 		logging.EventType, "constraint_added",
+		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
+		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintAction, string(enforcementAction),
 		logging.ConstraintStatus, "enforced",
@@ -364,6 +367,9 @@ func logRemoval(l logr.Logger, constraint *unstructured.Unstructured, enforcemen
 	l.Info(
 		"constraint removed from OPA",
 		logging.EventType, "constraint_removed",
+		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
+		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintAction, string(enforcementAction),
 		logging.ConstraintStatus, "unenforced",
