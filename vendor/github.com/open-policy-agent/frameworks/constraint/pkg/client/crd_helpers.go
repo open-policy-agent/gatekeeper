@@ -133,7 +133,14 @@ func (h *crdHelper) createCRD(
 		return nil, err
 	}
 	crd2.ObjectMeta.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, constraintGroup)
-	crd2.ObjectMeta.Labels = map[string]string{"gatekeeper.sh/constraint": "yes"}
+
+	labels := templ.ObjectMeta.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["gatekeeper.sh/constraint"] = "yes"
+	crd2.ObjectMeta.Labels = labels
+
 	return crd2, nil
 }
 
