@@ -495,9 +495,9 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		}
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, r.EnforcementAction, rkind, rnamespace, rname, message)
+		logViolation(am.log, r.Constraint, r.EnforcementAction, resource.GroupVersionKind(), rnamespace, rname, message)
 		if *emitAuditEvents {
-			emitEvent(r.Constraint, timestamp, enforcementAction, rkind, rnamespace, rname, message, am.gkNamespace, am.eventRecorder)
+			emitEvent(r.Constraint, timestamp, enforcementAction, resource.GroupVersionKind(), rnamespace, rname, message, am.gkNamespace, am.eventRecorder)
 		}
 	}
 	return nil
@@ -714,6 +714,8 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",
+		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
 		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
@@ -725,37 +727,45 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction, rkind, rnamespace, rname, message string) {
+	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string) {
 	l.Info(
 		message,
 		logging.EventType, "violation_audited",
+		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
 		logging.ConstraintKind, constraint.GetKind(),
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
-		logging.ResourceKind, rkind,
+		logging.ResourceGroup, resourceGroupVersionKind.Group,
+		logging.ResourceAPIVersion, resourceGroupVersionKind.Version,
+		logging.ResourceKind, resourceGroupVersionKind.Kind,
 		logging.ResourceNamespace, rnamespace,
 		logging.ResourceName, rname,
 	)
 }
 
 func emitEvent(constraint *unstructured.Unstructured,
-	timestamp, enforcementAction, rkind, rnamespace, rname, message, gkNamespace string,
+	timestamp, enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
 	eventRecorder record.EventRecorder) {
 	annotations := map[string]string{
-		"process":                   "audit",
-		"auditTimestamp":            timestamp,
-		logging.EventType:           "violation_audited",
-		logging.ConstraintKind:      constraint.GetKind(),
-		logging.ConstraintName:      constraint.GetName(),
-		logging.ConstraintNamespace: constraint.GetNamespace(),
-		logging.ConstraintAction:    enforcementAction,
-		logging.ResourceKind:        rkind,
-		logging.ResourceNamespace:   rnamespace,
-		logging.ResourceName:        rname,
+		"process":                    "audit",
+		"auditTimestamp":             timestamp,
+		logging.EventType:            "violation_audited",
+		logging.ConstraintGroup:      constraint.GroupVersionKind().Group,
+		logging.ConstraintAPIVersion: constraint.GroupVersionKind().Version,
+		logging.ConstraintKind:       constraint.GetKind(),
+		logging.ConstraintName:       constraint.GetName(),
+		logging.ConstraintNamespace:  constraint.GetNamespace(),
+		logging.ConstraintAction:     enforcementAction,
+		logging.ResourceGroup:        resourceGroupVersionKind.Group,
+		logging.ResourceAPIVersion:   resourceGroupVersionKind.Version,
+		logging.ResourceKind:         resourceGroupVersionKind.Kind,
+		logging.ResourceNamespace:    rnamespace,
+		logging.ResourceName:         rname,
 	}
 	reason := "AuditViolation"
-	ref := getViolationRef(gkNamespace, rkind, rname, rnamespace, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace())
+	ref := getViolationRef(gkNamespace, resourceGroupVersionKind.Kind, rname, rnamespace, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace())
 
 	eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Timestamp: %s, Resource Namespace: %s, Constraint: %s, Message: %s", timestamp, rnamespace, constraint.GetName(), message)
 }

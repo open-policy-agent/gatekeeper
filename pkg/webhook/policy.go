@@ -31,6 +31,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -239,28 +240,36 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
 			if *logDenies {
 				log.WithValues(
-					"process", "admission",
-					"event_type", "violation",
-					"constraint_name", r.Constraint.GetName(),
-					"constraint_kind", r.Constraint.GetKind(),
-					"constraint_action", r.EnforcementAction,
-					"resource_kind", req.AdmissionRequest.Kind.Kind,
-					"resource_namespace", req.AdmissionRequest.Namespace,
-					"resource_name", resourceName,
+					logging.Process, "admission",
+					logging.EventType, "violation",
+					logging.ConstraintName, r.Constraint.GetName(),
+					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind, r.Constraint.GetKind(),
+					logging.ConstraintAction, r.EnforcementAction,
+					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+					logging.ResourceName, resourceName,
 					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
 			if *emitAdmissionEvents {
 				annotations := map[string]string{
-					"process":            "admission",
-					"event_type":         "violation",
-					"constraint_name":    r.Constraint.GetName(),
-					"constraint_kind":    r.Constraint.GetKind(),
-					"constraint_action":  r.EnforcementAction,
-					"resource_kind":      req.AdmissionRequest.Kind.Kind,
-					"resource_namespace": req.AdmissionRequest.Namespace,
-					"resource_name":      resourceName,
-					"request_username":   req.AdmissionRequest.UserInfo.Username,
+					logging.Process:              "admission",
+					logging.EventType:            "violation",
+					logging.ConstraintName:       r.Constraint.GetName(),
+					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind:       r.Constraint.GetKind(),
+					logging.ConstraintAction:     r.EnforcementAction,
+					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
+					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
+					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
+					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
+					logging.ResourceName:         resourceName,
+					"request_username":           req.AdmissionRequest.UserInfo.Username,
 				}
 				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
 				reason := "FailedAdmission"
