@@ -32,10 +32,9 @@ teardown() {
   kubectl wait --for=condition=Ready --timeout=60s pod temp
   kubectl cp ${cert} temp:/cacert
   
-  CLEAN_CMD="${CLEAN_CMD}; kubectl delete pod temp"
-
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl exec -it temp -- curl -f --cacert /cacert --connect-timeout 1 --max-time 2  https://gatekeeper-webhook-service.gatekeeper-system.svc:443/v1/admitlabel"
   assert_success
+  kubectl delete pod temp
 }
 
 
