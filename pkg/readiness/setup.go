@@ -39,8 +39,21 @@ func SetupTracker(mgr manager.Manager) (*Tracker, error) {
 	}
 
 	if err := mgr.AddReadyzCheck("tracker", tracker.CheckSatisfied); err != nil {
-		return nil, fmt.Errorf("registering readiness check: %w", err)
+		return nil, fmt.Errorf("registering readiness CheckSatisfied: %w", err)
 	}
 
 	return tracker, nil
+}
+
+// SetupCertTracker sets up a readiness cert tracker and registers it to run under control of the
+// provided Manager object.
+// NOTE: Must be called _before_ the manager is started.
+func SetupCertTracker(mgr manager.Manager, certDir string, dnsName string) error {
+	certTracker := NewCertTracker(certDir, dnsName)
+
+	if err := mgr.AddReadyzCheck("certtracker", certTracker.CheckCert); err != nil {
+		return fmt.Errorf("registering readiness CheckCert: %w", err)
+	}
+
+	return nil
 }

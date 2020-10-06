@@ -187,6 +187,14 @@ func main() {
 		setupLog.Error(err, "unable to register readiness tracker")
 		os.Exit(1)
 	}
+	if operations.IsAssigned(operations.Webhook) {
+		// Setup cert tracker and register readiness probe.
+		err = readiness.SetupCertTracker(mgr, *certDir, dnsName)
+		if err != nil {
+			setupLog.Error(err, "unable to register readiness cert tracker")
+			os.Exit(1)
+		}
+	}
 
 	// +kubebuilder:scaffold:builder
 
