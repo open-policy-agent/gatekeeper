@@ -32,7 +32,7 @@ teardown() {
   kubectl run temp --generator=run-pod/v1  --image=tutum/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
   kubectl cp ${cert} temp:/cacert
-  
+
   run wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl exec -it temp -- curl -f --cacert /cacert --connect-timeout 1 --max-time 2  https://gatekeeper-webhook-service.gatekeeper-system.svc:443/v1/admitlabel"
   assert_success
   kubectl delete pod temp
@@ -65,7 +65,8 @@ teardown() {
 }
 
 @test "no ignore label unless namespace is exempt test" {
-  run kubectl apply -f ${BATS_TESTS_DIR}/good/ignore_label_ns.yaml
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/ignore_label_ns.yaml
+  assert_match 'Only exempt namespace can have the admission.gatekeeper.sh/ignore label' "$output"
   assert_failure
 }
 
