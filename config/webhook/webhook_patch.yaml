@@ -13,11 +13,11 @@ metadata:
 webhooks:
   - name: validation.gatekeeper.sh
     sideEffects: None
-    timeoutSeconds: 5
+    timeoutSeconds: 3
     namespaceSelector:
       matchExpressions:
         - key: admission.gatekeeper.sh/ignore
           operator: DoesNotExist
   - name: check-ignore-label.gatekeeper.sh
     sideEffects: None
-    timeoutSeconds: 5
+    timeoutSeconds: 3
