@@ -7,16 +7,17 @@ import (
 	"go.opencensus.io/stats/view"
 )
 
+const expectedDurationValueMin = time.Duration(1 * time.Second)
+const expectedDurationValueMax = time.Duration(5 * time.Second)
+const expectedDurationMin float64 = 1
+const expectedDurationMax float64 = 5
+const expectedCount int64 = 2
+const expectedRowLength = 1
+
 func TestReportRequest(t *testing.T) {
 	expectedTags := map[string]string{
 		"admission_status": "allow",
 	}
-	const expectedDurationValueMin = time.Duration(1 * time.Second)
-	const expectedDurationValueMax = time.Duration(5 * time.Second)
-	const expectedDurationMin float64 = 1
-	const expectedDurationMax float64 = 5
-	const expectedCount int64 = 2
-	const expectedRowLength = 1
 
 	r, err := newStatsReporter()
 	if err != nil {
@@ -30,9 +31,36 @@ func TestReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
+	check(t, expectedTags, requestCountMetricName, requestDurationMetricName)
+}
+
+func TestMutationReportRequest(t *testing.T) {
+	expectedTags := map[string]string{
+		"mutation_status": "allow",
+	}
+
+	r, err := newStatsReporter()
+
+	if err != nil {
+		t.Errorf("newStatsReporter() error %v", err)
+	}
+	err = r.ReportMutationRequest(mutationAllowResponse, expectedDurationValueMin)
+	if err != nil {
+		t.Errorf("ReportRequest error %v", err)
+	}
+	err = r.ReportMutationRequest(mutationAllowResponse, expectedDurationValueMax)
+	if err != nil {
+		t.Errorf("ReportRequest error %v", err)
+	}
+
+	check(t, expectedTags, mutationRequestCountMetricName, mutationRequestDurationMetricName)
+}
+
+func check(t *testing.T, expectedTags map[string]string, requestCountMetricName string, requestDurationMetricName string) {
 
 	// count test
 	row := checkData(t, requestCountMetricName, expectedRowLength)
+
 	count, ok := row.Data.(*view.CountData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Count()")
