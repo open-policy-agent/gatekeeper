@@ -59,12 +59,19 @@ import (
 )
 
 const (
-	secretName     = "gatekeeper-webhook-server-cert"
-	vwhName        = "gatekeeper-validating-webhook-configuration"
+	secretName = "gatekeeper-webhook-server-cert"
+
 	serviceName    = "gatekeeper-webhook-service"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
 )
+
+var webhooks = []rotator.WebhookInfo{
+	rotator.WebhookInfo{
+		Name: webhook.VwhName,
+		Type: rotator.Validating,
+	},
+}
 
 var (
 	// DNSName is <service name>.<namespace>.svc
@@ -137,6 +144,8 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
+	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
@@ -168,7 +177,7 @@ func main() {
 			CAOrganization: caOrganization,
 			DNSName:        dnsName,
 			IsReady:        setupFinished,
-			VWHName:        vwhName,
+			Webhooks:       webhooks,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)

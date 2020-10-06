@@ -402,6 +402,32 @@ status:
   conditions: []
   storedVersions: []
 ---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-mutating-webhook-configuration
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/mutate
+  failurePolicy: Ignore
+  name: mutation.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - '*'
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    resources:
+    - '*'
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -486,6 +512,7 @@ rules:
   verbs:
   - get
   - list
+  - update
   - watch
 - apiGroups:
   - apiextensions.k8s.io

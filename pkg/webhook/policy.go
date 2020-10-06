@@ -17,8 +17,6 @@ package webhook
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,27 +26,19 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
-	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/keys"
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -60,23 +50,6 @@ func init() {
 		panic(err)
 	}
 }
-
-var log = logf.Log.WithName("webhook")
-
-const (
-	serviceAccountName = "gatekeeper-admin"
-)
-
-var (
-	runtimeScheme                      = k8sruntime.NewScheme()
-	codecs                             = serializer.NewCodecFactory(runtimeScheme)
-	deserializer                       = codecs.UniversalDeserializer()
-	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
-	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
-	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace for each admission violation")
-	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
-	// webhookName is deprecated, set this on the manifest YAML if needed"
-)
 
 // +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -95,13 +68,15 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 		corev1.EventSource{Component: "gatekeeper-webhook"})
 	wh := &admission.Webhook{
 		Handler: &validationHandler{
-			opa:             opa,
-			client:          mgr.GetClient(),
-			reader:          mgr.GetAPIReader(),
-			reporter:        reporter,
-			processExcluder: processExcluder,
-			eventRecorder:   recorder,
-			gkNamespace:     util.GetNamespace(),
+			webhookHandler: webhookHandler{
+				opa:             opa,
+				client:          mgr.GetClient(),
+				reader:          mgr.GetAPIReader(),
+				reporter:        reporter,
+				processExcluder: processExcluder,
+				eventRecorder:   recorder,
+				gkNamespace:     util.GetNamespace(),
+			},
 		},
 	}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
@@ -116,26 +91,16 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
-	opa      *opa.Client
-	client   client.Client
-	reporter StatsReporter
-	// reader that will be configured to use the API server
-	// obtained from mgr.GetAPIReader()
-	reader client.Reader
-	// for testing
-	injectedConfig  *v1alpha1.Config
-	processExcluder *process.Excluder
-	eventRecorder   record.EventRecorder
-	gkNamespace     string
+	webhookHandler
 }
 
-type requestResponse string
+type admissionReqRes string
 
 const (
-	errorResponse   requestResponse = "error"
-	denyResponse    requestResponse = "deny"
-	allowResponse   requestResponse = "allow"
-	unknownResponse requestResponse = "unknown"
+	errorResponse   admissionReqRes = "error"
+	denyResponse    admissionReqRes = "deny"
+	allowResponse   admissionReqRes = "allow"
+	unknownResponse admissionReqRes = "unknown"
 )
 
 // Handle the validation request
@@ -181,7 +146,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportRequest(
+			if err := h.reporter.ReportAdmissionRequest(
 				requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
@@ -240,36 +205,28 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
 			if *logDenies {
 				log.WithValues(
-					logging.Process, "admission",
-					logging.EventType, "violation",
-					logging.ConstraintName, r.Constraint.GetName(),
-					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, r.EnforcementAction,
-					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-					logging.ResourceName, resourceName,
+					"process", "admission",
+					"event_type", "violation",
+					"constraint_name", r.Constraint.GetName(),
+					"constraint_kind", r.Constraint.GetKind(),
+					"constraint_action", r.EnforcementAction,
+					"resource_kind", req.AdmissionRequest.Kind.Kind,
+					"resource_namespace", req.AdmissionRequest.Namespace,
+					"resource_name", resourceName,
 					"request_username", req.AdmissionRequest.UserInfo.Username,
 				).Info("denied admission")
 			}
 			if *emitAdmissionEvents {
 				annotations := map[string]string{
-					logging.Process:              "admission",
-					logging.EventType:            "violation",
-					logging.ConstraintName:       r.Constraint.GetName(),
-					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     r.EnforcementAction,
-					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
-					logging.ResourceName:         resourceName,
-					"request_username":           req.AdmissionRequest.UserInfo.Username,
+					"process":            "admission",
+					"event_type":         "violation",
+					"constraint_name":    r.Constraint.GetName(),
+					"constraint_kind":    r.Constraint.GetKind(),
+					"constraint_action":  r.EnforcementAction,
+					"resource_kind":      req.AdmissionRequest.Kind.Kind,
+					"resource_namespace": req.AdmissionRequest.Namespace,
+					"resource_name":      resourceName,
+					"request_username":   req.AdmissionRequest.UserInfo.Username,
 				}
 				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
 				reason := "FailedAdmission"
@@ -288,21 +245,6 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 	}
 	return msgs
-}
-
-func (h *validationHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error) {
-	if h.injectedConfig != nil {
-		return h.injectedConfig, nil
-	}
-	if h.client == nil {
-		return nil, errors.New("no client available to retrieve validation config")
-	}
-	cfg := &v1alpha1.Config{}
-	return cfg, h.client.Get(ctx, keys.Config, cfg)
-}
-
-func isGkServiceAccount(user authenticationv1.UserInfo) bool {
-	return user.Username == serviceaccount
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
@@ -397,33 +339,6 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 		}
 	}
 	return resp, err
-}
-
-func (h *validationHandler) tracingLevel(ctx context.Context, req admission.Request) (bool, bool) {
-	cfg, _ := h.getConfig(ctx)
-	traceEnabled := false
-	dump := false
-	for _, trace := range cfg.Spec.Validation.Traces {
-		if trace.User != req.AdmissionRequest.UserInfo.Username {
-			continue
-		}
-		gvk := v1alpha1.GVK{
-			Group:   req.AdmissionRequest.Kind.Group,
-			Version: req.AdmissionRequest.Kind.Version,
-			Kind:    req.AdmissionRequest.Kind.Kind,
-		}
-		if gvk == trace.Kind {
-			traceEnabled = true
-			if strings.EqualFold(trace.Dump, "All") {
-				dump = true
-			}
-		}
-	}
-	return traceEnabled, dump
-}
-
-func (h *validationHandler) skipExcludedNamespace(namespace string) bool {
-	return h.processExcluder.IsNamespaceExcluded(process.Webhook, namespace)
 }
 
 func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
