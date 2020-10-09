@@ -2,7 +2,7 @@ ARG BUILDPLATFORM="linux/amd64"
 ARG BUILDERIMAGE="golang:1.15-alpine"
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
+ARG BASEIMAGE="gcr.io/distroless/static:nonroot-amd64"
 
 FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
 
