@@ -58,19 +58,20 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	secretName = "gatekeeper-webhook-server-cert"
+
+	serviceName    = "gatekeeper-webhook-service"
+	caName         = "gatekeeper-ca"
+	caOrganization = "gatekeeper"
+)
+
 var webhooks = []rotator.WebhookInfo{
 	rotator.WebhookInfo{
 		Name: types.NamespacedName{Name: webhook.VwhName},
 		GVK:  webhook.VwhGVK,
 	},
 }
-
-const (
-	secretName     = "gatekeeper-webhook-server-cert"
-	serviceName    = "gatekeeper-webhook-service"
-	caName         = "gatekeeper-ca"
-	caOrganization = "gatekeeper"
-)
 
 var (
 	// DNSName is <service name>.<namespace>.svc
@@ -142,6 +143,8 @@ func main() {
 	}
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
+
+	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,

@@ -22,6 +22,7 @@ var (
 		stats.UnitSeconds)
 
 	admissionStatusKey = tag.MustNewKey("admission_status")
+	mutationStatusKey  = tag.MustNewKey("mutation_status")
 )
 
 func init() {
@@ -33,6 +34,7 @@ func init() {
 // StatsReporter reports webhook metrics
 type StatsReporter interface {
 	ReportAdmissionRequest(response admissionReqRes, d time.Duration) error
+	ReportMutationRequest(response mutationResponse, d time.Duration) error
 }
 
 // reporter implements StatsReporter interface
@@ -57,6 +59,19 @@ func (r *reporter) ReportAdmissionRequest(response admissionReqRes, d time.Durat
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(admissionStatusKey, string(response)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
+}
+
+// Captures req count metric, recording the count and the duration
+func (r *reporter) ReportMutationRequest(response mutationResponse, d time.Duration) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(mutationStatusKey, string(response)),
 	)
 	if err != nil {
 		return err
