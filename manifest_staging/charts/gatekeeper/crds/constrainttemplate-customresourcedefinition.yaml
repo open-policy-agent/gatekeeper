@@ -4,6 +4,7 @@ metadata:
   annotations:
     helm.sh/hook: crd-install
     helm.sh/hook-delete-policy: before-hook-creation
+  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
@@ -13,7 +14,8 @@ spec:
     kind: ConstraintTemplate
     plural: constrainttemplates
   scope: Cluster
-  subresources: {}
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:

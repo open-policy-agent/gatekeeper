@@ -763,14 +763,14 @@ spec:
             port: 9090
         name: manager
         ports:
+        - containerPort: 8443
+          name: webhook-server
+          protocol: TCP
         - containerPort: 8888
           name: metrics
           protocol: TCP
         - containerPort: 9090
           name: healthz
-          protocol: TCP
-        - containerPort: 8443
-          name: webhook-server
           protocol: TCP
         readinessProbe:
           httpGet:
@@ -808,30 +808,11 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
+  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
 webhooks:
-- clientConfig:
-    caBundle: Cg==
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admitlabel
-  failurePolicy: Fail
-  name: check-ignore-label.gatekeeper.sh
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - namespaces
-  sideEffects: None
-  timeoutSeconds: 3
 - clientConfig:
     caBundle: Cg==
     service:
@@ -854,5 +835,25 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 3
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  failurePolicy: Fail
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
   sideEffects: None
   timeoutSeconds: 3

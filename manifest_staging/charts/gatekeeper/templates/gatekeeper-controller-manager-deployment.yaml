@@ -12,7 +12,7 @@ metadata:
   name: gatekeeper-controller-manager
   namespace: gatekeeper-system
 spec:
-  replicas: 3
+  replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
       app: '{{ template "gatekeeper.name" . }}'
@@ -24,8 +24,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
+      annotations: 
+{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
@@ -51,6 +51,8 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
+        - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+        - --log-level={{ .Values.logLevel }}
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
         command:
@@ -65,34 +67,29 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-rc.1
-        imagePullPolicy: Always
+        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         livenessProbe:
           httpGet:
             path: /healthz
             port: 9090
         name: manager
         ports:
+        - containerPort: 8443
+          name: webhook-server
+          protocol: TCP
         - containerPort: 8888
           name: metrics
           protocol: TCP
         - containerPort: 9090
           name: healthz
           protocol: TCP
-        - containerPort: 8443
-          name: webhook-server
-          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
             port: 9090
-        resources:
-          limits:
-            cpu: 1000m
-            memory: 512Mi
-          requests:
-            cpu: 100m
-            memory: 256Mi
+        resources: 
+{{ toYaml .Values.controllerManager.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -105,8 +102,12 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector:
-        kubernetes.io/os: linux
+      nodeSelector: 
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:

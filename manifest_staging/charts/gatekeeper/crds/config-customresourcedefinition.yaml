@@ -5,6 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.3.0
     helm.sh/hook: crd-install
     helm.sh/hook-delete-policy: before-hook-creation
+  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
