@@ -244,7 +244,11 @@ func (am *Manager) auditResources(
 
 	serverResourceLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
-		return err
+		if discovery.IsGroupDiscoveryFailedError(err) {
+			am.log.Error(err, "Kubernetes has an orphaned APIService. Delete orphaned APIService using kubectl delete apiservice <name>")
+		} else {
+			return err
+		}
 	}
 
 	clusterAPIResources := make(map[metav1.GroupVersion]map[string]bool)
