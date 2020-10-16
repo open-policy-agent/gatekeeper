@@ -72,7 +72,7 @@ type ByPodStatus struct {
 // ConstraintTemplateStatus defines the observed state of ConstraintTemplate
 type ConstraintTemplateStatus struct {
 	Created bool           `json:"created,omitempty"`
-	ByPod   []*ByPodStatus `json:"byPod,omitempty"`
+	ByPod   []ByPodStatus `json:"byPod,omitempty"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
