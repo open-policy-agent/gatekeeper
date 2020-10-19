@@ -25,9 +25,9 @@ import (
 
 // AssignMetadataSpec defines the desired state of AssignMetadata
 type AssignMetadataSpec struct {
-	Match      Match      `json:"match,omitempty"`
-	Location   string     `json:"location,omitempty"`
-	Parameters Parameters `json:"parameters,omitempty"`
+	Match       Match             `json:"match,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // AssignMetadataStatus defines the observed state of AssignMetadata
@@ -57,13 +57,8 @@ type Kinds struct {
 	Kinds     string `json:"kinds,omitempty"`
 }
 
-type Parameters struct {
-	Value string `json:"value,omitempty"`
-}
-
 // +kubebuilder:object:root=true
-// TODO: check if we need to define the scope here (e.g kubebuilder:resource:scope=Namespaced)
-// TODO:  check addition of k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:resource:scope="Cluster"
 
 // AssignMetadata is the Schema for the assignmetadata API
 type AssignMetadata struct {
@@ -75,7 +70,6 @@ type AssignMetadata struct {
 }
 
 // +kubebuilder:object:root=true
-// TODO:  check addition of k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // AssignMetadataList contains a list of AssignMetadata
 type AssignMetadataList struct {
