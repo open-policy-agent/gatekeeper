@@ -53,8 +53,8 @@ type Kinds struct {
 	// APIGroups is the API groups the resources belong to. '*' is all groups.
 	// If '*' is present, the length of the slice must be one.
 	// Required.
-	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
-	Kinds     []string `json:"kinds,omitempty"`
+	APIGroups string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
+	Kinds     string `json:"kinds,omitempty"`
 }
 
 type Parameters struct {
