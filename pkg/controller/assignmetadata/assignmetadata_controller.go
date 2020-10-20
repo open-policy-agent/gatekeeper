@@ -17,14 +17,19 @@ limitations under the License.
 package assignmentmetadata
 
 import (
+	"context"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -43,13 +48,14 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
+	MutationCache    *mutation.Cache
 }
 
 // Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 
-	r := newReconciler(mgr)
+	r := newReconciler(mgr, a.MutationCache)
 	events := make(chan event.GenericEvent, 1024)
 	return add(mgr, r, events)
 }
@@ -70,9 +76,13 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
+func (a *Adder) InjectMutationCache(c *mutation.Cache) {
+	a.MutationCache = c
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) *AssignMetadataReconciler {
-	r := &AssignMetadataReconciler{}
+func newReconciler(mgr manager.Manager, cache *mutation.Cache) *AssignMetadataReconciler {
+	r := &AssignMetadataReconciler{cache: cache, Client: mgr.GetClient()}
 	return r
 }
 
@@ -112,6 +122,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 // AssignMetadataReconciler reconciles a AssignMetadata object
 type AssignMetadataReconciler struct {
+	client.Client
+	cache *mutation.Cache
 }
 
 // +kubebuilder:rbac:groups=assignmetadata.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -120,6 +132,31 @@ type AssignMetadataReconciler struct {
 // and what is in the constraint.Spec
 func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
+	deleted := false
+	m := &mutationsv1alpha1.AssignMetadata{}
+	err := r.Get(context.TODO(), request.NamespacedName, m)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		deleted = true
+		// be sure we are using a blank constraint template so that
+		// we know finalizer removal code won't break (can be removed once that
+		// code is removed)
+		m = &mutationsv1alpha1.AssignMetadata{}
+	}
+	deleted = deleted || !m.GetDeletionTimestamp().IsZero()
 
+	if !deleted {
+		err := r.cache.Insert(mutation.MetadataMutator{AssignMetadata: m.DeepCopy()})
+		if err != nil {
+			log.Error(err, "Failed to insert")
+		}
+	} else {
+		err := r.cache.Remove(mutation.MetadataMutator{AssignMetadata: m.DeepCopy()})
+		if err != nil {
+			log.Error(err, "Failed to remove")
+		}
+	}
 	return ctrl.Result{}, nil
 }

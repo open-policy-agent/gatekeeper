@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -18,11 +20,11 @@ type PodMutator struct {
 	corev1.Pod
 }
 
-func (p *PodMutator) Mutate(obj runtime.Object) (runtime.Object, error) {
+func (p *PodMutator) Mutate(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
 
-func (p *PodMutator) Matches(scheme *runtime.Scheme, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
+func (p *PodMutator) Matches(obj *unstructured.Unstructured, gvk metav1.GroupVersionKind, ns *corev1.Namespace) (bool, error) {
 	return false, nil
 }
 
@@ -34,11 +36,11 @@ type ConfigMutator struct {
 	configv1.Config
 }
 
-func (p *ConfigMutator) Mutate(obj runtime.Object) (runtime.Object, error) {
+func (p *ConfigMutator) Mutate(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
 
-func (p *ConfigMutator) Matches(scheme *runtime.Scheme, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
+func (p *ConfigMutator) Matches(obj *unstructured.Unstructured, gvk metav1.GroupVersionKind, ns *corev1.Namespace) (bool, error) {
 	return false, nil
 }
 
