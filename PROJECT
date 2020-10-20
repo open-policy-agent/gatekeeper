@@ -11,4 +11,7 @@ resources:
 - group: status
   kind: ConstraintTemplatePodStatus
   version: v1beta1
+- group: mutations
+  kind: AssignMetadata
+  version: v1alpha1
 version: "2"
