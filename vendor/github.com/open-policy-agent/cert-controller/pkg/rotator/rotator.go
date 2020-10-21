@@ -45,13 +45,16 @@ const (
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
-
 var crdGVK = schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"}
 
 var _ manager.Runnable = &CertRotator{}
 
 var restartOnSecretRefresh = false
+
+type WebhookInfo struct {
+	Name types.NamespacedName
+	GVK  schema.GroupVersionKind
+}
 
 func init() {
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
@@ -68,17 +71,16 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 		return err
 	}
 
-	vwhKey := types.NamespacedName{Name: cr.VWHName}
 	reconciler := &ReconcileWH{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		ctx:           context.Background(),
 		secretKey:     cr.SecretKey,
-		vwhKey:        vwhKey,
 		crdNames:      cr.CRDNames,
 		wasCAInjected: cr.wasCAInjected,
+		webhooks:      cr.Webhooks,
 	}
-	if err := addController(mgr, reconciler); err != nil {
+	if err := addController(mgr, reconciler, cr.Webhooks); err != nil {
 		return err
 	}
 	return nil
@@ -97,7 +99,7 @@ type CertRotator struct {
 	certsNotMounted chan struct{}
 	wasCAInjected   *atomic.Bool
 	caNotInjected   chan struct{}
-	VWHName         string
+	Webhooks        []WebhookInfo
 	CRDNames        []string
 }
 
@@ -496,22 +498,23 @@ func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func addController(mgr manager.Manager, r *ReconcileWH) error {
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
+func addController(mgr manager.Manager, r *ReconcileWH, webhookInfos []WebhookInfo) error {
 	crd := &unstructured.Unstructured{}
 	crd.SetGroupVersionKind(crdGVK)
 	// Create a new controller
-	err := ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Secret{}).
-		Watches(&source.Kind{Type: vwh}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
+	builder := ctrl.NewControllerManagedBy(mgr).For(&corev1.Secret{})
+	for _, webhookInfo := range webhookInfos {
+		wh := &unstructured.Unstructured{}
+		wh.SetGroupVersionKind(webhookInfo.GVK)
+		builder = builder.Watches(&source.Kind{Type: wh}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
 			secretKey: r.secretKey,
-			vwhKey:    r.vwhKey,
-		}}).
-		Watches(&source.Kind{Type: crd}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &crdMapper{
-			secretKey: r.secretKey,
-			crdNames:  r.crdNames,
-		}}).Complete(r)
+			vwhKey:    webhookInfo.Name,
+		}})
+	}
+	err := builder.Watches(&source.Kind{Type: crd}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &crdMapper{
+		secretKey: r.secretKey,
+		crdNames:  r.crdNames,
+	}}).Complete(r)
 	if err != nil {
 		return err
 	}
@@ -528,7 +531,7 @@ type ReconcileWH struct {
 	scheme        *runtime.Scheme
 	ctx           context.Context
 	secretKey     types.NamespacedName
-	vwhKey        types.NamespacedName
+	webhooks      []WebhookInfo
 	crdNames      []string
 	wasCAInjected *atomic.Bool
 }
@@ -557,15 +560,15 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 			return reconcile.Result{}, nil
 		}
 
-		// Ensure certs on validating webhooks.
-		errVWH := r.ensureVWHCerts(artifacts.CertPEM)
+		// Ensure certs on webhooks.
+		errWH := r.ensureWHCerts(artifacts.CertPEM)
 
 		// Ensure certs on CRD conversion webhooks if there's any.
 		errCWH := r.ensureCRDConvWHCerts(artifacts.CertPEM)
 
 		// Return errors if there's any when trying to inject certs to all webhooks.
-		if errVWH != nil {
-			return reconcile.Result{}, errVWH
+		if errWH != nil {
+			return reconcile.Result{}, errWH
 		}
 		if errCWH != nil {
 			return reconcile.Result{}, errCWH
@@ -578,25 +581,26 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileWH) ensureVWHCerts(certPem []byte) error {
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			crLog.Info("VWK " + r.vwhKey.Name + " is not found. No action is needed.")
-			return nil
+func (r *ReconcileWH) ensureWHCerts(certPem []byte) error {
+	for _, webhook := range r.webhooks {
+		wh := &unstructured.Unstructured{}
+		wh.SetGroupVersionKind(webhook.GVK)
+		if err := r.client.Get(r.ctx, webhook.Name, wh); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				crLog.Info("VWK " + webhook.Name.Name + " is not found. No action is needed.")
+				return nil
+			}
+			// Error reading the object - requeue the request.
+			return err
 		}
-		// Error reading the object - requeue the request.
-		return err
-	}
-
-	crLog.Info("ensuring CA cert on ValidatingWebhookConfiguration")
-	if err := injectCertToWebhook(vwh, certPem); err != nil {
-		crLog.Error(err, "unable to inject cert to webhook")
-		return err
-	}
-	if err := r.client.Update(r.ctx, vwh); err != nil {
-		return err
+		crLog.Info("ensuring CA cert on " + webhook.GVK.Kind)
+		if err := injectCertToWebhook(wh, certPem); err != nil {
+			crLog.Error(err, "unable to inject cert to webhook")
+			return err
+		}
+		if err := r.client.Update(r.ctx, wh); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -707,6 +707,7 @@ spec:
         - --operation=audit
         - --operation=status
         - --logtostderr
+        - --enable-mutation=true
         command:
         - /manager
         env:
@@ -800,6 +801,7 @@ spec:
         - --logtostderr
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
+        - --enable-mutation=true
         command:
         - /manager
         env:
