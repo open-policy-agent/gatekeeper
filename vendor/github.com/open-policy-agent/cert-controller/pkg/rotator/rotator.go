@@ -100,7 +100,7 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 		wasCAInjected: cr.wasCAInjected,
 		webhooks:      cr.Webhooks,
 	}
-	if err := addController(mgr, reconciler); err != nil {
+	if err := addController(mgr, reconciler, cr.Webhooks); err != nil {
 		return err
 	}
 	return nil

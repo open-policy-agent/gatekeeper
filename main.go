@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -59,12 +60,19 @@ import (
 )
 
 const (
-	secretName     = "gatekeeper-webhook-server-cert"
-	vwhName        = "gatekeeper-validating-webhook-configuration"
+	secretName = "gatekeeper-webhook-server-cert"
+
 	serviceName    = "gatekeeper-webhook-service"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
 )
+
+var webhooks = []rotator.WebhookInfo{
+	rotator.WebhookInfo{
+		Name: types.NamespacedName{Name: webhook.VwhName},
+		GVK:  webhook.VwhGVK,
+	},
+}
 
 var (
 	// DNSName is <service name>.<namespace>.svc
@@ -99,6 +107,7 @@ func init() {
 
 	_ = configv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
+	_ = mutationsv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -137,6 +146,8 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
+	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
@@ -168,7 +179,7 @@ func main() {
 			CAOrganization: caOrganization,
 			DNSName:        dnsName,
 			IsReady:        setupFinished,
-			VWHName:        vwhName,
+			Webhooks:       webhooks,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)
