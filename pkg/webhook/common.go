@@ -14,7 +14,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,9 +26,6 @@ var log = logf.Log.WithName("webhook")
 var (
 	VwhName = "gatekeeper-validating-webhook-configuration"
 	MwhName = "gatekeeper-mutating-webhook-configuration"
-
-	VwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
-	MwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "MutatingWebhookConfiguration"}
 )
 
 const (

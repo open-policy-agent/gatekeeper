@@ -69,8 +69,8 @@ const (
 
 var webhooks = []rotator.WebhookInfo{
 	rotator.WebhookInfo{
-		Name: types.NamespacedName{Name: webhook.VwhName},
-		GVK:  webhook.VwhGVK,
+		Name: webhook.VwhName,
+		Type: rotator.Validating,
 	},
 }
 

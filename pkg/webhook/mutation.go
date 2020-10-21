@@ -28,7 +28,6 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -165,13 +164,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Request) (admission.Response, error) {
 
 	// TODO: place mutation logic here
-	patches := []jsonpatch.JsonPatchOperation{
-		jsonpatch.JsonPatchOperation{
-			Operation: "add",
-			Path:      "/metadata/labels/telco",
-			Value:     "demo",
-		},
-	}
+	patches := []jsonpatch.JsonPatchOperation{}
 	resp := admission.Response{
 		AdmissionResponse: admissionv1beta1.AdmissionResponse{
 			Allowed: true,
@@ -187,8 +180,8 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Reque
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if *MutationEnabled {
 		return append(webhooks, rotator.WebhookInfo{
-			Name: types.NamespacedName{Name: MwhName},
-			GVK:  MwhGVK,
+			Name: MwhName,
+			Type: rotator.Mutating,
 		})
 	}
 	return webhooks
