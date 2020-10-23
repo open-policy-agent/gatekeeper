@@ -14,20 +14,21 @@ package webhook
 
 import (
 	"context"
-	"flag"
 	"net/http"
 	"time"
-
-	"gomodules.xyz/jsonpatch/v2"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -50,7 +51,8 @@ const (
 )
 
 func init() {
-	MutationEnabled = flag.Bool("enable-mutation", false, "Enable the mutation webhook")
+	trueVar := true
+	MutationEnabled = &trueVar
 
 	AddToManagerFuncs = append(AddToManagerFuncs, AddMutatingWebhook)
 
@@ -64,7 +66,7 @@ func init() {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update
 
 // AddMutatingWebhook registers the mutating webhook server with the manager
-func AddMutatingWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) error {
+func AddMutatingWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationCache *mutation.Cache) error {
 	if !*MutationEnabled {
 		return nil
 	}
@@ -91,6 +93,7 @@ func AddMutatingWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *p
 				eventRecorder:   recorder,
 				gkNamespace:     util.GetNamespace(),
 			},
+			cache: mutationCache,
 		},
 	}
 
@@ -108,6 +111,7 @@ var _ admission.Handler = &mutationHandler{}
 
 type mutationHandler struct {
 	webhookHandler
+	cache *mutation.Cache
 }
 
 // Handle the validation request
@@ -162,9 +166,35 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 
 // traceSwitch returns true if a request should be traced
 func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Request) (admission.Response, error) {
+	ns := &corev1.Namespace{}
+	if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return admission.Response{}, err
+		}
+		// bypass cached client and ask api-server directly
+		err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+		if err != nil {
+			return admission.Response{}, err
+		}
+	}
 
-	// TODO: place mutation logic here
-	patches := []jsonpatch.JsonPatchOperation{}
+	obj := unstructured.Unstructured{}
+	err := obj.UnmarshalJSON(req.Object.Raw)
+	if err != nil {
+		return admission.Response{}, err
+	}
+
+	mutated, err := mutation.ApplyMutations(h.cache, obj, req.Kind, ns)
+
+	if err != nil {
+		return admission.Response{}, err
+	}
+
+	patches, err := mutation.GenerateJSONPatch(obj, *mutated)
+	if err != nil {
+		return admission.Response{}, err
+	}
+
 	resp := admission.Response{
 		AdmissionResponse: admissionv1beta1.AdmissionResponse{
 			Allowed: true,

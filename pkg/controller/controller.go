@@ -24,6 +24,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -56,6 +57,10 @@ type GetProcessExcluderInjector interface {
 	InjectProcessExcluder(processExcluder *process.Excluder)
 }
 
+type GetMutationCacheInjector interface {
+	InjectMutationCache(*mutation.Cache)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync
 var Injectors []Injector
@@ -71,6 +76,7 @@ type Dependencies struct {
 	Tracker          *readiness.Tracker
 	GetPod           func() (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
+	MutationCache    *mutation.Cache
 }
 
 type defaultPodGetter struct {
@@ -151,6 +157,10 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		if a2, ok := a.(GetProcessExcluderInjector); ok {
 			a2.InjectProcessExcluder(deps.ProcessExcluder)
 		}
+		if a2, ok := a.(GetMutationCacheInjector); ok {
+			a2.InjectMutationCache(deps.MutationCache)
+		}
+
 		if err := a.Add(m); err != nil {
 			return err
 		}

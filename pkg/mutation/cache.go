@@ -10,7 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// Cache represent a mutation cache containting all the mutation resources
+// Cache represent a mutation cache containting all the mutation resources,
+// sorted with the following criteria:
+// - group
+// - kind
+// - namespace
+// - name
 type Cache struct {
 	mutators []Mutator
 	sync.RWMutex
