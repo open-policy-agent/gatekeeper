@@ -3,7 +3,7 @@ id: exempt-namespaces
 title: Exempting Namespaces
 ---
 
-Config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](#constraints) instead.
+The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](#constraints) instead.
 
 ```yaml
 apiVersion: config.gatekeeper.sh/v1alpha1
@@ -30,10 +30,10 @@ Available processes:
 
 ## Exempting Namespaces from the Gatekeeper Admission Webhook using `--exempt-namespace` flag
 
-Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints is
+Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints or config resource (as described above) is
 necessary to exclude them from audit.
 
-If it becomes necessary to exempt a namespace from Gatekeeper entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
+If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
 
    1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
 

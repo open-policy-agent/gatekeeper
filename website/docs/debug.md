@@ -95,4 +95,4 @@ If there is an error in the Rego in the ConstraintTemplate, there are cases wher
 
 When applying the constraint using `kubectl apply -f constraint.yaml` with a ConstraintTemplate that contains incorrect Rego, and error will occur: `error: unable to recognize "[CONSTRAINT_FILENAME].yaml": no matches for kind "[NAME_OF_CONSTRAINT]" in version "constraints.gatekeeper.sh/v1beta1"`.
 
-To find the error, run `kubectl get -f [CONSTRAINT_FILENAME].yaml -oyaml`. Build errors are shown in the `status` field.
+To find the error, run `kubectl get -f [CONSTRAINT_TEMPLATE_FILENAME].yaml -o yaml`. Build errors are shown in the `status` field.

@@ -1,7 +1,25 @@
 module.exports = {
   someSidebar: {
-    "Getting Started": ['intro', 'install', 'examples'],
-    "How to use Gatekeeper": ['howto', 'audit', 'exempt-namespaces', 'library', 'debug'],
-    "Contributing": ['help', 'security']
+    "Getting Started": [
+      'intro',
+      'install',
+      'examples'
+    ],
+    "How to use Gatekeeper": [
+      'howto',
+      'audit',
+      'violations',
+      'sync',
+      'exempt-namespaces',
+      'library',
+      'customize-admission',
+      'debug',
+      'emergency',
+      'vendor-specific'
+    ],
+    "Contributing": [
+      'help',
+      'security'
+    ]
   },
 };
