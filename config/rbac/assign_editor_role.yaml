@@ -1,0 +1,24 @@
+# permissions for end users to edit assigns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: assign-editor-role
+rules:
+- apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - assigns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - assigns/status
+  verbs:
+  - get
