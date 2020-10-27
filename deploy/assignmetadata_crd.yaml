@@ -30,14 +30,8 @@ spec:
         spec:
           description: AssignMetadataSpec defines the desired state of AssignMetadata
           properties:
-            annotations:
-              additionalProperties:
-                type: string
-              type: object
-            labels:
-              additionalProperties:
-                type: string
-              type: object
+            location:
+              type: string
             match:
               properties:
                 excludedNamespaces:
@@ -124,6 +118,11 @@ spec:
                   type: string
               required:
               - scope
+              type: object
+            parameters:
+              properties:
+                value:
+                  type: string
               type: object
           type: object
         status:
