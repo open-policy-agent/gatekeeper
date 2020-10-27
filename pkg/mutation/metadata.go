@@ -6,7 +6,6 @@ import (
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,41 +28,49 @@ func (m MetadataMutator) Obj() runtime.Object {
 // Mutate tries to apply the mutation to the given object.
 func (m MetadataMutator) Mutate(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	copy := obj.DeepCopy()
-	meta, err := meta.Accessor(copy)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get accessor")
-	}
-	annotations := meta.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string, len(m.Spec.Annotations))
-	}
-	added := false
-	for k, v := range m.Spec.Annotations {
-		_, ok := annotations[k]
-		if !ok {
-			annotations[k] = v
-			added = true
-		}
-	}
-	if added {
-		meta.SetAnnotations(annotations)
-	}
 
-	labels := meta.GetLabels()
-	if labels == nil {
-		labels = make(map[string]string, len(m.Spec.Labels))
-	}
-	added = false
-	for k, v := range m.Spec.Labels {
-		_, ok := labels[k]
-		if !ok {
-			labels[k] = v
-			added = true
+	// TODO: replace with m.Spec location
+	/*
+		meta, err := meta.Accessor(copy)
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to get accessor")
 		}
-	}
-	if added {
-		meta.SetLabels(labels)
-	}
+
+
+
+			annotations := meta.GetAnnotations()
+			if annotations == nil {
+
+				// annotations = make(map[string]string, len(m.Spec.Annotations))
+			}
+			added := false
+			for k, v := range m.Spec.Annotations {
+				_, ok := annotations[k]
+				if !ok {
+					annotations[k] = v
+					added = true
+				}
+			}
+			if added {
+				meta.SetAnnotations(annotations)
+			}
+
+			labels := meta.GetLabels()
+			if labels == nil {
+				labels = make(map[string]string, len(m.Spec.Labels))
+			}
+			added = false
+			for k, v := range m.Spec.Labels {
+				_, ok := labels[k]
+				if !ok {
+					labels[k] = v
+					added = true
+				}
+			}
+			if added {
+				meta.SetLabels(labels)
+			}
+	*/
 	return copy, nil
 }
 
