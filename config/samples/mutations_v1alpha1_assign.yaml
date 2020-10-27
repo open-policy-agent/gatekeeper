@@ -1,0 +1,7 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: assign-sample
+spec:
+  # Add fields here
+  foo: bar

@@ -14,4 +14,7 @@ resources:
 - group: mutations
   kind: AssignMetadata
   version: v1alpha1
+- group: mutations
+  kind: Assign
+  version: v1alpha1
 version: "2"
