@@ -147,8 +147,8 @@ func (w *Set) Difference(other *Set) *Set {
 	return &Set{set: out}
 }
 
-// Union returns a set composed of all items that are both in set w and other.
-func (w *Set) Union(other *Set) *Set {
+// Intersection returns a set composed of all items that are both in set w and other.
+func (w *Set) Intersection(other *Set) *Set {
 	s := other.Dump()
 	w.mux.RLock()
 	defer w.mux.RUnlock()

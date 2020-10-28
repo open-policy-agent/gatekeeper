@@ -167,6 +167,8 @@ type ReconcileConfig struct {
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
 	watched          *watch.Set
+	needsReplay      *watch.Set
+	dirty            bool
 	tracker          *readiness.Tracker
 	processExcluder  *process.Excluder
 }
@@ -248,15 +250,16 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	r.removeStaleExpectations(diff)
 
 	// If the watch set has not changed, we're done here.
-	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
+	if !r.dirty && r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
 		return reconcile.Result{}, nil
 	}
+	r.dirty = true
 
 	// --- Start watching the new set ---
 
 	// This must happen first - signals to the opa client in the sync controller
 	// to drop events from no-longer-watched resources that may be in its queue.
-	needReplay := r.watched.Union(newSyncOnly)
+	r.needsReplay = r.watched.Intersection(newSyncOnly)
 	r.watched.Replace(newSyncOnly)
 
 	// swapping with the new excluder
@@ -275,6 +278,8 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	// Important: dynamic watches update must happen *after* updating our watchSet.
 	// Otherwise the sync controller will drop events for the newly watched kinds.
+	// Defer error handling so object re-sync happens even if the watch is hard
+	// errored due to a missing GVK in the watch set.
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -282,17 +287,21 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	// Replay cached data for any resources that were previously watched and still in the watch set.
 	// This is necessary because we wiped their data from Opa above.
 	// TODO(OREN): Improve later by selectively removing subtrees of data instead of a full wipe.
-	if err := r.replayData(context.TODO(), needReplay); err != nil {
+	if err := r.replayData(context.TODO()); err != nil {
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
 
+	r.dirty = false
 	return reconcile.Result{}, nil
 }
 
 // replayData replays all watched and cached data into Opa following a config set change.
 // In the future we can rework this to avoid the full opa data cache wipe.
-func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
-	for _, gvk := range w.Items() {
+func (r *ReconcileConfig) replayData(ctx context.Context) error {
+	if r.needsReplay == nil {
+		return nil
+	}
+	for _, gvk := range r.needsReplay.Items() {
 		u := &unstructured.UnstructuredList{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{
 			Group:   gvk.Group,
@@ -326,7 +335,9 @@ func (r *ReconcileConfig) replayData(ctx context.Context, w *watch.Set) error {
 				Status: metrics.ActiveStatus,
 			})
 		}
+		r.needsReplay.Remove(gvk)
 	}
+	r.needsReplay = nil
 	return nil
 }
 
