@@ -1,0 +1,20 @@
+# permissions for end users to view assignmetadata.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: assignmetadata-viewer-role
+rules:
+- apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - assignmetadata
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - assignmetadata/status
+  verbs:
+  - get
