@@ -250,8 +250,13 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	r.removeStaleExpectations(diff)
 
 	// If the watch set has not changed, we're done here.
-	if !r.dirty && r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
-		return reconcile.Result{}, nil
+	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
+		if !r.dirty {
+			return reconcile.Result{}, nil
+		}
+	} else {
+		// only re-calculate replays if our watch set has changed
+		r.needsReplay = nil
 	}
 	r.dirty = true
 
@@ -259,7 +264,9 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	// This must happen first - signals to the opa client in the sync controller
 	// to drop events from no-longer-watched resources that may be in its queue.
-	r.needsReplay = r.watched.Intersection(newSyncOnly)
+	if r.needsReplay != nil {
+		r.needsReplay = r.watched.Intersection(newSyncOnly)
+	}
 	r.watched.Replace(newSyncOnly)
 
 	// swapping with the new excluder
@@ -335,9 +342,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 				Status: metrics.ActiveStatus,
 			})
 		}
-		r.needsReplay.Remove(gvk)
 	}
-	r.needsReplay = nil
 	return nil
 }
 
