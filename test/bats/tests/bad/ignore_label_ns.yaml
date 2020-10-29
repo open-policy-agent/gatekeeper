@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: bad-ns
   labels:
-    admission.gatekeeper.sh/ignore: yes
+    admission.gatekeeper.sh/ignore: "yes"
