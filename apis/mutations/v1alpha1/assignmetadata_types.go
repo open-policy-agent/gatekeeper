@@ -17,6 +17,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -30,7 +31,7 @@ type AssignMetadataSpec struct {
 }
 
 type MetadataParameters struct {
-	Value string `json:"value,omitempty"`
+	Value runtime.RawExtension `json:"value,omitempty"`
 }
 
 // AssignMetadataStatus defines the observed state of AssignMetadata

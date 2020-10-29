@@ -17,6 +17,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -41,13 +42,13 @@ type ApplyTo struct {
 }
 
 type Parameters struct {
-	PathTests []PathTests `json:"pathTests,omitempty"`
+	PathTests []PathTest `json:"pathTests,omitempty"`
 	// IfIn Only mutate if the current value is in the supplied list
 	IfIn []string `json:"ifIn,omitempty"`
 	// IfNotIn Only mutate if the current value is NOT in the supplied list
 	IfNotIn []string `json:"ifNotIn,omitempty"`
 	// Value to assign
-	Value string `json:"value,omitempty"`
+	Value runtime.RawExtension `json:"value,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=MustExist;MustNotExist
@@ -63,7 +64,7 @@ type Condition string
 // Available Tests:
 // * MustExist    - the path must exist or do not mutate
 // * MustNotExist - the path must not exist or do not mutate
-type PathTests struct {
+type PathTest struct {
 	SubPath   string    `json:"subPath,omitempty"`
 	Condition Condition `json:"condition,omitempty"`
 }
