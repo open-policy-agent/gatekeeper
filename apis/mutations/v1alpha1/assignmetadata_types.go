@@ -42,7 +42,7 @@ type AssignMetadataStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
 
-// AssignMetadata is the Schema for the assignmetadata API
+// AssignMetadata is the Schema for the assignmetadatas API
 type AssignMetadata struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

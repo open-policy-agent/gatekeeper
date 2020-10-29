@@ -1,4 +1,4 @@
-# permissions for end users to edit assignmetadata.
+# permissions for end users to edit assignmetadatas.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - mutations.gatekeeper.sh
   resources:
-  - assignmetadata
+  - assignmetadatas
   verbs:
   - create
   - delete
@@ -19,6 +19,6 @@ rules:
 - apiGroups:
   - mutations.gatekeeper.sh
   resources:
-  - assignmetadata/status
+  - assignmetadatas/status
   verbs:
   - get
