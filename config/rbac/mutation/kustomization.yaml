@@ -1,0 +1,5 @@
+resources:
+- assign_editor_role.yaml
+- assign_viewer_role.yaml
+- assignmetadata_editor_role.yaml
+- assignmetadata_viewer_role.yaml
