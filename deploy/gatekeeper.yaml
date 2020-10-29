@@ -380,6 +380,38 @@ metadata:
   name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-admin
+spec:
+  allowPrivilegeEscalation: false
+  fsGroup:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  requiredDropCapabilities:
+  - ALL
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    ranges:
+    - max: 65535
+      min: 1
+    rule: MustRunAs
+  volumes:
+  - configMap
+  - projected
+  - secret
+  - downwardAPI
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -471,6 +503,8 @@ rules:
   - watch
 - apiGroups:
   - policy
+  resourceNames:
+  - gatekeeper-admin
   resources:
   - podsecuritypolicies
   verbs:
@@ -628,7 +662,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-rc.1
+        image: openpolicyagent/gatekeeper:v3.2.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -721,7 +755,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.1.0-rc.1
+        image: openpolicyagent/gatekeeper:v3.2.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -802,7 +836,7 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
-  timeoutSeconds: 5
+  timeoutSeconds: 3
 - clientConfig:
     caBundle: Cg==
     service:
@@ -822,4 +856,4 @@ webhooks:
     resources:
     - namespaces
   sideEffects: None
-  timeoutSeconds: 5
+  timeoutSeconds: 3
