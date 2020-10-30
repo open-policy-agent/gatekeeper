@@ -37,6 +37,8 @@ type Mutator interface {
 	// Has diff tells if the mutator has meaningful differences
 	// with the provided mutator
 	HasDiff(mutator Mutator) bool
+	// DeepCopy returns a copy of the current object
+	DeepCopy() Mutator
 }
 
 // MutatorWithSchema is a mutator exposing the implied
