@@ -172,7 +172,6 @@ docker-tag-dev:
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
-	@docker tag $(IMG) $(REPOSITORY):latest
 
 # Push for Dev
 docker-push-dev: docker-tag-dev
@@ -182,7 +181,6 @@ docker-push-dev: docker-tag-dev
 # Push for Release
 docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
-	@docker push $(REPOSITORY):latest
 
 docker-build:
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
@@ -213,7 +211,6 @@ docker-buildx-release:
 	fi
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
-		-t $(REPOSITORY):latest \
 		. --push
 
 # Update manager_image_patch.yaml with image tag
