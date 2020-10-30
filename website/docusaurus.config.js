@@ -1,11 +1,11 @@
 module.exports = {
   title: 'Gatekeeper',
   tagline: 'Policy Controller for Kubernetes',
-  url: 'https://sozercan.github.io/gatekeeper/website/docs/', // TODO(sertac): update to openpolicyagent before merging
+  url: 'https://open-policy-agent.github.io/gatekeeper/website/docs/',
   baseUrl: '/gatekeeper/website/',
   onBrokenLinks: 'throw',
   favicon: 'img/favicon.ico',
-  organizationName: 'sozercan', // TODO(sertac): update to openpolicyagent before merging
+  organizationName: 'open-policy-agent',
   projectName: 'gatekeeper',
   themeConfig: {
     colorMode: {
@@ -57,7 +57,7 @@ module.exports = {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
           editUrl:
-            'https://sozercan.github.io/gatekeeper/website/docs',  // TODO(sertac): update to openpolicyagent before merging
+            'https://open-policy-agent.github.io/gatekeeper/website/docs',
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),

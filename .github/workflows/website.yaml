@@ -2,9 +2,8 @@ name: generate_website
 
 on:
   push:
-    # branches:
-    #   - master
-    # TODO(sertac): uncomment before merging
+    branches:
+      - master
     paths:
       - ".github/workflows/website.yaml"
       - "website/**"
