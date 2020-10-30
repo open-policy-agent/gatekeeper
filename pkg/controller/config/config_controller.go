@@ -168,7 +168,7 @@ type ReconcileConfig struct {
 	watcher          *watch.Registrar
 	watched          *watch.Set
 	needsReplay      *watch.Set
-	dirty            bool
+	wiped            bool
 	tracker          *readiness.Tracker
 	processExcluder  *process.Excluder
 }
@@ -251,20 +251,20 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	// If the watch set has not changed, we're done here.
 	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
-		if !r.dirty {
+		if !r.wiped && r.needsReplay != nil {
 			return reconcile.Result{}, nil
 		}
 	} else {
 		// only re-calculate replays if our watch set has changed
 		r.needsReplay = nil
+		r.wiped = false
 	}
-	r.dirty = true
 
 	// --- Start watching the new set ---
 
 	// This must happen first - signals to the opa client in the sync controller
 	// to drop events from no-longer-watched resources that may be in its queue.
-	if r.needsReplay != nil {
+	if r.needsReplay == nil {
 		r.needsReplay = r.watched.Intersection(newSyncOnly)
 	}
 	r.watched.Replace(newSyncOnly)
@@ -275,13 +275,16 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	// *Note the following steps are not transactional with respect to admission control*
 
 	// Wipe all data to avoid stale state
-	if _, err := r.opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
-		return reconcile.Result{}, err
-	}
+	if !r.wiped {
+		if _, err := r.opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
+			return reconcile.Result{}, err
+		}
 
-	// reset sync cache before sending the metric
-	r.syncMetricsCache.ResetCache()
-	r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+		// reset sync cache before sending the metric
+		r.syncMetricsCache.ResetCache()
+		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+	}
+	r.wiped = true
 
 	// Important: dynamic watches update must happen *after* updating our watchSet.
 	// Otherwise the sync controller will drop events for the newly watched kinds.
@@ -298,7 +301,7 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
 
-	r.dirty = false
+	r.wiped = false
 	return reconcile.Result{}, nil
 }
 
@@ -342,7 +345,9 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 				Status: metrics.ActiveStatus,
 			})
 		}
+		r.needsReplay.Remove(gvk)
 	}
+	r.needsReplay = nil
 	return nil
 }
 
