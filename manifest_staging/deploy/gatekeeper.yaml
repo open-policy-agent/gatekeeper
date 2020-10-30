@@ -802,7 +802,7 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
-  timeoutSeconds: 5
+  timeoutSeconds: 3
 - clientConfig:
     caBundle: Cg==
     service:
@@ -822,4 +822,4 @@ webhooks:
     resources:
     - namespaces
   sideEffects: None
-  timeoutSeconds: 5
+  timeoutSeconds: 3
