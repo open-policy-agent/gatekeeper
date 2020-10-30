@@ -7,11 +7,7 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
   creationTimestamp: null
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: configs.config.gatekeeper.sh
 spec:
   group: config.gatekeeper.sh

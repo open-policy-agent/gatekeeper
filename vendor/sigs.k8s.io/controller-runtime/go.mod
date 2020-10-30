@@ -3,8 +3,7 @@ module sigs.k8s.io/controller-runtime
 go 1.13
 
 require (
-	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/evanphx/json-patch v4.5.0+incompatible
+	github.com/evanphx/json-patch v4.9.0+incompatible
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.0
@@ -25,12 +24,10 @@ require (
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	gomodules.xyz/jsonpatch/v2 v2.0.1
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
-	k8s.io/api v0.18.4
-	k8s.io/apiextensions-apiserver v0.18.4
-	k8s.io/apimachinery v0.18.4
-	k8s.io/client-go v0.18.4
+	k8s.io/api v0.18.6
+	k8s.io/apiextensions-apiserver v0.18.6
+	k8s.io/apimachinery v0.18.6
+	k8s.io/client-go v0.18.6
 	k8s.io/utils v0.0.0-20200603063816-c1c6865ac451
 	sigs.k8s.io/yaml v1.2.0
 )
-
-replace github.com/evanphx/json-patch => github.com/evanphx/json-patch v0.0.0-20190815234213-e83c0a1c26c8

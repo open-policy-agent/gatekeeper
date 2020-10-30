@@ -71,8 +71,8 @@ type Controller struct {
 
 	// TODO(community): Consider initializing a logger with the Controller Name as the tag
 
-	// watches maintains a list of sources, handlers, and predicates to start when the controller is started.
-	watches []watchDescription
+	// startWatches maintains a list of sources, handlers, and predicates to start when the controller is started.
+	startWatches []watchDescription
 
 	// Log is used to log messages to users during reconciliation, or for example when a watch is started.
 	Log logr.Logger
@@ -108,13 +108,16 @@ func (c *Controller) Watch(src source.Source, evthdler handler.EventHandler, prc
 		}
 	}
 
-	c.watches = append(c.watches, watchDescription{src: src, handler: evthdler, predicates: prct})
-	if c.Started {
-		c.Log.Info("Starting EventSource", "source", src)
-		return src.Start(evthdler, c.Queue, prct...)
+	// Controller hasn't started yet, store the watches locally and return.
+	//
+	// These watches are going to be held on the controller struct until the manager or user calls Start(...).
+	if !c.Started {
+		c.startWatches = append(c.startWatches, watchDescription{src: src, handler: evthdler, predicates: prct})
+		return nil
 	}
 
-	return nil
+	c.Log.Info("Starting EventSource", "source", src)
+	return src.Start(evthdler, c.Queue, prct...)
 }
 
 // Start implements controller.Controller
@@ -135,7 +138,7 @@ func (c *Controller) Start(stop <-chan struct{}) error {
 		// NB(directxman12): launch the sources *before* trying to wait for the
 		// caches to sync so that they have a chance to register their intendeded
 		// caches.
-		for _, watch := range c.watches {
+		for _, watch := range c.startWatches {
 			c.Log.Info("Starting EventSource", "source", watch.src)
 			if err := watch.src.Start(watch.handler, c.Queue, watch.predicates...); err != nil {
 				return err
@@ -145,7 +148,7 @@ func (c *Controller) Start(stop <-chan struct{}) error {
 		// Start the SharedIndexInformer factories to begin populating the SharedIndexInformer caches
 		c.Log.Info("Starting Controller")
 
-		for _, watch := range c.watches {
+		for _, watch := range c.startWatches {
 			syncingSource, ok := watch.src.(source.SyncingSource)
 			if !ok {
 				continue
@@ -158,6 +161,12 @@ func (c *Controller) Start(stop <-chan struct{}) error {
 				return err
 			}
 		}
+
+		// All the watches have been started, we can reset the local slice.
+		//
+		// We should never hold watches more than necessary, each watch source can hold a backing cache,
+		// which won't be garbage collected if we hold a reference to it.
+		c.startWatches = nil
 
 		if c.JitterPeriod == 0 {
 			c.JitterPeriod = 1 * time.Second
@@ -228,11 +237,13 @@ func (c *Controller) reconcileHandler(obj interface{}) bool {
 		return true
 	}
 
+	log := c.Log.WithValues("name", req.Name, "namespace", req.Namespace)
+
 	// RunInformersAndControllers the syncHandler, passing it the namespace/Name string of the
 	// resource to be synced.
 	if result, err := c.Do.Reconcile(req); err != nil {
 		c.Queue.AddRateLimited(req)
-		c.Log.Error(err, "Reconciler error", "name", req.Name, "namespace", req.Namespace)
+		log.Error(err, "Reconciler error")
 		ctrlmetrics.ReconcileErrors.WithLabelValues(c.Name).Inc()
 		ctrlmetrics.ReconcileTotal.WithLabelValues(c.Name, "error").Inc()
 		return false
@@ -256,7 +267,7 @@ func (c *Controller) reconcileHandler(obj interface{}) bool {
 	c.Queue.Forget(obj)
 
 	// TODO(directxman12): What does 1 mean?  Do we want level constants?  Do we want levels at all?
-	c.Log.V(1).Info("Successfully Reconciled", "name", req.Name, "namespace", req.Namespace)
+	log.V(1).Info("Successfully Reconciled")
 
 	ctrlmetrics.ReconcileTotal.WithLabelValues(c.Name, "success").Inc()
 	// Return true, don't take a break

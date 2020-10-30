@@ -64,6 +64,8 @@ rules:
   - watch
 - apiGroups:
   - policy
+  resourceNames:
+  - gatekeeper-admin
   resources:
   - podsecuritypolicies
   verbs:
