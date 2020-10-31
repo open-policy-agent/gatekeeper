@@ -32,8 +32,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
-	// TODO implement
-	return nil
+	return Mutate(m, obj)
 }
 func (m *AssignMutator) ID() ID {
 	return m.id
