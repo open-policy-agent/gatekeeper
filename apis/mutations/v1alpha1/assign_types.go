@@ -47,8 +47,9 @@ type Parameters struct {
 	IfIn []string `json:"ifIn,omitempty"`
 	// IfNotIn Only mutate if the current value is NOT in the supplied list
 	IfNotIn []string `json:"ifNotIn,omitempty"`
-	// Value to assign
-	Value runtime.RawExtension `json:"value,omitempty"`
+	// Assign holds the value to be assigned
+	// +kubebuilder:validation:XPreserveUnknownFields
+	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=MustExist;MustNotExist

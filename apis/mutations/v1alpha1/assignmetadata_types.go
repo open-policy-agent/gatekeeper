@@ -25,13 +25,15 @@ import (
 
 // AssignMetadataSpec defines the desired state of AssignMetadata
 type AssignMetadataSpec struct {
-	Match              Match              `json:"match,omitempty"`
-	Location           string             `json:"location,omitempty"`
-	MetadataParameters MetadataParameters `json:"parameters,omitempty"`
+	Match      Match              `json:"match,omitempty"`
+	Location   string             `json:"location,omitempty"`
+	Parameters MetadataParameters `json:"parameters,omitempty"`
 }
 
 type MetadataParameters struct {
-	Value runtime.RawExtension `json:"value,omitempty"`
+	// Assign holds the value to be assigned
+	// +kubebuilder:validation:XPreserveUnknownFields
+	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
 
 // AssignMetadataStatus defines the observed state of AssignMetadata

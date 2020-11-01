@@ -140,6 +140,10 @@ spec:
               type: object
             parameters:
               properties:
+                assign:
+                  description: Assign holds the value to be assigned
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
                 ifIn:
                   description: IfIn Only mutate if the current value is in the supplied list
                   items:
@@ -163,9 +167,6 @@ spec:
                         type: string
                     type: object
                   type: array
-                value:
-                  description: Value to assign
-                  type: object
               type: object
           type: object
         status:

@@ -121,8 +121,10 @@ spec:
               type: object
             parameters:
               properties:
-                value:
+                assign:
+                  description: Assign holds the value to be assigned
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
               type: object
           type: object
         status:
