@@ -344,7 +344,7 @@ func saveRequired(c *ast.Compiler, ic *inliningControl, icIgnoreInternal bool, s
 			case ast.Ref:
 				if ss.Contains(node, b) {
 					found = true
-				} else if ic.Disabled(v, icIgnoreInternal) {
+				} else if ic.Disabled(v.ConstantPrefix(), icIgnoreInternal) {
 					found = true
 				} else {
 					for _, rule := range c.GetRulesDynamic(v) {
@@ -384,6 +384,7 @@ func ignoreDuringPartial(bi *ast.Builtin) bool {
 }
 
 type inliningControl struct {
+	shallow bool
 	disable []disableInliningFrame
 }
 
