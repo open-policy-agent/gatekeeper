@@ -98,7 +98,7 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 // events is the channel from which sync controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // events and regEvents point to same event channel except for testing
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, regEvents chan<- event.GenericEvent) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
@@ -168,7 +168,7 @@ type ReconcileConfig struct {
 	watcher          *watch.Registrar
 	watched          *watch.Set
 	needsReplay      *watch.Set
-	wiped            bool
+	needsWipe        bool
 	tracker          *readiness.Tracker
 	processExcluder  *process.Excluder
 }
@@ -251,13 +251,17 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	// If the watch set has not changed, we're done here.
 	if r.watched.Equals(newSyncOnly) && r.processExcluder.Equals(newExcluder) {
-		if !r.wiped && r.needsReplay != nil {
+		// ...unless we have pending wipe / replay operations from a previous reconcile.
+		if !(r.needsWipe || r.needsReplay != nil) {
 			return reconcile.Result{}, nil
 		}
+
+		// If we reach here, the watch set hasn't changed since last reconcile, but we
+		// have unfinished wipe/replay business from the last change.
 	} else {
-		// only re-calculate replays if our watch set has changed
+		// The watch set _has_ changed, so recalculate the replay set.
 		r.needsReplay = nil
-		r.wiped = false
+		r.needsWipe = true
 	}
 
 	// --- Start watching the new set ---
@@ -274,17 +278,10 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 
 	// *Note the following steps are not transactional with respect to admission control*
 
-	// Wipe all data to avoid stale state
-	if !r.wiped {
-		if _, err := r.opa.RemoveData(context.Background(), target.WipeData{}); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		// reset sync cache before sending the metric
-		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+	// Wipe all data to avoid stale state if needed. Happens once per watch-set-change.
+	if err := r.wipeCacheIfNeeded(ctx); err != nil {
+		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
 	}
-	r.wiped = true
 
 	// Important: dynamic watches update must happen *after* updating our watchSet.
 	// Otherwise the sync controller will drop events for the newly watched kinds.
@@ -295,14 +292,28 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	// Replay cached data for any resources that were previously watched and still in the watch set.
-	// This is necessary because we wiped their data from Opa above.
+	// This is necessary because we wipe their data from Opa above.
 	// TODO(OREN): Improve later by selectively removing subtrees of data instead of a full wipe.
-	if err := r.replayData(context.TODO()); err != nil {
+	if err := r.replayData(ctx); err != nil {
 		return reconcile.Result{}, fmt.Errorf("replaying data: %w", err)
 	}
 
-	r.wiped = false
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
+	if r.needsWipe {
+		if _, err := r.opa.RemoveData(ctx, target.WipeData{}); err != nil {
+			return err
+		}
+
+		// reset sync cache before sending the metric
+		r.syncMetricsCache.ResetCache()
+		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+
+		r.needsWipe = false
+	}
+	return nil
 }
 
 // replayData replays all watched and cached data into Opa following a config set change.
