@@ -25,6 +25,7 @@ import (
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -242,6 +243,13 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 		log.Info("disabling readiness stats")
 		r.tracker.DisableStats(ctx)
 	}
+
+	// Enable the mutation feature
+	var mutationEnabled bool
+	if exists && instance.GetDeletionTimestamp().IsZero() {
+		mutationEnabled = instance.Spec.Mutation.MutationEnabled
+	}
+	mutation.MutationEnabled = mutationEnabled
 
 	// Remove expectations for resources we no longer watch.
 	diff := r.watched.Difference(newSyncOnly)

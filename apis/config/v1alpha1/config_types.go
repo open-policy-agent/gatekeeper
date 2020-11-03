@@ -34,6 +34,9 @@ type ConfigSpec struct {
 
 	// Configuration for readiness tracker
 	Readiness ReadinessSpec `json:"readiness,omitempty"`
+
+	// Configuration for mutation feature
+	Mutation Mutation `json:"mutation,omitempty"`
 }
 
 type Validation struct {
@@ -68,6 +71,10 @@ type MatchEntry struct {
 
 type ReadinessSpec struct {
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
+}
+
+type Mutation struct {
+	MutationEnabled bool `json:"mutationEnabled,omitempty"`
 }
 
 // ConfigStatus defines the observed state of Config
