@@ -175,10 +175,10 @@ teardown() {
   wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
 
   violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
-  [[ "$violations" -eq 6 ]]
+  [[ "$violations" -eq 7 ]]
 
   totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
-  [[ "$totalViolations" -eq 6 ]]
+  [[ "$totalViolations" -eq 7 ]]
 }
 
 @test "emit events test" {
