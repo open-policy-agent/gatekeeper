@@ -63,9 +63,13 @@ spec:
                     properties:
                       apiGroups:
                         description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
-                        type: string
+                        items:
+                          type: string
+                        type: array
                       kinds:
-                        type: string
+                        items:
+                          type: string
+                        type: array
                     type: object
                   type: array
                 labelSelector:
