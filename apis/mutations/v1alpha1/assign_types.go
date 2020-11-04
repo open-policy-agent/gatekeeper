@@ -47,7 +47,7 @@ type Parameters struct {
 	IfIn []string `json:"ifIn,omitempty"`
 	// IfNotIn Only mutate if the current value is NOT in the supplied list
 	IfNotIn []string `json:"ifNotIn,omitempty"`
-	// Assign holds the value to be assigned
+	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
 	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
@@ -77,9 +77,10 @@ type AssignStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:path="assign"
 // +kubebuilder:resource:scope="Cluster"
 
-// Assign is the Schema for the assigns API
+// Assign is the Schema for the assign API
 type Assign struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

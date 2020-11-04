@@ -6,18 +6,18 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: assigns.mutations.gatekeeper.sh
+  name: assign.mutations.gatekeeper.sh
 spec:
   group: mutations.gatekeeper.sh
   names:
     kind: Assign
     listKind: AssignList
-    plural: assigns
+    plural: assign
     singular: assign
   scope: Cluster
   validation:
     openAPIV3Schema:
-      description: Assign is the Schema for the assigns API
+      description: Assign is the Schema for the assign API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -145,7 +145,7 @@ spec:
             parameters:
               properties:
                 assign:
-                  description: Assign holds the value to be assigned
+                  description: Assign.value holds the value to be assigned
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
                 ifIn:

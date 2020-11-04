@@ -31,7 +31,7 @@ type AssignMetadataSpec struct {
 }
 
 type MetadataParameters struct {
-	// Assign holds the value to be assigned
+	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
 	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
@@ -45,7 +45,7 @@ type AssignMetadataStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
 
-// AssignMetadata is the Schema for the assignmetadatas API
+// AssignMetadata is the Schema for the assignmetadata API
 type AssignMetadata struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
