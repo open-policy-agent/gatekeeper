@@ -53,8 +53,7 @@ type MutatorWithSchema interface {
 func MakeID(obj runtime.Object) (ID, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s - %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
-
+		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
 	}
 	return ID{
 		Group:     obj.GetObjectKind().GroupVersionKind().Group,
