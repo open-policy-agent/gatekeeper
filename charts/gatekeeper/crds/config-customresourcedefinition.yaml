@@ -24,10 +24,14 @@ spec:
       description: Config is the Schema for the configs API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -58,7 +62,8 @@ spec:
               description: Configuration for syncing k8s objects
               properties:
                 syncOnly:
-                  description: If non-empty, only entries on this list will be replicated into OPA
+                  description: If non-empty, only entries on this list will be replicated
+                    into OPA
                   items:
                     properties:
                       group:
@@ -74,11 +79,13 @@ spec:
               description: Configuration for validation
               properties:
                 traces:
-                  description: List of requests to trace. Both "user" and "kinds" must be specified
+                  description: List of requests to trace. Both "user" and "kinds"
+                    must be specified
                   items:
                     properties:
                       dump:
-                        description: Also dump the state of OPA with the trace. Set to `All` to dump everything.
+                        description: Also dump the state of OPA with the trace. Set
+                          to `All` to dump everything.
                         type: string
                       kind:
                         description: Only trace requests of the following GroupVersionKind
