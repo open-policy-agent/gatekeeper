@@ -22,46 +22,6 @@ type wasmBuiltin struct {
 	WasmFunction string
 }
 
-// internalBuiltins are the built-in functions implemented in wasm.
-var internalBuiltins = map[string]wasmBuiltin{
-	ast.Plus.Name:            wasmBuiltin{ast.Plus, "opa_arith_plus"},
-	ast.Minus.Name:           wasmBuiltin{ast.Minus, "opa_arith_minus"},
-	ast.Multiply.Name:        wasmBuiltin{ast.Multiply, "opa_arith_multiply"},
-	ast.Divide.Name:          wasmBuiltin{ast.Divide, "opa_arith_divide"},
-	ast.Abs.Name:             wasmBuiltin{ast.Abs, "opa_arith_abs"},
-	ast.Round.Name:           wasmBuiltin{ast.Abs, "opa_arith_round"},
-	ast.Rem.Name:             wasmBuiltin{ast.Rem, "opa_arith_rem"},
-	ast.ArrayConcat.Name:     wasmBuiltin{ast.ArrayConcat, "opa_array_concat"},
-	ast.ArraySlice.Name:      wasmBuiltin{ast.ArraySlice, "opa_array_slice"},
-	ast.SetDiff.Name:         wasmBuiltin{ast.SetDiff, "opa_set_diff"},
-	ast.And.Name:             wasmBuiltin{ast.And, "opa_set_intersection"},
-	ast.Or.Name:              wasmBuiltin{ast.Or, "opa_set_union"},
-	ast.Intersection.Name:    wasmBuiltin{ast.Intersection, "opa_sets_intersection"},
-	ast.Union.Name:           wasmBuiltin{ast.Union, "opa_sets_union"},
-	ast.IsNumber.Name:        wasmBuiltin{ast.IsNumber, "opa_types_is_number"},
-	ast.IsString.Name:        wasmBuiltin{ast.IsString, "opa_types_is_string"},
-	ast.IsBoolean.Name:       wasmBuiltin{ast.IsBoolean, "opa_types_is_boolean"},
-	ast.IsArray.Name:         wasmBuiltin{ast.IsArray, "opa_types_is_array"},
-	ast.IsSet.Name:           wasmBuiltin{ast.IsSet, "opa_types_is_set"},
-	ast.IsObject.Name:        wasmBuiltin{ast.IsObject, "opa_types_is_object"},
-	ast.IsNull.Name:          wasmBuiltin{ast.IsNull, "opa_types_is_null"},
-	ast.TypeNameBuiltin.Name: wasmBuiltin{ast.TypeNameBuiltin, "opa_types_name"},
-	ast.BitsOr.Name:          wasmBuiltin{ast.BitsOr, "opa_bits_or"},
-	ast.BitsAnd.Name:         wasmBuiltin{ast.BitsAnd, "opa_bits_and"},
-	ast.BitsNegate.Name:      wasmBuiltin{ast.BitsNegate, "opa_bits_negate"},
-	ast.BitsXOr.Name:         wasmBuiltin{ast.BitsXOr, "opa_bits_xor"},
-	ast.BitsShiftLeft.Name:   wasmBuiltin{ast.BitsShiftLeft, "opa_bits_shiftleft"},
-	ast.BitsShiftRight.Name:  wasmBuiltin{ast.BitsShiftRight, "opa_bits_shiftright"},
-	ast.Count.Name:           wasmBuiltin{ast.Count, "opa_agg_count"},
-	ast.Sum.Name:             wasmBuiltin{ast.Sum, "opa_agg_sum"},
-	ast.Product.Name:         wasmBuiltin{ast.Product, "opa_agg_product"},
-	ast.Max.Name:             wasmBuiltin{ast.Max, "opa_agg_max"},
-	ast.Min.Name:             wasmBuiltin{ast.Min, "opa_agg_min"},
-	ast.Sort.Name:            wasmBuiltin{ast.Sort, "opa_agg_sort"},
-	ast.All.Name:             wasmBuiltin{ast.All, "opa_agg_all"},
-	ast.Any.Name:             wasmBuiltin{ast.Any, "opa_agg_any"},
-}
-
 // Planner implements a query planner for Rego queries.
 type Planner struct {
 	policy    *ir.Policy              // result of planning
@@ -577,8 +537,7 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 			}
 		}
 
-		return p.planWithRec(e, paths, locals, 0, func() error {
-
+		err := p.planWithRec(e, paths, locals, 0, func() error {
 			if len(dataRefs) > 0 {
 				p.funcs.Pop()
 				for i := len(dataRefs) - 1; i >= 0; i-- {
@@ -586,13 +545,34 @@ func (p *Planner) planWith(e *ast.Expr, iter planiter) error {
 				}
 			}
 
-			return p.planWithUndoRec(restore, 0, iter)
+			err := p.planWithUndoRec(restore, 0, func() error {
+
+				err := iter()
+
+				if len(dataRefs) > 0 {
+					p.funcs.Push(map[string]string{})
+					for _, ref := range dataRefs {
+						p.rules.Push(ref)
+					}
+				}
+				return err
+			})
+
+			return err
 		})
+
+		if len(dataRefs) > 0 {
+			p.funcs.Pop()
+			for i := len(dataRefs) - 1; i >= 0; i-- {
+				p.rules.Pop(dataRefs[i])
+			}
+		}
+		return err
+
 	})
 }
 
 func (p *Planner) planWithRec(e *ast.Expr, targets [][]int, values []ir.Local, index int, iter planiter) error {
-
 	if index >= len(e.With) {
 		return p.planExpr(e.NoWith(), iter)
 	}
@@ -736,9 +716,6 @@ func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
 				p.vars.GetOrEmpty(ast.InputRootDocument.Value.(ast.Var)),
 				p.vars.GetOrEmpty(ast.DefaultRootDocument.Value.(ast.Var)),
 			}
-		} else if decl, ok := internalBuiltins[operator]; ok {
-			arity = len(decl.Decl.Args())
-			name = decl.WasmFunction
 		} else if decl, ok := p.decls[operator]; ok {
 			arity = len(decl.Decl.Args())
 			name = operator
@@ -811,7 +788,7 @@ func (p *Planner) planUnify(a, b *ast.Term, iter planiter) error {
 		})
 	case ast.Var:
 		return p.planUnifyVar(va, b, iter)
-	case ast.Array:
+	case *ast.Array:
 		switch vb := b.Value.(type) {
 		case ast.Var:
 			return p.planUnifyVar(vb, a, iter)
@@ -819,8 +796,8 @@ func (p *Planner) planUnify(a, b *ast.Term, iter planiter) error {
 			return p.planTerm(b, func() error {
 				return p.planUnifyLocalArray(p.ltarget, va, iter)
 			})
-		case ast.Array:
-			if len(va) == len(vb) {
+		case *ast.Array:
+			if va.Len() == vb.Len() {
 				return p.planUnifyArraysRec(va, vb, 0, iter)
 			}
 			return nil
@@ -886,7 +863,7 @@ func (p *Planner) planUnifyLocal(a ir.Local, b *ast.Term, iter planiter) error {
 			Target: lv,
 		})
 		return iter()
-	case ast.Array:
+	case *ast.Array:
 		return p.planUnifyLocalArray(a, vb, iter)
 	case ast.Object:
 		return p.planUnifyLocalObject(a, vb, iter)
@@ -895,7 +872,7 @@ func (p *Planner) planUnifyLocal(a ir.Local, b *ast.Term, iter planiter) error {
 	return fmt.Errorf("not implemented: unifyLocal(%v, %v)", a, b)
 }
 
-func (p *Planner) planUnifyLocalArray(a ir.Local, b ast.Array, iter planiter) error {
+func (p *Planner) planUnifyLocalArray(a ir.Local, b *ast.Array, iter planiter) error {
 	p.appendStmt(&ir.IsArrayStmt{
 		Source: a,
 	})
@@ -909,7 +886,7 @@ func (p *Planner) planUnifyLocalArray(a ir.Local, b ast.Array, iter planiter) er
 	})
 
 	p.appendStmt(&ir.MakeNumberIntStmt{
-		Value:  int64(len(b)),
+		Value:  int64(b.Len()),
 		Target: blen,
 	})
 
@@ -929,8 +906,8 @@ func (p *Planner) planUnifyLocalArray(a ir.Local, b ast.Array, iter planiter) er
 	return p.planUnifyLocalArrayRec(a, 0, b, lkey, lval, iter)
 }
 
-func (p *Planner) planUnifyLocalArrayRec(a ir.Local, index int, b ast.Array, lkey, lval ir.Local, iter planiter) error {
-	if len(b) == index {
+func (p *Planner) planUnifyLocalArrayRec(a ir.Local, index int, b *ast.Array, lkey, lval ir.Local, iter planiter) error {
+	if b.Len() == index {
 		return iter()
 	}
 
@@ -945,7 +922,7 @@ func (p *Planner) planUnifyLocalArrayRec(a ir.Local, index int, b ast.Array, lke
 		Target: lval,
 	})
 
-	return p.planUnifyLocal(lval, b[index], func() error {
+	return p.planUnifyLocal(lval, b.Elem(index), func() error {
 		return p.planUnifyLocalArrayRec(a, index+1, b, lkey, lval, iter)
 	})
 }
@@ -1002,11 +979,11 @@ func (p *Planner) planUnifyLocalObjectRec(a ir.Local, index int, keys []*ast.Ter
 	})
 }
 
-func (p *Planner) planUnifyArraysRec(a, b ast.Array, index int, iter planiter) error {
-	if index == len(a) {
+func (p *Planner) planUnifyArraysRec(a, b *ast.Array, index int, iter planiter) error {
+	if index == a.Len() {
 		return iter()
 	}
-	return p.planUnify(a[index], b[index], func() error {
+	return p.planUnify(a.Elem(index), b.Elem(index), func() error {
 		return p.planUnifyArraysRec(a, b, index+1, iter)
 	})
 }
@@ -1052,7 +1029,7 @@ func (p *Planner) planTerm(t *ast.Term, iter planiter) error {
 		return p.planVar(v, iter)
 	case ast.Ref:
 		return p.planRef(v, iter)
-	case ast.Array:
+	case *ast.Array:
 		return p.planArray(v, iter)
 	case ast.Object:
 		return p.planObject(v, iter)
@@ -1160,25 +1137,25 @@ func (p *Planner) planVar(v ast.Var, iter planiter) error {
 	return iter()
 }
 
-func (p *Planner) planArray(arr ast.Array, iter planiter) error {
+func (p *Planner) planArray(arr *ast.Array, iter planiter) error {
 
 	larr := p.newLocal()
 
 	p.appendStmt(&ir.MakeArrayStmt{
-		Capacity: int32(len(arr)),
+		Capacity: int32(arr.Len()),
 		Target:   larr,
 	})
 
 	return p.planArrayRec(arr, 0, larr, iter)
 }
 
-func (p *Planner) planArrayRec(arr ast.Array, index int, larr ir.Local, iter planiter) error {
-	if index == len(arr) {
+func (p *Planner) planArrayRec(arr *ast.Array, index int, larr ir.Local, iter planiter) error {
+	if index == arr.Len() {
 		p.ltarget = larr
 		return iter()
 	}
 
-	return p.planTerm(arr[index], func() error {
+	return p.planTerm(arr.Elem(index), func() error {
 
 		p.appendStmt(&ir.ArrayAppendStmt{
 			Value: p.ltarget,
