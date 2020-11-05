@@ -19,13 +19,18 @@ spec:
   scope: Namespaced
   validation:
     openAPIV3Schema:
-      description: ConstraintPodStatus is the Schema for the constraintpodstatuses API
+      description: ConstraintPodStatus is the Schema for the constraintpodstatuses
+        API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -33,13 +38,16 @@ spec:
           description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus
           properties:
             constraintUID:
-              description: Storing the constraint UID allows us to detect drift, such as when a constraint has been recreated after its CRD was deleted out from under it, interrupting the watch
+              description: Storing the constraint UID allows us to detect drift, such
+                as when a constraint has been recreated after its CRD was deleted
+                out from under it, interrupting the watch
               type: string
             enforced:
               type: boolean
             errors:
               items:
-                description: Error represents a single error caught while adding a constraint to OPA
+                description: Error represents a single error caught while adding a
+                  constraint to OPA
                 properties:
                   code:
                     type: string

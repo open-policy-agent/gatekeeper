@@ -19,22 +19,29 @@ spec:
   scope: Namespaced
   validation:
     openAPIV3Schema:
-      description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API
+      description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses
+        API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
         status:
-          description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
+          description: ConstraintTemplatePodStatusStatus defines the observed state
+            of ConstraintTemplatePodStatus
           properties:
             errors:
               items:
-                description: CreateCRDError represents a single error caught during parsing, compiling, etc.
+                description: CreateCRDError represents a single error caught during
+                  parsing, compiling, etc.
                 properties:
                   code:
                     type: string
@@ -48,7 +55,8 @@ spec:
                 type: object
               type: array
             id:
-              description: 'Important: Run "make" to regenerate code after modifying this file'
+              description: 'Important: Run "make" to regenerate code after modifying
+                this file'
               type: string
             observedGeneration:
               format: int64
@@ -58,7 +66,10 @@ spec:
                 type: string
               type: array
             templateUID:
-              description: UID is a type that holds unique ID values, including UUIDs.  Because we don't ONLY use UUIDs, this is an alias to string.  Being a type captures intent and helps make sure that UIDs and names do not get conflated.
+              description: UID is a type that holds unique ID values, including UUIDs.  Because
+                we don't ONLY use UUIDs, this is an alias to string.  Being a type
+                captures intent and helps make sure that UIDs and names do not get
+                conflated.
               type: string
           type: object
       type: object
