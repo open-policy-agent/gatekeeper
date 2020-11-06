@@ -66,7 +66,7 @@ spec:
             - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
+          resources: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
 ---
 apiVersion: apps/v1
@@ -93,5 +93,5 @@ spec:
             - --logtostderr
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_CONTAINER_RESOURCES
+          resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING

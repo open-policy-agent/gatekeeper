@@ -445,6 +445,10 @@ func (p *Parser) parseHead(defaultRule bool) *Head {
 			}
 		}
 		p.scan()
+
+		if p.s.tok == tokens.LBrack {
+			return nil
+		}
 	}
 
 	if p.s.tok == tokens.LBrack {
@@ -954,7 +958,7 @@ func (p *Parser) parseRef(head *Term, offset int) (term *Term) {
 	}()
 
 	switch h := head.Value.(type) {
-	case Var, Array, Object, Set, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
+	case Var, *Array, Object, Set, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
 		// ok
 	default:
 		p.errorf(loc, "illegal ref (head cannot be %v)", TypeName(h))
@@ -1055,7 +1059,7 @@ func (p *Parser) parseArray() (term *Term) {
 	case tokens.Comma:
 		p.scan()
 		if terms := p.parseTermList(tokens.RBrack, []*Term{head}); terms != nil {
-			return NewTerm(Array(terms))
+			return NewTerm(NewArray(terms...))
 		}
 		return nil
 	case tokens.Or:
@@ -1074,7 +1078,7 @@ func (p *Parser) parseArray() (term *Term) {
 	default:
 		p.restore(s)
 		if terms := p.parseTermList(tokens.RBrack, nil); terms != nil {
-			return NewTerm(Array(terms))
+			return NewTerm(NewArray(terms...))
 		}
 		return nil
 	}

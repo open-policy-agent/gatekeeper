@@ -2,20 +2,25 @@ name: build_test_release
 on:
   push:
     paths-ignore:
+      - ".github/workflows/website.yaml"
       - "docs/**"
       - "library/**"
       - "demo/**"
       - "deprecated/**"
       - "example/**"
+      - "website/**"
       - "**.md"
   pull_request:
     paths-ignore:
+      - ".github/workflows/website.yaml"
       - "docs/**"
       - "library/**"
       - "demo/**"
       - "deprecated/**"
       - "example/**"
+      - "website/**"
       - "**.md"
+
 env:
   GITHUB_REPO: open-policy-agent/gatekeeper
   IMAGE_REPO: openpolicyagent/gatekeeper
