@@ -35,6 +35,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
@@ -241,6 +242,8 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
+	mutationCache := mutation.NewSystem()
+
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
 	if !ok {
@@ -269,6 +272,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ControllerSwitch: sw,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
+		MutationCache:    mutationCache,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
@@ -277,7 +281,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder); err != nil {
+		if err := webhook.AddToManager(mgr, client, processExcluder, mutationCache); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}
