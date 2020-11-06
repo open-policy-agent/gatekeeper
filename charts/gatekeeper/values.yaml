@@ -11,6 +11,7 @@ image:
   repository: openpolicyagent/gatekeeper
   release: v3.2.0
   pullPolicy: IfNotPresent
+  pullSecrets: []
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}
 tolerations: []
