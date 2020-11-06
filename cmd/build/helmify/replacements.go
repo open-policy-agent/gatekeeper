@@ -12,7 +12,9 @@ var replacements = map[string]string{
       affinity:
 {{ toYaml .Values.affinity | indent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}`,
+{{ toYaml .Values.tolerations | indent 8 }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}`,
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 

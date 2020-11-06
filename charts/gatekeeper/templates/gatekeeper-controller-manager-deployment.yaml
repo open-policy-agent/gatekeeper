@@ -102,6 +102,8 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}
       nodeSelector: 
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:
