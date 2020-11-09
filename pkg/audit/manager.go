@@ -517,10 +517,12 @@ func (am *Manager) writeAuditResults(ctx context.Context, resourceList []schema.
 	}
 
 	if am.ucloop.uc != nil {
+		am.log.Info("terminating audit ucloop thread")
 		close(am.ucloop.stop)
 		select {
 		case <-am.ucloop.stopped:
 		case <-time.After(time.Duration(*auditInterval) * time.Second):
+			am.log.Info("terminating audit ucloop thread due to auditInterval timeout")
 		}
 	}
 
