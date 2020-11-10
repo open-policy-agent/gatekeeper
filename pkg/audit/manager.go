@@ -682,7 +682,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
-						ucloop.log.Error(err, "could not find latest constraint", "name", name, "namespace", namespace)
+						ucloop.log.Info("could not find constraint", "name", name, "namespace", namespace)
 						delete(ucloop.uc, item.GetSelfLink())
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
