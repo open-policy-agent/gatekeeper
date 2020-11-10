@@ -30,7 +30,13 @@ type Parser struct {
 	err       error
 }
 
-func NewParser(input string) *Parser {
+// Parse parses the provided input and returns an abstract representation if successful.
+func Parse(input string) (*Root, error) {
+	p := newParser(input)
+	return p.Parse()
+}
+
+func newParser(input string) *Parser {
 	s := token.NewScanner(input)
 	p := &Parser{
 		input:   input,

@@ -223,8 +223,7 @@ func TestParser(t *testing.T) {
 
 	for i, tc := range tests {
 		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
-			p := NewParser(tc.input)
-			root, err := p.Parse()
+			root, err := Parse(tc.input)
 			if tc.expectErr != (err != nil) {
 				t.Fatalf("for input: %s\nunexpected error: %v", tc.input, err)
 			}
