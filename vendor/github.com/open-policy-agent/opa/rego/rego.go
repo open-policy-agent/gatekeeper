@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/bundle"
@@ -24,6 +25,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/types"
 	"github.com/open-policy-agent/opa/util"
 )
@@ -80,20 +82,22 @@ type preparedQuery struct {
 // EvalContext defines the set of options allowed to be set at evaluation
 // time. Any other options will need to be set on a new Rego object.
 type EvalContext struct {
-	hasInput         bool
-	rawInput         *interface{}
-	parsedInput      ast.Value
-	metrics          metrics.Metrics
-	txn              storage.Transaction
-	instrument       bool
-	instrumentation  *topdown.Instrumentation
-	partialNamespace string
-	tracers          []topdown.Tracer
-	compiledQuery    compiledQuery
-	unknowns         []string
-	disableInlining  []ast.Ref
-	parsedUnknowns   []*ast.Term
-	indexing         bool
+	hasInput               bool
+	time                   time.Time
+	rawInput               *interface{}
+	parsedInput            ast.Value
+	metrics                metrics.Metrics
+	txn                    storage.Transaction
+	instrument             bool
+	instrumentation        *topdown.Instrumentation
+	partialNamespace       string
+	queryTracers           []topdown.QueryTracer
+	compiledQuery          compiledQuery
+	unknowns               []string
+	disableInlining        []ast.Ref
+	parsedUnknowns         []*ast.Term
+	indexing               bool
+	interQueryBuiltinCache cache.InterQueryCache
 }
 
 // EvalOption defines a function to set an option on an EvalConfig
@@ -137,10 +141,20 @@ func EvalInstrument(instrument bool) EvalOption {
 }
 
 // EvalTracer configures a tracer for a Prepared Query's evaluation
+// Deprecated: Use EvalQueryTracer instead.
 func EvalTracer(tracer topdown.Tracer) EvalOption {
 	return func(e *EvalContext) {
 		if tracer != nil {
-			e.tracers = append(e.tracers, tracer)
+			e.queryTracers = append(e.queryTracers, topdown.WrapLegacyTracer(tracer))
+		}
+	}
+}
+
+// EvalQueryTracer configures a tracer for a Prepared Query's evaluation
+func EvalQueryTracer(tracer topdown.QueryTracer) EvalOption {
+	return func(e *EvalContext) {
+		if tracer != nil {
+			e.queryTracers = append(e.queryTracers, tracer)
 		}
 	}
 }
@@ -186,6 +200,22 @@ func EvalRuleIndexing(enabled bool) EvalOption {
 	}
 }
 
+// EvalTime sets the wall clock time to use during policy evaluation.
+// time.now_ns() calls will return this value.
+func EvalTime(x time.Time) EvalOption {
+	return func(e *EvalContext) {
+		e.time = x
+	}
+}
+
+// EvalInterQueryBuiltinCache sets the inter-query cache that built-in functions can utilize
+// during evaluation.
+func EvalInterQueryBuiltinCache(c cache.InterQueryCache) EvalOption {
+	return func(e *EvalContext) {
+		e.interQueryBuiltinCache = c
+	}
+}
+
 func (pq preparedQuery) Modules() map[string]*ast.Module {
 	mods := make(map[string]*ast.Module)
 
@@ -216,7 +246,7 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 		instrument:       false,
 		instrumentation:  nil,
 		partialNamespace: pq.r.partialNamespace,
-		tracers:          nil,
+		queryTracers:     nil,
 		unknowns:         pq.r.unknowns,
 		parsedUnknowns:   pq.r.parsedUnknowns,
 		compiledQuery:    compiledQuery{},
@@ -435,42 +465,46 @@ type loadPaths struct {
 
 // Rego constructs a query and can be evaluated to obtain results.
 type Rego struct {
-	query                string
-	parsedQuery          ast.Body
-	compiledQueries      map[queryType]compiledQuery
-	pkg                  string
-	parsedPackage        *ast.Package
-	imports              []string
-	parsedImports        []*ast.Import
-	rawInput             *interface{}
-	parsedInput          ast.Value
-	unknowns             []string
-	parsedUnknowns       []*ast.Term
-	disableInlining      []string
-	skipPartialNamespace bool
-	partialNamespace     string
-	modules              []rawModule
-	parsedModules        map[string]*ast.Module
-	compiler             *ast.Compiler
-	store                storage.Store
-	ownStore             bool
-	txn                  storage.Transaction
-	metrics              metrics.Metrics
-	tracers              []topdown.Tracer
-	tracebuf             *topdown.BufferTracer
-	trace                bool
-	instrumentation      *topdown.Instrumentation
-	instrument           bool
-	capture              map[*ast.Expr]ast.Var // map exprs to generated capture vars
-	termVarID            int
-	dump                 io.Writer
-	runtime              *ast.Term
-	builtinDecls         map[string]*ast.Builtin
-	builtinFuncs         map[string]*topdown.Builtin
-	unsafeBuiltins       map[string]struct{}
-	loadPaths            loadPaths
-	bundlePaths          []string
-	bundles              map[string]*bundle.Bundle
+	query                  string
+	parsedQuery            ast.Body
+	compiledQueries        map[queryType]compiledQuery
+	pkg                    string
+	parsedPackage          *ast.Package
+	imports                []string
+	parsedImports          []*ast.Import
+	rawInput               *interface{}
+	parsedInput            ast.Value
+	unknowns               []string
+	parsedUnknowns         []*ast.Term
+	disableInlining        []string
+	shallowInlining        bool
+	skipPartialNamespace   bool
+	partialNamespace       string
+	modules                []rawModule
+	parsedModules          map[string]*ast.Module
+	compiler               *ast.Compiler
+	store                  storage.Store
+	ownStore               bool
+	txn                    storage.Transaction
+	metrics                metrics.Metrics
+	queryTracers           []topdown.QueryTracer
+	tracebuf               *topdown.BufferTracer
+	trace                  bool
+	instrumentation        *topdown.Instrumentation
+	instrument             bool
+	capture                map[*ast.Expr]ast.Var // map exprs to generated capture vars
+	termVarID              int
+	dump                   io.Writer
+	runtime                *ast.Term
+	time                   time.Time
+	builtinDecls           map[string]*ast.Builtin
+	builtinFuncs           map[string]*topdown.Builtin
+	unsafeBuiltins         map[string]struct{}
+	loadPaths              loadPaths
+	bundlePaths            []string
+	bundles                map[string]*bundle.Bundle
+	skipBundleVerification bool
+	interQueryBuiltinCache cache.InterQueryCache
 }
 
 // Function represents a built-in function that is callable in Rego.
@@ -750,6 +784,14 @@ func DisableInlining(paths []string) func(r *Rego) {
 	}
 }
 
+// ShallowInlining prevents rules that depend on unknown values from being inlined.
+// Rules that only depend on known values are inlined.
+func ShallowInlining(yes bool) func(r *Rego) {
+	return func(r *Rego) {
+		r.shallowInlining = yes
+	}
+}
+
 // SkipPartialNamespace disables namespacing of partial evalution results for support
 // rules generated from policy. Synthetic support rules are still namespaced.
 func SkipPartialNamespace(yes bool) func(r *Rego) {
@@ -875,10 +917,20 @@ func Trace(yes bool) func(r *Rego) {
 }
 
 // Tracer returns an argument that adds a query tracer to r.
+// Deprecated: Use QueryTracer instead.
 func Tracer(t topdown.Tracer) func(r *Rego) {
 	return func(r *Rego) {
 		if t != nil {
-			r.tracers = append(r.tracers, t)
+			r.queryTracers = append(r.queryTracers, topdown.WrapLegacyTracer(t))
+		}
+	}
+}
+
+// QueryTracer returns an argument that adds a query tracer to r.
+func QueryTracer(t topdown.QueryTracer) func(r *Rego) {
+	return func(r *Rego) {
+		if t != nil {
+			r.queryTracers = append(r.queryTracers, t)
 		}
 	}
 }
@@ -888,6 +940,15 @@ func Tracer(t topdown.Tracer) func(r *Rego) {
 func Runtime(term *ast.Term) func(r *Rego) {
 	return func(r *Rego) {
 		r.runtime = term
+	}
+}
+
+// Time sets the wall clock time to use during policy evaluation. Prepared queries
+// do not inherit this parameter. Use EvalTime to set the wall clock time when
+// executing a prepared query.
+func Time(x time.Time) func(r *Rego) {
+	return func(r *Rego) {
+		r.time = x
 	}
 }
 
@@ -916,6 +977,21 @@ func PrintTraceWithLocation(w io.Writer, r *Rego) {
 func UnsafeBuiltins(unsafeBuiltins map[string]struct{}) func(r *Rego) {
 	return func(r *Rego) {
 		r.unsafeBuiltins = unsafeBuiltins
+	}
+}
+
+// SkipBundleVerification skips verification of a signed bundle.
+func SkipBundleVerification(yes bool) func(r *Rego) {
+	return func(r *Rego) {
+		r.skipBundleVerification = yes
+	}
+}
+
+// InterQueryBuiltinCache sets the inter-query cache that built-in functions can utilize
+// during evaluation.
+func InterQueryBuiltinCache(c cache.InterQueryCache) func(r *Rego) {
+	return func(r *Rego) {
+		r.interQueryBuiltinCache = c
 	}
 }
 
@@ -959,7 +1035,7 @@ func New(options ...func(r *Rego)) *Rego {
 
 	if r.trace {
 		r.tracebuf = topdown.NewBufferTracer()
-		r.tracers = append(r.tracers, r.tracebuf)
+		r.queryTracers = append(r.queryTracers, r.tracebuf)
 	}
 
 	if r.partialNamespace == "" {
@@ -988,10 +1064,12 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		EvalTransaction(r.txn),
 		EvalMetrics(r.metrics),
 		EvalInstrument(r.instrument),
+		EvalTime(r.time),
+		EvalInterQueryBuiltinCache(r.interQueryBuiltinCache),
 	}
 
-	for _, t := range r.tracers {
-		evalArgs = append(evalArgs, EvalTracer(t))
+	for _, qt := range r.queryTracers {
+		evalArgs = append(evalArgs, EvalQueryTracer(qt))
 	}
 
 	rs, err := pq.Eval(ctx, evalArgs...)
@@ -1055,10 +1133,11 @@ func (r *Rego) Partial(ctx context.Context) (*PartialQueries, error) {
 		EvalTransaction(r.txn),
 		EvalMetrics(r.metrics),
 		EvalInstrument(r.instrument),
+		EvalInterQueryBuiltinCache(r.interQueryBuiltinCache),
 	}
 
-	for _, t := range r.tracers {
-		evalArgs = append(evalArgs, EvalTracer(t))
+	for _, t := range r.queryTracers {
+		evalArgs = append(evalArgs, EvalQueryTracer(t))
 	}
 
 	pqs, err := pq.Partial(ctx, evalArgs...)
@@ -1459,7 +1538,7 @@ func (r *Rego) loadBundles(ctx context.Context, txn storage.Transaction, m metri
 	defer m.Timer(metrics.RegoLoadBundles).Stop()
 
 	for _, path := range r.bundlePaths {
-		bndl, err := loader.NewFileLoader().WithMetrics(m).AsBundle(path)
+		bndl, err := loader.NewFileLoader().WithMetrics(m).WithSkipBundleVerification(r.skipBundleVerification).AsBundle(path)
 		if err != nil {
 			return fmt.Errorf("loading error: %s", err)
 		}
@@ -1613,10 +1692,15 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithMetrics(ectx.metrics).
 		WithInstrumentation(ectx.instrumentation).
 		WithRuntime(r.runtime).
-		WithIndexing(ectx.indexing)
+		WithIndexing(ectx.indexing).
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
 
-	for i := range ectx.tracers {
-		q = q.WithTracer(ectx.tracers[i])
+	if !ectx.time.IsZero() {
+		q = q.WithTime(ectx.time)
+	}
+
+	for i := range ectx.queryTracers {
+		q = q.WithQueryTracer(ectx.queryTracers[i])
 	}
 
 	if ectx.parsedInput != nil {
@@ -1699,7 +1783,7 @@ func (r *Rego) partialResult(ctx context.Context, pCfg *PrepareConfig) (PartialR
 		metrics:          r.metrics,
 		txn:              r.txn,
 		partialNamespace: r.partialNamespace,
-		tracers:          r.tracers,
+		queryTracers:     r.queryTracers,
 		compiledQuery:    r.compiledQueries[partialResultQueryType],
 		instrumentation:  r.instrumentation,
 		indexing:         true,
@@ -1800,10 +1884,16 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithRuntime(r.runtime).
 		WithIndexing(ectx.indexing).
 		WithPartialNamespace(ectx.partialNamespace).
-		WithSkipPartialNamespace(r.skipPartialNamespace)
+		WithSkipPartialNamespace(r.skipPartialNamespace).
+		WithShallowInlining(r.shallowInlining).
+		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache)
 
-	for i := range ectx.tracers {
-		q = q.WithTracer(ectx.tracers[i])
+	if !ectx.time.IsZero() {
+		q = q.WithTime(ectx.time)
+	}
+
+	for i := range ectx.queryTracers {
+		q = q.WithQueryTracer(ectx.queryTracers[i])
 	}
 
 	if ectx.parsedInput != nil {
