@@ -6,7 +6,7 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.1.2
+VERSION := v3.1.3
 
 KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
