@@ -7,6 +7,11 @@ resources:
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
+# TODO: once mutation is deployed by default and not by config/ovelays/mutation, 
+# add the mutation crds to resources:
+#- bases/mutations.gatekeeper.sh_assigns.yaml  
+#- bases/mutations.gatekeeper.sh_assignmetadata.yaml
+
 bases:
 - ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
 
