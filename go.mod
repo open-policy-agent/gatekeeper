@@ -11,7 +11,7 @@ require (
 	github.com/google/go-cmp v0.4.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
-	github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e
+	github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20200929072634-d96896eff389
 	github.com/open-policy-agent/opa v0.21.0
 	github.com/pkg/errors v0.9.1

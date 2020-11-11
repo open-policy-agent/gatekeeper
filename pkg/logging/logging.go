@@ -18,5 +18,6 @@ const (
 	ResourceAPIVersion   = "resource_api_version"
 	ResourceNamespace    = "resource_namespace"
 	ResourceName         = "resource_name"
+	RequestUsername      = "request_username"
 	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )
