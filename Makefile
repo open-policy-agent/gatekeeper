@@ -140,6 +140,9 @@ run: generate manifests
 install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
+deploy-mutation: deploy
+	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
+
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
 	kustomize build config/overlays/dev | kubectl apply -f -
