@@ -9,9 +9,8 @@ emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.2.0
+  release: v3.3.0-beta.1
   pullPolicy: IfNotPresent
-  pullSecrets: []
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}
 tolerations: []

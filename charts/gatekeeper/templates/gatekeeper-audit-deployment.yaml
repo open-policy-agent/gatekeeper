@@ -86,8 +86,6 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-      imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
       nodeSelector: 
 {{ toYaml .Values.nodeSelector | indent 8 }}
       affinity:

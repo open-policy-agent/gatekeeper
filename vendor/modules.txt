@@ -154,7 +154,7 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e
+# github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
 # github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8
