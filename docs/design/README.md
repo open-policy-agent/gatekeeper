@@ -10,11 +10,12 @@ Generally, design docs are on Google docs:
 ## Proposed
 * [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit?usp=sharing)
 * [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
-* [Mutation Design - 4th Edition](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#
+* [Mutation Design - 4th Edition (current approach)](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#
 )
-   * [OPA Gatekeeper Mutation](https://docs.google.com/document/d/1LtNIxd-Y3oh0HPgPYdaVV7t2c6vBSwzYAFcTyxQYZjE/edit)
-   * [Mutation Revised Design Doc](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
-   * [Mutation Initial Design Doc](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
+   * [Mutation Interfaces (for the current approach)](https://docs.google.com/document/d/1c5Z3g6Zsfmga7xod4--t6RrXamdAaMaqYzPNujtZb10/edit)
+   * [OPA Gatekeeper Mutation (alternate proposal)](https://docs.google.com/document/d/1LtNIxd-Y3oh0HPgPYdaVV7t2c6vBSwzYAFcTyxQYZjE/edit)
+   * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
+   * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
