@@ -59,9 +59,15 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+var webhooks = []rotator.WebhookInfo{
+	{
+		Name: webhook.VwhName,
+		Type: rotator.Validating,
+	},
+}
+
 const (
 	secretName     = "gatekeeper-webhook-server-cert"
-	vwhName        = "gatekeeper-validating-webhook-configuration"
 	serviceName    = "gatekeeper-webhook-service"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
@@ -170,7 +176,7 @@ func main() {
 			CAOrganization: caOrganization,
 			DNSName:        dnsName,
 			IsReady:        setupFinished,
-			VWHName:        vwhName,
+			Webhooks:       webhooks,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)
