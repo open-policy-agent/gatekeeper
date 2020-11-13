@@ -60,6 +60,20 @@ func TestScanner(t *testing.T) {
 			},
 		},
 		{
+			input: "\n we\t\r\n.\nsupport\t    \n[newlines\t\n:\n*]\n",
+			expected: []Token{
+				{Type: IDENT, Literal: "we"},
+				{Type: SEPARATOR, Literal: "."},
+				{Type: IDENT, Literal: "support"},
+				{Type: LBRACKET, Literal: "["},
+				{Type: IDENT, Literal: "newlines"},
+				{Type: COLON, Literal: ":"},
+				{Type: GLOB, Literal: "*"},
+				{Type: RBRACKET, Literal: "]"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
 			input: `        	   `,
 			expected: []Token{
 				{Type: EOF, Literal: ""},

@@ -48,42 +48,42 @@ func TestParser(t *testing.T) {
 		{
 			input: `single_field`,
 			expected: []Node{
-				&Object{Value: "single_field"},
+				&Object{Reference: "single_field"},
 			},
 		},
 		{
 			input: `spec.containers[name: *].securityContext`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 				&List{KeyField: "name", Glob: true},
-				&Object{Value: "securityContext"},
+				&Object{Reference: "securityContext"},
 			},
 		},
 		{
 			// A quoted '*' is a fieldValue, not a glob
 			input: `spec.containers[name: "*"].securityContext`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 				&List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
-				&Object{Value: "securityContext"},
+				&Object{Reference: "securityContext"},
 			},
 		},
 		{
 			input: `spec.containers[name: foo].securityContext`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 				&List{KeyField: "name", KeyValue: strPtr("foo")},
-				&Object{Value: "securityContext"},
+				&Object{Reference: "securityContext"},
 			},
 		},
 		{
 			input: `spec.containers["my key": "foo bar"]`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 				&List{KeyField: "my key", KeyValue: strPtr("foo bar")},
 			},
 		},
@@ -100,21 +100,25 @@ func TestParser(t *testing.T) {
 		{
 			input: `spec.containers[name: ""].securityContext`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 				&List{KeyField: "name", KeyValue: strPtr("")},
-				&Object{Value: "securityContext"},
+				&Object{Reference: "securityContext"},
 			},
 		},
 		{
-			// TODO: Is this useful or should we make it a parsing error?
-			input: `spec.containers[name: ].securityContext`,
+			input: `spec.containers["": "someValue"].securityContext`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
-				&List{KeyField: "name", KeyValue: nil},
-				&Object{Value: "securityContext"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
+				&List{KeyField: "", KeyValue: strPtr("someValue")},
+				&Object{Reference: "securityContext"},
 			},
+		},
+		{
+			// Parsing error: either glob or field value are required in listSpec
+			input:     `spec.containers[name: ].securityContext`,
+			expectErr: true,
 		},
 		{
 			// parse error: listSpec requires keyField
@@ -134,6 +138,10 @@ func TestParser(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			input:     `spec.containers[*].securityContext`,
+			expectErr: true,
+		},
+		{
 			// parse error: we don't allow empty segments
 			input:     `foo..bar`,
 			expectErr: true,
@@ -142,47 +150,59 @@ func TestParser(t *testing.T) {
 			// ...but we do allow zero-string-named segments
 			input: `foo."".bar`,
 			expected: []Node{
-				&Object{Value: "foo"},
-				&Object{Value: ""},
-				&Object{Value: "bar"},
+				&Object{Reference: "foo"},
+				&Object{Reference: ""},
+				&Object{Reference: "bar"},
 			},
 		},
 		{
 			// whitespace can surround tokens
 			input: `    spec   .    containers    `,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 			},
 		},
 		{
 			// whitespace can surround tokens
 			input: `    spec   .    "containers"    `,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "containers"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
 			},
 		},
 		{
-			// TODO: Should this be allowed?
-			input: `[foo: bar][bar: *]`,
-			expected: []Node{
-				&List{KeyField: "foo", KeyValue: strPtr("bar")},
-				&List{KeyField: "bar", Glob: true},
-			},
+			// List cannot start the path
+			input:     `[foo: bar]`,
+			expectErr: true,
+		},
+		{
+			// List cannot follow list
+			input:     `[foo: bar][bar: *]`,
+			expectErr: true,
+		},
+		{
+			// List cannot follow valid list
+			input:     `spec.containers[foo: bar][bar: *]`,
+			expectErr: true,
+		},
+		{
+			// List cannot follow separator
+			input:     `spec.[foo: bar]`,
+			expectErr: true,
 		},
 		{
 			// allow leading dash
 			input: `-123-_456_`,
 			expected: []Node{
-				&Object{Value: "-123-_456_"},
+				&Object{Reference: "-123-_456_"},
 			},
 		},
 		{
 			// allow leading digits
 			input: `012345`,
 			expected: []Node{
-				&Object{Value: "012345"},
+				&Object{Reference: "012345"},
 			},
 		},
 		{
@@ -194,8 +214,16 @@ func TestParser(t *testing.T) {
 			// whitespace must be quoted
 			input: `spec."foo bar"`,
 			expected: []Node{
-				&Object{Value: "spec"},
-				&Object{Value: "foo bar"},
+				&Object{Reference: "spec"},
+				&Object{Reference: "foo bar"},
+			},
+		},
+		{
+			// whitespace must be quoted
+			input: "spec.\"foo\nbar\"",
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&Object{Reference: "foo\nbar"},
 			},
 		},
 		{
@@ -218,6 +246,17 @@ func TestParser(t *testing.T) {
 		{
 			input:     `:`,
 			expectErr: true,
+		},
+		{
+			input: `spec."this object"."is very"["much full": 'of everyone\'s'].'favorite thing'`,
+
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&Object{Reference: "this object"},
+				&Object{Reference: "is very"},
+				&List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+				&Object{Reference: "favorite thing"},
+			},
 		},
 	}
 

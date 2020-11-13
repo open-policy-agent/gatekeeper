@@ -141,7 +141,7 @@ func (s *Scanner) setError(err error) {
 }
 
 func isSpace(r rune) bool {
-	return r == ' ' || r == '\t'
+	return r == ' ' || r == '\t' || r == '\r' || r == '\n'
 }
 
 func isAlphaNum(r rune) bool {

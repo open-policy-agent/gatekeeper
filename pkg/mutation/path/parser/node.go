@@ -18,7 +18,7 @@ package parser
 type NodeType string
 
 const (
-	RootNode   NodeType = "Root"
+	PathNode   NodeType = "Path"
 	ListNode   NodeType = "List"
 	ObjectNode NodeType = "Object"
 )
@@ -27,16 +27,17 @@ type Node interface {
 	Type() NodeType
 }
 
-type Root struct {
+// Path represents an entire parsed path specification
+type Path struct {
 	Nodes []Node
 }
 
-func (r Root) Type() NodeType {
-	return RootNode
+func (r Path) Type() NodeType {
+	return PathNode
 }
 
 type Object struct {
-	Value string
+	Reference string
 }
 
 func (o Object) Type() NodeType {

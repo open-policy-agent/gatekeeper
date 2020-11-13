@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/path/token"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/token"
 )
 
 type Parser struct {
@@ -31,7 +31,7 @@ type Parser struct {
 }
 
 // Parse parses the provided input and returns an abstract representation if successful.
-func Parse(input string) (*Root, error) {
+func Parse(input string) (*Path, error) {
 	p := newParser(input)
 	return p.Parse()
 }
@@ -70,30 +70,22 @@ func (p *Parser) expectPeek(t token.Type) bool {
 	return p.peekToken.Type == t
 }
 
-func (p *Parser) Parse() (*Root, error) {
-	root := &Root{}
-loop:
-	for p.curToken.Type != token.EOF && p.err == nil {
-		var node Node
-		switch p.curToken.Type {
-		case token.IDENT:
-			node = p.parseObject()
-		case token.LBRACKET:
-			node = p.parseList()
-		default:
-			p.setError(fmt.Errorf("unexpected token: expected field name or eof, got: %s", p.peekToken.String()))
-		}
-
-		if p.err != nil {
-			// Encountered parsing error, abort
-			return nil, p.err
-		}
-
-		if node != nil {
+func (p *Parser) Parse() (*Path, error) {
+	root := &Path{}
+	for p.curToken.Type == token.IDENT && p.err == nil {
+		if node := p.parseObject(); node != nil {
 			root.Nodes = append(root.Nodes, node)
 		}
 
-		// Advance past separator if needed and ensure no unexpected tokens follow
+		// Check for optional listSpec operator
+		if p.expect(token.LBRACKET) {
+			if node := p.parseList(); node != nil {
+				root.Nodes = append(root.Nodes, node)
+			}
+		}
+
+		// Advance past separator if needed and ensure no unexpected tokens follow.
+		// NOTE: expect() advances the current position if the next token is a match.
 		switch {
 		case p.expect(token.SEPARATOR):
 			if p.expectPeek(token.EOF) {
@@ -103,15 +95,21 @@ loop:
 			}
 			// Skip past the separator
 			p.next()
-		case p.expect(token.LBRACKET):
-			// Allowed but don't advance past the bracket
 		case p.expect(token.EOF):
-			break loop
+			// Allowed. Loop will exit.
 		default:
 			p.setError(fmt.Errorf("expected '.' or eof, got: %s", p.peekToken.String()))
 			return nil, p.err
 		}
 	}
+
+	if p.curToken.Type != token.EOF {
+		p.setError(fmt.Errorf("unexpected token: expected field name or eof, got: %s", p.curToken.String()))
+	}
+	if p.err != nil {
+		return nil, p.err
+	}
+
 	return root, nil
 }
 
@@ -137,9 +135,11 @@ func (p *Parser) parseList() Node {
 	case p.expect(token.GLOB):
 		out.Glob = true
 	case p.expect(token.IDENT):
-		// Optional
 		val := p.curToken.Literal
 		out.KeyValue = &val
+	default:
+		p.setError(fmt.Errorf("expected key value or glob in listSpec, got: %s", p.peekToken.String()))
+		return nil
 	}
 
 	if !p.expect(token.RBRACKET) {
@@ -150,10 +150,14 @@ func (p *Parser) parseList() Node {
 }
 
 func (p *Parser) parseObject() Node {
-	out := &Object{Value: p.curToken.Literal}
+	out := &Object{Reference: p.curToken.Literal}
 	return out
 }
 
 func (p *Parser) setError(err error) {
+	// Support only the first error for now
+	if p.err != nil {
+		return
+	}
 	p.err = err
 }

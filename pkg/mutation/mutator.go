@@ -1,13 +1,14 @@
 package mutation
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 )
 
 // ID represent the identifier of a mutation object.
@@ -44,7 +45,7 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() []path.Entry
+	Path() parser.Path
 }
 
 // MakeID builds an ID object for the given object
