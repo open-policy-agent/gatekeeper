@@ -16,26 +16,11 @@ import (
 	"github.com/open-policy-agent/opa/topdown/builtins"
 )
 
-type nowKeyID string
-
-var nowKey = nowKeyID("time.now_ns")
 var tzCache map[string]*time.Location
 var tzCacheMutex *sync.Mutex
 
 func builtinTimeNowNanos(bctx BuiltinContext, _ []*ast.Term, iter func(*ast.Term) error) error {
-
-	exist, ok := bctx.Cache.Get(nowKey)
-	var now *ast.Term
-
-	if !ok {
-		curr := time.Now()
-		now = ast.NewTerm(ast.Number(int64ToJSONNumber(curr.UnixNano())))
-		bctx.Cache.Put(nowKey, now)
-	} else {
-		now = exist.(*ast.Term)
-	}
-
-	return iter(now)
+	return iter(bctx.Time)
 }
 
 func builtinTimeParseNanos(a, b ast.Value) (ast.Value, error) {
@@ -91,7 +76,7 @@ func builtinDate(a ast.Value) (ast.Value, error) {
 		return nil, err
 	}
 	year, month, day := t.Date()
-	result := ast.Array{ast.IntNumberTerm(year), ast.IntNumberTerm(int(month)), ast.IntNumberTerm(day)}
+	result := ast.NewArray(ast.IntNumberTerm(year), ast.IntNumberTerm(int(month)), ast.IntNumberTerm(day))
 	return result, nil
 }
 
@@ -101,7 +86,7 @@ func builtinClock(a ast.Value) (ast.Value, error) {
 		return nil, err
 	}
 	hour, minute, second := t.Clock()
-	result := ast.Array{ast.IntNumberTerm(hour), ast.IntNumberTerm(minute), ast.IntNumberTerm(second)}
+	result := ast.NewArray(ast.IntNumberTerm(hour), ast.IntNumberTerm(minute), ast.IntNumberTerm(second))
 	return result, nil
 }
 
@@ -144,19 +129,18 @@ func tzTime(a ast.Value) (t time.Time, err error) {
 	loc := time.UTC
 
 	switch va := a.(type) {
-	case ast.Array:
-
-		if len(va) == 0 {
+	case *ast.Array:
+		if va.Len() == 0 {
 			return time.Time{}, builtins.NewOperandTypeErr(1, a, "either number (ns) or [number (ns), string (tz)]")
 		}
 
-		nVal, err = builtins.NumberOperand(va[0].Value, 1)
+		nVal, err = builtins.NumberOperand(va.Elem(0).Value, 1)
 		if err != nil {
 			return time.Time{}, err
 		}
 
-		if len(va) > 1 {
-			tzVal, err := builtins.StringOperand(va[1].Value, 1)
+		if va.Len() > 1 {
+			tzVal, err := builtins.StringOperand(va.Elem(1).Value, 1)
 			if err != nil {
 				return time.Time{}, err
 			}

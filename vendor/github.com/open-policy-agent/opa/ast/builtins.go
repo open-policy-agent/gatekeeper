@@ -87,7 +87,9 @@ var DefaultBuiltins = [...]*Builtin{
 	CastArray,
 
 	// Regular Expressions
+	RegexIsValid,
 	RegexMatch,
+	RegexMatchDeprecated,
 	RegexSplit,
 	GlobsMatch,
 	RegexTemplateMatch,
@@ -120,16 +122,21 @@ var DefaultBuiltins = [...]*Builtin{
 	TrimSpace,
 	Sprintf,
 
+	// Numbers
+	NumbersRange,
+
 	// Encoding
 	JSONMarshal,
 	JSONUnmarshal,
 	Base64Encode,
 	Base64Decode,
+	Base64IsValid,
 	Base64UrlEncode,
 	Base64UrlDecode,
 	URLQueryDecode,
 	URLQueryEncode,
 	URLQueryEncodeObject,
+	URLQueryDecodeObject,
 	YAMLMarshal,
 	YAMLUnmarshal,
 
@@ -213,6 +220,7 @@ var DefaultBuiltins = [...]*Builtin{
 	NetCIDRContains,
 	NetCIDRContainsMatches,
 	NetCIDRExpand,
+	NetCIDRMerge,
 
 	// Glob
 	GlobMatch,
@@ -223,6 +231,10 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// UUIDs
 	UUIDRFC4122,
+
+	//SemVers
+	SemVerIsValid,
+	SemVerCompare,
 }
 
 // BuiltinMap provides a convenient mapping of built-in names to
@@ -661,10 +673,21 @@ var ToNumber = &Builtin{
 // RegexMatch takes two strings and evaluates to true if the string in the second
 // position matches the pattern in the first position.
 var RegexMatch = &Builtin{
-	Name: "re_match",
+	Name: "regex.match",
 	Decl: types.NewFunction(
 		types.Args(
 			types.S,
+			types.S,
+		),
+		types.B,
+	),
+}
+
+// RegexIsValid returns true if the regex pattern string is valid, otherwise false.
+var RegexIsValid = &Builtin{
+	Name: "regex.is_valid",
+	Decl: types.NewFunction(
+		types.Args(
 			types.S,
 		),
 		types.B,
@@ -984,6 +1007,26 @@ var Sprintf = &Builtin{
 	),
 }
 
+/**
+ * Numbers
+ */
+
+// NumbersRange returns an array of numbers in the given inclusive range.
+var NumbersRange = &Builtin{
+	Name: "numbers.range",
+	Decl: types.NewFunction(
+		types.Args(
+			types.N,
+			types.N,
+		),
+		types.NewArray(nil, types.N),
+	),
+}
+
+/**
+ * Units
+ */
+
 // UnitsParseBytes converts strings like 10GB, 5K, 4mb, and the like into an
 // integer number of bytes.
 var UnitsParseBytes = &Builtin{
@@ -1102,6 +1145,20 @@ var JSONRemove = &Builtin{
 	),
 }
 
+// ObjectGet returns takes an object and returns a value under its key if
+// present, otherwise it returns the default.
+var ObjectGet = &Builtin{
+	Name: "object.get",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
+			types.A,
+			types.A,
+		),
+		types.A,
+	),
+}
+
 // ObjectUnion creates a new object that is the asymmetric union of two objects
 var ObjectUnion = &Builtin{
 	Name: "object.union",
@@ -1176,6 +1233,15 @@ var Base64Decode = &Builtin{
 	),
 }
 
+// Base64IsValid verifies the input string is base64 encoded.
+var Base64IsValid = &Builtin{
+	Name: "base64.is_valid",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.B,
+	),
+}
+
 // Base64UrlEncode serializes the input string into base64url encoding.
 var Base64UrlEncode = &Builtin{
 	Name: "base64url.encode",
@@ -1226,6 +1292,17 @@ var URLQueryEncodeObject = &Builtin{
 						types.NewArray(nil, types.S),
 						types.NewSet(types.S))))),
 		types.S,
+	),
+}
+
+// URLQueryDecodeObject decodes the given URL query string into an object.
+var URLQueryDecodeObject = &Builtin{
+	Name: "urlquery.decode_object",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewObject(nil, types.NewDynamicProperty(
+			types.S,
+			types.NewArray(nil, types.S))),
 	),
 }
 
@@ -1924,6 +2001,20 @@ var NetCIDRContainsMatches = &Builtin{
 	),
 }
 
+// NetCIDRMerge merges IP addresses and subnets into the smallest possible list of CIDRs.
+var NetCIDRMerge = &Builtin{
+	Name: "net.cidr_merge",
+	Decl: types.NewFunction(
+		types.Args(netCidrMergeOperandType),
+		types.NewSet(types.S),
+	),
+}
+
+var netCidrMergeOperandType = types.NewAny(
+	types.NewArray(nil, types.NewAny(types.S)),
+	types.NewSet(types.S),
+)
+
 var netCidrContainsMatchesOperandType = types.NewAny(
 	types.S,
 	types.NewArray(nil, types.NewAny(
@@ -1942,6 +2033,36 @@ var netCidrContainsMatchesOperandType = types.NewAny(
 		),
 	)),
 )
+
+/**
+ * Semantic Versions
+ */
+
+// SemVerIsValid validiates a the term is a valid SemVer as a string, returns
+// false for all other input
+var SemVerIsValid = &Builtin{
+	Name: "semver.is_valid",
+	Decl: types.NewFunction(
+		types.Args(
+			types.A,
+		),
+		types.B,
+	),
+}
+
+// SemVerCompare compares valid SemVer formatted version strings. Given two
+// version strings, if A < B returns -1, if A > B returns 1. If A == B, returns
+// 0
+var SemVerCompare = &Builtin{
+	Name: "semver.compare",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.S,
+		),
+		types.N,
+	),
+}
 
 /**
  * Deprecated built-ins.
@@ -2030,27 +2151,25 @@ var CastObject = &Builtin{
 	),
 }
 
-// ObjectGet returns takes an object and returns a value under its key if
-// present, otherwise it returns the default.
-var ObjectGet = &Builtin{
-	Name: "object.get",
+// RegexMatchDeprecated declares `re_match` which has been deprecated. Use `regex.match` instead.
+var RegexMatchDeprecated = &Builtin{
+	Name: "re_match",
 	Decl: types.NewFunction(
 		types.Args(
-			types.NewObject(nil, types.NewDynamicProperty(types.A, types.A)),
-			types.A,
-			types.A,
+			types.S,
+			types.S,
 		),
-		types.A,
+		types.B,
 	),
 }
 
 // Builtin represents a built-in function supported by OPA. Every built-in
 // function is uniquely identified by a name.
 type Builtin struct {
-	Name     string          // Unique name of built-in function, e.g., <name>(arg1,arg2,...,argN)
-	Infix    string          // Unique name of infix operator. Default should be unset.
-	Decl     *types.Function // Built-in function type declaration.
-	Relation bool            // Indicates if the built-in acts as a relation.
+	Name     string          `json:"name"`               // Unique name of built-in function, e.g., <name>(arg1,arg2,...,argN)
+	Decl     *types.Function `json:"decl"`               // Built-in function type declaration.
+	Infix    string          `json:"infix,omitempty"`    // Unique name of infix operator. Default should be unset.
+	Relation bool            `json:"relation,omitempty"` // Indicates if the built-in acts as a relation.
 }
 
 // Expr creates a new expression for the built-in with the given operands.

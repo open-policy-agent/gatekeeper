@@ -245,7 +245,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 			},
 		},
 	}
-	h := validationHandler{opa: opa, client: c, injectedConfig: cfg}
+	h := validationHandler{opa: opa, webhookHandler: webhookHandler{client: c, injectedConfig: cfg}}
 
 	benchmarks := map[string]struct {
 		// description of the test

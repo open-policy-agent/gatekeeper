@@ -195,7 +195,7 @@ func TestTemplateValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.Template))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -289,7 +289,7 @@ func TestReviewRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -377,7 +377,7 @@ func TestConstraintValidation(t *testing.T) {
 			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
-			handler := validationHandler{opa: opa}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -497,7 +497,7 @@ func TestTracing(t *testing.T) {
 			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
-			handler := validationHandler{opa: opa, injectedConfig: tt.Cfg}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -621,7 +621,7 @@ func TestGetDenyMessages(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa}
+			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{

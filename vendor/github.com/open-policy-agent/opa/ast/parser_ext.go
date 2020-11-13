@@ -164,6 +164,10 @@ func ParseRuleFromExpr(module *Module, expr *Expr) (*Rule, error) {
 	if expr.IsAssignment() {
 
 		lhs, rhs := expr.Operand(0), expr.Operand(1)
+		if lhs == nil || rhs == nil {
+			return nil, errors.New("assignment requires two operands")
+		}
+
 		rule, err := ParseCompleteDocRuleFromAssignmentExpr(module, lhs, rhs)
 
 		if err == nil {
@@ -203,6 +207,10 @@ func parseCompleteRuleFromEq(module *Module, expr *Expr) (rule *Rule, err error)
 	}()
 
 	lhs, rhs := expr.Operand(0), expr.Operand(1)
+	if lhs == nil || rhs == nil {
+		return nil, errors.New("assignment requires two operands")
+	}
+
 	rule, err = ParseCompleteDocRuleFromEqExpr(module, lhs, rhs)
 
 	if err == nil {
@@ -268,11 +276,11 @@ func ParsePartialObjectDocRuleFromEqExpr(module *Module, lhs, rhs *Term) (*Rule,
 
 	ref, ok := lhs.Value.(Ref)
 	if !ok || len(ref) != 2 {
-		return nil, fmt.Errorf("%v cannot be used for rule name", TypeName(lhs.Value))
+		return nil, fmt.Errorf("%v cannot be used as rule name", TypeName(lhs.Value))
 	}
 
 	if _, ok := ref[0].Value.(Var); !ok {
-		return nil, fmt.Errorf("%vs cannot be used in rule head", TypeName(ref[0].Value))
+		return nil, fmt.Errorf("%vs cannot be used as rule name", TypeName(ref[0].Value))
 	}
 
 	name := ref[0].Value.(Var)
@@ -310,7 +318,7 @@ func ParsePartialSetDocRuleFromTerm(module *Module, term *Term) (*Rule, error) {
 
 	name, ok := ref[0].Value.(Var)
 	if !ok {
-		return nil, fmt.Errorf("%vs cannot be used in rule head", TypeName(ref[0].Value))
+		return nil, fmt.Errorf("%vs cannot be used as rule name", TypeName(ref[0].Value))
 	}
 
 	rule := &Rule{
@@ -430,15 +438,15 @@ func ParseBody(input string) (Body, error) {
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
 		case Body:
-			result = append(result, stmt...)
+			for i := range stmt {
+				result.Append(stmt[i])
+			}
 		case *Comment:
 			// skip
 		default:
 			return nil, fmt.Errorf("expected body but got %T", stmt)
 		}
 	}
-
-	setExprIndices(result)
 
 	return result, nil
 }
@@ -618,128 +626,11 @@ func parseModule(filename string, stmts []Statement, comments []*Comment) (*Modu
 	return nil, errs
 }
 
-func postProcess(filename string, stmts []Statement) error {
-
-	if err := mangleDataVars(stmts); err != nil {
-		return err
-	}
-
-	if err := mangleInputVars(stmts); err != nil {
-		return err
-	}
-
-	mangleWildcards(stmts)
-	mangleExprIndices(stmts)
-
-	return nil
-}
-
-func mangleDataVars(stmts []Statement) error {
-	for i := range stmts {
-		vt := newVarToRefTransformer(DefaultRootDocument.Value.(Var), DefaultRootRef.Copy())
-		stmt, err := Transform(vt, stmts[i])
-		if err != nil {
-			return err
-		}
-		stmts[i] = stmt.(Statement)
-	}
-	return nil
-}
-
-func mangleInputVars(stmts []Statement) error {
-	for i := range stmts {
-		vt := newVarToRefTransformer(InputRootDocument.Value.(Var), InputRootRef.Copy())
-		stmt, err := Transform(vt, stmts[i])
-		if err != nil {
-			return err
-		}
-		stmts[i] = stmt.(Statement)
-	}
-	return nil
-}
-
-func mangleExprIndices(stmts []Statement) {
-	for _, stmt := range stmts {
-		setExprIndices(stmt)
-	}
-}
-
-func setExprIndices(x interface{}) {
-	WalkBodies(x, func(b Body) bool {
-		for i, expr := range b {
-			expr.Index = i
-		}
-		return false
-	})
-}
-
-func mangleWildcards(stmts []Statement) {
-	m := &wildcardMangler{}
-	for i := range stmts {
-		stmt, _ := Transform(m, stmts[i])
-		stmts[i] = stmt.(Statement)
-	}
-}
-
-type wildcardMangler struct {
-	c int
-}
-
-func (m *wildcardMangler) Transform(x interface{}) (interface{}, error) {
-	if term, ok := x.(Var); ok {
-		if term.Equal(Wildcard.Value) {
-			name := fmt.Sprintf("%s%d", WildcardPrefix, m.c)
-			m.c++
-			return Var(name), nil
-		}
-	}
-	return x, nil
-}
-
 func setRuleModule(rule *Rule, module *Module) {
 	rule.Module = module
 	if rule.Else != nil {
 		setRuleModule(rule.Else, module)
 	}
-}
-
-type varToRefTransformer struct {
-	orig   Var
-	target Ref
-	// skip set to true to avoid recursively processing the result of
-	// transformation.
-	skip bool
-}
-
-func newVarToRefTransformer(orig Var, target Ref) *varToRefTransformer {
-	return &varToRefTransformer{
-		orig:   orig,
-		target: target,
-		skip:   false,
-	}
-}
-
-func (vt *varToRefTransformer) Transform(x interface{}) (interface{}, error) {
-	if vt.skip {
-		vt.skip = false
-		return x, nil
-	}
-	switch x := x.(type) {
-	case *Head:
-		// The next AST node will be the rule name (which should not be
-		// transformed).
-		vt.skip = true
-	case Ref:
-		// The next AST node will be the ref head (which should not be
-		// transformed).
-		vt.skip = true
-	case Var:
-		if x.Equal(vt.orig) {
-			vt.skip = true
-			return vt.target, nil
-		}
-	}
-	return x, nil
 }
 
 // ParserErrorDetail holds additional details for parser errors.

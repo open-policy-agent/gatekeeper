@@ -1,0 +1,33 @@
+# Adds namespace to all resources.
+namespace: gatekeeper-system
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+namePrefix: gatekeeper-
+
+commonLabels:
+  gatekeeper.sh/system: "yes"    
+
+resources:
+- ../../crd/bases/mutations.gatekeeper.sh_assign.yaml  
+- ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
+
+patchesStrategicMerge:
+# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
+# patches here are for enabling the conversion webhook for each CRD
+#- ../../crd/patches/webhook_in_assignmetadata.yaml
+#- ../../crd/patches/webhook_in_assigns.yaml
+# +kubebuilder:scaffold:crdkustomizewebhookpatch
+
+# [CERTMANAGER] To enable webhook, uncomment all the sections with [CERTMANAGER] prefix.
+# patches here are for enabling the CA injection for each CRD
+#- ../../crd/patches/cainjection_in_assignmetadata.yaml
+#- ../../crd/patches/cainjection_in_assigns.yaml
+# +kubebuilder:scaffold:crdkustomizecainjectionpatch
+
+# the following config is for teaching kustomize how to do kustomization for CRDs.
+configurations:
+- ../../crd/kustomizeconfig.yaml
