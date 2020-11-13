@@ -12,7 +12,7 @@ commonLabels:
   gatekeeper.sh/system: "yes"    
 
 resources:
-- ../../crd/bases/mutations.gatekeeper.sh_assigns.yaml  
+- ../../crd/bases/mutations.gatekeeper.sh_assign.yaml  
 - ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
 
 patchesStrategicMerge:
