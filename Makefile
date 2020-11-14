@@ -148,7 +148,7 @@ deploy: patch-image manifests
 	kustomize build config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
+manifests: __controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./apis/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
@@ -160,7 +160,7 @@ lint:
 	golangci-lint -v run ./... --timeout 5m
 
 # Generate code
-generate: controller-gen target-template-source
+generate: __controller-gen target-template-source
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 
 # Docker Login
@@ -256,16 +256,13 @@ promote-staging-manifest:
 uninstall:
 	kustomize build config/overlays/dev | kubectl delete -f -
 
-# find or download controller-gen
-# download controller-gen if necessary
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	GO111MODULE=on go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0
-	go mod tidy
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
+__controller-gen: __tooling-image
+CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
+
+__tooling-image:
+	docker build . \
+		-t gatekeeper-tooling \
+		-f build/tooling/Dockerfile
 
 .PHONY: vendor
 vendor:

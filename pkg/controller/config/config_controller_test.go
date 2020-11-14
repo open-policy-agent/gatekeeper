@@ -25,7 +25,6 @@ import (
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -43,8 +42,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -408,6 +407,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	defer func() {
 		err = c.Delete(context.TODO(), cm)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = c.Delete(context.TODO(), cm2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
 	expected := map[opaKey]interface{}{
@@ -469,100 +470,113 @@ func TestConfig_CacheContents(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeZero(), "waiting for cache to empty")
 }
 
-type opaKey struct {
-	gvk schema.GroupVersionKind
-	key string
-}
-
-// fakeOpa is an OpaDataClient for testing.
-type fakeOpa struct {
-	mu   gosync.Mutex
-	data map[opaKey]interface{}
-}
-
-// keyFor returns an opaKey for the provided resource.
-// Returns error if the resource is not a runtime.Object w/ metadata.
-func (f *fakeOpa) keyFor(obj interface{}) (opaKey, error) {
-	o, ok := obj.(runtime.Object)
-	if !ok {
-		return opaKey{}, fmt.Errorf("expected runtime.Object, got: %T", obj)
+func TestConfig_Retries(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	nsGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "Namespace",
 	}
-	gvk := o.GetObjectKind().GroupVersionKind()
-	k, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		return opaKey{}, fmt.Errorf("extracting key: %v", err)
+	configMapGVK := schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMap",
 	}
-	return opaKey{
-		gvk: gvk,
-		key: k,
-	}, nil
-}
-func (f *fakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	instance := configFor([]schema.GroupVersionKind{
+		configMapGVK,
+	})
 
-	key, err := f.keyFor(data)
-	if err != nil {
-		return nil, err
-	}
+	// Setup the Manager and Controller.
+	mgr, wm := setupManager(t)
+	c := &testclient.RetryClient{Client: mgr.GetClient()}
 
-	if f.data == nil {
-		f.data = make(map[opaKey]interface{})
-	}
+	opa := &fakeOpa{}
+	cs := watch.NewSwitch()
+	tracker, err := readiness.SetupTracker(mgr)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	processExcluder := process.Get()
+	processExcluder.Add(instance.Spec.Match)
 
-	f.data[key] = data
-	return &constraintTypes.Responses{}, nil
-}
+	events := make(chan event.GenericEvent, 1024)
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
+	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-func (f *fakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if _, ok := data.(target.WipeData); ok {
-		f.data = make(map[opaKey]interface{})
-		return &constraintTypes.Responses{}, nil
+	// Use our special hookReader to inject controlled failures
+	failPlease := make(chan string, 1)
+	rec.reader = hookReader{
+		Reader: mgr.GetCache(),
+		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+			// Return an error the first go-around.
+			var failKind string
+			select {
+			case failKind = <-failPlease:
+			default:
+			}
+			if failKind != "" && list.GetObjectKind().GroupVersionKind().Kind == failKind {
+				return fmt.Errorf("synthetic failure")
+			}
+			return mgr.GetCache().List(ctx, list, opts...)
+		},
 	}
 
-	key, err := f.keyFor(data)
-	if err != nil {
-		return nil, err
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			close(stopMgr)
+			mgrStopped.Wait()
+		})
 	}
 
-	delete(f.data, key)
-	return &constraintTypes.Responses{}, nil
-}
+	defer testMgrStopped()
 
-// Contains returns true if all expected resources are in the cache.
-func (f *fakeOpa) Contains(expected map[opaKey]interface{}) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	// Create the Config object and expect the Reconcile to be created
+	err = c.Create(context.TODO(), instance)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	for k := range expected {
-		if _, ok := f.data[k]; !ok {
-			return false
-		}
+	defer func() {
+		_ = c.Delete(context.TODO(), instance)
+	}()
+
+	// Create a configMap to test for
+	cm := unstructuredFor(configMapGVK, "config-test-1")
+	cm.SetNamespace("default")
+	err = c.Create(context.TODO(), cm)
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
+
+	defer func() {
+		err = c.Delete(context.TODO(), cm)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
+
+	expected := map[opaKey]interface{}{
+		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
 	}
-	return true
-}
+	g.Eventually(func() bool {
+		return opa.Contains(expected)
+	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
-// HasGVK returns true if the cache has any data of the requested kind.
-func (f *fakeOpa) HasGVK(gvk schema.GroupVersionKind) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
+	_, err = opa.RemoveData(context.TODO(), target.WipeData{})
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
+	g.Expect(opa.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
 
-	for k := range f.data {
-		if k.gvk == gvk {
-			return true
-		}
-	}
-	return false
-}
+	// Make List fail once for ConfigMaps as the replay occurs following the reconfig below.
+	failPlease <- "ConfigMapList"
 
-// Len returns the number of items in the cache.
-func (f *fakeOpa) Len() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.data)
+	// Reconfigure to add a namespace watch.
+	instance = configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
+	forUpdate := instance.DeepCopy()
+	_, err = controllerutil.CreateOrUpdate(context.TODO(), c, forUpdate, func() error {
+		forUpdate.Spec = instance.Spec
+		return nil
+	})
+	g.Expect(err).ToNot(gomega.HaveOccurred(), "updating Config resource")
+
+	// Despite the transient error, we expect the cache to eventually be repopulated.
+	g.Eventually(func() bool {
+		return opa.Contains(expected)
+	}, 10*time.Second).Should(gomega.BeTrue(), "checking final opa cache contents")
 }
 
 // configFor returns a config resource that watches the requested set of resources.
