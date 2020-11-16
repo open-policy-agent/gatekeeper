@@ -35,6 +35,7 @@ spec:
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - --audit-interval={{ .Values.auditInterval }}
