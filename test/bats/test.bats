@@ -107,7 +107,8 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_success
 
-  CLEAN_CMD="kubectl delete -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml"
+  run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
+  assert_success
 }
 
 @test "container limits test" {
@@ -172,13 +173,8 @@ teardown() {
 }
 
 @test "required labels audit test" {
-  wait_for_process $WAIT_TIME $SLEEP_TIME "kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]'"
-
-  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
-  [[ "$violations" -eq 6 ]]
-
-  totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
-  [[ "$totalViolations" -eq 6 ]]
+  run wait_for_process $WAIT_TIME $SLEEP_TIME "check_audit_violations 6"
+  assert_success
 }
 
 @test "emit events test" {
