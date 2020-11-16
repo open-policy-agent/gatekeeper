@@ -173,8 +173,11 @@ teardown() {
 }
 
 @test "required labels audit test" {
-  run wait_for_process $WAIT_TIME $SLEEP_TIME "check_audit_violations 6"
-  assert_success
+  # should be 6, using 7 to test
+  local expected=7
+  wait_for_process $WAIT_TIME $SLEEP_TIME "[[ "'"'"$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')"'"'" -eq "'"'"${expected}"'"'" ]]"
+  
+  wait_for_process $WAIT_TIME $SLEEP_TIME "[[ "'"'"$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')"'"'" -eq "'"'"${expected}"'"'" ]]"
 }
 
 @test "emit events test" {
