@@ -106,8 +106,7 @@ teardown() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
   assert_success
 
-  run kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
-  assert_success
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_ns.yaml
 }
 
 @test "container limits test" {
@@ -172,6 +171,9 @@ teardown() {
 }
 
 @test "required labels audit test" {
+  # Write out the initial set of violations to aid in debugging, as a change in the # of namespaces is a common source of errors
+  echo "initial set of violations"
+  echo $(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations[]') >&3
   # should be 6, using 7 to test
   local expected=7
   wait_for_process $WAIT_TIME $SLEEP_TIME "[[ "'"'"$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')"'"'" -eq "'"'"${expected}"'"'" ]]"
