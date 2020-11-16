@@ -87,3 +87,12 @@ compare_count() {
 
   [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o yaml | grep -c 'id: gatekeeper-controller-manager')" = $podcount ]]
 }
+
+check_audit_violations() {
+  expected="$1"
+  violations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.violations | length')
+  [[ "$violations" -eq "${expected}" ]]
+
+  totalViolations=$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh ns-must-have-gk -o json | jq '.status.totalViolations')
+  [[ "$totalViolations" -eq "${expected}" ]]
+}
