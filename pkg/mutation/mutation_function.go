@@ -4,14 +4,15 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func Mutate(mutator Mutator, obj *unstructured.Unstructured) error {
+func Mutate(mutator types.Mutator, obj *unstructured.Unstructured) error {
 	return mutate(mutator, obj.Object, nil, 0)
 }
 
-func mutate(m Mutator, current interface{}, previous interface{}, depth int) error {
+func mutate(m types.Mutator, current interface{}, previous interface{}, depth int) error {
 	if len(m.Path().Nodes)-1 == depth {
 		return addValue(m, current, previous, depth)
 	}
@@ -70,7 +71,7 @@ func mutate(m Mutator, current interface{}, previous interface{}, depth int) err
 	return nil
 }
 
-func addValue(m Mutator, current interface{}, previous interface{}, depth int) error {
+func addValue(m types.Mutator, current interface{}, previous interface{}, depth int) error {
 	pathEntry := m.Path().Nodes[depth]
 	switch castPathEntry := pathEntry.(type) {
 	case *parser.Object:
@@ -81,7 +82,7 @@ func addValue(m Mutator, current interface{}, previous interface{}, depth int) e
 	return nil
 }
 
-func setObjectValue(m Mutator, pathEntry *parser.Object, current interface{}, depth int) error {
+func setObjectValue(m types.Mutator, pathEntry *parser.Object, current interface{}, depth int) error {
 	key := pathEntry.Reference
 	switch m.(type) {
 	case *AssignMetadataMutator:
@@ -103,7 +104,7 @@ func setObjectValue(m Mutator, pathEntry *parser.Object, current interface{}, de
 	return nil
 }
 
-func setListElementToValue(m Mutator, current interface{}, previous interface{}, listPathEntry *parser.List, depth int) error {
+func setListElementToValue(m types.Mutator, current interface{}, previous interface{}, listPathEntry *parser.List, depth int) error {
 	currentAsList, ok := current.([]interface{})
 	if !ok {
 		return fmt.Errorf("mismatch between path entry (type: list) and received object (type: %T). Path: %+v", current, listPathEntry)
@@ -143,7 +144,7 @@ func setListElementToValue(m Mutator, current interface{}, previous interface{},
 	return nil
 }
 
-func appendNewObjectToList(m Mutator, currentAsList []interface{}, previous interface{}, newValueAsObject map[string]interface{}, listPathEntry *parser.List, depth int) error {
+func appendNewObjectToList(m types.Mutator, currentAsList []interface{}, previous interface{}, newValueAsObject map[string]interface{}, listPathEntry *parser.List, depth int) error {
 	currentAsList = append(currentAsList, newValueAsObject)
 	previousPath, ok := m.Path().Nodes[depth-1].(*parser.Object)
 	if !ok {
@@ -157,7 +158,7 @@ func appendNewObjectToList(m Mutator, currentAsList []interface{}, previous inte
 	return nil
 }
 
-func createMissingElement(m Mutator, current interface{}, previous interface{}, depth int) interface{} {
+func createMissingElement(m types.Mutator, current interface{}, previous interface{}, depth int) interface{} {
 	var next interface{}
 	pathEntry := m.Path().Nodes[depth]
 	nextPathEntry := m.Path().Nodes[depth+1]

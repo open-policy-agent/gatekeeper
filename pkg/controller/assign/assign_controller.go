@@ -23,6 +23,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -125,7 +126,7 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	deleted = deleted || !assign.GetDeletionTimestamp().IsZero()
 
 	if deleted {
-		id, err := mutation.MakeID(assign)
+		id, err := types.MakeID(assign)
 		if err != nil {
 			log.Error(err, "Failed to get id out of assign")
 			return ctrl.Result{}, nil
