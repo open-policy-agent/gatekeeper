@@ -33,13 +33,11 @@ teardown() {
 }
 
 @test "constrainttemplates crd is established" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n gatekeeper-system wait --for condition=established --timeout=60s crd/constrainttemplates.templates.gatekeeper.sh"
-  kubectl -n gatekeeper-system get crd/constrainttemplates.templates.gatekeeper.sh
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/constrainttemplates.templates.gatekeeper.sh"
 }
 
 @test "waiting for validating webhook" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
-  kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration
 }
 
 @test "applying sync config" {
