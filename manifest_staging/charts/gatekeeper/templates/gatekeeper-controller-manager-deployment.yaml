@@ -47,6 +47,7 @@ spec:
                   - webhook
               topologyKey: kubernetes.io/hostname
             weight: 100
+      automountServiceAccountToken: true
       containers:
       - args:
         - --port=8443
