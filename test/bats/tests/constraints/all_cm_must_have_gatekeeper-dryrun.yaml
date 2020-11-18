@@ -1,12 +1,13 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
-  name: ns-must-have-gk
+  name: cm-must-have-gk
 spec:
   enforcementAction: dryrun
   match:
     kinds:
       - apiGroups: [""]
-        kinds: ["Namespace"]
+        kinds: ["ConfigMap"]
+    namespaces: ["gatekeeper-test-playground"]
   parameters:
     labels: ["gatekeeper"]

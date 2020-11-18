@@ -11,9 +11,9 @@ require (
 	github.com/google/go-cmp v0.5.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
+	github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8
 	github.com/open-policy-agent/opa v0.24.0
-	github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0
 	go.opencensus.io v0.22.2
