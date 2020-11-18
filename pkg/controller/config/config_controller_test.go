@@ -136,7 +136,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
@@ -283,7 +283,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(c.Create(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
 
 	// set up tracker
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// events channel will be used to receive events from dynamic watches
@@ -393,7 +393,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
@@ -521,7 +521,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)

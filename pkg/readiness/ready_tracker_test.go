@@ -94,7 +94,7 @@ func setupOpa(t *testing.T) *opa.Client {
 }
 
 func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) error {
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
@@ -258,7 +258,7 @@ func Test_CollectDeleted(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	mgr, _ := setupManager(t)
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
