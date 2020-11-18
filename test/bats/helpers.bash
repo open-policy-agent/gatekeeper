@@ -73,17 +73,31 @@ get_ca_cert() {
   kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d >$destination
 }
 
-compare_generation() {
-  kind="$1"
-  constraint="$2"
+constraint_enforced() {
+  local kind="$1"
+  local name="$2"
+  local pod_list="$(kubectl -n gatekeeper-system get pod -l gatekeeper.sh/operation=webhook -o json)"
+  if [[ $? -ne 0 ]]; then
+    echo "error gathering pods"
+    return 1
+  fi
 
-  [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.status.byPod[0].observedGeneration')" = "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o json | jq '.metadata.generation')" ]]
-}
+  # ensure pod_count is at least one
+  local pod_count=$(echo "${pod_list}" | jq '.items | length')
+  if [[ ${pod_count} -lt 1 ]]; then
+    echo "Gatekeeper pod count is < 1"
+    return 2
+  fi
+  
+  local cstr="$(kubectl get ${kind} ${name} -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "Error gathering constraint ${kind} ${name}"
+    return 3
+  fi
 
-compare_count() {
-  kind="$1"
-  constraint="$2"
-  podcount="$3"
+  echo "checking constraint ${cstr}"
 
-  [[ "$(kubectl get ${kind}.constraints.gatekeeper.sh ${constraint} -o yaml | grep -c 'id: gatekeeper-controller-manager')" = $podcount ]]
+  local ready_count=$(echo "${cstr}" | jq '.metadata.generation as $generation | [.status.byPod[] | select( .operations[] == "webhook" and .observedGeneration == $generation)] | length')
+  echo "ready: ${ready_count}, expected: ${pod_count}"
+  [[ "${ready_count}" -eq "${pod_count}" ]]
 }
