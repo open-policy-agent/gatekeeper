@@ -22,7 +22,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/token"
 )
 
-type Parser struct {
+type parser struct {
 	input     string
 	scanner   *token.Scanner
 	curToken  token.Token
@@ -36,9 +36,9 @@ func Parse(input string) (*Path, error) {
 	return p.Parse()
 }
 
-func newParser(input string) *Parser {
+func newParser(input string) *parser {
 	s := token.NewScanner(input)
-	p := &Parser{
+	p := &parser{
 		input:   input,
 		scanner: s,
 	}
@@ -48,7 +48,7 @@ func newParser(input string) *Parser {
 }
 
 // next advances to the next token in the stream.
-func (p *Parser) next() {
+func (p *parser) next() {
 	p.curToken = p.peekToken
 	p.peekToken = p.scanner.Next()
 }
@@ -56,7 +56,7 @@ func (p *Parser) next() {
 // expect returns whether the next token matches our expectation,
 // and if so advances to that token.
 // Otherwise returns false and doesn't advance.
-func (p *Parser) expect(t token.Type) bool {
+func (p *parser) expect(t token.Type) bool {
 	if p.peekToken.Type == t {
 		p.next()
 		return true
@@ -66,11 +66,11 @@ func (p *Parser) expect(t token.Type) bool {
 
 // expectPeek returns whether the next token matches our expectation.
 // The current token is not advanced either way.
-func (p *Parser) expectPeek(t token.Type) bool {
+func (p *parser) expectPeek(t token.Type) bool {
 	return p.peekToken.Type == t
 }
 
-func (p *Parser) Parse() (*Path, error) {
+func (p *parser) Parse() (*Path, error) {
 	root := &Path{}
 	for p.curToken.Type == token.IDENT && p.err == nil {
 		if node := p.parseObject(); node != nil {
@@ -115,7 +115,7 @@ func (p *Parser) Parse() (*Path, error) {
 
 // parseList tries to parse the current position as List match node, e.g. [key: val]
 // returns nil if it cannot be parsed as a List.
-func (p *Parser) parseList() Node {
+func (p *parser) parseList() Node {
 	out := &List{}
 
 	// keyField is required
@@ -149,12 +149,12 @@ func (p *Parser) parseList() Node {
 	return out
 }
 
-func (p *Parser) parseObject() Node {
+func (p *parser) parseObject() Node {
 	out := &Object{Reference: p.curToken.Literal}
 	return out
 }
 
-func (p *Parser) setError(err error) {
+func (p *parser) setError(err error) {
 	// Support only the first error for now
 	if p.err != nil {
 		return
