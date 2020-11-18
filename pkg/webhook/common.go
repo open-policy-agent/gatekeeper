@@ -121,13 +121,13 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request
 	return traceEnabled, dump
 }
 
-func (h *webhookHandler) skipExcludedNamespace(req admissionv1beta1.AdmissionRequest) (bool, error) {
+func (h *webhookHandler) skipExcludedNamespace(req admissionv1beta1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
 		return false, err
 	}
 
-	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(excludedProcess, obj)
 	if err != nil {
 		return false, err
 	}

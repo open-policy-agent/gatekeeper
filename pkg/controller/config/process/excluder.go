@@ -13,10 +13,11 @@ import (
 type Process string
 
 const (
-	Audit   = Process("audit")
-	Sync    = Process("sync")
-	Webhook = Process("webhook")
-	Star    = Process("*")
+	Audit    = Process("audit")
+	Sync     = Process("sync")
+	Webhook  = Process("webhook")
+	Mutation = Process("mutation-webhook")
+	Star     = Process("*")
 )
 
 type Excluder struct {
