@@ -41,6 +41,7 @@ spec:
                   - webhook
               topologyKey: kubernetes.io/hostname
       serviceAccountName: admin
+      automountServiceAccountToken: true
       containers:
         - command:
             - /manager
@@ -118,6 +119,7 @@ spec:
       annotations:
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
     spec:
+      automountServiceAccountToken: true
       containers:
         - args:
             - --operation=audit

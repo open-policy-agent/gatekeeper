@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: opa
-  namespace: good-ns
+  namespace: gatekeeper-test-playground
   labels:
     owner: me.agilebank.demo
 spec:

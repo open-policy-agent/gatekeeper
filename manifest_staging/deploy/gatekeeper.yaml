@@ -675,6 +675,7 @@ spec:
         gatekeeper.sh/operation: audit
         gatekeeper.sh/system: "yes"
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - --operation=audit
@@ -767,6 +768,7 @@ spec:
                   - webhook
               topologyKey: kubernetes.io/hostname
             weight: 100
+      automountServiceAccountToken: true
       containers:
       - args:
         - --port=8443

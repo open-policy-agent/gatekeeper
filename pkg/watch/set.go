@@ -44,6 +44,10 @@ func (w *Set) Size() int {
 }
 
 func (w *Set) Items() []schema.GroupVersionKind {
+	if w == nil {
+		return nil
+	}
+
 	w.mux.RLock()
 	defer w.mux.RUnlock()
 	var r []schema.GroupVersionKind
@@ -79,6 +83,10 @@ func (w *Set) Remove(gvks ...schema.GroupVersionKind) {
 }
 
 func (w *Set) Dump() map[schema.GroupVersionKind]bool {
+	if w == nil {
+		return nil
+	}
+
 	w.mux.RLock()
 	defer w.mux.RUnlock()
 	m := make(map[schema.GroupVersionKind]bool, len(w.set))
@@ -107,6 +115,12 @@ func (w *Set) RemoveSet(other *Set) {
 }
 
 func (w *Set) Equals(other *Set) bool {
+	if w == nil && other == nil {
+		return true
+	}
+	if w == nil || other == nil {
+		return false
+	}
 	otherSet := other.Dump()
 	w.mux.RLock()
 	defer w.mux.RUnlock()
@@ -147,8 +161,8 @@ func (w *Set) Difference(other *Set) *Set {
 	return &Set{set: out}
 }
 
-// Union returns a set composed of all items that are both in set w and other.
-func (w *Set) Union(other *Set) *Set {
+// Intersection returns a set composed of all items that are both in set w and other.
+func (w *Set) Intersection(other *Set) *Set {
 	s := other.Dump()
 	w.mux.RLock()
 	defer w.mux.RUnlock()
