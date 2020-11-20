@@ -20,6 +20,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+type requestResponse string
+
+const (
+	successResponse requestResponse = "success"
+	errorResponse   requestResponse = "error"
+	denyResponse    requestResponse = "deny"
+	allowResponse   requestResponse = "allow"
+	unknownResponse requestResponse = "unknown"
+	skipResponse    requestResponse = "skip"
+)
+
 var log = logf.Log.WithName("webhook")
 
 var (
