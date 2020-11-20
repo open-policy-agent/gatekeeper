@@ -1,0 +1,15 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: cm-must-have-gk-audit
+spec:
+  match:
+    namespaces: ["gatekeeper-test-playground"]
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap"]
+    labelSelector:
+      matchLabels:
+        test.gatekeeper.sh/audit: "yes"
+  parameters:
+    labels: ["gatekeeper"]

@@ -1,7 +1,7 @@
 package mutation
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -37,6 +37,8 @@ type Mutator interface {
 	// Has diff tells if the mutator has meaningful differences
 	// with the provided mutator
 	HasDiff(mutator Mutator) bool
+	// DeepCopy returns a copy of the current object
+	DeepCopy() Mutator
 }
 
 // MutatorWithSchema is a mutator exposing the implied
@@ -44,7 +46,7 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() []path.Entry
+	Path() parser.Path
 }
 
 // MakeID builds an ID object for the given object

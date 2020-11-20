@@ -387,8 +387,10 @@ github.com/onsi/gomega v1.7.0/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1Cpa
 github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
 github.com/onsi/gomega v1.10.1 h1:o0+MgICZLuZ7xjH7Vx6zS/zcu93/BEp1VwkIW1mEXCE=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
-github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e h1:kKIQk82R8CKO8mQV4sWNl0zR+UcHLAhTwwQ8y+1o02s=
-github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e/go.mod h1:/y33mmiq3Cc0N+6cickevrLI/iBbWcUwcEVjSKHA0z0=
+github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc h1:KYWavrXcTWCzQthNe/iW5Eh/KI8SeQV6tSia36uia8g=
+github.com/open-policy-agent/cert-controller v0.0.0-20201021182510-6b649a1dbadc/go.mod h1:c9DSNblEzdNx4YZkW+EBU+srKFcb+8Mo5vy3tk3etcQ=
+github.com/open-policy-agent/cert-controller v0.0.0-20201118195149-7df0cfffc634 h1:DGWhUOohlVUqYjyDomslL5KBUAJCIc0jvDmvU/dJApI=
+github.com/open-policy-agent/cert-controller v0.0.0-20201118195149-7df0cfffc634/go.mod h1:Z7C0aJTvb4zG+8dOF6H0j4LBDi3/ks9WZed2Fexc7d4=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8 h1:a1owzPFTYUK9zLFLp1PC6yM3MyR+R+/vsxHFucWVoN0=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8/go.mod h1:vvhkBONv7Uah2fvS/bQ/N1u0rSLvxZOs2ErR6m+4QtQ=
 github.com/open-policy-agent/opa v0.24.0 h1:fnGOIux+TTGZsC0du1bRBtV8F+KPN55Hks12uE3Fq3E=

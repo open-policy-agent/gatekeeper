@@ -4,6 +4,9 @@ metadata:
   name: config
   namespace: "gatekeeper-system"
 spec:
+  match:
+    - excludedNamespaces: ["gatekeeper-excluded-namespace"]
+      processes: ["*"]
   sync:
     syncOnly:
       - group: ""
@@ -15,4 +18,3 @@ spec:
       - group: ""
         version: "v1"
         kind: "Namespace"
-
