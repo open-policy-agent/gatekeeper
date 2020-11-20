@@ -1,6 +1,10 @@
 package mutation
 
 import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -94,12 +98,12 @@ func (m *AssignMutator) DeepCopy() Mutator {
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
 	id, err := MakeID(assign)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to retrieve id for assign type")
+		return nil, errors.Wrap(err, "Failed to retrieve id for assign type")
 	}
 
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to parse the location specified")
+		return nil, errors.Wrap(err, "Failed to parse the location specified")
 	}
 
 	return &AssignMutator{
@@ -130,4 +134,111 @@ func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []SchemaBinding {
 		res = append(res, binding)
 	}
 	return res
+}
+
+// IsValidAssign returns an error if the given assign object is not
+// semantically valid
+func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
+	path, err := parser.Parse(assign.Spec.Location)
+	if err != nil {
+		return errors.Wrap(err, "invalid location format")
+	}
+
+	if hasMetadataRoot(path) {
+		return errors.New("assign can't change metadata")
+	}
+
+	err = checkKeyNotChanged(path)
+	if err != nil {
+		return err
+	}
+
+	toAssign := make(map[string]interface{})
+	err = json.Unmarshal([]byte(assign.Spec.Parameters.Assign.Raw), &toAssign)
+	if err != nil {
+		return errors.Wrap(err, "invalid format for parameters.assign")
+	}
+
+	value, ok := toAssign["value"]
+	if !ok {
+		return errors.New("spec.parameters.assign must have a value field")
+	}
+
+	err = validateObjectAssignedToList(path, value)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func hasMetadataRoot(path *parser.Path) bool {
+	if len(path.Nodes) == 0 {
+		return false
+	}
+
+	if reflect.DeepEqual(path.Nodes[0], &parser.Object{Reference: "metadata"}) {
+		return true
+	}
+	return false
+}
+
+// checkKeyNotChanged does not allow to change the key field of
+// a list element. A path like foo[name: bar].name is rejected
+func checkKeyNotChanged(p *parser.Path) error {
+	if len(p.Nodes) == 0 || p.Nodes == nil {
+		return errors.New("empty path")
+	}
+	if len(p.Nodes) < 2 {
+		return nil
+	}
+	lastNode := p.Nodes[len(p.Nodes)-1]
+	secondLastNode := p.Nodes[len(p.Nodes)-2]
+
+	if secondLastNode.Type() != parser.ListNode {
+		return nil
+	}
+	if lastNode.Type() != parser.ObjectNode {
+		return errors.New("invalid path format: child of a list can't be a list")
+	}
+	addedObject, ok := lastNode.(*parser.Object)
+	if !ok {
+		return errors.New("failed converting an ObjectNodeType to Object")
+	}
+	listNode, ok := secondLastNode.(*parser.List)
+	if !ok {
+		return errors.New("failed converting a ListNodeType to List")
+	}
+
+	if addedObject.Reference == listNode.KeyField {
+		return errors.New("invalid path format: changing the item key is not allowed")
+	}
+	return nil
+}
+
+func validateObjectAssignedToList(p *parser.Path, value interface{}) error {
+	if len(p.Nodes) == 0 || p.Nodes == nil {
+		return errors.New("empty path")
+	}
+	if p.Nodes[len(p.Nodes)-1].Type() != parser.ListNode {
+		return nil
+	}
+	listNode, ok := p.Nodes[len(p.Nodes)-1].(*parser.List)
+	if !ok {
+		return errors.New("failed converting a ListNodeType to List")
+	}
+	if listNode.Glob {
+		return errors.New("can't append to a globbed list")
+	}
+	if listNode.KeyValue == nil {
+		return errors.New("invalid key value for a non globbed object")
+	}
+	valueMap, ok := value.(map[string]interface{})
+	if !ok {
+		return errors.New("only full objects can be appended to lists")
+	}
+	if *listNode.KeyValue != valueMap[listNode.KeyField] {
+		return fmt.Errorf("adding object to list with different key %s: list key %s, object key %s", listNode.KeyField, *listNode.KeyValue, valueMap[listNode.KeyField])
+	}
+
+	return nil
 }
