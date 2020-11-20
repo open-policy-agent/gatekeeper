@@ -103,8 +103,6 @@ const (
 	denyResponse    admissionReqRes = "deny"
 	allowResponse   admissionReqRes = "allow"
 	unknownResponse admissionReqRes = "unknown"
-
-	namespaceStr string = "Namespace"
 )
 
 // Handle the validation request
@@ -158,7 +156,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}()
 
 	// namespace is excluded from webhook using config
-	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) || (req.AdmissionRequest.Kind.Kind == namespaceStr && req.AdmissionRequest.Kind.Group == "" && h.skipExcludedNamespace(req.AdmissionRequest.Name)) {
+	if h.skipExcludedNamespace(req.AdmissionRequest) {
 		requestResponse = allowResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
@@ -319,7 +317,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
 	// https://github.com/open-policy-agent/gatekeeper/issues/792
-	if req.Kind.Kind == namespaceStr && req.Kind.Group == "" {
+	if req.Kind.Kind == "Namespace" && req.Kind.Group == "" {
 		req.Namespace = ""
 	}
 	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}

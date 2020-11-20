@@ -187,7 +187,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// namespace is excluded from sync
-	if r.skipExcludedNamespace(request.Namespace) {
+	if r.skipExcludedNamespace(instance) {
 		// cancel expectations
 		t := r.tracker.ForData(instance.GroupVersionKind())
 		t.CancelExpect(instance)
@@ -240,8 +240,8 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileSync) skipExcludedNamespace(namespace string) bool {
-	return r.processExcluder.IsNamespaceExcluded(process.Sync, namespace)
+func (r *ReconcileSync) skipExcludedNamespace(obj *unstructured.Unstructured) bool {
+	return r.processExcluder.IsNamespaceExcluded(process.Sync, obj.GroupVersionKind(), obj.GetName(), obj.GetNamespace())
 }
 
 func NewMetricsCache() *MetricsCache {

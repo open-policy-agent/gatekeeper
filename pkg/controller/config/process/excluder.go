@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 )
 
@@ -79,8 +81,13 @@ func (s *Excluder) Equals(new *Excluder) bool {
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
-func (s *Excluder) IsNamespaceExcluded(process Process, namespace string) bool {
+func (s *Excluder) IsNamespaceExcluded(process Process, gvk schema.GroupVersionKind, name, namespace string) bool {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
+
+	if gvk.Kind == "Namespace" && gvk.Group == "" {
+		return s.excludedNamespaces[process][name]
+	}
+
 	return s.excludedNamespaces[process][namespace]
 }

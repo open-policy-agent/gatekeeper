@@ -339,7 +339,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
 
-			if r.skipExcludedNamespace(u.Items[i].GetNamespace()) {
+			if r.skipExcludedNamespace(u.Items[i]) {
 				continue
 			}
 
@@ -369,8 +369,8 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 	}
 }
 
-func (r *ReconcileConfig) skipExcludedNamespace(namespace string) bool {
-	return r.processExcluder.IsNamespaceExcluded(process.Sync, namespace)
+func (r *ReconcileConfig) skipExcludedNamespace(obj unstructured.Unstructured) bool {
+	return r.processExcluder.IsNamespaceExcluded(process.Sync, obj.GroupVersionKind(), obj.GetName(), obj.GetNamespace())
 }
 
 func containsString(s string, items []string) bool {
