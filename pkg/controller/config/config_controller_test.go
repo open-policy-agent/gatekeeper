@@ -184,14 +184,24 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := processExcluder.IsNamespaceExcluded(process.Audit, "foo")
+	auditExcludedNS := processExcluder.IsNamespaceExcluded(process.Audit, nsGvk, "foo", "")
 	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
-	syncExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, "foo")
+	syncExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, nsGvk, "foo", "")
 	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
-	syncNotExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, "bar")
+	syncNotExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, nsGvk, "bar", "")
 	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
-	webhookExcludedNS := processExcluder.IsNamespaceExcluded(process.Webhook, "foo")
+	webhookExcludedNS := processExcluder.IsNamespaceExcluded(process.Webhook, nsGvk, "foo", "")
 	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
+
+	podGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	auditExcludedPod := processExcluder.IsNamespaceExcluded(process.Audit, podGvk, "foo", "foo")
+	g.Expect(auditExcludedPod).Should(gomega.BeTrue())
+	syncExcludedPod := processExcluder.IsNamespaceExcluded(process.Sync, podGvk, "foo", "foo")
+	g.Expect(syncExcludedPod).Should(gomega.BeTrue())
+	syncNotExcludedPod := processExcluder.IsNamespaceExcluded(process.Sync, podGvk, "bar", "bar")
+	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
+	webhookExcludedPod := processExcluder.IsNamespaceExcluded(process.Webhook, podGvk, "foo", "foo")
+	g.Expect(webhookExcludedPod).Should(gomega.BeTrue())
 
 	// Test finalizer removal
 
@@ -413,8 +423,8 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	expected := map[opaKey]interface{}{
 		{gvk: nsGVK, key: "default"}:                      nil,
-		{gvk: nsGVK, key: "kube-system"}:                  nil,
 		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
 		return opa.Contains(expected)
