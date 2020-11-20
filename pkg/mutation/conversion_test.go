@@ -68,7 +68,7 @@ func TestAssignMetadataToMutator(t *testing.T) {
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
 			Match:      mutationsv1alpha1.Match{},
-			Location:   "spec.foo",
+			Location:   "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{},
 		},
 	}
@@ -178,7 +178,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
 			Match:      mutationsv1alpha1.Match{},
-			Location:   "spec.foo",
+			Location:   "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{},
 		},
 	}
@@ -206,7 +206,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		{
 			"differentLocation",
 			func(a *mutationsv1alpha1.AssignMetadata) {
-				a.Spec.Location = "location"
+				a.Spec.Location = "metadata.annotations.bar"
 			},
 			true,
 		},
@@ -289,5 +289,60 @@ func TestParseShouldFail(t *testing.T) {
 	_, err = mutation.MutatorForAssignMetadata(assignMeta)
 	if err == nil || !strings.Contains(err.Error(), "parse") {
 		t.Errorf("Parsing was expected to fail for assign metadata: %v", err)
+	}
+}
+
+func TestPathValidation(t *testing.T) {
+	assignMeta := &mutationsv1alpha1.AssignMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "name",
+			Namespace: "namespace",
+		},
+		Spec: mutationsv1alpha1.AssignMetadataSpec{
+			Match:      mutationsv1alpha1.Match{},
+			Parameters: mutationsv1alpha1.MetadataParameters{},
+		},
+	}
+
+	table := []struct {
+		tname    string
+		location string
+		isValid  bool
+	}{
+		{
+			"validlabel",
+			"metadata.labels.mutate",
+			true,
+		},
+		{
+			"validannotation",
+			"metadata.annotations.mutate",
+			true,
+		},
+		{
+			"changename",
+			"metadata.name",
+			false,
+		},
+		{
+			"containers",
+			"spec.containers[name: foo]",
+			false,
+		},
+	}
+
+	for _, tc := range table {
+		t.Run(tc.tname, func(t *testing.T) {
+			a := assignMeta.DeepCopy()
+			a.Spec.Location = tc.location
+			_, err := mutation.MutatorForAssignMetadata(a)
+
+			if tc.isValid && err != nil {
+				t.Errorf("Unexpected error for location %s, %v", tc.location, err)
+			}
+			if !tc.isValid && (err == nil || !strings.HasPrefix(err.Error(), "Invalid location")) {
+				t.Errorf("Location was invalid but did not get an invalid location error, %v", err)
+			}
+		})
 	}
 }

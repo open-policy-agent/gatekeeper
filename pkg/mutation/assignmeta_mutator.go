@@ -1,6 +1,9 @@
 package mutation
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -8,6 +11,26 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+var (
+	labelsValidSubPath = []parser.Node{
+		&parser.Object{
+			Reference: "metadata",
+		},
+		&parser.Object{
+			Reference: "labels",
+		},
+	}
+
+	annotationValidSubPath = []parser.Node{
+		&parser.Object{
+			Reference: "metadata",
+		},
+		&parser.Object{
+			Reference: "annotations",
+		},
+	}
 )
 
 //AssignMetadataMutator is a mutator built out of an
@@ -70,9 +93,33 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed to parse location for assign metadata")
 	}
+
+	if !isMetadataPath(path) {
+		return nil, fmt.Errorf("Invalid location for assignmetadata: %s", assignMeta.Spec.Location)
+	}
 	return &AssignMetadataMutator{
 		id:             id,
 		assignMetadata: assignMeta.DeepCopy(),
 		path:           path,
 	}, nil
+}
+
+// Verifies that the given path is valid for metadata
+func isMetadataPath(path *parser.Path) bool {
+	// Path must be metadata.annotations.something or metadata.labels.something
+	if len(path.Nodes) != 3 ||
+		path.Nodes[0].Type() != parser.ObjectNode ||
+		path.Nodes[1].Type() != parser.ObjectNode ||
+		path.Nodes[2].Type() != parser.ObjectNode {
+
+		return false
+	}
+
+	if reflect.DeepEqual(path.Nodes[0:2], labelsValidSubPath) {
+		return true
+	}
+	if reflect.DeepEqual(path.Nodes[0:2], annotationValidSubPath) {
+		return true
+	}
+	return false
 }
