@@ -3,6 +3,7 @@ package mutation
 import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,7 @@ import (
 type AssignMetadataMutator struct {
 	id             ID
 	assignMetadata *mutationsv1alpha1.AssignMetadata
+	path           *parser.Path
 }
 
 // assignMetadataMutator implements mutator
@@ -63,8 +65,14 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed to retrieve id for assignMetadata type")
 	}
+
+	path, err := parser.Parse(assignMeta.Spec.Location)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Failed to parse location for assign metadata")
+	}
 	return &AssignMetadataMutator{
 		id:             id,
 		assignMetadata: assignMeta.DeepCopy(),
+		path:           path,
 	}, nil
 }

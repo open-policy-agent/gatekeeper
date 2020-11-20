@@ -1,6 +1,7 @@
 package mutation_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -57,7 +58,6 @@ func TestAssignToMutator(t *testing.T) {
 	if !cmp.Equal(bindings, expectedBindings) {
 		t.Errorf("Bindings are not as expected: %s", cmp.Diff(bindings, expectedBindings))
 	}
-
 }
 
 func TestAssignMetadataToMutator(t *testing.T) {
@@ -247,5 +247,47 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 				t.Errorf("test %s: Expected to be different: %v, diff result is %v", tc.tname, tc.areDifferent, hasDiff)
 			}
 		})
+	}
+}
+
+func TestParseShouldFail(t *testing.T) {
+	assign := &mutationsv1alpha1.Assign{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "name",
+			Namespace: "namespace",
+		},
+		Spec: mutationsv1alpha1.AssignSpec{
+			ApplyTo: []mutationsv1alpha1.ApplyTo{
+				{
+					Groups:   []string{"group3", "group4"},
+					Kinds:    []string{"kind4", "kind2", "kind3"},
+					Versions: []string{"version1"},
+				},
+			},
+			Match:      mutationsv1alpha1.Match{},
+			Location:   "aaa..bb",
+			Parameters: mutationsv1alpha1.Parameters{},
+		},
+	}
+
+	_, err := mutation.MutatorForAssign(assign)
+	if err == nil || !strings.Contains(err.Error(), "parse") {
+		t.Errorf("Parsing was expected to fail for assign: %v", err)
+	}
+
+	assignMeta := &mutationsv1alpha1.AssignMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "name",
+			Namespace: "namespace",
+		},
+		Spec: mutationsv1alpha1.AssignMetadataSpec{
+			Match:      mutationsv1alpha1.Match{},
+			Location:   "spec...foo",
+			Parameters: mutationsv1alpha1.MetadataParameters{},
+		},
+	}
+	_, err = mutation.MutatorForAssignMetadata(assignMeta)
+	if err == nil || !strings.Contains(err.Error(), "parse") {
+		t.Errorf("Parsing was expected to fail for assign metadata: %v", err)
 	}
 }

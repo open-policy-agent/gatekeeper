@@ -46,7 +46,7 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() parser.Path
+	Path() *parser.Path
 }
 
 // MakeID builds an ID object for the given object

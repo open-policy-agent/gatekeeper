@@ -3,7 +3,7 @@ package mutation
 import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +15,7 @@ import (
 type AssignMutator struct {
 	id       ID
 	assign   *mutationsv1alpha1.Assign
-	path     []path.Entry
+	path     *parser.Path
 	bindings []SchemaBinding
 }
 
@@ -63,18 +63,20 @@ func (m *AssignMutator) HasDiff(mutator Mutator) bool {
 	return false
 }
 
-func (m *AssignMutator) Path() []path.Entry {
+func (m *AssignMutator) Path() *parser.Path {
 	return m.path
 }
 
 func (m *AssignMutator) DeepCopy() Mutator {
 	res := &AssignMutator{
-		id:       m.id,
-		assign:   m.assign.DeepCopy(),
-		path:     make([]path.Entry, len(m.path)),
+		id:     m.id,
+		assign: m.assign.DeepCopy(),
+		path: &parser.Path{
+			Nodes: make([]parser.Node, len(m.path.Nodes)),
+		},
 		bindings: make([]SchemaBinding, len(m.bindings)),
 	}
-	copy(res.path, m.path)
+	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
 	return res
 }
@@ -86,11 +88,17 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed to retrieve id for assign type")
 	}
+
+	path, err := parser.Parse(assign.Spec.Location)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Failed to parse the location specified")
+	}
+
 	return &AssignMutator{
 		id:       id,
 		assign:   assign.DeepCopy(),
 		bindings: applyToToBindings(assign.Spec.ApplyTo),
-		path:     nil, // TODO fill when the parsing is done
+		path:     path,
 	}, nil
 }
 
