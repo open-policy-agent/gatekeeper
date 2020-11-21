@@ -20,4 +20,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_ANNOTATIONS": `
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
+
+	"HELMSUBST_SECRET_ANNOTATIONS": `
+{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 }
