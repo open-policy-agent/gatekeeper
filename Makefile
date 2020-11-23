@@ -153,8 +153,8 @@ manifests: __controller-gen
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
-	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
-	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
+	docker run --rm -v $(shell pwd):/gatekeeper -ti --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:1.18.5-3.7.0 build /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
+	docker run --rm -v $(shell pwd):/gatekeeper -ti --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:1.18.5-3.7.0 build /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 lint:
 	golangci-lint -v run ./... --timeout 5m
