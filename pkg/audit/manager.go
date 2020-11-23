@@ -546,7 +546,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 }
 
 func (am *Manager) skipExcludedNamespace(obj runtime.Object) (bool, error) {
-	isNamespaceExcluded, err := am.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	isNamespaceExcluded, err := am.processExcluder.IsNamespaceExcluded(process.Audit, obj)
 	if err != nil {
 		return false, err
 	}

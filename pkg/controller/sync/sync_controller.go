@@ -246,7 +246,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 }
 
 func (r *ReconcileSync) skipExcludedNamespace(obj runtime.Object) (bool, error) {
-	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
 	if err != nil {
 		return false, err
 	}

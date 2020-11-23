@@ -375,7 +375,7 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 }
 
 func (r *ReconcileConfig) skipExcludedNamespace(obj runtime.Object) (bool, error) {
-	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
 	if err != nil {
 		return false, err
 	}
