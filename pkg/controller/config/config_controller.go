@@ -339,7 +339,12 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
 
-			if r.skipExcludedNamespace(u.Items[i]) {
+			isExcludedNamespace, err := r.skipExcludedNamespace(u.Items[i].DeepCopyObject())
+			if err != nil {
+				log.Error(err, "error while excluding namespaces")
+			}
+
+			if isExcludedNamespace {
 				continue
 			}
 
@@ -369,8 +374,13 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 	}
 }
 
-func (r *ReconcileConfig) skipExcludedNamespace(obj unstructured.Unstructured) bool {
-	return r.processExcluder.IsNamespaceExcluded(process.Sync, obj.GroupVersionKind(), obj.GetName(), obj.GetNamespace())
+func (r *ReconcileConfig) skipExcludedNamespace(obj runtime.Object) (bool, error) {
+	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	if err != nil {
+		return false, err
+	}
+
+	return isNamespaceExcluded, err
 }
 
 func containsString(s string, items []string) bool {
