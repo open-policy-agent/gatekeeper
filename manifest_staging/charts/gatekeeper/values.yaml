@@ -18,6 +18,7 @@ affinity: {}
 tolerations: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+secretAnnotations: {}
 controllerManager:
   resources:
     limits:
