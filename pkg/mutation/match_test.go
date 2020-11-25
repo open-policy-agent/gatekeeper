@@ -38,6 +38,36 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
+			tname:   "match group and no kinds specified should match",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: mutationsv1.Match{
+				Kinds: []mutationsv1.Kinds{
+					{
+						Kinds:     []string{"notmatching", "neithermatching"},
+						APIGroups: []string{"*"},
+					},
+					{
+						APIGroups: []string{"*"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "match kind and no group specified should match",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: mutationsv1.Match{
+				Kinds: []mutationsv1.Kinds{
+					{
+						Kinds: []string{"kind", "neithermatching"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
 			tname:   "match kind and group explicit",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: mutationsv1.Match{

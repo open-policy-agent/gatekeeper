@@ -15,7 +15,7 @@ import (
 
 // Matches verifies if the given object belonging to the given namespace
 // matches the current mutator.
-func Matches(match mutationsv1.Match, obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
+func Matches(match mutationsv1.Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
 		return false, fmt.Errorf("Accessor failed for %s", obj.GetObjectKind().GroupVersionKind().Kind)
@@ -28,17 +28,25 @@ func Matches(match mutationsv1.Match, obj *unstructured.Unstructured, ns *corev1
 		groupMatches := false
 
 		for _, k := range kk.Kinds {
-			if k == "*" || k == obj.GroupVersionKind().Kind {
+			if k == "*" || k == obj.GetObjectKind().GroupVersionKind().Kind {
 				kindMatches = true
 				break
 			}
 		}
+		if len(kk.Kinds) == 0 {
+			kindMatches = true
+		}
+
 		for _, g := range kk.APIGroups {
-			if g == "*" || g == obj.GroupVersionKind().Group {
+			if g == "*" || g == obj.GetObjectKind().GroupVersionKind().Group {
 				groupMatches = true
 				break
 			}
 		}
+		if len(kk.APIGroups) == 0 {
+			groupMatches = true
+		}
+
 		if kindMatches && groupMatches {
 			foundMatch = true
 		}
