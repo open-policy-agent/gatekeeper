@@ -46,15 +46,14 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() parser.Path
+	Path() *parser.Path
 }
 
 // MakeID builds an ID object for the given object
 func MakeID(obj runtime.Object) (ID, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s - %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
-
+		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
 	}
 	return ID{
 		Group:     obj.GetObjectKind().GroupVersionKind().Group,
