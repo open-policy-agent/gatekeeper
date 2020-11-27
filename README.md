@@ -620,7 +620,7 @@ Redeploying the webhook configuration will re-enable Gatekeeper.
 
 Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straight to the POD on port 8443.
 
-In order to configure masters to communicate to the webhook on port 8443, you have to configure the webhook port as follow
+In order to configure masters to communicate to the webhook on port 8443 on container, you have to configure the webhook port as follow:
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1beta1
