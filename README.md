@@ -616,6 +616,28 @@ the default webhook name has been used this can be achieved by running:
 
 Redeploying the webhook configuration will re-enable Gatekeeper.
 
+### Running on GKE Cluster nodes
+
+Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straight to the POD on port 8443.
+
+In order to configure masters to communicate to the webhook on port 8443, you have to configure the webhook port as follow
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  [...]
+  name: gatekeeper-validating-webhook-configuration
+webhooks:
+  - clientConfig:
+        service:
+        name: gatekeeper-webhook-service
+        namespace: gatekeeper-system
+        path: /v1/admit
+        port: 8443
+[...]   
+```
+
 ### Running on private GKE Cluster nodes
 
 By default, firewall rules restrict the cluster master communication to nodes only on ports 443 (HTTPS) and 10250 (kubelet). Although Gatekeeper exposes its service on port 443, GKE by default enables `--enable-aggregator-routing` option, which makes the master to bypass the service and communicate straight to the POD on port 8443.
