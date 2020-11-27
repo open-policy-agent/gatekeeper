@@ -39,6 +39,10 @@ func (m *AssignMutator) SchemaBindings() []SchemaBinding {
 	return m.bindings
 }
 
+func (m *AssignMutator) Value() (interface{}, error) {
+	return unmarshalValue(m.assign.Spec.Parameters.Assign.Raw)
+}
+
 func (m *AssignMutator) HasDiff(mutator Mutator) bool {
 	toCheck, ok := mutator.(*AssignMutator)
 	if !ok { // different types, different

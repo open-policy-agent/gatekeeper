@@ -1,6 +1,8 @@
 package mutation
 
 import (
+	"encoding/json"
+
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +41,7 @@ type Mutator interface {
 	HasDiff(mutator Mutator) bool
 	// DeepCopy returns a copy of the current object
 	DeepCopy() Mutator
+	Value() (interface{}, error)
 }
 
 // MutatorWithSchema is a mutator exposing the implied
@@ -61,4 +64,13 @@ func MakeID(obj runtime.Object) (ID, error) {
 		Name:      meta.GetName(),
 		Namespace: meta.GetNamespace(),
 	}, nil
+}
+
+func unmarshalValue(data []byte) (interface{}, error) {
+	value := make(map[string]interface{})
+	err := json.Unmarshal(data, &value)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to unmarshal value")
+	}
+	return value["value"], nil
 }
