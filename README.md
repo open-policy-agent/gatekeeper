@@ -634,8 +634,15 @@ webhooks:
         name: gatekeeper-webhook-service
         namespace: gatekeeper-system
         path: /v1/admit
+        port: 8443 
+[...]
+  - clientConfig:
+        service:
+        name: gatekeeper-webhook-service
+        namespace: gatekeeper-system
+        path: /v1/admit
         port: 8443
-[...]   
+[...]
 ```
 
 ### Running on private GKE Cluster nodes
