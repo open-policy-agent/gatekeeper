@@ -59,6 +59,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - policy
   resourceNames:
   - gatekeeper-admin
