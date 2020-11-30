@@ -14,10 +14,15 @@ package mutation
 
 import (
 	"flag"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // MutationEnabled indicates if the mutation feature is enabled
-var MutationEnabled *bool
+var (
+	MutationEnabled *bool
+	log             = logf.Log.WithName("mutation")
+)
 
 func init() {
 	MutationEnabled = flag.Bool("enable-mutation", false, "(alpha) Enable the mutation feature")
