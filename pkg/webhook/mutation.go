@@ -143,7 +143,6 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	return resp
 }
 
-// traceSwitch returns true if a request should be traced
 func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Request) (admission.Response, error) {
 	// TODO: place mutation logic here
 	mutatedObject := req.Object

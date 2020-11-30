@@ -9,6 +9,9 @@ bases:
 
 resources:
   - webhook.yaml
+  - mutations.gatekeeper.sh_assign.yaml
+  - mutations.gatekeeper.sh_assignmetadata.yaml
+
 
 patchesJson6902:
 - target:
