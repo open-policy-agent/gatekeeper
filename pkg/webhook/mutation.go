@@ -27,7 +27,10 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -153,6 +156,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	}
 
 	resp, err := h.mutateRequest(ctx, req)
+
 	if err != nil {
 		requestResponse = mutationErrorResponse
 		return admission.Errored(int32(http.StatusInternalServerError), err)
@@ -162,9 +166,40 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 }
 
 func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Request) (admission.Response, error) {
-	// TODO: place mutation logic here
-	mutatedObject := req.Object
-	resp := admission.PatchResponseFromRaw(req.Object.Raw, mutatedObject.Raw)
+	okResp := admission.Allowed("")
+	ns := &corev1.Namespace{}
+	if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			log.Info("Namespace not found", "name", req.AdmissionRequest.Namespace)
+			return okResp, nil
+		}
+		// bypass cached client and ask api-server directly
+		err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+		if err != nil {
+			log.Info("Namespace not found", "name", req.AdmissionRequest.Namespace)
+			return okResp, nil
+		}
+	}
+	obj := unstructured.Unstructured{}
+	err := obj.UnmarshalJSON(req.Object.Raw)
+	if err != nil {
+		log.Error(err, "Failed to unmarshal", "object", string(req.Object.Raw))
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+
+	err = h.mutationSystem.Mutate(&obj, ns)
+	if err != nil {
+		log.Error(err, "Failed to mutate object", "object", string(req.Object.Raw))
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+
+	newJSON, err := obj.MarshalJSON()
+	if err != nil {
+		log.Error(err, "Failed to marshal mutated object", "object", obj)
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+	log.Info("Mutated", "object", obj, "json", string(newJSON))
+	resp := admission.PatchResponseFromRaw(req.Object.Raw, newJSON)
 	return resp, nil
 }
 
