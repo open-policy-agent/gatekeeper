@@ -35,8 +35,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/conversion"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -157,23 +155,10 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		}
 	}()
 
-	var obj runtime.Object
-	var scope conversion.Scope
-	err := runtime.Convert_runtime_RawExtension_To_runtime_Object(&req.AdmissionRequest.Object, &obj, scope)
-	if err != nil {
-		log.Error(err, "error while converting admission request raw extension to object")
-	}
-
-	innerObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		log.Error(err, "error while converting runtime object to unstructured")
-	}
-	u := unstructured.Unstructured{Object: innerObj}
-
 	// namespace is excluded from webhook using config
-	isExcludedNamespace, err := h.skipExcludedNamespace(u.DeepCopyObject())
+	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest)
 	if err != nil {
-		log.Error(err, "error while excluding namespaces")
+		log.Error(err, "error while excluding namespace")
 	}
 
 	if isExcludedNamespace {

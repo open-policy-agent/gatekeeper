@@ -11,8 +11,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/tools/record"
@@ -94,7 +95,12 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request
 	return traceEnabled, dump
 }
 
-func (h *webhookHandler) skipExcludedNamespace(obj runtime.Object) (bool, error) {
+func (h *webhookHandler) skipExcludedNamespace(req admissionv1beta1.AdmissionRequest) (bool, error) {
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
+		return false, err
+	}
+
 	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
 	if err != nil {
 		return false, err
