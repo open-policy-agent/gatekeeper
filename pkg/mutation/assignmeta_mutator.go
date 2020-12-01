@@ -9,8 +9,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var (
@@ -44,9 +44,13 @@ type AssignMetadataMutator struct {
 // assignMetadataMutator implements mutator
 var _ Mutator = &AssignMetadataMutator{}
 
-func (m *AssignMetadataMutator) Matches(obj metav1.Object, ns *corev1.Namespace) bool {
-	// TODO implement using matches function
-	return false
+func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+	matches, err := Matches(m.assignMetadata.Spec.Match, obj, ns)
+	if err != nil {
+		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
+		return false
+	}
+	return matches
 }
 
 func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
