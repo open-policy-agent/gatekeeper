@@ -23,7 +23,7 @@ type MockMutator struct {
 	UnstableFor      int // makes the mutation unstable for the first n mutations
 }
 
-func (m *MockMutator) Matches(obj metav1.Object, ns *corev1.Namespace) bool {
+func (m *MockMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return true // always matches
 }
 

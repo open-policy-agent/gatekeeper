@@ -95,3 +95,10 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations: HELMSUBST_SECRET_ANNOTATIONS
+  name: gatekeeper-webhook-server-cert
+  namespace: gatekeeper-system

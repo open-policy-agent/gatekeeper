@@ -5,7 +5,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -29,7 +28,7 @@ type SchemaBinding struct {
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
-	Matches(obj metav1.Object, ns *corev1.Namespace) bool
+	Matches(obj runtime.Object, ns *corev1.Namespace) bool
 	// Mutate applies the mutation to the given object
 	Mutate(obj *unstructured.Unstructured) error
 	// ID returns the id of the current mutator.
@@ -46,15 +45,14 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() parser.Path
+	Path() *parser.Path
 }
 
 // MakeID builds an ID object for the given object
 func MakeID(obj runtime.Object) (ID, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s - %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
-
+		return ID{}, errors.Wrapf(err, "Failed to get accessor for %s %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
 	}
 	return ID{
 		Group:     obj.GetObjectKind().GroupVersionKind().Group,

@@ -1,8 +1,11 @@
 /*
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -10,20 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mutation
+package controller
 
 import (
-	"flag"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-)
-
-// MutationEnabled indicates if the mutation feature is enabled
-var (
-	MutationEnabled *bool
-	log             = logf.Log.WithName("mutation")
+	assignmetadata "github.com/open-policy-agent/gatekeeper/pkg/controller/assignmetadata"
 )
 
 func init() {
-	MutationEnabled = flag.Bool("enable-mutation", false, "(alpha) Enable the mutation feature")
+	Injectors = append(Injectors, &assignmetadata.Adder{})
 }
