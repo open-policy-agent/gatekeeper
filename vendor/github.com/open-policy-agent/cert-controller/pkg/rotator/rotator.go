@@ -25,8 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -41,25 +42,63 @@ const (
 	caKeyName              = "ca.key"
 	rotationCheckFrequency = 12 * time.Hour
 	certValidityDuration   = 10 * 365 * 24 * time.Hour
+	lookaheadInterval      = 90 * 24 * time.Hour
 )
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
+//WebhookType it the type of webhook, either validating/mutating webhook or a CRD conversion webhook
+type WebhookType int
 
-var crdGVK = schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"}
+const (
+	//ValidatingWebhook indicates the webhook is a ValidatingWebhook
+	Validating WebhookType = iota
+	//MutingWebhook indicates the webhook is a MutatingWebhook
+	Mutating
+	//CRDConversionWebhook indicates the webhook is a conversion webhook
+	CRDConversion
+)
 
 var _ manager.Runnable = &CertRotator{}
 
 var restartOnSecretRefresh = false
 
+//WebhookInfo is used by the rotator to receive info about resources to be updated with certificates
+type WebhookInfo struct {
+	//Name is the name of the webhook for a validating or mutating webhook, or the CRD name in case of a CRD conversion webhook
+	Name string
+	Type WebhookType
+}
+
 func init() {
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
 }
 
+func (w WebhookInfo) gvk() schema.GroupVersionKind {
+	t2g := map[WebhookType]schema.GroupVersionKind{
+		Validating:    schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"},
+		Mutating:      schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "MutatingWebhookConfiguration"},
+		CRDConversion: schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"},
+	}
+	return t2g[w.Type]
+}
+
 // AddRotator adds the CertRotator and ReconcileWH to the manager.
 func AddRotator(mgr manager.Manager, cr *CertRotator) error {
-	cr.client = mgr.GetClient()
+	if mgr == nil || cr == nil {
+		return fmt.Errorf("nil arguments")
+	}
+	ns := cr.SecretKey.Namespace
+	if ns == "" {
+		return fmt.Errorf("invalid namespace for secret")
+	}
+	cache, err := addNamespacedCache(mgr, ns)
+	if err != nil {
+		return fmt.Errorf("creating namespaced cache: %w", err)
+	}
+
+	cr.reader = cache
+	cr.writer = mgr.GetClient() // TODO make overrideable
 	cr.certsMounted = make(chan struct{})
 	cr.certsNotMounted = make(chan struct{})
 	cr.wasCAInjected = atomic.NewBool(false)
@@ -68,15 +107,14 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 		return err
 	}
 
-	vwhKey := types.NamespacedName{Name: cr.VWHName}
 	reconciler := &ReconcileWH{
-		client:        mgr.GetClient(),
+		cache:         cache,
+		writer:        mgr.GetClient(), // TODO
 		scheme:        mgr.GetScheme(),
 		ctx:           context.Background(),
 		secretKey:     cr.SecretKey,
-		vwhKey:        vwhKey,
-		crdNames:      cr.CRDNames,
 		wasCAInjected: cr.wasCAInjected,
+		webhooks:      cr.Webhooks,
 	}
 	if err := addController(mgr, reconciler); err != nil {
 		return err
@@ -84,25 +122,59 @@ func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 	return nil
 }
 
+// addNamespacedCache will add a new namespace-scoped cache.Cache to the provided manager.
+// Informers in the new cache will be scoped to the provided namespace for namespaced resources,
+// but will still have cluster-wide visibility into cluster-scoped resources.
+// The cache will be started by the manager when it starts, and consumers should synchronize on
+// it using WaitForCacheSync().
+func addNamespacedCache(mgr manager.Manager, namespace string) (cache.Cache, error) {
+	c, err := cache.New(mgr.GetConfig(),
+		cache.Options{
+			Scheme:    mgr.GetScheme(),
+			Mapper:    mgr.GetRESTMapper(),
+			Namespace: namespace,
+		})
+	if err != nil {
+		return nil, err
+	}
+	if err := mgr.Add(c); err != nil {
+		return nil, fmt.Errorf("registering namespaced cache: %w", err)
+	}
+	return c, nil
+}
+
+// SyncingSource is a reader that needs syncing prior to being usable.
+type SyncingReader interface {
+	client.Reader
+	WaitForCacheSync(stop <-chan struct{}) bool
+}
+
 // CertRotator contains cert artifacts and a channel to close when the certs are ready.
 type CertRotator struct {
-	client          client.Client
+	reader          SyncingReader
+	writer          client.Writer
 	SecretKey       types.NamespacedName
 	CertDir         string
 	CAName          string
 	CAOrganization  string
 	DNSName         string
 	IsReady         chan struct{}
+	Webhooks        []WebhookInfo
 	certsMounted    chan struct{}
 	certsNotMounted chan struct{}
 	wasCAInjected   *atomic.Bool
 	caNotInjected   chan struct{}
-	VWHName         string
-	CRDNames        []string
 }
 
 // Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
-func (cr *CertRotator) Start(stop <-chan (struct{})) error {
+func (cr *CertRotator) Start(stop <-chan struct{}) error {
+	if cr.reader == nil {
+		return errors.New("nil reader")
+	}
+	if !cr.reader.WaitForCacheSync(stop) {
+		return errors.New("failed waiting for reader to sync")
+	}
+
 	// explicitly rotate on the first round so that the certificate
 	// can be bootstrapped, otherwise manager exits before a cert can be written
 	crLog.Info("starting cert rotator controller")
@@ -142,7 +214,7 @@ tickerLoop:
 func (cr *CertRotator) refreshCertIfNeeded() error {
 	refreshFn := func() (bool, error) {
 		secret := &corev1.Secret{}
-		if err := cr.client.Get(context.Background(), cr.SecretKey, secret); err != nil {
+		if err := cr.reader.Get(context.Background(), cr.SecretKey, secret); err != nil {
 			return false, errors.Wrap(err, "acquiring secret to update certificates")
 		}
 		if secret.Data == nil || !cr.validCACert(secret.Data[caCertName], secret.Data[caKeyName]) {
@@ -188,9 +260,12 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 
 func (cr *CertRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error {
 	var caArtifacts *KeyPairArtifacts
+	now := time.Now()
+	begin := now.Add(-1 * time.Hour)
+	end := now.Add(certValidityDuration)
 	if refreshCA {
 		var err error
-		caArtifacts, err = cr.createCACert()
+		caArtifacts, err = cr.CreateCACert(begin, end)
 		if err != nil {
 			return err
 		}
@@ -201,7 +276,7 @@ func (cr *CertRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error
 			return err
 		}
 	}
-	cert, key, err := cr.createCertPEM(caArtifacts)
+	cert, key, err := cr.CreateCertPEM(caArtifacts, begin, end)
 	if err != nil {
 		return err
 	}
@@ -211,8 +286,20 @@ func (cr *CertRotator) refreshCerts(refreshCA bool, secret *corev1.Secret) error
 	return nil
 }
 
-func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
-	webhooks, found, err := unstructured.NestedSlice(vwh.Object, "webhooks")
+func injectCert(updatedResource *unstructured.Unstructured, certPem []byte, webhookType WebhookType) error {
+	switch webhookType {
+	case Validating:
+		return injectCertToWebhook(updatedResource, certPem)
+	case Mutating:
+		return injectCertToWebhook(updatedResource, certPem)
+	case CRDConversion:
+		return injectCertToConversionWebhook(updatedResource, certPem)
+	}
+	return fmt.Errorf("Incorrect webhook type")
+}
+
+func injectCertToWebhook(wh *unstructured.Unstructured, certPem []byte) error {
+	webhooks, found, err := unstructured.NestedSlice(wh.Object, "webhooks")
 	if err != nil {
 		return err
 	}
@@ -229,7 +316,7 @@ func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
 		}
 		webhooks[i] = hook
 	}
-	if err := unstructured.SetNestedSlice(vwh.Object, webhooks, "webhooks"); err != nil {
+	if err := unstructured.SetNestedSlice(wh.Object, webhooks, "webhooks"); err != nil {
 		return err
 	}
 	return nil
@@ -252,7 +339,7 @@ func injectCertToConversionWebhook(crd *unstructured.Unstructured, certPem []byt
 
 func (cr *CertRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
 	populateSecret(cert, key, caArtifacts, secret)
-	return cr.client.Update(context.Background(), secret)
+	return cr.writer.Update(context.Background(), secret)
 }
 
 // KeyPairArtifacts stores cert artifacts.
@@ -306,12 +393,9 @@ func buildArtifactsFromSecret(secret *corev1.Secret) (*KeyPairArtifacts, error) 
 	}, nil
 }
 
-// createCACert creates the self-signed CA cert and private key that will
+// CreateCACert creates the self-signed CA cert and private key that will
 // be used to sign the server certificate
-func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
-	now := time.Now()
-	begin := now.Add(-1 * time.Hour)
-	end := now.Add(certValidityDuration)
+func (cr *CertRotator) CreateCACert(begin, end time.Time) (*KeyPairArtifacts, error) {
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
@@ -347,12 +431,9 @@ func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
 	return &KeyPairArtifacts{Cert: cert, Key: key, CertPEM: certPEM, KeyPEM: keyPEM}, nil
 }
 
-// createCertPEM takes the results of createCACert and uses it to create the
+// CreateCertPEM takes the results of CreateCACert and uses it to create the
 // PEM-encoded public certificate and private key, respectively
-func (cr *CertRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, error) {
-	now := time.Now()
-	begin := now.Add(-1 * time.Hour)
-	end := now.Add(certValidityDuration)
+func (cr *CertRotator) CreateCertPEM(ca *KeyPairArtifacts, begin, end time.Time) ([]byte, []byte, error) {
 	templ := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
@@ -396,11 +477,11 @@ func pemEncode(certificateDER []byte, key *rsa.PrivateKey) ([]byte, []byte, erro
 }
 
 func lookaheadTime() time.Time {
-	return time.Now().Add(90 * 24 * time.Hour)
+	return time.Now().Add(lookaheadInterval)
 }
 
 func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
-	valid, err := validCert(caCert, cert, key, cr.DNSName, lookaheadTime())
+	valid, err := ValidCert(caCert, cert, key, cr.DNSName, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -408,14 +489,14 @@ func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
 }
 
 func (cr *CertRotator) validCACert(cert, key []byte) bool {
-	valid, err := validCert(cert, cert, key, cr.CAName, lookaheadTime())
+	valid, err := ValidCert(cert, cert, key, cr.CAName, lookaheadTime())
 	if err != nil {
 		return false
 	}
 	return valid
 }
 
-func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, error) {
+func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, error) {
 	if len(caCert) == 0 || len(cert) == 0 || len(key) == 0 {
 		return false, errors.New("empty cert")
 	}
@@ -482,14 +563,14 @@ var _ handler.Mapper = &mapper{}
 
 type mapper struct {
 	secretKey types.NamespacedName
-	vwhKey    types.NamespacedName
+	whKey     types.NamespacedName
 }
 
 func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
-	if object.Meta.GetNamespace() != m.vwhKey.Namespace {
+	if object.Meta.GetNamespace() != m.whKey.Namespace {
 		return nil
 	}
-	if object.Meta.GetName() != m.vwhKey.Name {
+	if object.Meta.GetName() != m.whKey.Name {
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: m.secretKey}}
@@ -497,23 +578,33 @@ func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func addController(mgr manager.Manager, r *ReconcileWH) error {
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
-	crd := &unstructured.Unstructured{}
-	crd.SetGroupVersionKind(crdGVK)
 	// Create a new controller
-	err := ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Secret{}).
-		Watches(&source.Kind{Type: vwh}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
-			secretKey: r.secretKey,
-			vwhKey:    r.vwhKey,
-		}}).
-		Watches(&source.Kind{Type: crd}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &crdMapper{
-			secretKey: r.secretKey,
-			crdNames:  r.crdNames,
-		}}).Complete(r)
+	c, err := controller.New("cert-rotator", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
+	}
+
+	err = c.Watch(
+		source.NewKindWithCache(&corev1.Secret{}, r.cache),
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return fmt.Errorf("watching Secrets: %w", err)
+	}
+
+	for _, webhook := range r.webhooks {
+		wh := &unstructured.Unstructured{}
+		wh.SetGroupVersionKind(webhook.gvk())
+		err = c.Watch(
+			source.NewKindWithCache(wh, r.cache),
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
+				secretKey: r.secretKey,
+				whKey:     types.NamespacedName{Name: webhook.Name},
+			}},
+		)
+		if err != nil {
+			return fmt.Errorf("watching webhook %s: %w", webhook.Name, err)
+		}
 	}
 
 	return nil
@@ -524,12 +615,12 @@ var _ reconcile.Reconciler = &ReconcileWH{}
 // ReconcileWH reconciles a validatingwebhookconfiguration, making sure it
 // has the appropriate CA cert
 type ReconcileWH struct {
-	client        client.Client
+	writer        client.Writer
+	cache         cache.Cache
 	scheme        *runtime.Scheme
 	ctx           context.Context
 	secretKey     types.NamespacedName
-	vwhKey        types.NamespacedName
-	crdNames      []string
+	webhooks      []WebhookInfo
 	wasCAInjected *atomic.Bool
 }
 
@@ -539,8 +630,14 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
 	}
+
+	stop := make(<-chan struct{})
+	if !r.cache.WaitForCacheSync(stop) {
+		return reconcile.Result{}, errors.New("cache not ready")
+	}
+
 	secret := &corev1.Secret{}
-	if err := r.client.Get(r.ctx, request.NamespacedName, secret); err != nil {
+	if err := r.cache.Get(r.ctx, request.NamespacedName, secret); err != nil {
 		if k8sErrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
@@ -557,18 +654,9 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 			return reconcile.Result{}, nil
 		}
 
-		// Ensure certs on validating webhooks.
-		errVWH := r.ensureVWHCerts(artifacts.CertPEM)
-
-		// Ensure certs on CRD conversion webhooks if there's any.
-		errCWH := r.ensureCRDConvWHCerts(artifacts.CertPEM)
-
-		// Return errors if there's any when trying to inject certs to all webhooks.
-		if errVWH != nil {
-			return reconcile.Result{}, errVWH
-		}
-		if errCWH != nil {
-			return reconcile.Result{}, errCWH
+		// Ensure certs on webhooks
+		if err := r.ensureCerts(artifacts.CertPEM); err != nil {
+			return reconcile.Result{}, err
 		}
 
 		// Set CAInjected if the reconciler has not exited early.
@@ -578,66 +666,50 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileWH) ensureVWHCerts(certPem []byte) error {
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			crLog.Info("VWK " + r.vwhKey.Name + " is not found. No action is needed.")
-			return nil
-		}
-		// Error reading the object - requeue the request.
-		return err
-	}
-
-	crLog.Info("ensuring CA cert on ValidatingWebhookConfiguration")
-	if err := injectCertToWebhook(vwh, certPem); err != nil {
-		crLog.Error(err, "unable to inject cert to webhook")
-		return err
-	}
-	if err := r.client.Update(r.ctx, vwh); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ensureCRDConvWHCerts returns an arbitrary error if multiple errors are
-// encountered, while all the errors are logged.
-func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) error {
+// ensureCerts returns an arbitrary error if multiple errors are encountered,
+// while all the errors are logged.
+// This is important to allow the controller to reconcile the secret. If an error
+// is returned, request will be requeued, and the controller will attempt to reconcile
+// the secret again.
+// When an error is encountered for when processing a webhook, the error is logged, but
+// following webhooks are also attempted to be updated. If multiple errors occur for different
+// webhooks, only the last one will be returned. This is ok, as the returned error is only meant
+// to indicate that reconciliation failed. The information about all the errors is passed not
+// by the returned error, but rather in the logged errors.
+func (r *ReconcileWH) ensureCerts(certPem []byte) error {
 	var anyError error = nil
-	for _, crdName := range r.crdNames {
-		crd := &unstructured.Unstructured{}
-		crd.SetGroupVersionKind(crdGVK)
-		crdKey := types.NamespacedName{Name: crdName}
-		if err := r.client.Get(r.ctx, crdKey, crd); err != nil {
+
+	for _, webhook := range r.webhooks {
+		gvk := webhook.gvk()
+		log := crLog.WithValues("name", webhook.Name, "gvk", gvk)
+		updatedResource := &unstructured.Unstructured{}
+		updatedResource.SetGroupVersionKind(gvk)
+		if err := r.cache.Get(r.ctx, types.NamespacedName{Name: webhook.Name}, updatedResource); err != nil {
 			if k8sErrors.IsNotFound(err) {
-				crLog.Info("CRD " + crdName + " is not found")
+				log.Error(err, "Webhook not found. Unable to update certificate.")
 				continue
 			}
-			// Error reading the object - requeue the request.
-			crLog.Error(err, "unable to get CRD")
 			anyError = err
+			log.Error(err, "Error getting webhook for certificate update.")
+			continue
+		}
+		if !updatedResource.GetDeletionTimestamp().IsZero() {
+			log.Info("Webhook is being deleted. Unable to update certificate")
 			continue
 		}
 
-		if !crd.GetDeletionTimestamp().IsZero() {
-			crLog.Info("CRD " + crdName + " is being deleted")
-			continue
-		}
-
-		crLog.Info("ensuring CA cert on CRD conversion webhook")
-		if err := injectCertToConversionWebhook(crd, certPem); err != nil {
-			crLog.Error(err, "unable to inject cert to CRD conversion webhook")
+		log.Info("Ensuring CA cert", "name", webhook.Name, "gvk", gvk)
+		if err := injectCert(updatedResource, certPem, webhook.Type); err != nil {
+			log.Error(err, "Unable to inject cert to webhook.")
 			anyError = err
 			continue
 		}
-		if err := r.client.Update(r.ctx, crd); err != nil {
-			crLog.Error(err, "unable to update cert on CRD "+crdName)
+		if err := r.writer.Update(r.ctx, updatedResource); err != nil {
+			log.Error(err, "Error updating webhook with certificate")
 			anyError = err
+			continue
 		}
 	}
-
 	return anyError
 }
 
@@ -681,6 +753,6 @@ func (cr *CertRotator) ensureReady() {
 		close(cr.caNotInjected)
 		return
 	}
-	crLog.Info(fmt.Sprintf("CA certs are injected to webhooks"))
+	crLog.Info("CA certs are injected to webhooks")
 	close(cr.IsReady)
 }

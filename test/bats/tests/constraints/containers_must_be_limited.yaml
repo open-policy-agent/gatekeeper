@@ -7,6 +7,7 @@ spec:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
+    namespaces: ["gatekeeper-test-playground"]
   parameters:
     cpu: "200m"
     memory: "1Gi"

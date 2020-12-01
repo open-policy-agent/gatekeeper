@@ -22,11 +22,11 @@ func TestReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportRequest(allowResponse, expectedDurationValueMin)
+	err = r.ReportAdmissionRequest(allowResponse, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportRequest(allowResponse, expectedDurationValueMax)
+	err = r.ReportAdmissionRequest(allowResponse, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
