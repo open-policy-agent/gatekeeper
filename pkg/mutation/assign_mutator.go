@@ -6,8 +6,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // AssignMutator is a mutator object built out of a
@@ -22,9 +22,13 @@ type AssignMutator struct {
 // AssignMutator implements mutatorWithSchema
 var _ MutatorWithSchema = &AssignMutator{}
 
-func (m *AssignMutator) Matches(obj metav1.Object, ns *corev1.Namespace) bool {
-	// TODO implement using matches function
-	return false
+func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+	matches, err := Matches(m.assign.Spec.Match, obj, ns)
+	if err != nil {
+		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)
+		return false
+	}
+	return matches
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
@@ -37,6 +41,10 @@ func (m *AssignMutator) ID() ID {
 
 func (m *AssignMutator) SchemaBindings() []SchemaBinding {
 	return m.bindings
+}
+
+func (m *AssignMutator) Value() (interface{}, error) {
+	return unmarshalValue(m.assign.Spec.Parameters.Assign.Raw)
 }
 
 func (m *AssignMutator) HasDiff(mutator Mutator) bool {

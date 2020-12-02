@@ -1,11 +1,12 @@
 package mutation
 
 import (
+	"encoding/json"
+
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -29,7 +30,7 @@ type SchemaBinding struct {
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
-	Matches(obj metav1.Object, ns *corev1.Namespace) bool
+	Matches(obj runtime.Object, ns *corev1.Namespace) bool
 	// Mutate applies the mutation to the given object
 	Mutate(obj *unstructured.Unstructured) error
 	// ID returns the id of the current mutator.
@@ -39,6 +40,7 @@ type Mutator interface {
 	HasDiff(mutator Mutator) bool
 	// DeepCopy returns a copy of the current object
 	DeepCopy() Mutator
+	Value() (interface{}, error)
 }
 
 // MutatorWithSchema is a mutator exposing the implied
@@ -61,4 +63,13 @@ func MakeID(obj runtime.Object) (ID, error) {
 		Name:      meta.GetName(),
 		Namespace: meta.GetNamespace(),
 	}, nil
+}
+
+func unmarshalValue(data []byte) (interface{}, error) {
+	value := make(map[string]interface{})
+	err := json.Unmarshal(data, &value)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to unmarshal value")
+	}
+	return value["value"], nil
 }
