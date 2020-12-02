@@ -21,7 +21,7 @@ There is an optional script for cherry picking PRs that should make the process 
 
 Prerequisites:
 - `hub` binary is installed. If not, `hub` can be installed by `go get github.com/github/hub`.
-- Set GitHub user name with `export GITHUB_USERNAME=<your GitHub username>`
+- Set GitHub user name with `export GITHUB_USER=<your GitHub username>`
 - Set fork remote with `export FORK_REMOTE=<your fork remote name, by default it is "origin">`
 - Set upstream remote with `export UPSTREAM_REMOTE=<upstream remote name, by default it is "upstream">`
 
