@@ -145,6 +145,8 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
+	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,

@@ -13,6 +13,9 @@ import (
 const (
 	requestCountMetricName    = "request_count"
 	requestDurationMetricName = "request_duration_seconds"
+
+	mutationRequestCountMetricName    = "mutation_request_count"
+	mutationRequestDurationMetricName = "mutation_request_duration_seconds"
 )
 
 var (
@@ -21,7 +24,13 @@ var (
 		"The response time in seconds",
 		stats.UnitSeconds)
 
+	mutationResponseTimeInSecM = stats.Float64(
+		mutationRequestDurationMetricName,
+		"The response time in seconds",
+		stats.UnitSeconds)
+
 	admissionStatusKey = tag.MustNewKey("admission_status")
+	mutationStatusKey  = tag.MustNewKey("mutation_status")
 )
 
 func init() {
@@ -33,6 +42,7 @@ func init() {
 // StatsReporter reports webhook metrics
 type StatsReporter interface {
 	ReportAdmissionRequest(response admissionReqRes, d time.Duration) error
+	ReportMutationRequest(response mutationResponse, d time.Duration) error
 }
 
 // reporter implements StatsReporter interface
@@ -65,6 +75,19 @@ func (r *reporter) ReportAdmissionRequest(response admissionReqRes, d time.Durat
 	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
+// Captures req count metric, recording the count and the duration
+func (r *reporter) ReportMutationRequest(response mutationResponse, d time.Duration) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(mutationStatusKey, string(response)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, mutationResponseTimeInSecM.M(d.Seconds()))
+}
+
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
@@ -84,6 +107,20 @@ func register() error {
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{admissionStatusKey},
+		},
+		{
+			Name:        mutationRequestCountMetricName,
+			Description: "The number of requests that are routed to mutation webhook",
+			Measure:     mutationResponseTimeInSecM,
+			Aggregation: view.Count(),
+			TagKeys:     []tag.Key{mutationStatusKey},
+		},
+		{
+			Name:        mutationRequestDurationMetricName,
+			Description: mutationResponseTimeInSecM.Description(),
+			Measure:     mutationResponseTimeInSecM,
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			TagKeys:     []tag.Key{mutationStatusKey},
 		},
 	}
 	return view.Register(views...)

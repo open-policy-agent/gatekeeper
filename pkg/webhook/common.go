@@ -23,8 +23,8 @@ import (
 var log = logf.Log.WithName("webhook")
 
 var (
-	// VwhName is the gatekeeper validating webhook for policy validation
 	VwhName = "gatekeeper-validating-webhook-configuration"
+	MwhName = "gatekeeper-mutating-webhook-configuration"
 )
 
 const (
@@ -68,6 +68,19 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 	}
 	cfg := &v1alpha1.Config{}
 	return cfg, h.client.Get(ctx, keys.Config, cfg)
+}
+
+// isGatekeeperResource returns true if the request relates to a gatekeeper resource
+func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req admission.Request) bool {
+	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "mutations.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "config.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "status.gatekeeper.sh" {
+		return true
+	}
+
+	return false
 }
 
 func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request) (bool, bool) {
