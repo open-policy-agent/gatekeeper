@@ -57,6 +57,10 @@ func (m *MockMutator) ID() ID {
 	return m.Mocked
 }
 
+func (m *MockMutator) Value() (interface{}, error) {
+	return nil, nil
+}
+
 func (m *MockMutator) HasDiff(mutator Mutator) bool {
 	mock, ok := mutator.(*MockMutator)
 	if !ok {
