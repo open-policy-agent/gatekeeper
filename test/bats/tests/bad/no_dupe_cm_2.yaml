@@ -1,6 +1,7 @@
 apiVersion: v1
-kind: Namespace
+kind: ConfigMap
 metadata:
   name: no-dupes-2
+  namespace: gatekeeper-test-playground
   labels:
     gatekeeper: not_duplicated
