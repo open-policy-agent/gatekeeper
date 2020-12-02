@@ -163,7 +163,7 @@ jobs:
       - name: Get tag
         id: get_version
         run: |
-          echo ::set-env name=TAG::${GITHUB_REF#refs/tags/}
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           echo $TAG
 
       - name: Publish release
@@ -194,7 +194,8 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        uses: "marvinpinto/action-automatic-releases@v1.1.0"
+        # using latest to fix set-env deprecation
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
