@@ -470,7 +470,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
 	for _, r := range res {
-		selfLink := r.Constraint.GetSelfLink()
+		selfLink := util.GetSelfLink(*r.Constraint)
 		totalViolationsPerConstraint[selfLink]++
 		name := r.Constraint.GetName()
 		namespace := r.Constraint.GetNamespace()
@@ -657,7 +657,8 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 
 		// get each constraint
 		for _, item := range instanceList.Items {
-			ucloop.uc[item.GetSelfLink()] = item
+			selfLink := util.GetSelfLink(item)
+			ucloop.uc[selfLink] = item
 		}
 	}
 
@@ -682,19 +683,21 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					Name:      name,
 					Namespace: namespace,
 				}
+				selfLink := util.GetSelfLink(item)
 				// get the latest constraint
 				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", name, "namespace", namespace)
-						delete(ucloop.uc, item.GetSelfLink())
+						delete(ucloop.uc, selfLink)
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
 						continue
 					}
 				}
-				totalViolations := ucloop.tv[latestItem.GetSelfLink()]
-				if constraintAuditResults, ok := ucloop.ul[latestItem.GetSelfLink()]; !ok {
+				latestItemSelfLink := util.GetSelfLink(latestItem)
+				totalViolations := ucloop.tv[latestItemSelfLink]
+				if constraintAuditResults, ok := ucloop.ul[latestItemSelfLink]; !ok {
 					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
@@ -708,7 +711,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 						continue
 					}
 				}
-				delete(ucloop.uc, item.GetSelfLink())
+				delete(ucloop.uc, selfLink)
 			}
 		}
 		if len(ucloop.uc) == 0 {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -140,7 +141,8 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 		updateResources := make(map[string]unstructured.Unstructured, len(instanceList.Items))
 		// get each resource
 		for _, item := range instanceList.Items {
-			updateResources[item.GetSelfLink()] = item
+			selfLink := util.GetSelfLink(item)
+			updateResources[selfLink] = item
 		}
 
 		if len(updateResources) > 0 {
@@ -193,7 +195,8 @@ func (urloop *updateResourceLoop) update() {
 					log.Error(err, "could not update resource", "name", name, "namespace", namespace)
 				}
 				if !failure {
-					delete(urloop.ur, latestItem.GetSelfLink())
+					selfLink := util.GetSelfLink(latestItem)
+					delete(urloop.ur, selfLink)
 				}
 			}
 		}
