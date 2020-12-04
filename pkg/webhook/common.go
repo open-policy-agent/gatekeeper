@@ -29,6 +29,7 @@ var (
 
 const (
 	serviceAccountName = "gatekeeper-admin"
+	mutationsGroup     = "mutations.gatekeeper.sh"
 )
 
 var (
@@ -74,7 +75,7 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req admission.Request) bool {
 	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
-		req.AdmissionRequest.Kind.Group == "mutations.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == mutationsGroup ||
 		req.AdmissionRequest.Kind.Group == "config.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == "status.gatekeeper.sh" {
 		return true
