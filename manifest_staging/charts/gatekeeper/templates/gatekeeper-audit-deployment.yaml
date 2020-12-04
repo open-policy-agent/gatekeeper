@@ -88,11 +88,11 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
       nodeSelector: 
-{{ toYaml .Values.nodeSelector | indent 8 }}
+{{ toYaml .Values.audit.nodeSelector | indent 8 }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{ toYaml .Values.audit.affinity | indent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
+{{ toYaml .Values.audit.tolerations | indent 8 }}
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
 {{- if .Values.audit.priorityClassName }}
