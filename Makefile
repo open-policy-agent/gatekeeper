@@ -6,7 +6,7 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.3.0-beta.1
+VERSION := v3.3.0-beta.2
 
 KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -140,7 +140,9 @@ run: generate manifests
 install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
-deploy-mutation: deploy
+deploy-mutation: patch-image
+	@grep -q -v 'enable-mutation' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev/manager_image_patch.yaml
+	kustomize build config/overlays/mutation_webhook | kubectl apply -f -
 	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config

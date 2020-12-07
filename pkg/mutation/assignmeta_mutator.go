@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -86,20 +87,33 @@ func (m *AssignMetadataMutator) DeepCopy() Mutator {
 	return res
 }
 
+func (m *AssignMetadataMutator) Value() (interface{}, error) {
+	value, err := unmarshalValue(m.assignMetadata.Spec.Parameters.Assign.Raw)
+	if err != nil {
+		return nil, err
+	}
+	switch t := value.(type) {
+	case string:
+		return value, nil
+	default:
+		return nil, fmt.Errorf("incorrect value for AssignMetadataMutator. Value must be a string. Value: %s Type: %s", value, t)
+	}
+}
+
 // MutatorForAssignMetadata builds an AssignMetadataMutator from the given AssignMetadata object.
 func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*AssignMetadataMutator, error) {
 	id, err := MakeID(assignMeta)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to retrieve id for assignMetadata type")
+		return nil, errors.Wrap(err, "failed to retrieve id for assignMetadata type")
 	}
 
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed to parse location for assign metadata")
+		return nil, errors.Wrap(err, "failed to parse location for assign metadata")
 	}
 
-	if !isMetadataPath(path) {
-		return nil, fmt.Errorf("Invalid location for assignmetadata: %s", assignMeta.Spec.Location)
+	if !isValidMetadataPath(path) {
+		return nil, fmt.Errorf("invalid location for assignmetadata: %s", assignMeta.Spec.Location)
 	}
 	return &AssignMetadataMutator{
 		id:             id,
@@ -109,7 +123,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 }
 
 // Verifies that the given path is valid for metadata
-func isMetadataPath(path *parser.Path) bool {
+func isValidMetadataPath(path *parser.Path) bool {
 	// Path must be metadata.annotations.something or metadata.labels.something
 	if len(path.Nodes) != 3 ||
 		path.Nodes[0].Type() != parser.ObjectNode ||
@@ -126,4 +140,30 @@ func isMetadataPath(path *parser.Path) bool {
 		return true
 	}
 	return false
+}
+
+// IsValidAssignMetadata returns an error if the given assignmetadata object is not
+// semantically valid
+func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
+	path, err := parser.Parse(assignMeta.Spec.Location)
+	if err != nil {
+		return errors.Wrap(err, "invalid location format")
+	}
+	if !isValidMetadataPath(path) {
+		return fmt.Errorf("invalid location for assignmetadata: %s", assignMeta.Spec.Location)
+	}
+
+	assign := make(map[string]interface{})
+	err = json.Unmarshal([]byte(assignMeta.Spec.Parameters.Assign.Raw), &assign)
+	if err != nil {
+		return errors.Wrap(err, "invalid format for parameters.assign")
+	}
+	value, ok := assign["value"]
+	if !ok {
+		return errors.New("spec.parameters.assign must have a string value field")
+	}
+	if _, ok := value.(string); !ok {
+		return errors.New("spec.parameters.assign must be a string")
+	}
+	return nil
 }

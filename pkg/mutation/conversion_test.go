@@ -340,7 +340,7 @@ func TestPathValidation(t *testing.T) {
 			if tc.isValid && err != nil {
 				t.Errorf("Unexpected error for location %s, %v", tc.location, err)
 			}
-			if !tc.isValid && (err == nil || !strings.HasPrefix(err.Error(), "Invalid location")) {
+			if !tc.isValid && (err == nil || !strings.HasPrefix(err.Error(), "invalid location")) {
 				t.Errorf("Location was invalid but did not get an invalid location error, %v", err)
 			}
 		})
