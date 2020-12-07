@@ -67,7 +67,7 @@ spec:
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
+      nodeSelector: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -94,7 +94,7 @@ spec:
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_POD_SCHEDULING
+      nodeSelector: HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING
 ---
 apiVersion: v1
 kind: Secret
