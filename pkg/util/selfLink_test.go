@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func TestGetSelfLink(t *testing.T) {
+func TestGetUniqueKey(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	gvk := schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
@@ -20,7 +20,11 @@ func TestGetSelfLink(t *testing.T) {
 	obj.SetGroupVersionKind(gvk)
 	obj.SetName(name)
 
-	selfLink := GetSelfLink(*obj)
-	expected := "/apis/constraints.gatekeeper.sh/v1beta1/myTemplate/myConstraint"
-	g.Expect(selfLink).To(gomega.Equal(expected))
+	key := GetUniqueKey(*obj)
+	expected := KindVersionResource{
+		version:  "constraints.gatekeeper.sh/v1beta1",
+		kind:     "myTemplate",
+		resource: "myConstraint",
+	}
+	g.Expect(key).To(gomega.Equal(expected))
 }

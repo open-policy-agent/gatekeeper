@@ -1,11 +1,19 @@
 package util
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func GetSelfLink(obj unstructured.Unstructured) string {
-	return fmt.Sprintf("/apis/%s/%s/%s", obj.GetAPIVersion(), obj.GetKind(), obj.GetName())
+type KindVersionResource struct {
+	kind     string
+	version  string
+	resource string
+}
+
+func GetUniqueKey(obj unstructured.Unstructured) KindVersionResource {
+	return KindVersionResource{
+		version:  obj.GetAPIVersion(),
+		kind:     obj.GetKind(),
+		resource: obj.GetName(),
+	}
 }

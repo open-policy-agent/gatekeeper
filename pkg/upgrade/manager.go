@@ -138,11 +138,11 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 			return err
 		}
 		log.Info("resource count", "count", len(instanceList.Items))
-		updateResources := make(map[string]unstructured.Unstructured, len(instanceList.Items))
+		updateResources := make(map[util.KindVersionResource]unstructured.Unstructured, len(instanceList.Items))
 		// get each resource
 		for _, item := range instanceList.Items {
-			selfLink := util.GetSelfLink(item)
-			updateResources[selfLink] = item
+			key := util.GetUniqueKey(item)
+			updateResources[key] = item
 		}
 
 		if len(updateResources) > 0 {
@@ -160,7 +160,7 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 }
 
 type updateResourceLoop struct {
-	ur      map[string]unstructured.Unstructured
+	ur      map[util.KindVersionResource]unstructured.Unstructured
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
@@ -195,8 +195,8 @@ func (urloop *updateResourceLoop) update() {
 					log.Error(err, "could not update resource", "name", name, "namespace", namespace)
 				}
 				if !failure {
-					selfLink := util.GetSelfLink(latestItem)
-					delete(urloop.ur, selfLink)
+					key := util.GetUniqueKey(latestItem)
+					delete(urloop.ur, key)
 				}
 			}
 		}
