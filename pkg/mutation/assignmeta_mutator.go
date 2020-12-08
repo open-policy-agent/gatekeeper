@@ -107,6 +107,12 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 		return nil, errors.Wrap(err, "failed to retrieve id for assignMetadata type")
 	}
 
+	if assignMeta.Spec.Location == "" {
+		return &AssignMetadataMutator{
+			id: id,
+		}, nil
+	}
+
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse location for assign metadata")
