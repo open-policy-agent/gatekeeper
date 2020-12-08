@@ -187,17 +187,17 @@ func TestReconcile(t *testing.T) {
 	fooNS := &unstructured.Unstructured{}
 	fooNS.SetName("foo")
 	fooNS.SetGroupVersionKind(nsGvk)
-	auditExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooNS.DeepCopyObject())
+	auditExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooNS)
 	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
-	syncExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooNS.DeepCopyObject())
+	syncExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooNS)
 	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
-	webhookExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooNS.DeepCopyObject())
+	webhookExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooNS)
 	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
 
 	barNS := &unstructured.Unstructured{}
 	barNS.SetName("bar")
 	barNS.SetGroupVersionKind(nsGvk)
-	syncNotExcludedNS, err := processExcluder.IsNamespaceExcluded(process.Sync, barNS.DeepCopyObject())
+	syncNotExcludedNS, err := processExcluder.IsNamespaceExcluded(process.Sync, barNS)
 	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
 
@@ -206,18 +206,18 @@ func TestReconcile(t *testing.T) {
 	fooPod.SetNamespace("foo")
 	podGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	fooPod.SetGroupVersionKind(podGvk)
-	auditExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooPod.DeepCopyObject())
+	auditExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooPod)
 	g.Expect(auditExcludedPod).Should(gomega.BeTrue())
-	syncExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooPod.DeepCopyObject())
+	syncExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooPod)
 	g.Expect(syncExcludedPod).Should(gomega.BeTrue())
-	webhookExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooPod.DeepCopyObject())
+	webhookExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooPod)
 	g.Expect(webhookExcludedPod).Should(gomega.BeTrue())
 
 	barPod := &unstructured.Unstructured{}
 	barPod.SetName("bar")
 	barPod.SetNamespace("bar")
 	barPod.SetGroupVersionKind(podGvk)
-	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod.DeepCopyObject())
+	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
 	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
 
