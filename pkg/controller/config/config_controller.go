@@ -339,7 +339,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())
 
-			isExcludedNamespace, err := r.skipExcludedNamespace(u.Items[i].DeepCopyObject())
+			isExcludedNamespace, err := r.skipExcludedNamespace(&u.Items[i])
 			if err != nil {
 				log.Error(err, "error while excluding namespaces")
 			}
@@ -374,7 +374,7 @@ func (r *ReconcileConfig) removeStaleExpectations(stale *watch.Set) {
 	}
 }
 
-func (r *ReconcileConfig) skipExcludedNamespace(obj runtime.Object) (bool, error) {
+func (r *ReconcileConfig) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
 	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
 	if err != nil {
 		return false, err
