@@ -187,7 +187,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	// namespace is excluded from sync
-	isExcludedNamespace, err := r.skipExcludedNamespace(instance.DeepCopyObject())
+	isExcludedNamespace, err := r.skipExcludedNamespace(instance)
 	if err != nil {
 		log.Error(err, "error while excluding namespaces")
 	}
@@ -245,7 +245,7 @@ func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, 
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileSync) skipExcludedNamespace(obj runtime.Object) (bool, error) {
+func (r *ReconcileSync) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
 	isNamespaceExcluded, err := r.processExcluder.IsNamespaceExcluded(process.Sync, obj)
 	if err != nil {
 		return false, err

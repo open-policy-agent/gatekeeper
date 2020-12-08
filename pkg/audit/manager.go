@@ -21,7 +21,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -364,7 +363,7 @@ func (am *Manager) auditResources(
 
 				for _, obj := range objList.Items {
 					objNamespace := obj.GetNamespace()
-					isExcludedNamespace, err := am.skipExcludedNamespace(obj.DeepCopyObject())
+					isExcludedNamespace, err := am.skipExcludedNamespace(&obj)
 					if err != nil {
 						log.Error(err, "error while excluding namespaces")
 					}
@@ -545,7 +544,7 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 	go am.ucloop.update(ctx, constraintsGVKs)
 }
 
-func (am *Manager) skipExcludedNamespace(obj runtime.Object) (bool, error) {
+func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
 	isNamespaceExcluded, err := am.processExcluder.IsNamespaceExcluded(process.Audit, obj)
 	if err != nil {
 		return false, err
