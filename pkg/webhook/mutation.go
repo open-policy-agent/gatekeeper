@@ -58,7 +58,7 @@ func init() {
 // TODO enable this once mutation is beta +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update
 
 // AddMutatingWebhook registers the mutating webhook server with the manager
-func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder) error {
+func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !*mutation.MutationEnabled {
 		return nil
 	}
@@ -84,6 +84,7 @@ func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder
 				eventRecorder:   recorder,
 				gkNamespace:     util.GetNamespace(),
 			},
+			mutationSystem: mutationSystem,
 		},
 	}
 
@@ -101,6 +102,7 @@ var _ admission.Handler = &mutationHandler{}
 
 type mutationHandler struct {
 	webhookHandler
+	mutationSystem *mutation.System
 }
 
 // Handle the mutation request
