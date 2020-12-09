@@ -55,11 +55,14 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 }
 
 func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
-	// TODO implement
-	return nil
+	return Mutate(m, obj)
 }
 func (m *AssignMetadataMutator) ID() ID {
 	return m.id
+}
+
+func (m *AssignMetadataMutator) Path() *parser.Path {
+	return m.path
 }
 
 func (m *AssignMetadataMutator) HasDiff(mutator Mutator) bool {
@@ -83,7 +86,11 @@ func (m *AssignMetadataMutator) DeepCopy() Mutator {
 	res := &AssignMetadataMutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
+		path: &parser.Path{
+			Nodes: make([]parser.Node, len(m.path.Nodes)),
+		},
 	}
+	copy(res.path.Nodes, m.path.Nodes)
 	return res
 }
 
