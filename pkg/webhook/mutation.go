@@ -36,15 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-type mutationResponse string
-
-const (
-	mutationSkipResponse    mutationResponse = "skip"
-	mutationUnknownResponse mutationResponse = "unknown"
-	mutationAllowResponse   mutationResponse = "allow"
-	mutationErrorResponse   mutationResponse = "error"
-)
-
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddMutatingWebhook)
 
@@ -58,7 +49,7 @@ func init() {
 // TODO enable this once mutation is beta +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update
 
 // AddMutatingWebhook registers the mutating webhook server with the manager
-func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder) error {
+func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !*mutation.MutationEnabled {
 		return nil
 	}
@@ -84,6 +75,7 @@ func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder
 				eventRecorder:   recorder,
 				gkNamespace:     util.GetNamespace(),
 			},
+			mutationSystem: mutationSystem,
 		},
 	}
 
@@ -101,6 +93,7 @@ var _ admission.Handler = &mutationHandler{}
 
 type mutationHandler struct {
 	webhookHandler
+	mutationSystem *mutation.System
 }
 
 // Handle the mutation request
@@ -134,11 +127,10 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.ValidationResponse(true, "Not mutating gatekeeper resources")
 	}
 
-	requestResponse := mutationUnknownResponse
+	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportMutationRequest(
-				requestResponse, time.Since(timeStart)); err != nil {
+			if err := h.reporter.ReportMutationRequest(requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
 		}
@@ -151,16 +143,16 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	}
 
 	if isExcludedNamespace {
-		requestResponse = mutationSkipResponse
+		requestResponse = skipResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
 
 	resp, err := h.mutateRequest(ctx, req)
 	if err != nil {
-		requestResponse = mutationErrorResponse
+		requestResponse = errorResponse
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
-	requestResponse = mutationAllowResponse
+	requestResponse = successResponse
 	return resp
 }
 

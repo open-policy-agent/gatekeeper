@@ -42,12 +42,13 @@ var (
 )
 
 type Adder struct {
+	MutationCache *mutation.System
 }
 
 // Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr)
+	r := newReconciler(mgr, a.MutationCache)
 	return add(mgr, r)
 }
 
@@ -59,10 +60,13 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
 
 func (a *Adder) InjectTracker(t *readiness.Tracker) {}
 
+func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
+	a.MutationCache = mutationCache
+}
+
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) *AssignMetadataReconciler {
-	system := mutation.NewSystem()
-	r := &AssignMetadataReconciler{system: system, Client: mgr.GetClient()}
+func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *AssignMetadataReconciler {
+	r := &AssignMetadataReconciler{system: mutationCache, Client: mgr.GetClient()}
 	return r
 }
 

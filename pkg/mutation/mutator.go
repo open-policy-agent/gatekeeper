@@ -41,6 +41,7 @@ type Mutator interface {
 	// DeepCopy returns a copy of the current object
 	DeepCopy() Mutator
 	Value() (interface{}, error)
+	Path() *parser.Path
 }
 
 // MutatorWithSchema is a mutator exposing the implied
@@ -48,7 +49,6 @@ type Mutator interface {
 type MutatorWithSchema interface {
 	Mutator
 	SchemaBindings() []SchemaBinding
-	Path() *parser.Path
 }
 
 // MakeID builds an ID object for the given object
