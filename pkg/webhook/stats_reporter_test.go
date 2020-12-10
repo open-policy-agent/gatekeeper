@@ -14,7 +14,7 @@ const expectedDurationMax float64 = 5
 const expectedCount int64 = 2
 const expectedRowLength = 1
 
-func TestReportRequest(t *testing.T) {
+func TestValidationReportRequest(t *testing.T) {
 	expectedTags := map[string]string{
 		"admission_status": "allow",
 	}
@@ -23,20 +23,21 @@ func TestReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportAdmissionRequest(allowResponse, expectedDurationValueMin)
+	err = r.ReportValidationRequest(allowResponse, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportAdmissionRequest(allowResponse, expectedDurationValueMax)
+	err = r.ReportValidationRequest(allowResponse, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
 	check(t, expectedTags, requestCountMetricName, requestDurationMetricName)
+	check(t, expectedTags, validationRequestCountMetricName, validationRequestDurationMetricName)
 }
 
 func TestMutationReportRequest(t *testing.T) {
 	expectedTags := map[string]string{
-		"mutation_status": "allow",
+		"mutation_status": "success",
 	}
 
 	r, err := newStatsReporter()
@@ -44,11 +45,11 @@ func TestMutationReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportMutationRequest(mutationAllowResponse, expectedDurationValueMin)
+	err = r.ReportMutationRequest(successResponse, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportMutationRequest(mutationAllowResponse, expectedDurationValueMax)
+	err = r.ReportMutationRequest(successResponse, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}

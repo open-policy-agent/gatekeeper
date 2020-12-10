@@ -14,6 +14,9 @@ const (
 	requestCountMetricName    = "request_count"
 	requestDurationMetricName = "request_duration_seconds"
 
+	validationRequestCountMetricName    = "validation_request_count"
+	validationRequestDurationMetricName = "validation_request_duration_seconds"
+
 	mutationRequestCountMetricName    = "mutation_request_count"
 	mutationRequestDurationMetricName = "mutation_request_duration_seconds"
 )
@@ -21,6 +24,11 @@ const (
 var (
 	responseTimeInSecM = stats.Float64(
 		requestDurationMetricName,
+		"The response time in seconds",
+		stats.UnitSeconds)
+
+	validationResponseTimeInSecM = stats.Float64(
+		validationRequestDurationMetricName,
 		"The response time in seconds",
 		stats.UnitSeconds)
 
@@ -41,8 +49,8 @@ func init() {
 
 // StatsReporter reports webhook metrics
 type StatsReporter interface {
-	ReportAdmissionRequest(response admissionReqRes, d time.Duration) error
-	ReportMutationRequest(response mutationResponse, d time.Duration) error
+	ReportValidationRequest(response requestResponse, d time.Duration) error
+	ReportMutationRequest(response requestResponse, d time.Duration) error
 }
 
 // reporter implements StatsReporter interface
@@ -62,30 +70,29 @@ func newStatsReporter() (StatsReporter, error) {
 	return &reporter{ctx: ctx}, nil
 }
 
-// Captures req count metric, recording the count and the duration
-func (r *reporter) ReportAdmissionRequest(response admissionReqRes, d time.Duration) error {
-	ctx, err := tag.New(
-		r.ctx,
-		tag.Insert(admissionStatusKey, string(response)),
-	)
-	if err != nil {
+func (r *reporter) ReportValidationRequest(response requestResponse, d time.Duration) error {
+	if err := r.reportRequest(response, admissionStatusKey, responseTimeInSecM.M(d.Seconds())); err != nil {
 		return err
 	}
+	return r.reportRequest(response, admissionStatusKey, validationResponseTimeInSecM.M(d.Seconds()))
+}
 
-	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
+func (r *reporter) ReportMutationRequest(response requestResponse, d time.Duration) error {
+	return r.reportRequest(response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
 }
 
 // Captures req count metric, recording the count and the duration
-func (r *reporter) ReportMutationRequest(response mutationResponse, d time.Duration) error {
+func (r *reporter) reportRequest(response requestResponse, statusKey tag.Key, m stats.Measurement) error {
+	//mutationResponseTimeInSecM.M(d.Seconds())
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(mutationStatusKey, string(response)),
+		tag.Insert(statusKey, string(response)),
 	)
 	if err != nil {
 		return err
 	}
 
-	return r.report(ctx, mutationResponseTimeInSecM.M(d.Seconds()))
+	return r.report(ctx, m)
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
@@ -96,7 +103,7 @@ func register() error {
 	views := []*view.View{
 		{
 			Name:        requestCountMetricName,
-			Description: "The number of requests that are routed to webhook",
+			Description: "The number of requests that are routed to validation webhook",
 			Measure:     responseTimeInSecM,
 			Aggregation: view.Count(),
 			TagKeys:     []tag.Key{admissionStatusKey},
@@ -105,6 +112,20 @@ func register() error {
 			Name:        requestDurationMetricName,
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			TagKeys:     []tag.Key{admissionStatusKey},
+		},
+		{
+			Name:        validationRequestCountMetricName,
+			Description: "The number of requests that are routed to validation webhook",
+			Measure:     validationResponseTimeInSecM,
+			Aggregation: view.Count(),
+			TagKeys:     []tag.Key{admissionStatusKey},
+		},
+		{
+			Name:        validationRequestDurationMetricName,
+			Description: validationResponseTimeInSecM.Description(),
+			Measure:     validationResponseTimeInSecM,
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
@@ -119,6 +140,7 @@ func register() error {
 			Name:        mutationRequestDurationMetricName,
 			Description: mutationResponseTimeInSecM.Description(),
 			Measure:     mutationResponseTimeInSecM,
+			// TODO: Adjust the distribution once we know what value make sense here
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{mutationStatusKey},
 		},
