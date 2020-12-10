@@ -73,9 +73,13 @@ func TestAssignMetadataToMutator(t *testing.T) {
 		},
 	}
 
-	_, err := mutation.MutatorForAssignMetadata(assignMeta)
+	mutator, err := mutation.MutatorForAssignMetadata(assignMeta)
 	if err != nil {
 		t.Fatalf("MutatorForAssignMetadata for failed, %v", err)
+	}
+	path := mutator.Path()
+	if path == nil {
+		t.Fatalf("Got empty path")
 	}
 }
 
