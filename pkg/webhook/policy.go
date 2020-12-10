@@ -97,15 +97,6 @@ type validationHandler struct {
 	opa *opa.Client
 }
 
-type admissionReqRes string
-
-const (
-	errorResponse   admissionReqRes = "error"
-	denyResponse    admissionReqRes = "deny"
-	allowResponse   admissionReqRes = "allow"
-	unknownResponse admissionReqRes = "unknown"
-)
-
 // Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
@@ -149,8 +140,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportAdmissionRequest(
-				requestResponse, time.Since(timeStart)); err != nil {
+			if err := h.reporter.ReportValidationRequest(requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
 		}
