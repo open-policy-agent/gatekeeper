@@ -5,6 +5,9 @@ import (
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type Process string
@@ -79,8 +82,18 @@ func (s *Excluder) Equals(new *Excluder) bool {
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
-func (s *Excluder) IsNamespaceExcluded(process Process, namespace string) bool {
+func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-	return s.excludedNamespaces[process][namespace]
+
+	meta, err := meta.Accessor(obj)
+	if err != nil {
+		return false, errors.Wrapf(err, "Failed to get accessor for %s - %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
+	}
+
+	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
+		return s.excludedNamespaces[process][meta.GetName()], nil
+	}
+
+	return s.excludedNamespaces[process][meta.GetNamespace()], nil
 }
