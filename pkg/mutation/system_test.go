@@ -133,7 +133,7 @@ func TestSorting(t *testing.T) {
 				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Remove(&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}})
+				return s.Remove(ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"})
 			},
 		},
 		{

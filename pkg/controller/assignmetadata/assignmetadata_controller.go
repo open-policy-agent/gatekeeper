@@ -124,18 +124,26 @@ func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconci
 	}
 	deleted = deleted || !assignMetadata.GetDeletionTimestamp().IsZero()
 
+	if deleted {
+		id, err := mutation.MakeID(assignMetadata)
+		if err != nil {
+			log.Error(err, "Failed to get id out of metadata")
+			return ctrl.Result{}, nil
+		}
+
+		if err := r.system.Remove(id); err != nil {
+			log.Error(err, "Remove failed", "resource", request.NamespacedName)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	mutator, err := mutation.MutatorForAssignMetadata(assignMetadata)
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 	}
-	if !deleted {
-		if err := r.system.Upsert(mutator); err != nil {
-			log.Error(err, "Insert failed", "resource", request.NamespacedName)
-		}
-	} else {
-		if err := r.system.Remove(mutator); err != nil {
-			log.Error(err, "Remove failed", "resource", request.NamespacedName)
-		}
+	if err := r.system.Upsert(mutator); err != nil {
+		log.Error(err, "Insert failed", "resource", request.NamespacedName)
 	}
+
 	return ctrl.Result{}, nil
 }
