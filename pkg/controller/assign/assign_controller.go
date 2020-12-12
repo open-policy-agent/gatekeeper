@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package assignment
+package assign
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "assignment_controller")
+	log = logf.Log.WithName("controller").WithValues(logging.Process, "assign_controller")
 )
 
 type Adder struct {
@@ -65,8 +65,8 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *AssignReconciler {
-	r := &AssignReconciler{system: mutationCache, Client: mgr.GetClient()}
+func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *Reconciler {
+	r := &Reconciler{system: mutationCache, Client: mgr.GetClient()}
 	return r
 }
 
@@ -91,8 +91,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// AssignReconciler reconciles a Assign object
-type AssignReconciler struct {
+// Reconciler reconciles a Assign object
+type Reconciler struct {
 	client.Client
 	system *mutation.System
 }
@@ -101,7 +101,7 @@ type AssignReconciler struct {
 
 // Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
 // and what is in the Assign.Spec
-func (r *AssignReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
 	assign := &mutationsv1alpha1.Assign{}
@@ -124,18 +124,26 @@ func (r *AssignReconciler) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 	deleted = deleted || !assign.GetDeletionTimestamp().IsZero()
 
+	if deleted {
+		id, err := mutation.MakeID(assign)
+		if err != nil {
+			log.Error(err, "Failed to get id out of assign")
+			return ctrl.Result{}, nil
+		}
+
+		if err := r.system.Remove(id); err != nil {
+			log.Error(err, "Remove failed", "resource", request.NamespacedName)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	mutator, err := mutation.MutatorForAssign(assign)
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 	}
-	if !deleted {
-		if err := r.system.Upsert(mutator); err != nil {
-			log.Error(err, "Insert failed", "resource", request.NamespacedName)
-		}
-	} else {
-		if err := r.system.Remove(mutator); err != nil {
-			log.Error(err, "Remove failed", "resource", request.NamespacedName)
-		}
+	if err := r.system.Upsert(mutator); err != nil {
+		log.Error(err, "Insert failed", "resource", request.NamespacedName)
 	}
+
 	return ctrl.Result{}, nil
 }
