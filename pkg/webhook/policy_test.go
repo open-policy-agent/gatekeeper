@@ -284,12 +284,16 @@ func TestReviewRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -311,7 +315,11 @@ func TestReviewRequest(t *testing.T) {
 			if err == nil && tt.Error {
 				t.Error("err = nil; want non-nil")
 			}
-		})
+		}
+		t.Run(tt.Name, testFn)
+
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
 	}
 
 }
@@ -481,7 +489,8 @@ func TestTracing(t *testing.T) {
 		},
 	}
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
@@ -498,6 +507,9 @@ func TestTracing(t *testing.T) {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -529,7 +541,10 @@ func TestTracing(t *testing.T) {
 					t.Error("Trace when no trace is expected")
 				}
 			}
-		})
+		}
+		t.Run(tt.Name, testFn)
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
 	}
 }
 
@@ -615,13 +630,18 @@ func TestGetDenyMessages(t *testing.T) {
 			ExpectedMsgCount: 0,
 		},
 	}
+
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
 				AdmissionRequest: admissionv1beta1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -638,7 +658,11 @@ func TestGetDenyMessages(t *testing.T) {
 			if len(msgs) != tt.ExpectedMsgCount {
 				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
 			}
-		})
+		}
+		t.Run(tt.Name, testFn)
+
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
 	}
 }
 
