@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package assignmentmetadata
+package assign
 
 import (
 	"context"
@@ -38,14 +38,14 @@ import (
 )
 
 var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "assignmentmetadata_controller")
+	log = logf.Log.WithName("controller").WithValues(logging.Process, "assign_controller")
 )
 
 type Adder struct {
 	MutationCache *mutation.System
 }
 
-// Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new Assign Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.MutationCache)
@@ -65,8 +65,8 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *AssignMetadataReconciler {
-	r := &AssignMetadataReconciler{system: mutationCache, Client: mgr.GetClient()}
+func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *Reconciler {
+	r := &Reconciler{system: mutationCache, Client: mgr.GetClient()}
 	return r
 }
 
@@ -77,57 +77,57 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Create a new controller
-	c, err := controller.New("assignmetadata-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("assign-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to AssignMetadata
+	// Watch for changes to Assign
 	if err = c.Watch(
-		&source.Kind{Type: &mutationsv1alpha1.AssignMetadata{}},
+		&source.Kind{Type: &mutationsv1alpha1.Assign{}},
 		&handler.EnqueueRequestForObject{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-// AssignMetadataReconciler reconciles a AssignMetadata object
-type AssignMetadataReconciler struct {
+// Reconciler reconciles a Assign object
+type Reconciler struct {
 	client.Client
 	system *mutation.System
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile reads that state of the cluster for a AssignMetadata object and makes changes based on the state read
-// and what is in the AssignMetadata.Spec
-func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+// Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
+// and what is in the Assign.Spec
+func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
-	assignMetadata := &mutationsv1alpha1.AssignMetadata{}
-	err := r.Get(context.TODO(), request.NamespacedName, assignMetadata)
+	assign := &mutationsv1alpha1.Assign{}
+	err := r.Get(context.TODO(), request.NamespacedName, assign)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
-		assignMetadata = &mutationsv1alpha1.AssignMetadata{
+		assign = &mutationsv1alpha1.Assign{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      request.NamespacedName.Name,
 				Namespace: request.NamespacedName.Namespace,
 			},
 			TypeMeta: metav1.TypeMeta{
-				Kind:       "AssignMetadata",
+				Kind:       "Assign",
 				APIVersion: "mutations.gatekeeper.sh",
 			},
 		}
 	}
-	deleted = deleted || !assignMetadata.GetDeletionTimestamp().IsZero()
+	deleted = deleted || !assign.GetDeletionTimestamp().IsZero()
 
 	if deleted {
-		id, err := mutation.MakeID(assignMetadata)
+		id, err := mutation.MakeID(assign)
 		if err != nil {
-			log.Error(err, "Failed to get id out of metadata")
+			log.Error(err, "Failed to get id out of assign")
 			return ctrl.Result{}, nil
 		}
 
@@ -137,10 +137,9 @@ func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconci
 		return ctrl.Result{}, nil
 	}
 
-	mutator, err := mutation.MutatorForAssignMetadata(assignMetadata)
+	mutator, err := mutation.MutatorForAssign(assign)
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
-		return ctrl.Result{}, err // TODO: reque all request on error now. change this once a decision is made on how to process errors
 	}
 	if err := r.system.Upsert(mutator); err != nil {
 		log.Error(err, "Insert failed", "resource", request.NamespacedName)
