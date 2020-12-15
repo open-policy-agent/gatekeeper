@@ -1,41 +1,21 @@
 package main
 
 var replacements = map[string]string{
-	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES": `
-{{ toYaml .Values.controllerManager.resources | indent 10 }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""`: `{{- toYaml .Values.controllerManager.resources | nindent 10 }}`,
 
-	"HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES": `
-{{ toYaml .Values.audit.resources | indent 10 }}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""`: `{{- toYaml .Values.audit.resources | nindent 10 }}`,
 
-	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING": `
-{{ toYaml .Values.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
-      imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
-{{- if .Values.controllerManager.priorityClassName }}
-      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
-{{- end }}`,
+	`HELMSUBST_DEPLOYMENT_NODE_SELECTOR: ""`: `{{- toYaml .Values.nodeSelector | nindent 8 }}`,
 
-	"HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING": `
-{{ toYaml .Values.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
-      imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
-{{- if .Values.audit.priorityClassName }}
-      priorityClassName: {{ .Values.audit.priorityClassName }}
-{{- end }}`,
+	`HELMSUBST_DEPLOYMENT_AFFINITY: ""`: `{{- toYaml .Values.affinity | nindent 8 }}`,
+
+	`HELMSUBST_DEPLOYMENT_TOLERATIONS: ""`: `{{- toYaml .Values.tolerations | nindent 8 }}`,
+
+	`HELMSUBST_DEPLOYMENT_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
-	"HELMSUBST_ANNOTATIONS": `
-{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
+	`HELMSUBST_ANNOTATIONS: ""`: `{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
 
-	"HELMSUBST_SECRET_ANNOTATIONS": `
-{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
+	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 }

@@ -53,7 +53,8 @@ spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   template:
     metadata:
-      annotations: HELMSUBST_ANNOTATIONS
+      annotations:
+        HELMSUBST_ANNOTATIONS: ""
     spec:
       containers:
         - name: manager
@@ -66,8 +67,16 @@ spec:
             - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING
+          resources:
+            HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
+      nodeSelector:
+        HELMSUBST_DEPLOYMENT_NODE_SELECTOR: ""
+      affinity:
+        HELMSUBST_DEPLOYMENT_AFFINITY: ""
+      tolerations:
+        HELMSUBST_DEPLOYMENT_TOLERATIONS: ""
+      imagePullSecrets:
+        HELMSUBST_DEPLOYMENT_IMAGE_PULL_SECRETS: ""
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -77,7 +86,8 @@ metadata:
 spec:
   template:
     metadata:
-      annotations: HELMSUBST_ANNOTATIONS
+      annotations:
+        HELMSUBST_ANNOTATIONS: ""
     spec:
       containers:
         - name: manager
@@ -93,8 +103,16 @@ spec:
             - --logtostderr
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING
+          resources:
+            HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
+      nodeSelector:
+        HELMSUBST_DEPLOYMENT_NODE_SELECTOR: ""
+      affinity:
+        HELMSUBST_DEPLOYMENT_AFFINITY: ""
+      tolerations:
+        HELMSUBST_DEPLOYMENT_TOLERATIONS: ""
+      imagePullSecrets:
+        HELMSUBST_DEPLOYMENT_IMAGE_PULL_SECRETS: ""
 ---
 apiVersion: v1
 kind: Secret

@@ -90,7 +90,7 @@ spec:
             path: /readyz
             port: 9090
         resources: 
-{{ toYaml .Values.controllerManager.resources | indent 10 }}
+{{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -104,13 +104,16 @@ spec:
           name: cert
           readOnly: true
       nodeSelector: 
-{{ toYaml .Values.nodeSelector | indent 8 }}
+{{- toYaml .Values.nodeSelector | nindent 8 }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{- toYaml .Values.affinity | nindent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
+{{- toYaml .Values.tolerations | nindent 8 }}
       imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
+{{- toYaml .Values.image.pullSecrets | nindent 8 }}
+{{- with .Values.controllerManager.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+{{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
