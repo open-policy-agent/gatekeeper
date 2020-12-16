@@ -140,11 +140,25 @@ func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconci
 	mutator, err := mutation.MutatorForAssignMetadata(assignMetadata)
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
+		// TODO: should we just set the status to false? What if there is a previou version enforced in the system, but we failed to update it?
+		r.updateStatus(assignMetadata, assignMetadata.Status.Enforced || false, []string{err.Error()})
 		return ctrl.Result{}, err // TODO: reque all request on error now. change this once a decision is made on how to process errors
 	}
 	if err := r.system.Upsert(mutator); err != nil {
+		// TODO: should we just set the status to false? What if there is a previou version enforced in the system, but we failed to update it?
+		r.updateStatus(assignMetadata, assignMetadata.Status.Enforced || false, []string{err.Error()})
 		log.Error(err, "Insert failed", "resource", request.NamespacedName)
+		return ctrl.Result{}, nil
 	}
-
+	r.updateStatus(assignMetadata, true, nil)
 	return ctrl.Result{}, nil
+}
+
+func (r *AssignMetadataReconciler) updateStatus(assignMetadata *mutationsv1alpha1.AssignMetadata, enforced bool, errors []string) {
+	assignMetadata.Status.Enforced = enforced
+	assignMetadata.Status.Errors = errors
+	err := r.Update(context.TODO(), assignMetadata)
+	if err != nil {
+		log.Error(err, "Failed to update assignMetadata status.", "assignMetadata", assignMetadata)
+	}
 }

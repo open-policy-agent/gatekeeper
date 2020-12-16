@@ -40,6 +40,8 @@ type MetadataParameters struct {
 type AssignMetadataStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Enforced bool     `json:"enforced,omitempty"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 // +kubebuilder:object:root=true

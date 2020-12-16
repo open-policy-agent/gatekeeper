@@ -179,6 +179,14 @@ spec:
         status:
           description: AssignMetadataStatus defines the observed state of AssignMetadata
           type: object
+          properties:
+            enforced:
+              type: boolean
+            errors:
+              items:
+                description: Error raised while adding a AssignMetadata
+                type: string
+              type: array
       type: object
   version: v1alpha1
   versions:
