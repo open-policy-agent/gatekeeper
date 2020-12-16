@@ -9,6 +9,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/pkg/errors"
 	types "k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -51,7 +52,7 @@ func (l nsSet) Set(s string) error {
 // +kubebuilder:webhook:verbs=CREATE;UPDATE,path=/v1/admitlabel,mutating=false,failurePolicy=fail,groups="",resources=namespaces,versions=*,name=check-ignore-label.gatekeeper.sh
 
 // AddLabelWebhook registers the label webhook server with the manager
-func AddLabelWebhook(mgr manager.Manager, _ *opa.Client, _ *process.Excluder) error {
+func AddLabelWebhook(mgr manager.Manager, _ *opa.Client, _ *process.Excluder, mutationCache *mutation.System) error {
 	wh := &admission.Webhook{Handler: &namespaceLabelHandler{}}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.

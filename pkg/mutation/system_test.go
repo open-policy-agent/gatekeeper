@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,7 +24,7 @@ type MockMutator struct {
 	UnstableFor      int // makes the mutation unstable for the first n mutations
 }
 
-func (m *MockMutator) Matches(obj metav1.Object, ns *corev1.Namespace) bool {
+func (m *MockMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return true // always matches
 }
 
@@ -55,6 +56,14 @@ func (m *MockMutator) Mutate(obj *unstructured.Unstructured) error {
 
 func (m *MockMutator) ID() ID {
 	return m.Mocked
+}
+
+func (m *MockMutator) Path() *parser.Path {
+	return nil
+}
+
+func (m *MockMutator) Value() (interface{}, error) {
+	return nil, nil
 }
 
 func (m *MockMutator) HasDiff(mutator Mutator) bool {
@@ -124,7 +133,7 @@ func TestSorting(t *testing.T) {
 				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Remove(&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}})
+				return s.Remove(ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"})
 			},
 		},
 		{

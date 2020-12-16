@@ -502,6 +502,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - mutations.gatekeeper.sh
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - policy
   resourceNames:
   - gatekeeper-admin
@@ -645,6 +657,7 @@ spec:
         gatekeeper.sh/operation: audit
         gatekeeper.sh/system: "yes"
     spec:
+      automountServiceAccountToken: true
       containers:
       - args:
         - --operation=audit
@@ -662,7 +675,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.3.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.3.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -737,6 +750,7 @@ spec:
                   - webhook
               topologyKey: kubernetes.io/hostname
             weight: 100
+      automountServiceAccountToken: true
       containers:
       - args:
         - --port=8443
@@ -755,7 +769,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.3.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.3.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

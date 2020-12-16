@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplatestatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -105,6 +106,8 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
+
+func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {}
 
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events

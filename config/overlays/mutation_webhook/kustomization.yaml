@@ -1,0 +1,22 @@
+# TODO: this is a temporary kustomization for the mutation webhook
+# It is kept separate until the mutation feature is stable enough,
+# when the mutation webhook should be moved to config/webhooks/manifests.yaml  
+
+namespace: gatekeeper-system
+
+bases:
+  - ../dev
+
+resources:
+  - webhook.yaml
+  - mutations.gatekeeper.sh_assign.yaml
+  - mutations.gatekeeper.sh_assignmetadata.yaml
+
+
+patchesJson6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRole
+    name: manager-role
+  path: webhook_permissions_patch.yaml
