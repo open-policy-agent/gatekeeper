@@ -363,7 +363,12 @@ func (am *Manager) auditResources(
 
 				for _, obj := range objList.Items {
 					objNamespace := obj.GetNamespace()
-					if am.skipExcludedNamespace(objNamespace) {
+					isExcludedNamespace, err := am.skipExcludedNamespace(&obj)
+					if err != nil {
+						log.Error(err, "error while excluding namespaces")
+					}
+
+					if isExcludedNamespace {
 						continue
 					}
 
@@ -539,8 +544,13 @@ func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []sche
 	go am.ucloop.update(ctx, constraintsGVKs)
 }
 
-func (am *Manager) skipExcludedNamespace(namespace string) bool {
-	return am.processExcluder.IsNamespaceExcluded(process.Audit, namespace)
+func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, error) {
+	isNamespaceExcluded, err := am.processExcluder.IsNamespaceExcluded(process.Audit, obj)
+	if err != nil {
+		return false, err
+	}
+
+	return isNamespaceExcluded, err
 }
 
 func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {

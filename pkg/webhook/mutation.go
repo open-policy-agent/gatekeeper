@@ -41,15 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-type mutationResponse string
-
-const (
-	mutationSkipResponse    mutationResponse = "skip"
-	mutationUnknownResponse mutationResponse = "unknown"
-	mutationAllowResponse   mutationResponse = "allow"
-	mutationErrorResponse   mutationResponse = "error"
-)
-
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddMutatingWebhook)
 
@@ -143,29 +134,33 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.ValidationResponse(true, "Not mutating gatekeeper resources")
 	}
 
-	requestResponse := mutationUnknownResponse
+	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportMutationRequest(
-				requestResponse, time.Since(timeStart)); err != nil {
+			if err := h.reporter.ReportMutationRequest(requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
 		}
 	}()
 
 	// namespace is excluded from webhook using config
-	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) {
-		requestResponse = mutationSkipResponse
+	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest)
+	if err != nil {
+		log.Error(err, "error while excluding namespace")
+	}
+
+	if isExcludedNamespace {
+		requestResponse = skipResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
 
 	resp, err := h.mutateRequest(ctx, req)
 
 	if err != nil {
-		requestResponse = mutationErrorResponse
+		requestResponse = errorResponse
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
-	requestResponse = mutationAllowResponse
+	requestResponse = successResponse
 	return resp
 }
 

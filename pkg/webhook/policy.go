@@ -97,15 +97,6 @@ type validationHandler struct {
 	opa *opa.Client
 }
 
-type admissionReqRes string
-
-const (
-	errorResponse   admissionReqRes = "error"
-	denyResponse    admissionReqRes = "deny"
-	allowResponse   admissionReqRes = "allow"
-	unknownResponse admissionReqRes = "unknown"
-)
-
 // Handle the validation request
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
@@ -149,15 +140,19 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			if err := h.reporter.ReportAdmissionRequest(
-				requestResponse, time.Since(timeStart)); err != nil {
+			if err := h.reporter.ReportValidationRequest(requestResponse, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
 			}
 		}
 	}()
 
 	// namespace is excluded from webhook using config
-	if h.skipExcludedNamespace(req.AdmissionRequest.Namespace) {
+	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest)
+	if err != nil {
+		log.Error(err, "error while excluding namespace")
+	}
+
+	if isExcludedNamespace {
 		requestResponse = allowResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}

@@ -184,14 +184,42 @@ func TestReconcile(t *testing.T) {
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
 
-	auditExcludedNS := processExcluder.IsNamespaceExcluded(process.Audit, "foo")
+	fooNS := &unstructured.Unstructured{}
+	fooNS.SetName("foo")
+	fooNS.SetGroupVersionKind(nsGvk)
+	auditExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooNS)
 	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
-	syncExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, "foo")
+	syncExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooNS)
 	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
-	syncNotExcludedNS := processExcluder.IsNamespaceExcluded(process.Sync, "bar")
-	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
-	webhookExcludedNS := processExcluder.IsNamespaceExcluded(process.Webhook, "foo")
+	webhookExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooNS)
 	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
+
+	barNS := &unstructured.Unstructured{}
+	barNS.SetName("bar")
+	barNS.SetGroupVersionKind(nsGvk)
+	syncNotExcludedNS, err := processExcluder.IsNamespaceExcluded(process.Sync, barNS)
+	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
+	g.Expect(err).To(gomega.BeNil())
+
+	fooPod := &unstructured.Unstructured{}
+	fooPod.SetName("foo")
+	fooPod.SetNamespace("foo")
+	podGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
+	fooPod.SetGroupVersionKind(podGvk)
+	auditExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooPod)
+	g.Expect(auditExcludedPod).Should(gomega.BeTrue())
+	syncExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooPod)
+	g.Expect(syncExcludedPod).Should(gomega.BeTrue())
+	webhookExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooPod)
+	g.Expect(webhookExcludedPod).Should(gomega.BeTrue())
+
+	barPod := &unstructured.Unstructured{}
+	barPod.SetName("bar")
+	barPod.SetNamespace("bar")
+	barPod.SetGroupVersionKind(podGvk)
+	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
+	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
+	g.Expect(err).To(gomega.BeNil())
 
 	// Test finalizer removal
 
@@ -413,8 +441,8 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	expected := map[opaKey]interface{}{
 		{gvk: nsGVK, key: "default"}:                      nil,
-		{gvk: nsGVK, key: "kube-system"}:                  nil,
 		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
+		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
 		return opa.Contains(expected)
