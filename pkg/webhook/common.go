@@ -11,7 +11,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/tools/record"
@@ -20,15 +22,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+type requestResponse string
+
+const (
+	successResponse requestResponse = "success"
+	errorResponse   requestResponse = "error"
+	denyResponse    requestResponse = "deny"
+	allowResponse   requestResponse = "allow"
+	unknownResponse requestResponse = "unknown"
+	skipResponse    requestResponse = "skip"
+)
+
 var log = logf.Log.WithName("webhook")
 
 var (
-	// VwhName is the gatekeeper validating webhook for policy validation
 	VwhName = "gatekeeper-validating-webhook-configuration"
+	MwhName = "gatekeeper-mutating-webhook-configuration"
 )
 
 const (
 	serviceAccountName = "gatekeeper-admin"
+	mutationsGroup     = "mutations.gatekeeper.sh"
 )
 
 var (
@@ -70,6 +84,19 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 	return cfg, h.client.Get(ctx, keys.Config, cfg)
 }
 
+// isGatekeeperResource returns true if the request relates to a gatekeeper resource
+func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req admission.Request) bool {
+	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == mutationsGroup ||
+		req.AdmissionRequest.Kind.Group == "config.gatekeeper.sh" ||
+		req.AdmissionRequest.Kind.Group == "status.gatekeeper.sh" {
+		return true
+	}
+
+	return false
+}
+
 func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request) (bool, bool) {
 	cfg, _ := h.getConfig(ctx)
 	traceEnabled := false
@@ -93,6 +120,16 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request
 	return traceEnabled, dump
 }
 
-func (h *webhookHandler) skipExcludedNamespace(namespace string) bool {
-	return h.processExcluder.IsNamespaceExcluded(process.Webhook, namespace)
+func (h *webhookHandler) skipExcludedNamespace(req admissionv1beta1.AdmissionRequest) (bool, error) {
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
+		return false, err
+	}
+
+	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(process.Webhook, obj)
+	if err != nil {
+		return false, err
+	}
+
+	return isNamespaceExcluded, err
 }

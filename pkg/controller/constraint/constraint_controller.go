@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -81,6 +82,8 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {
 func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
+
+func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {}
 
 // Add creates a new Constraint Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

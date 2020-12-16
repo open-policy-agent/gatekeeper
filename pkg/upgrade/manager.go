@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -137,10 +138,11 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 			return err
 		}
 		log.Info("resource count", "count", len(instanceList.Items))
-		updateResources := make(map[string]unstructured.Unstructured, len(instanceList.Items))
+		updateResources := make(map[util.KindVersionResource]unstructured.Unstructured, len(instanceList.Items))
 		// get each resource
 		for _, item := range instanceList.Items {
-			updateResources[item.GetSelfLink()] = item
+			key := util.GetUniqueKey(item)
+			updateResources[key] = item
 		}
 
 		if len(updateResources) > 0 {
@@ -158,7 +160,7 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 }
 
 type updateResourceLoop struct {
-	ur      map[string]unstructured.Unstructured
+	ur      map[util.KindVersionResource]unstructured.Unstructured
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
@@ -193,7 +195,8 @@ func (urloop *updateResourceLoop) update() {
 					log.Error(err, "could not update resource", "name", name, "namespace", namespace)
 				}
 				if !failure {
-					delete(urloop.ur, latestItem.GetSelfLink())
+					key := util.GetUniqueKey(latestItem)
+					delete(urloop.ur, key)
 				}
 			}
 		}
