@@ -76,7 +76,7 @@ func (s *System) Upsert(m Mutator) error {
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.RLock()
 	defer s.RUnlock()
-
+	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
 	for i := 0; i < maxIterations; i++ {
@@ -92,6 +92,9 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		if cmp.Equal(old, obj) {
 			if i == 0 {
 				return false, nil
+			}
+			if cmp.Equal(original, obj) {
+				return false, fmt.Errorf("oscillating mutation for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
 			}
 			return true, nil
 		}
