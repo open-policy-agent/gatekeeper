@@ -140,6 +140,7 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	mutator, err := mutation.MutatorForAssignMetadata(assignMetadata)
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
+		return ctrl.Result{}, err // TODO: reque all request on error now. change this once a decision is made on how to process errors
 	}
 	if err := r.system.Upsert(mutator); err != nil {
 		log.Error(err, "Insert failed", "resource", request.NamespacedName)
