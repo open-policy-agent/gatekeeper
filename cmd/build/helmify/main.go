@@ -96,6 +96,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
 			}
 
+			if name == "gatekeeper-system" {
+				obj = "{{- if .Values.createNamespace }}\n" + obj + "{{- end }}\n"
+			}
+
 			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
 				return err
 			}

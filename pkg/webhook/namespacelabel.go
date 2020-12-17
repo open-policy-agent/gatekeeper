@@ -71,7 +71,7 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 	if req.Operation == types.Delete {
 		return admission.Allowed("Delete is always allowed")
 	}
-	if req.AdmissionRequest.Kind.Group != "" || req.AdmissionRequest.Kind.Kind != "Namespace" {
+	if req.AdmissionRequest.Kind.Group != "" || req.AdmissionRequest.Kind.Kind != namespaceKind {
 		return admission.Allowed("Not a namespace")
 	}
 	obj := &unstructured.Unstructured{}

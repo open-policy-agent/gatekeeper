@@ -313,7 +313,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Req
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
 	// https://github.com/open-policy-agent/gatekeeper/issues/792
-	if req.Kind.Kind == "Namespace" && req.Kind.Group == "" {
+	if req.Kind.Kind == namespaceKind && req.Kind.Group == "" {
 		req.Namespace = ""
 	}
 	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
