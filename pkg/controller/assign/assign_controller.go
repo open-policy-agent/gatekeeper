@@ -118,7 +118,7 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Assign",
-				APIVersion: "mutations.gatekeeper.sh",
+				APIVersion: "mutations.gatekeeper.sh/v1alpha1",
 			},
 		}
 	}
