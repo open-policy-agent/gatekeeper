@@ -16,7 +16,7 @@ limitations under the License.
 package controller
 
 import (
-	assignmetadata "github.com/open-policy-agent/gatekeeper/pkg/controller/assignmetadata"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/assignmetadata"
 )
 
 func init() {
