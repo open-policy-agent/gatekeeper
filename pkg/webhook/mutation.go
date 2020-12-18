@@ -201,10 +201,13 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Reque
 		return admission.Errored(int32(http.StatusInternalServerError), err), nil
 	}
 
-	err = h.mutationSystem.Mutate(&obj, ns)
+	mutated, err := h.mutationSystem.Mutate(&obj, ns)
 	if err != nil {
 		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+	if !mutated {
+		return admission.ValidationResponse(true, "Resource was not mutated"), nil
 	}
 
 	newJSON, err := obj.MarshalJSON()
