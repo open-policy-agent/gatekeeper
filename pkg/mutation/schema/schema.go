@@ -31,7 +31,7 @@ var (
 	log = logf.Log.WithName("mutation_schema")
 )
 
-func iterateOver(bindings []Binding) func() *schema.GroupVersionKind {
+func getSortedGVKs(bindings []Binding) []schema.GroupVersionKind {
 	// deduplicate GVKs
 	gvksMap := map[schema.GroupVersionKind]struct{}{}
 	for _, binding := range bindings {
@@ -57,15 +57,8 @@ func iterateOver(bindings []Binding) func() *schema.GroupVersionKind {
 	// we iterate over the map in a stable order so that
 	// unit tests wont be flaky
 	sort.Slice(gvks, func(i, j int) bool { return gvks[i].String() < gvks[j].String() })
-	i := 0
 
-	return func() *schema.GroupVersionKind {
-		if i == len(gvks) {
-			return nil
-		}
-		i++
-		return &gvks[i-1]
-	}
+	return gvks
 }
 
 // New returns a new schema database
@@ -102,13 +95,12 @@ func (db *DB) upsert(mutator MutatorWithSchema, unwind bool) error {
 		db.remove(oldMutator.ID())
 	}
 
-	iterator := iterateOver(mutator.SchemaBindings())
 	modified := []*scheme{}
-	for gvk := iterator(); gvk != nil; gvk = iterator() {
-		s, ok := db.schemas[*gvk]
+	for _, gvk := range getSortedGVKs(mutator.SchemaBindings()) {
+		s, ok := db.schemas[gvk]
 		if !ok {
-			s = &scheme{gvk: *gvk}
-			db.schemas[*gvk] = s
+			s = &scheme{gvk: gvk}
+			db.schemas[gvk] = s
 		}
 		if err := s.add(mutator.Path().Nodes); err != nil {
 			// avoid infinite recursion
@@ -163,16 +155,15 @@ func (db *DB) remove(id types.ID) {
 		return
 	}
 
-	iterator := iterateOver(mutator.SchemaBindings())
-	for gvk := iterator(); gvk != nil; gvk = iterator() {
-		s, ok := db.schemas[*gvk]
+	for _, gvk := range getSortedGVKs(mutator.SchemaBindings()) {
+		s, ok := db.schemas[gvk]
 		if !ok {
-			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", *gvk)
-			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, *gvk))
+			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", gvk)
+			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, gvk))
 		}
 		s.remove(mutator.Path().Nodes)
 		if s.root == nil {
-			delete(db.schemas, *gvk)
+			delete(db.schemas, gvk)
 		}
 	}
 }
