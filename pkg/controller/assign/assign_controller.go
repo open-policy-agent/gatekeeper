@@ -18,6 +18,7 @@ package assign
 
 import (
 	"context"
+	"fmt"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -118,7 +119,7 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Assign",
-				APIVersion: "mutations.gatekeeper.sh",
+				APIVersion: fmt.Sprintf("%s/%s", mutationsv1alpha1.GroupVersion.Group, mutationsv1alpha1.GroupVersion.Version),
 			},
 		}
 	}
