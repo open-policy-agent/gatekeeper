@@ -145,13 +145,8 @@ e2e-helm-upgrade-init: e2e-helm-install
 	fi;
 
 e2e-helm-upgrade:
-	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
-		./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
-	else\
-		./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
-	fi;
+	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
+		--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
 
 # Build manager binary
 manager: generate
