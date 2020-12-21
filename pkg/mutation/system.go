@@ -140,6 +140,11 @@ func (s *System) Remove(id types.ID) error {
 	return nil
 }
 
+// Get mutator for given id
+func (s *System) Get(id types.ID) types.Mutator {
+	return s.mutatorsMap[id].DeepCopy()
+}
+
 func greaterOrEqual(id1, id2 types.ID) bool {
 	if id1.Group > id2.Group {
 		return true

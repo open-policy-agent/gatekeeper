@@ -161,7 +161,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if !deleted {
 		if err := r.system.Upsert(mutator); err != nil {
 			log.Error(err, "Insert failed", "resource", request.NamespacedName)
-			tracker.CancelExpect(assignMetadata)
+			tracker.TryCancelExpect(assignMetadata)
 		} else {
 			tracker.Observe(assignMetadata)
 		}

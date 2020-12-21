@@ -71,11 +71,10 @@ type Tracker struct {
 
 // NewTracker creates a new Tracker and initializes the internal trackers
 func NewTracker(lister Lister, mutationEnabled bool) *Tracker {
-	return &Tracker{
+	tracker := Tracker{
 		lister:             lister,
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), nil),
 		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config"), nil),
-		assignMetadata:     newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), nil),
 		constraints:        newTrackerMap(),
 		data:               newTrackerMap(),
 		ready:              make(chan struct{}),
@@ -83,6 +82,10 @@ func NewTracker(lister Lister, mutationEnabled bool) *Tracker {
 
 		mutationEnabled: mutationEnabled,
 	}
+	if mutationEnabled {
+		tracker.assignMetadata = newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), nil)
+	}
+	return &tracker
 }
 
 // CheckSatisfied implements healthz.Checker to report readiness based on tracker status.
@@ -102,7 +105,10 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
 	case gvk.GroupVersion() == mutationv1alpha.GroupVersion && gvk.Kind == "AssignMetadata":
-		return t.assignMetadata
+		if t.mutationEnabled {
+			return t.assignMetadata
+		}
+		return noopExpectations{}
 	}
 
 	// Avoid new constraint trackers after templates have been populated.
@@ -151,10 +157,12 @@ func (t *Tracker) Satisfied(ctx context.Context) bool {
 		return true
 	}
 
-	if !t.assignMetadata.Satisfied() {
-		return false
+	if t.mutationEnabled {
+		if !t.assignMetadata.Satisfied() {
+			return false
+		}
+		log.V(1).Info("all expectations satisfied", "tracker", "assignMetadata")
 	}
-	log.V(1).Info("all expectations satisfied", "tracker", "assignMetadata")
 
 	if !t.templates.Satisfied() {
 		return false
@@ -194,9 +202,11 @@ func (t *Tracker) Run(ctx context.Context) error {
 	t.constraintTrackers = syncutil.RunnerWithContext(gctx)
 	close(t.ready) // The constraintTrackers SingleRunner is ready.
 
-	grp.Go(func() error {
-		return t.trackAssignMetadata(gctx)
-	})
+	if t.mutationEnabled {
+		grp.Go(func() error {
+			return t.trackAssignMetadata(gctx)
+		})
+	}
 	grp.Go(func() error {
 		return t.trackConstraintTemplates(gctx)
 	})
@@ -624,10 +634,15 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 				log.Info("unsatisfied data", "name", u.namespacedName, "gvk", u.gvk)
 			}
 		}
-
-		for amKey := range t.assignMetadata.expect {
-			log.Info("unsatisfied AssignMetadata", "name", amKey.namespacedName)
+		if t.mutationEnabled {
+			logUnsatisfiedAssignMetadata(t)
 		}
+	}
+}
+
+func logUnsatisfiedAssignMetadata(t *Tracker) {
+	for _, amKey := range t.assignMetadata.unsatisfied() {
+		log.Info("unsatisfied AssignMetadata", "name", amKey.namespacedName)
 	}
 }
 

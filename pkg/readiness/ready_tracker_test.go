@@ -30,6 +30,8 @@ import (
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -93,8 +95,8 @@ func setupOpa(t *testing.T) *opa.Client {
 	return client
 }
 
-func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) error {
-	tracker, err := readiness.SetupTracker(mgr, false)
+func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mutationSystem *mutation.System) error {
+	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
@@ -116,11 +118,60 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client) er
 		Tracker:          tracker,
 		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
+		MutationCache:    mutationSystem,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
 	return nil
+}
+
+func Test_AssignMetadata(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	defer func() {
+		mutationEnabled := false
+		mutation.MutationEnabled = &mutationEnabled
+	}()
+
+	mutationEnabled := true
+	mutation.MutationEnabled = &mutationEnabled
+
+	os.Setenv("POD_NAME", "no-pod")
+	podstatus.DisablePodOwnership()
+
+	// Apply fixtures *before* the controllers are setup.
+	err := applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+	mutationCache := mutation.NewSystem()
+	if err := setupController(mgr, wm, opaClient, mutationCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	defer func() {
+		cancelFunc()
+		mgrStopped.Wait()
+	}()
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the AssignMetadata is present in the cache
+	for _, am := range testAssignMetadata {
+		id, err := mutationtypes.MakeID(am)
+		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create AssignMetadata id")
+		exptectedMutator := mutationCache.Get(id)
+		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+	}
 }
 
 // Test_Tracker verifies that once an initial set of fixtures are loaded into OPA,
@@ -143,7 +194,8 @@ func Test_Tracker(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient); err != nil {
+
+	if err := setupController(mgr, wm, opaClient, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -222,7 +274,7 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient); err != nil {
+	if err := setupController(mgr, wm, opaClient, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
