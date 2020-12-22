@@ -13,7 +13,7 @@ KIND_VERSION ?= 0.8.1
 KUBERNETES_VERSION ?= v1.19.0
 KUSTOMIZE_VERSION ?= 3.7.0
 KUBECTL_KUSTOMIZE_VERSION ?= 1.18.5-${KUSTOMIZE_VERSION}
-HELM_VERSION ?= 2.16.10
+HELM_VERSION ?= 2.17.0
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
