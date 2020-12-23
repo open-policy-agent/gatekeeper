@@ -2,8 +2,7 @@ name: upgrade
 on:
   push:
     paths:
-      #- "manifest_staging/charts/**"
-      - "**"
+      - "manifest_staging/charts/**"
 
   pull_request:
     paths:
