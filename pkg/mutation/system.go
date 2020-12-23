@@ -72,7 +72,8 @@ func (s *System) Upsert(m Mutator) error {
 	return nil
 }
 
-// Mutate applies the mutation in place to the given object
+// Mutate applies the mutation in place to the given object. Returns
+// true if a mutation was performed.
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.RLock()
 	defer s.RUnlock()
