@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package assignmentmetadata
+package assignmetadata
 
 import (
 	"context"
+	"fmt"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -39,7 +40,7 @@ import (
 )
 
 var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "assignmentmetadata_controller")
+	log = logf.Log.WithName("controller").WithValues(logging.Process, "assignmetadata_controller")
 )
 
 type Adder struct {
@@ -66,8 +67,8 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *AssignMetadataReconciler {
-	r := &AssignMetadataReconciler{system: mutationCache, Client: mgr.GetClient()}
+func newReconciler(mgr manager.Manager, mutationCache *mutation.System) *Reconciler {
+	r := &Reconciler{system: mutationCache, Client: mgr.GetClient()}
 	return r
 }
 
@@ -92,8 +93,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// AssignMetadataReconciler reconciles a AssignMetadata object
-type AssignMetadataReconciler struct {
+// Reconciler reconciles a AssignMetadata object
+type Reconciler struct {
 	client.Client
 	system *mutation.System
 }
@@ -102,7 +103,7 @@ type AssignMetadataReconciler struct {
 
 // Reconcile reads that state of the cluster for a AssignMetadata object and makes changes based on the state read
 // and what is in the AssignMetadata.Spec
-func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
 	assignMetadata := &mutationsv1alpha1.AssignMetadata{}
@@ -119,7 +120,7 @@ func (r *AssignMetadataReconciler) Reconcile(request reconcile.Request) (reconci
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "AssignMetadata",
-				APIVersion: "mutations.gatekeeper.sh",
+				APIVersion: fmt.Sprintf("%s/%s", mutationsv1alpha1.GroupVersion.Group, mutationsv1alpha1.GroupVersion.Version),
 			},
 		}
 	}

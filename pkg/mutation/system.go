@@ -74,11 +74,12 @@ func (s *System) Upsert(m types.Mutator) error {
 	return nil
 }
 
-// Mutate applies the mutation in place to the given object
-func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) error {
+// Mutate applies the mutation in place to the given object. Returns
+// true if a mutation was performed.
+func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.RLock()
 	defer s.RUnlock()
-
+	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
 	for i := 0; i < maxIterations; i++ {
@@ -87,16 +88,21 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) er
 			if m.Matches(obj, ns) {
 				err := m.Mutate(obj)
 				if err != nil {
-					return errors.Wrapf(err, "Mutation failed for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+					return false, errors.Wrapf(err, "mutation failed for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
 				}
 			}
 		}
 		if cmp.Equal(old, obj) {
-			return nil
+			if i == 0 {
+				return false, nil
+			}
+			if cmp.Equal(original, obj) {
+				return false, fmt.Errorf("oscillating mutation for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+			}
+			return true, nil
 		}
 	}
-
-	return fmt.Errorf("Mutation not converging for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+	return false, fmt.Errorf("mutation not converging for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
 }
 
 // Remove removes the mutator from the mutation system

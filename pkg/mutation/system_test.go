@@ -284,7 +284,7 @@ func TestMutation(t *testing.T) {
 					t.Errorf(tc.tname, "Failed inserting %dth object", i)
 				}
 			}
-			err = c.Mutate(toMutate, nil)
+			mutated, err := c.Mutate(toMutate, nil)
 			if tc.expectError && err == nil {
 				t.Fatal(tc.tname, "Expecting error from mutate, did not fail")
 			}
@@ -303,6 +303,11 @@ func TestMutation(t *testing.T) {
 			}
 
 			newLabels := accessor.GetLabels()
+
+			if !mutated {
+				t.Error(tc.tname, "Mutation not as expected", cmp.Diff(newLabels, tc.expectedLabels))
+			}
+
 			if !cmp.Equal(newLabels, tc.expectedLabels) {
 				t.Error(tc.tname, "Mutation not as expected", cmp.Diff(newLabels, tc.expectedLabels))
 			}

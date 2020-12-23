@@ -2,6 +2,7 @@ replicas: 3
 auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
+createNamespace: true
 disableValidatingWebhook: false
 auditChunkSize: 0
 logLevel: INFO
@@ -19,6 +20,7 @@ podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
 secretAnnotations: {}
 controllerManager:
+  priorityClassName: system-cluster-critical
   resources:
     limits:
       cpu: 1000m
@@ -27,6 +29,7 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
 audit:
+  priorityClassName: system-cluster-critical
   resources:
     limits:
       cpu: 1000m

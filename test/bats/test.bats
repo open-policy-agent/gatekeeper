@@ -11,6 +11,12 @@ teardown() {
   bash -c "${CLEAN_CMD}"
 }
 
+teardown_file() {
+  kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
+  kubectl delete constrainttemplates k8scontainerlimits k8srequiredlabels k8suniquelabel || true
+  kubectl delete configs.config.gatekeeper.sh config -n gatekeeper-system || true
+}
+
 @test "gatekeeper-controller-manager is running" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
 }
@@ -78,7 +84,7 @@ teardown() {
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-dryrun.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
-  # deploying a violation with dryrun enforcement action will be accepted
+  # deploying a violation with dryrun enforcement action will be accepted
   kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
 
   kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
