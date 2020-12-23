@@ -14,6 +14,7 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -27,7 +28,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -76,6 +81,7 @@ func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder
 				gkNamespace:     util.GetNamespace(),
 			},
 			mutationSystem: mutationSystem,
+			deserializer:   codecs.UniversalDeserializer(),
 		},
 	}
 
@@ -94,6 +100,7 @@ var _ admission.Handler = &mutationHandler{}
 type mutationHandler struct {
 	webhookHandler
 	mutationSystem *mutation.System
+	deserializer   runtime.Decoder
 }
 
 // Handle the mutation request
@@ -148,6 +155,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	}
 
 	resp, err := h.mutateRequest(ctx, req)
+
 	if err != nil {
 		requestResponse = errorResponse
 		return admission.Errored(int32(http.StatusInternalServerError), err)
@@ -157,9 +165,57 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 }
 
 func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Request) (admission.Response, error) {
-	// TODO: place mutation logic here
-	mutatedObject := req.Object
-	resp := admission.PatchResponseFromRaw(req.Object.Raw, mutatedObject.Raw)
+
+	ns := &corev1.Namespace{}
+
+	// if the object being mutated is a namespace itself, we use it as namespace
+	if req.Kind.Kind == namespaceKind && req.Kind.Group == "" {
+		req.Namespace = ""
+		obj, _, err := deserializer.Decode(req.Object.Raw, nil, &corev1.Namespace{})
+		if err != nil {
+			return admission.Errored(int32(http.StatusInternalServerError), err), nil
+		}
+		ok := false
+		ns, ok = obj.(*corev1.Namespace)
+		if !ok {
+			return admission.Errored(int32(http.StatusInternalServerError), errors.New("failed to cast namespace object")), nil
+		}
+	} else if req.AdmissionRequest.Namespace != "" {
+		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
+				return admission.Errored(int32(http.StatusInternalServerError), err), nil
+			}
+			// bypass cached client and ask api-server directly
+			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
+			if err != nil {
+				log.Error(err, "error retrieving namespace from API server", "name", req.AdmissionRequest.Namespace)
+				return admission.Errored(int32(http.StatusInternalServerError), err), nil
+			}
+		}
+	}
+	obj := unstructured.Unstructured{}
+	err := obj.UnmarshalJSON(req.Object.Raw)
+	if err != nil {
+		log.Error(err, "failed to unmarshal", "object", string(req.Object.Raw))
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+
+	mutated, err := h.mutationSystem.Mutate(&obj, ns)
+	if err != nil {
+		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+	if !mutated {
+		return admission.ValidationResponse(true, "Resource was not mutated"), nil
+	}
+
+	newJSON, err := obj.MarshalJSON()
+	if err != nil {
+		log.Error(err, "failed to marshal mutated object", "object", obj)
+		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+	}
+	resp := admission.PatchResponseFromRaw(req.Object.Raw, newJSON)
 	return resp, nil
 }
 

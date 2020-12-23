@@ -95,5 +95,8 @@ spec:
 {{ toYaml .Values.tolerations | indent 8 }}
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
+{{- if .Values.audit.priorityClassName }}
+      priorityClassName: {{ .Values.audit.priorityClassName }}
+{{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60

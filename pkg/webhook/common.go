@@ -43,6 +43,7 @@ var (
 const (
 	serviceAccountName = "gatekeeper-admin"
 	mutationsGroup     = "mutations.gatekeeper.sh"
+	namespaceKind      = "Namespace"
 )
 
 var (
