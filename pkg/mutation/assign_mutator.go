@@ -8,6 +8,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -17,14 +19,14 @@ import (
 // AssignMutator is a mutator object built out of a
 // Assign instance.
 type AssignMutator struct {
-	id       ID
+	id       types.ID
 	assign   *mutationsv1alpha1.Assign
 	path     *parser.Path
-	bindings []SchemaBinding
+	bindings []schema.Binding
 }
 
 // AssignMutator implements mutatorWithSchema
-var _ MutatorWithSchema = &AssignMutator{}
+var _ schema.MutatorWithSchema = &AssignMutator{}
 
 func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	matches, err := Matches(m.assign.Spec.Match, obj, ns)
@@ -38,19 +40,19 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
 	return Mutate(m, obj)
 }
-func (m *AssignMutator) ID() ID {
+func (m *AssignMutator) ID() types.ID {
 	return m.id
 }
 
-func (m *AssignMutator) SchemaBindings() []SchemaBinding {
+func (m *AssignMutator) SchemaBindings() []schema.Binding {
 	return m.bindings
 }
 
 func (m *AssignMutator) Value() (interface{}, error) {
-	return unmarshalValue(m.assign.Spec.Parameters.Assign.Raw)
+	return types.UnmarshalValue(m.assign.Spec.Parameters.Assign.Raw)
 }
 
-func (m *AssignMutator) HasDiff(mutator Mutator) bool {
+func (m *AssignMutator) HasDiff(mutator types.Mutator) bool {
 	toCheck, ok := mutator.(*AssignMutator)
 	if !ok { // different types, different
 		return true
@@ -78,14 +80,14 @@ func (m *AssignMutator) Path() *parser.Path {
 	return m.path
 }
 
-func (m *AssignMutator) DeepCopy() Mutator {
+func (m *AssignMutator) DeepCopy() types.Mutator {
 	res := &AssignMutator{
 		id:     m.id,
 		assign: m.assign.DeepCopy(),
 		path: &parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
-		bindings: make([]SchemaBinding, len(m.bindings)),
+		bindings: make([]schema.Binding, len(m.bindings)),
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
@@ -95,7 +97,7 @@ func (m *AssignMutator) DeepCopy() Mutator {
 // MutatorForAssign returns an AssignMutator built from
 // the given assign instance.
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
-	id, err := MakeID(assign)
+	id, err := types.MakeID(assign)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to retrieve id for assign type")
 	}
@@ -113,10 +115,10 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	}, nil
 }
 
-func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []SchemaBinding {
-	res := []SchemaBinding{}
+func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
+	res := []schema.Binding{}
 	for _, applyTo := range applyTos {
-		binding := SchemaBinding{
+		binding := schema.Binding{
 			Groups:   make([]string, len(applyTo.Groups)),
 			Kinds:    make([]string, len(applyTo.Kinds)),
 			Versions: make([]string, len(applyTo.Versions)),

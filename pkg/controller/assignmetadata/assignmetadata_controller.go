@@ -24,6 +24,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -126,7 +127,7 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	deleted = deleted || !assignMetadata.GetDeletionTimestamp().IsZero()
 
 	if deleted {
-		id, err := mutation.MakeID(assignMetadata)
+		id, err := types.MakeID(assignMetadata)
 		if err != nil {
 			log.Error(err, "Failed to get id out of metadata")
 			return ctrl.Result{}, nil
