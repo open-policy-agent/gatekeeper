@@ -9,8 +9,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING": `
 {{ toYaml .Values.nodeSelector | indent 8 }}
+{{- with .Values.affinity }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{ toYaml . | indent 8 }}
+{{- end }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       imagePullSecrets:

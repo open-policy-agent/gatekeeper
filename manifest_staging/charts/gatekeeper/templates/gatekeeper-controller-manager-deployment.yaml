@@ -35,10 +35,6 @@ spec:
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
-{{- with .Values.affinity }}
-      affinity:
-{{ toYaml . | indent 8 }}
-{{- end }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -97,6 +93,10 @@ spec:
           readOnly: true
       nodeSelector: 
 {{ toYaml .Values.nodeSelector | indent 8 }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       imagePullSecrets:

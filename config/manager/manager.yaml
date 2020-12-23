@@ -28,18 +28,6 @@ spec:
         control-plane: controller-manager
         gatekeeper.sh/operation: webhook
     spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: gatekeeper.sh/operation
-                  operator: In
-                  values:
-                  - webhook
-              topologyKey: kubernetes.io/hostname
       serviceAccountName: admin
       automountServiceAccountToken: true
       containers:

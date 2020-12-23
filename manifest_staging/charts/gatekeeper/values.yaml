@@ -14,10 +14,11 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 nodeSelector: { kubernetes.io/os: linux }
-affinity: 
+affinity:
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
-    - podAffinityTerm:
+    - weight: 100
+      podAffinityTerm:
         labelSelector:
           matchExpressions:
           - key: gatekeeper.sh/operation
@@ -25,7 +26,6 @@ affinity:
             values:
             - webhook
         topologyKey: kubernetes.io/hostname
-      weight: 100
 tolerations: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
