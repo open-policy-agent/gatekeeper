@@ -1,4 +1,4 @@
-package mutation
+package types
 
 import (
 	"encoding/json"
@@ -19,14 +19,6 @@ type ID struct {
 	Name      string
 }
 
-// SchemaBinding represent the specific GVKs that a
-// mutation's implicit schema applies to
-type SchemaBinding struct {
-	Groups   []string
-	Kinds    []string
-	Versions []string
-}
-
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
@@ -44,13 +36,6 @@ type Mutator interface {
 	Path() *parser.Path
 }
 
-// MutatorWithSchema is a mutator exposing the implied
-// schema of the target object.
-type MutatorWithSchema interface {
-	Mutator
-	SchemaBindings() []SchemaBinding
-}
-
 // MakeID builds an ID object for the given object
 func MakeID(obj runtime.Object) (ID, error) {
 	meta, err := meta.Accessor(obj)
@@ -65,7 +50,8 @@ func MakeID(obj runtime.Object) (ID, error) {
 	}, nil
 }
 
-func unmarshalValue(data []byte) (interface{}, error) {
+// UnmarshalValue unmarhsals the value a mutation is meant to assign
+func UnmarshalValue(data []byte) (interface{}, error) {
 	value := make(map[string]interface{})
 	err := json.Unmarshal(data, &value)
 	if err != nil {
