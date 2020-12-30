@@ -86,6 +86,7 @@ spec:
               path: /readyz
               port: 9090
           securityContext:
+            readOnlyRootFilesystem: true
             runAsUser: 1000
             runAsGroup: 999
             runAsNonRoot: true
@@ -163,6 +164,7 @@ spec:
               cpu: 100m
               memory: 256Mi
           securityContext:
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
