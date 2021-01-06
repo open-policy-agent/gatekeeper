@@ -31,13 +31,10 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
-    {{- if .Values.enableDeleteOperations }}
-    - DELETE
-    {{- end}}
     resources:
     - '*'
   sideEffects: None
-  timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
+  timeoutSeconds: 3
 - clientConfig:
     caBundle: Cg==
     service:
@@ -54,11 +51,8 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
-    {{- if .Values.enableDeleteOperations }}
-    - DELETE
-    {{- end}}
     resources:
     - namespaces
   sideEffects: None
-  timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
+  timeoutSeconds: 3
 {{- end }}

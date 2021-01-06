@@ -475,8 +475,6 @@ Note: For admission webhooks registered for DELETE operations, use Kubernetes v1
     - DELETE
 ```
 
-If you use the helm chart, set `enableDeleteOperations=true`.
-
 You can now check for deletes.
 
 #### Viewing the Request Object
