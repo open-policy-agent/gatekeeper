@@ -25,6 +25,7 @@ type System struct {
 // NewSystem initializes an empty mutation system
 func NewSystem() *System {
 	return &System{
+		schemaDB:        *schema.New(),
 		orderedMutators: make([]types.Mutator, 0),
 		mutatorsMap:     make(map[types.ID]types.Mutator),
 	}
