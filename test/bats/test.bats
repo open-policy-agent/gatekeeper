@@ -42,8 +42,35 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/constrainttemplates.templates.gatekeeper.sh"
 }
 
+@test "mutation crds are established" {
+  if [ -z $ENABLE_MUTATION_TESTS ]; then
+    skip "skipping mutation tests"
+  fi
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assign.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignmetadata.mutations.gatekeeper.sh"
+}
+
 @test "waiting for validating webhook" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
+}
+
+@test "gatekeeper mutation test" {
+  if [ -z $ENABLE_MUTATION_TESTS ]; then
+    skip "skipping mutation tests"
+  fi
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml"
+  kubectl create namespace mutate-ns
+  result=$(kubectl get namespace mutate-ns -o jsonpath="{.metadata.labels.owner}")
+  [[ "${result}" == "gatekeeper" ]]
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sexternalip_assign.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_svc.yaml"
+  result=$(kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}")
+  [[ "${result}" == "[2.2.2.2]" ]]
+
+  kubectl delete --ignore-not-found namespace mutate-ns
+  kubectl delete --ignore-not-found svc mutate-svc
 }
 
 @test "applying sync config" {
