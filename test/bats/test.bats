@@ -61,15 +61,16 @@ teardown_file() {
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml"
   kubectl create namespace mutate-ns
-  result=$(kubectl get namespace mutate-ns -o jsonpath="{.metadata.labels.owner}")
-  [[ "${result}" == "gatekeeper" ]]
+  run kubectl get namespace mutate-ns -o jsonpath="{.metadata.labels.owner}"
+  assert_equal 'gatekeeper' "${output}"
+
+  kubectl delete --ignore-not-found namespace mutate-ns
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sexternalip_assign.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_svc.yaml"
-  result=$(kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}")
-  [[ "${result}" == "[2.2.2.2]" ]]
+  run kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}"
+  assert_equal "" "${output}"
 
-  kubectl delete --ignore-not-found namespace mutate-ns
   kubectl delete --ignore-not-found svc mutate-svc
 }
 

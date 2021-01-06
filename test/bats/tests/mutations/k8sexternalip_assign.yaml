@@ -10,4 +10,4 @@ spec:
   location: "spec.externalIPs"
   parameters:
     assign:
-      value: [2.2.2.2]
+      value: []
