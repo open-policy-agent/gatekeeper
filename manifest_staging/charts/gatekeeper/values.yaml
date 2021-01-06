@@ -4,6 +4,8 @@ constraintViolationsLimit: 20
 auditFromCache: false
 createNamespace: true
 disableValidatingWebhook: false
+validatingWebhookTimeoutSeconds: 3
+enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
 emitAdmissionEvents: false
