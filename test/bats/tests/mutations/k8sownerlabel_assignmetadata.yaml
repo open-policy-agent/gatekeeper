@@ -4,10 +4,10 @@ metadata:
   name: k8sownerlabel
 spec:
   match:
-    scope: Cluster
+    scope: Namespaced
     kinds:
       - apiGroups: [""]
-        kinds: ["Namespace"]
+        kinds: ["ConfigMap"]
   location: "metadata.labels.owner"
   parameters:
     assign:
