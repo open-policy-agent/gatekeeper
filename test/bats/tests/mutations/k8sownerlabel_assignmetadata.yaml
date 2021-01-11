@@ -1,0 +1,14 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignMetadata
+metadata:
+  name: k8sownerlabel
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap"]
+  location: "metadata.labels.owner"
+  parameters:
+    assign:
+      value: "gatekeeper"
