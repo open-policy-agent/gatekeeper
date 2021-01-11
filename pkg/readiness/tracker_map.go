@@ -64,7 +64,7 @@ func (t *trackerMap) Get(gvk schema.GroupVersionKind) Expectations {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entry := newObjTracker(gvk)
+	entry := newObjTracker(gvk, nil)
 	t.m[gvk] = entry
 	return entry
 }
