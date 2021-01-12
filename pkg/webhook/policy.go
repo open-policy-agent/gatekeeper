@@ -27,6 +27,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
@@ -256,12 +257,19 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req admission.Request) (bool, error) {
-	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" && req.AdmissionRequest.Kind.Kind == "ConstraintTemplate" {
+	gvk := req.AdmissionRequest.Kind
+
+	switch {
+	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
-	}
-	if req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" {
+	case gvk.Group == "constraints.gatekeeper.sh":
 		return h.validateConstraint(ctx, req)
+	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
+		if err := h.validateConfigResource(ctx, req); err != nil {
+			return true, err
+		}
 	}
+
 	return false, nil
 }
 
@@ -305,6 +313,13 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 		return true, nil
 	}
 	return false, nil
+}
+
+func (h *validationHandler) validateConfigResource(ctx context.Context, req admission.Request) error {
+	if req.Name != keys.Config.Name {
+		return fmt.Errorf("Config resource must have name 'config'")
+	}
+	return nil
 }
 
 // traceSwitch returns true if a request should be traced
