@@ -358,4 +358,21 @@ func Test_ObjectTracker_TryCancelExpect_CancelBeforeExpected(t *testing.T) {
 	ot.TryCancelExpect(ct) // 0 retries --> DELETE
 
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+
+}
+
+// Verify that unexpected observations do not prevent the tracker from reaching its satisfied state.
+func Test_ObjectTracker_Unexpected_Does_Not_Prevent_Satisfied(t *testing.T) {
+	g := gomega.NewWithT(t)
+	ot := newObjTracker(schema.GroupVersionKind{}, nil)
+
+	ct := makeCT("test-ct")
+	ot.Observe(ct)
+
+	g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "unpopulated tracker should not be satisfied")
+
+	// ** Do not expect the above observation **
+
+	ot.ExpectationsDone()
+	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "Nothing expected and ExpectationsDone(): should have been satisfied")
 }
