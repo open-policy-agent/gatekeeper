@@ -17,6 +17,8 @@ package webhook
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"strings"
@@ -46,6 +48,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+var (
+	maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
+)
+
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
 	if err := apis.AddToScheme(runtimeScheme); err != nil {
@@ -69,19 +75,21 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	recorder := eventBroadcaster.NewRecorder(
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
-	wh := &admission.Webhook{
-		Handler: &validationHandler{
-			opa: opa,
-			webhookHandler: webhookHandler{
-				client:          mgr.GetClient(),
-				reader:          mgr.GetAPIReader(),
-				reporter:        reporter,
-				processExcluder: processExcluder,
-				eventRecorder:   recorder,
-				gkNamespace:     util.GetNamespace(),
-			},
+	handler := &validationHandler{
+		opa: opa,
+		webhookHandler: webhookHandler{
+			client:          mgr.GetClient(),
+			reader:          mgr.GetAPIReader(),
+			reporter:        reporter,
+			processExcluder: processExcluder,
+			eventRecorder:   recorder,
+			gkNamespace:     util.GetNamespace(),
 		},
 	}
+	if *maxServingThreads > 0 {
+		handler.semaphore = make(chan struct{}, *maxServingThreads)
+	}
+	wh := &admission.Webhook{Handler: handler}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
 	if err := wh.InjectLogger(log); err != nil {
@@ -95,7 +103,8 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa *opa.Client
+	opa       *opa.Client
+	semaphore chan struct{}
 }
 
 // Handle the validation request
@@ -324,6 +333,18 @@ func (h *validationHandler) validateConfigResource(ctx context.Context, req admi
 
 // traceSwitch returns true if a request should be traced
 func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Request) (*rtypes.Responses, error) {
+	// if we have a maximum number of concurrent serving goroutines, try to acquire
+	// a lock and block until we succeed
+	if h.semaphore != nil {
+		select {
+		case h.semaphore <- struct{}{}:
+			defer func() {
+				<-h.semaphore
+			}()
+		case <-ctx.Done():
+			return nil, errors.New("serving context canceled, aborting request")
+		}
+	}
 	trace, dump := h.tracingLevel(ctx, req)
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
