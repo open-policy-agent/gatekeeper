@@ -16,6 +16,7 @@ limitations under the License.
 package readiness
 
 import (
+	"flag"
 	"fmt"
 	"sync"
 
@@ -29,6 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+var readinessRetries = flag.Int("readiness-retries", 0, "The number of resource ingestion attempts allowed before the resource is disregarded.  A value of -1 will retry indefinitely.")
+
 // Expectations tracks expectations for runtime.Objects.
 // A set of Expect() calls are made, demarcated by ExpectationsDone().
 // Expectations are satisfied by calls to Observe().
@@ -36,6 +39,7 @@ import (
 type Expectations interface {
 	Expect(o runtime.Object)
 	CancelExpect(o runtime.Object)
+	TryCancelExpect(o runtime.Object)
 	ExpectationsDone()
 	Observe(o runtime.Object)
 	Satisfied() bool
@@ -51,20 +55,28 @@ type objectTracker struct {
 	gvk           schema.GroupVersionKind
 	cancelled     objSet                    // expectations that have been cancelled
 	expect        objSet                    // unresolved expectations
+	tryCancelled  objRetrySet               // tracks TryCancelExpect calls, decrementing allotted retries for an object
 	seen          objSet                    // observations made before their expectations
 	satisfied     objSet                    // tracked to avoid re-adding satisfied expectations and to support unsatisfied()
 	populated     bool                      // all expectations have been provided
 	allSatisfied  bool                      // true once all expectations have been satisfied. Acts as a circuit-breaker.
 	kindsSnapshot []schema.GroupVersionKind // Snapshot of kinds before freeing memory in Satisfied.
+	tryCancelObj  objDataFactory            // Function that creates objData types used in tryCancelled
 }
 
-func newObjTracker(gvk schema.GroupVersionKind) *objectTracker {
+func newObjTracker(gvk schema.GroupVersionKind, fn objDataFactory) *objectTracker {
+	if fn == nil {
+		fn = objDataFromFlags
+	}
+
 	return &objectTracker{
-		gvk:       gvk,
-		cancelled: make(objSet),
-		expect:    make(objSet),
-		seen:      make(objSet),
-		satisfied: make(objSet),
+		gvk:          gvk,
+		cancelled:    make(objSet),
+		expect:       make(objSet),
+		tryCancelled: make(objRetrySet),
+		seen:         make(objSet),
+		satisfied:    make(objSet),
+		tryCancelObj: fn,
 	}
 }
 
@@ -106,6 +118,14 @@ func (t *objectTracker) Expect(o runtime.Object) {
 	t.expect[k] = struct{}{}
 }
 
+func (t *objectTracker) cancelExpectNoLock(k objKey) {
+	delete(t.expect, k)
+	delete(t.seen, k)
+	delete(t.satisfied, k)
+	delete(t.tryCancelled, k)
+	t.cancelled[k] = struct{}{}
+}
+
 // CancelExpect cancels an expectation and marks it so it
 // cannot be expected again going forward.
 func (t *objectTracker) CancelExpect(o runtime.Object) {
@@ -123,10 +143,36 @@ func (t *objectTracker) CancelExpect(o runtime.Object) {
 		return
 	}
 
-	delete(t.expect, k)
-	delete(t.seen, k)
-	delete(t.satisfied, k)
-	t.cancelled[k] = struct{}{}
+	t.cancelExpectNoLock(k)
+}
+
+func (t *objectTracker) TryCancelExpect(o runtime.Object) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Respect circuit-breaker.
+	if t.allSatisfied {
+		return
+	}
+
+	k, err := objKeyFromObject(o)
+	if err != nil {
+		log.Error(err, "skipping")
+		return
+	}
+
+	// Check if it's time to delete an expectation or just decrement its allotted retries
+	obj, ok := t.tryCancelled[k]
+	if !ok {
+		// If the item isn't in the map, add it.  This is the only place t.newObjData() should be called.
+		obj = t.tryCancelObj()
+	}
+	shouldDel := obj.decrementRetries()
+	t.tryCancelled[k] = obj // set the changed obj back to the map, as the value is not a pointer
+
+	if shouldDel {
+		t.cancelExpectNoLock(k)
+	}
 }
 
 // ExpectationsDone tells the tracker to stop accepting new expectations.
@@ -268,6 +314,7 @@ func (t *objectTracker) Satisfied() bool {
 		t.expect = nil
 		t.satisfied = nil
 		t.cancelled = nil
+		t.tryCancelled = nil
 	}
 	return t.allSatisfied
 }
