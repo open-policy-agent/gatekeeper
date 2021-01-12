@@ -387,7 +387,7 @@ func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructure
 	unstructured.RemoveNestedField(obj.Object, "status")
 	_, err := r.opa.AddConstraint(context.Background(), obj)
 	if err != nil {
-		t.CancelExpect(obj)
+		t.TryCancelExpect(obj)
 		return err
 	}
 

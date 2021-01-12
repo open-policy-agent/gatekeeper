@@ -31,15 +31,15 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: gatekeeper.sh/operation
-                  operator: In
-                  values:
-                  - webhook
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: gatekeeper.sh/operation
+                      operator: In
+                      values:
+                        - webhook
+                topologyKey: kubernetes.io/hostname
       serviceAccountName: admin
       automountServiceAccountToken: true
       containers:
@@ -104,7 +104,7 @@ metadata:
   name: audit
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: audit-controller
     gatekeeper.sh/operation: audit
 spec:
   selector:
