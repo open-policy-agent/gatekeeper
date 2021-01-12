@@ -641,3 +641,41 @@ func TestGetDenyMessages(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateConfigResource(t *testing.T) {
+	tc := []struct {
+		TestName string
+		Name     string
+		Err      bool
+	}{
+		{
+			TestName: "Wrong name",
+			Name:     "FooBar",
+			Err:      true,
+		},
+		{
+			TestName: "Correct name",
+			Name:     "config",
+		},
+	}
+
+	for _, tt := range tc {
+		t.Run(tt.TestName, func(t *testing.T) {
+			handler := validationHandler{}
+			req := atypes.Request{
+				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+					Name: tt.Name,
+				},
+			}
+
+			err := handler.validateConfigResource(context.Background(), req)
+
+			if tt.Err && err == nil {
+				t.Errorf("Expected error but received nil")
+			}
+			if !tt.Err && err != nil {
+				t.Errorf("Did not expect error but received: %v", err)
+			}
+		})
+	}
+}

@@ -15,14 +15,25 @@ image:
   release: v3.3.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
-nodeSelector: { kubernetes.io/os: linux }
-affinity: {}
-tolerations: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
 secretAnnotations: {}
 controllerManager:
   priorityClassName: system-cluster-critical
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: gatekeeper.sh/operation
+                  operator: In
+                  values:
+                    - webhook
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  tolerations: []
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       cpu: 1000m
@@ -32,6 +43,9 @@ controllerManager:
       memory: 256Mi
 audit:
   priorityClassName: system-cluster-critical
+  affinity: {}
+  tolerations: []
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       cpu: 1000m
