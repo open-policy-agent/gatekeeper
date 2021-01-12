@@ -257,19 +257,24 @@ func (t *objectTracker) Populated() bool {
 // Expectations must be populated before the tracker can be considered satisfied.
 // Expectations are marked as populated by calling ExpectationsDone().
 func (t *objectTracker) Satisfied() bool {
+	// Determine if we need to acquire a write lock, which blocks concurrent access
 	satisfied, needMutate := func() (bool, bool) {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 
-		// We'll only need the write lock in certain conditions:
-		//  1. We haven't tripped the circuit breaker
-		//  2. Expectations have been previously populated
-		//  3. We have expectations and observations - some of these may match can be resolved.
-		needMutate :=
-			!t.allSatisfied &&
-				t.populated &&
-				((len(t.seen) > 0 && len(t.expect) > 0) || // ...are there expectations we can resolve?
-					(len(t.seen) == 0 && len(t.expect) == 0)) // ...is the circuit-breaker ready to flip?
+		// matching observations and expectations may be able to be resolved
+		resolvableExpectations := len(t.seen) > 0 && len(t.expect) > 0
+
+		// We only need the write lock when all of the following are true:
+		//  1. We haven't yet tripped the circuit breaker (t.allSatisfied)
+		//  2. We have received all necessary expectations (t.populated)
+		//  3. There is potential for action to be taken
+		//     a. There are resolvableExpectations
+		//     - OR -
+		//     b. There are no expectations.  I.e. we are ready to declare t.allSatisfied = true
+		needMutate := !t.allSatisfied && t.populated &&
+			(resolvableExpectations || len(t.expect) == 0)
+
 		return t.allSatisfied, needMutate
 	}()
 
