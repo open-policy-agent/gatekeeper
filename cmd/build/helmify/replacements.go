@@ -8,11 +8,11 @@ var replacements = map[string]string{
 {{ toYaml .Values.audit.resources | indent 10 }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING": `
-{{ toYaml .Values.nodeSelector | indent 8 }}
+{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{ toYaml .Values.controllerManager.affinity | indent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
+{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
 {{- if .Values.controllerManager.priorityClassName }}
@@ -20,11 +20,11 @@ var replacements = map[string]string{
 {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING": `
-{{ toYaml .Values.nodeSelector | indent 8 }}
+{{ toYaml .Values.audit.nodeSelector | indent 8 }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{ toYaml .Values.audit.affinity | indent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
+{{ toYaml .Values.audit.tolerations | indent 8 }}
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
 {{- if .Values.audit.priorityClassName }}
