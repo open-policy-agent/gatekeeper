@@ -12,7 +12,7 @@ KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= v1.19.0
 KUSTOMIZE_VERSION ?= 3.7.0
-HELM_VERSION ?= 2.16.10
+HELM_VERSION ?= 2.17.0
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
