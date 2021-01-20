@@ -202,7 +202,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.ConstraintTemplatePodStatus{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constrainttemplatestatus.Mapper{}})
+		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.MapFunc()),
+	)
 	if err != nil {
 		return err
 	}
@@ -244,7 +245,7 @@ type ReconcileConstraintTemplate struct {
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
 // and what is in the ConstraintTemplate.Spec
-func (r *ReconcileConstraintTemplate) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := log.WithValues("template_name", request.Name)
 	// Short-circuit if shutting down.
 	if r.cs != nil {

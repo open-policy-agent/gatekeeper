@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -391,7 +391,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unable to marshal obj: %s", err)
 			}
-			req := &admissionv1beta1.AdmissionRequest{
+			req := &admissionv1.AdmissionRequest{
 				Kind: metav1.GroupVersionKind{
 					Group:   tc.obj.GroupVersionKind().Group,
 					Version: tc.obj.GroupVersionKind().Version,
@@ -420,7 +420,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			//also test oldObject
-			req2 := &admissionv1beta1.AdmissionRequest{
+			req2 := &admissionv1.AdmissionRequest{
 				Kind: metav1.GroupVersionKind{
 					Group:   tc.obj.GroupVersionKind().Group,
 					Version: tc.obj.GroupVersionKind().Version,

@@ -101,7 +101,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 			Source:         events,
 			DestBufferSize: 1024,
 		},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
 	)
 }
 
@@ -135,7 +135,7 @@ type ReconcileSync struct {
 
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileSync) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileSync) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	timeStart := time.Now()
 
 	gvk, unpackedRequest, err := util.UnpackRequest(request)

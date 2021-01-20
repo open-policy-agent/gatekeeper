@@ -151,7 +151,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 			Source:         events,
 			DestBufferSize: 1024,
 		},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
 	)
 	if err != nil {
 		return err
@@ -160,7 +160,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &constraintstatusv1beta1.ConstraintPodStatus{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constraintstatus.Mapper{}})
+		handler.EnqueueRequestsFromMapFunc(constraintstatus.ConstraintPodStatusMapFunc(constraintstatus.PackerMap(util.EventPackerMapFunc()))),
+	)
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ type ReconcileConstraint struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraint) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()

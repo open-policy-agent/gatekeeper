@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.7.0/pkg/cache)
 
 package dynamiccache
 
@@ -56,7 +56,7 @@ type dynamicInformerCache struct {
 }
 
 // Get implements Reader
-func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, out runtime.Object) error {
+func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, out client.Object) error {
 	gvk, err := apiutil.GVKForObject(out, ip.Scheme)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, o
 }
 
 // List implements Reader
-func (ip *dynamicInformerCache) List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
+func (ip *dynamicInformerCache) List(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error {
 
 	gvk, cacheTypeObj, err := ip.objectTypeForListObject(out)
 	if err != nil {
@@ -96,7 +96,7 @@ func (ip *dynamicInformerCache) List(ctx context.Context, out runtime.Object, op
 // objectTypeForListObject tries to find the runtime.Object and associated GVK
 // for a single object corresponding to the passed-in list type. We need them
 // because they are used as cache map key.
-func (ip *dynamicInformerCache) objectTypeForListObject(list runtime.Object) (*schema.GroupVersionKind, runtime.Object, error) {
+func (ip *dynamicInformerCache) objectTypeForListObject(list client.ObjectList) (*schema.GroupVersionKind, runtime.Object, error) {
 	gvk, err := apiutil.GVKForObject(list, ip.Scheme)
 	if err != nil {
 		return nil, nil, err
@@ -151,7 +151,7 @@ func (ip *dynamicInformerCache) GetInformerForKind(ctx context.Context, gvk sche
 }
 
 // GetInformer returns the informer for the obj
-func (ip *dynamicInformerCache) GetInformer(ctx context.Context, obj runtime.Object) (cache.Informer, error) {
+func (ip *dynamicInformerCache) GetInformer(ctx context.Context, obj client.Object) (cache.Informer, error) {
 	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (ip *dynamicInformerCache) GetInformer(ctx context.Context, obj runtime.Obj
 }
 
 // GetInformerNonBlocking returns the informer for the obj without waiting for its cache to sync.
-func (ip *dynamicInformerCache) GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error) {
+func (ip *dynamicInformerCache) GetInformerNonBlocking(obj client.Object) (cache.Informer, error) {
 	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
 	if err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func (ip *dynamicInformerCache) NeedLeaderElection() bool {
 // to List. For one-to-one compatibility with "normal" field selectors, only return one value.
 // The values may be anything.  They will automatically be prefixed with the namespace of the
 // given object, if present.  The objects passed are guaranteed to be objects of the correct type.
-func (ip *dynamicInformerCache) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func (ip *dynamicInformerCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	informer, err := ip.GetInformer(ctx, obj)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (ip *dynamicInformerCache) IndexField(ctx context.Context, obj runtime.Obje
 func indexByField(indexer cache.Informer, field string, extractor client.IndexerFunc) error {
 	indexFunc := func(objRaw interface{}) ([]string, error) {
 		// TODO(directxman12): check if this is the correct type?
-		obj, isObj := objRaw.(runtime.Object)
+		obj, isObj := objRaw.(client.Object)
 		if !isObj {
 			return nil, fmt.Errorf("object of type %T is not an Object", objRaw)
 		}
@@ -241,7 +241,7 @@ func indexByField(indexer cache.Informer, field string, extractor client.Indexer
 }
 
 // Remove removes an informer specified by the obj argument from the cache and stops it if it existed.
-func (ip *dynamicInformerCache) Remove(obj runtime.Object) error {
+func (ip *dynamicInformerCache) Remove(obj client.Object) error {
 	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
 	if err != nil {
 		return err

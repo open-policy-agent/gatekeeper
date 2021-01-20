@@ -34,7 +34,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -117,7 +117,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
 	}
 
-	if req.AdmissionRequest.Operation == admissionv1beta1.Delete {
+	if req.AdmissionRequest.Operation == admissionv1.Delete {
 		// oldObject is the existing object.
 		// It is null for DELETE operations in API servers prior to v1.15.0.
 		// https://github.com/kubernetes/website/pull/14671

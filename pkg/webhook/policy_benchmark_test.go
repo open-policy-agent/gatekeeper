@@ -32,7 +32,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -42,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/yaml"
@@ -53,7 +52,7 @@ type fakeNsGetter struct {
 	scheme *runtime.Scheme
 }
 
-func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -206,7 +205,7 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 	oldRes.SetResourceVersion("1")
 	gvr, _ := meta.UnsafeGuessKindToResource(oldRes.GroupVersionKind())
 	return atypes.Request{
-		AdmissionRequest: admissionv1beta1.AdmissionRequest{
+		AdmissionRequest: admissionv1.AdmissionRequest{
 			UID:                types.UID(uuid.NewUUID()),
 			Kind:               metav1.GroupVersionKind{Group: oldRes.GroupVersionKind().Group, Version: oldRes.GroupVersionKind().Version, Kind: oldRes.GroupVersionKind().Kind},
 			Resource:           metav1.GroupVersionResource{Group: gvr.Group, Version: gvr.Version, Resource: gvr.Resource},
@@ -237,7 +236,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 		b.Fatalf("could not initialize OPA: %s", err)
 	}
 
-	c := &fakeNsGetter{scheme: scheme.Scheme, NoopClient: testclient.NoopClient{}}
+	c := &fakeNsGetter{scheme: runtimeScheme, NoopClient: testclient.NoopClient{}}
 	cfg := &v1alpha1.Config{
 		Spec: v1alpha1.ConfigSpec{
 			Validation: v1alpha1.Validation{

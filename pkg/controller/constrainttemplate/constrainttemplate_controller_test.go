@@ -39,7 +39,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -131,7 +131,6 @@ violation[{"msg": "denied!"}] {
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := &testclient.RetryClient{Client: mgr.GetClient()}
-	ctx := context.Background()
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
@@ -163,11 +162,11 @@ violation[{"msg": "denied!"}] {
 
 	cstr := newDenyAllCstr()
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -221,7 +220,7 @@ violation[{"msg": "denied!"}] {
 				Name: "testns",
 			},
 		}
-		req := admissionv1beta1.AdmissionRequest{
+		req := admissionv1.AdmissionRequest{
 			Kind: metav1.GroupVersionKind{
 				Group:   "",
 				Version: "v1",
@@ -300,13 +299,13 @@ violation[{"msg": "denied!"}] {
 					{
 						Target: "admission.k8s.gatekeeper.sh",
 						Rego: `
-package foo
+	package foo
 
-violation[{"msg": "hi"}] { 1 == 1 }
+	violation[{"msg": "hi"}] { 1 == 1 }
 
-anyrule[}}}//invalid//rego
+	anyrule[}}}//invalid//rego
 
-`},
+	`},
 				},
 			},
 		}
@@ -352,7 +351,7 @@ anyrule[}}}//invalid//rego
 				Name: "testns",
 			},
 		}
-		req := admissionv1beta1.AdmissionRequest{
+		req := admissionv1.AdmissionRequest{
 			Kind: metav1.GroupVersionKind{
 				Group:   "",
 				Version: "v1",
@@ -471,12 +470,11 @@ violation[{"msg": "denied!"}] {
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-
+	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -499,7 +497,6 @@ violation[{"msg": "denied!"}] {
 
 	// set event channel to receive request for constraint
 	events <- event.GenericEvent{
-		Meta:   cstr,
 		Object: cstr,
 	}
 
@@ -607,7 +604,7 @@ func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1beta1.C
 }
 
 // applyCRD applies a CRD and waits for it to register successfully.
-func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd runtime.Object) error {
+func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
 	err := client.Create(ctx, crd)
 	if err != nil {
 		return err
@@ -624,7 +621,7 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 	return nil
 }
 
-func deleteObject(ctx context.Context, c client.Client, obj runtime.Object, timeout time.Duration) error {
+func deleteObject(ctx context.Context, c client.Client, obj client.Object, timeout time.Duration) error {
 	err := c.Delete(ctx, obj)
 	if err != nil {
 		if errors2.IsNotFound(err) {
@@ -635,7 +632,7 @@ func deleteObject(ctx context.Context, c client.Client, obj runtime.Object, time
 
 	err = wait.Poll(time.Second, timeout, func() (bool, error) {
 		// Get the object name
-		name, _ := client.ObjectKeyFromObject(obj)
+		name := client.ObjectKeyFromObject(obj)
 		err := c.Get(ctx, name, obj)
 		if err != nil {
 			if errors2.IsGone(err) || errors2.IsNotFound(err) {

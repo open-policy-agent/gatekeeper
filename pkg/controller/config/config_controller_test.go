@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -147,11 +146,11 @@ func TestReconcile(t *testing.T) {
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -294,11 +293,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := gosync.Once{}
 	defer func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}()
@@ -332,7 +331,6 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	events <- event.GenericEvent{
-		Meta:   podObj,
 		Object: podObj,
 	}
 
@@ -402,11 +400,11 @@ func TestConfig_CacheContents(t *testing.T) {
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -533,7 +531,7 @@ func TestConfig_Retries(t *testing.T) {
 	failPlease := make(chan string, 1)
 	rec.reader = hookReader{
 		Reader: mgr.GetCache(),
-		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			// Return an error the first go-around.
 			var failKind string
 			select {
@@ -547,11 +545,11 @@ func TestConfig_Retries(t *testing.T) {
 		},
 	}
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}

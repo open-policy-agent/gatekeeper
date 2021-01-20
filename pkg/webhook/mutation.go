@@ -26,7 +26,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,8 +112,8 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
 	}
 
-	if req.AdmissionRequest.Operation != admissionv1beta1.Create &&
-		req.AdmissionRequest.Operation != admissionv1beta1.Update {
+	if req.AdmissionRequest.Operation != admissionv1.Create &&
+		req.AdmissionRequest.Operation != admissionv1.Update {
 		return admission.ValidationResponse(true, "Mutating only on create or update")
 	}
 

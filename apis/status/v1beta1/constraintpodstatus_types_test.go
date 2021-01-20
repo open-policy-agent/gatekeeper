@@ -24,7 +24,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	defer os.Unsetenv("POD_NAMESPACE")
 
 	scheme := runtime.NewScheme()
-	g.Expect(SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 	pod := &corev1.Pod{}

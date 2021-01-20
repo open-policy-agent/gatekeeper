@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ghodss/yaml"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -28,7 +28,7 @@ spec:
   location: metadata.labels.foo
   parameters:
     assign:
-      value: bar  
+      value: bar
 `,
 			ErrorExpected: false,
 		},
@@ -43,7 +43,7 @@ spec:
   location: metadata.foo.bar
   parameters:
     assign:
-      value: bar  
+      value: bar
 `,
 			ErrorExpected: true,
 		},
@@ -58,7 +58,7 @@ spec:
   location: metadata.labels.bar
   parameters:
     assign:
-      foo: bar  
+      foo: bar
 `,
 			ErrorExpected: true,
 		},
@@ -74,7 +74,7 @@ spec:
   parameters:
     assign:
       value:
-        foo: bar  
+        foo: bar
 `,
 			ErrorExpected: true,
 		},
@@ -90,7 +90,7 @@ spec:
   parameters:
     assign:
       zzz:
-        foo: bar  
+        foo: bar
 `,
 			ErrorExpected: true,
 		},
@@ -103,7 +103,7 @@ spec:
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "mutations.gatekeeper.sh",
 						Version: "v1alpha1",
@@ -158,7 +158,7 @@ spec:
   location: metadata.foo.bar
   parameters:
     assign:
-      value: bar  
+      value: bar
 `,
 			ErrorExpected: true,
 		},
@@ -173,7 +173,7 @@ spec:
   location: spec.containers
   parameters:
     assign:
-      zzz: bar  
+      zzz: bar
 `,
 			ErrorExpected: true,
 		},
@@ -276,7 +276,7 @@ spec:
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "mutations.gatekeeper.sh",
 						Version: "v1alpha1",

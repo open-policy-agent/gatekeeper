@@ -16,9 +16,9 @@ limitations under the License.
 package readiness
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -28,9 +28,8 @@ import (
 func SetupTracker(mgr manager.Manager) (*Tracker, error) {
 	tracker := NewTracker(mgr.GetAPIReader())
 
-	err := mgr.Add(manager.RunnableFunc(func(done <-chan struct{}) error {
-		ctx, cancel := syncutil.ContextForChannel(done)
-		defer cancel()
+	err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		defer ctx.Done()
 
 		return tracker.Run(ctx)
 	}))

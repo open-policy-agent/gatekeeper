@@ -317,7 +317,7 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder) {
 	lvl := zap.NewAtomicLevelAt(zap.WarnLevel)
 	opts = append(opts, zap.AddStacktrace(zap.ErrorLevel),
 		zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-			return zapcore.NewSampler(core, time.Second, 100, 100)
+			return zapcore.NewSamplerWithOptions(core, time.Second, 100, 100)
 		}))
 	opts = append(opts, zap.AddCallerSkip(1), zap.ErrorOutput(sink))
 	zlog := zap.New(zapcore.NewCore(&crzap.KubeAwareEncoder{Encoder: enc, Verbose: false}, sink, lvl))

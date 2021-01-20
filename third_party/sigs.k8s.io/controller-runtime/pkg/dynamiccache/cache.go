@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.7.0/pkg/cache)
 
 package dynamiccache
 
@@ -54,7 +54,7 @@ func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error)
 	// Construct a new Mapper if unset
 	if opts.Mapper == nil {
 		var err error
-		opts.Mapper, err = apiutil.NewDynamicRESTMapper(config)
+		opts.Mapper, err = apiutil.NewDiscoveryRESTMapper(config)
 		if err != nil {
 			log.WithName("setup").Error(err, "Failed to get API Group-Resources")
 			return opts, fmt.Errorf("could not create RESTMapper from config")

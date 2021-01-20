@@ -28,7 +28,6 @@ import (
 	"github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kcache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -81,11 +80,11 @@ type fakeRemovableCache struct {
 	removeCounter int
 }
 
-func (f *fakeRemovableCache) GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error) {
+func (f *fakeRemovableCache) GetInformerNonBlocking(obj client.Object) (cache.Informer, error) {
 	return f.informer, nil
 }
 
-func (f *fakeRemovableCache) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+func (f *fakeRemovableCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	switch v := list.(type) {
 	case *unstructured.UnstructuredList:
 		v.Items = f.items
@@ -95,7 +94,7 @@ func (f *fakeRemovableCache) List(ctx context.Context, list runtime.Object, opts
 	return nil
 }
 
-func (f *fakeRemovableCache) Remove(obj runtime.Object) error {
+func (f *fakeRemovableCache) Remove(obj client.Object) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.removeCounter++
@@ -109,25 +108,25 @@ func (f *fakeRemovableCache) removeCount() int {
 }
 
 type funcCache struct {
-	ListFunc                   func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error
-	GetInformerNonBlockingFunc func(obj runtime.Object) (cache.Informer, error)
+	ListFunc                   func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+	GetInformerNonBlockingFunc func(obj client.Object) (cache.Informer, error)
 }
 
-func (f *funcCache) GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error) {
+func (f *funcCache) GetInformerNonBlocking(obj client.Object) (cache.Informer, error) {
 	if f.GetInformerNonBlockingFunc != nil {
 		return f.GetInformerNonBlockingFunc(obj)
 	}
 	return &fakeCacheInformer{}, nil
 }
 
-func (f *funcCache) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+func (f *funcCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	if f.ListFunc != nil {
 		return f.ListFunc(ctx, list, opts...)
 	}
 	return errors.New("ListFunc not initialized")
 }
 
-func (f *funcCache) Remove(obj runtime.Object) error {
+func (f *funcCache) Remove(obj client.Object) error {
 	return nil
 }
 
@@ -140,7 +139,7 @@ func setupWatchManager(c RemovableCache) (*Manager, context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
-		return wm.Start(ctx.Done())
+		return wm.Start(ctx)
 	})
 
 	shutdown := func() {
@@ -348,7 +347,7 @@ func TestRegistrar_Replay(t *testing.T) {
 					t.Errorf("channel closed while waiting for resources [%s]", entry.r.parentName)
 					return
 				}
-				g.Expect(event.Meta.GetName()).To(gomega.Equal(resources[i].GetName()), entry.r.parentName)
+				g.Expect(event.Object.GetName()).To(gomega.Equal(resources[i].GetName()), entry.r.parentName)
 			}
 		}
 	}
@@ -378,7 +377,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 	resources := generateTestResources(gvk, 10)
 	errCount := 3
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			if errCount > 0 {
 				errCount--
 				return fmt.Errorf("failing %d more times", errCount)
@@ -391,7 +390,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 			}
 			return nil
 		},
-		GetInformerNonBlockingFunc: func(obj runtime.Object) (cache.Informer, error) {
+		GetInformerNonBlockingFunc: func(obj client.Object) (cache.Informer, error) {
 			return informer, nil
 		},
 	}
@@ -433,7 +432,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 				t.Errorf("channel closed while waiting for resources")
 				return
 			}
-			g.Expect(event.Meta.GetName()).To(gomega.Equal(resources[i].GetName()))
+			g.Expect(event.Object.GetName()).To(gomega.Equal(resources[i].GetName()))
 		}
 	}
 
@@ -453,7 +452,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 	listCalled := make(chan struct{})
 	listDone := make(chan struct{})
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			listCalled <- struct{}{}
 
 			// Block until we're cancelled.
@@ -472,7 +471,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 	defer cancel()
 	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
-		return wm.Start(ctx.Done())
+		return wm.Start(ctx)
 	})
 
 	// "Primary" watcher. Doesn't trigger replay.
@@ -571,7 +570,7 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	listCalls := make(map[schema.GroupVersionKind]int)
 	getInformerCalls := make(map[schema.GroupVersionKind]int)
 	c := &funcCache{
-		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			mu.Lock()
 			defer mu.Unlock()
 			gvk := list.GetObjectKind().GroupVersionKind()
@@ -579,7 +578,7 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 			listCalls[gvk]++
 			return nil
 		},
-		GetInformerNonBlockingFunc: func(obj runtime.Object) (cache.Informer, error) {
+		GetInformerNonBlockingFunc: func(obj client.Object) (cache.Informer, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			gvk := obj.GetObjectKind().GroupVersionKind()

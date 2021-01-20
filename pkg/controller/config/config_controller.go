@@ -185,7 +185,7 @@ type ReconcileConfig struct {
 // and what is in the Config.Spec
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync)
 // update is needed for finalizers
-func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -202,7 +202,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 	exists := true
 	instance := &configv1alpha1.Config{}
-	ctx := context.Background()
 	err := r.reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		// if config is not found, we should remove cached data

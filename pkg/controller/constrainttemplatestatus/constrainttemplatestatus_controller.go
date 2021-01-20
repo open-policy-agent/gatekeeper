@@ -74,19 +74,17 @@ func newReconciler(
 	}
 }
 
-var _ handler.Mapper = &Mapper{}
-
-type Mapper struct{}
-
-// Map correlates a ConstraintTemplatePodStatus with its corresponding constraint template
-func (m Mapper) Map(obj handler.MapObject) []reconcile.Request {
-	labels := obj.Meta.GetLabels()
-	name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
-	if !ok {
-		log.Error(fmt.Errorf("constraint template status resource with no mapping label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint template status resource")
-		return nil
+// MapFunc correlates a ConstraintTemplatePodStatus with its corresponding constraint template
+func MapFunc() handler.MapFunc {
+	return func(obj client.Object) []reconcile.Request {
+		labels := obj.GetLabels()
+		name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
+		if !ok {
+			log.Error(fmt.Errorf("constraint template status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a constraint template status resource")
+			return nil
+		}
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name}}}
 	}
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name}}}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -100,7 +98,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		&source.Kind{Type: &v1beta1.ConstraintTemplatePodStatus{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &Mapper{}})
+		handler.EnqueueRequestsFromMapFunc(MapFunc()),
+	)
 	if err != nil {
 		return err
 	}
@@ -132,7 +131,7 @@ type ReconcileConstraintStatus struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()

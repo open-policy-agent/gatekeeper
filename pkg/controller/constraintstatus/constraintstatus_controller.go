@@ -75,29 +75,26 @@ func newReconciler(
 	}
 }
 
-var _ handler.Mapper = &Mapper{}
+type PackerMap func(obj client.Object) []reconcile.Request
 
-type Mapper struct {
-	packer util.EventPacker
-}
-
-// Map correlates a ConstraintPodStatus with its corresponding constraint
-func (m *Mapper) Map(obj handler.MapObject) []reconcile.Request {
-	labels := obj.Meta.GetLabels()
-	name, ok := labels[v1beta1.ConstraintNameLabel]
-	if !ok {
-		log.Error(fmt.Errorf("constraint status resource with no name label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
-		return nil
+func ConstraintPodStatusMapFunc(packerMap PackerMap) handler.MapFunc {
+	return func(obj client.Object) []reconcile.Request {
+		labels := obj.GetLabels()
+		name, ok := labels[v1beta1.ConstraintNameLabel]
+		if !ok {
+			log.Error(fmt.Errorf("constraint status resource with no name label: %s", obj.GetName()), "missing label while attempting to map a constraint status resource")
+			return nil
+		}
+		kind, ok := labels[v1beta1.ConstraintKindLabel]
+		if !ok {
+			log.Error(fmt.Errorf("constraint status resource with no kind label: %s", obj.GetName()), "missing label while attempting to map a constraint status resource")
+			return nil
+		}
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
+		u.SetName(name)
+		return packerMap(u)
 	}
-	kind, ok := labels[v1beta1.ConstraintKindLabel]
-	if !ok {
-		log.Error(fmt.Errorf("constraint status resource with no kind label: %s", obj.Meta.GetName()), "missing label while attempting to map a constraint status resource")
-		return nil
-	}
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
-	u.SetName(name)
-	return m.packer.Map(handler.MapObject{Meta: u, Object: u})
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -111,7 +108,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &v1beta1.ConstraintPodStatus{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &Mapper{}})
+		handler.EnqueueRequestsFromMapFunc(ConstraintPodStatusMapFunc(PackerMap(util.EventPackerMapFunc()))),
+	)
 	if err != nil {
 		return err
 	}
@@ -122,7 +120,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 			Source:         events,
 			DestBufferSize: 1024,
 		},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
 	)
 }
 
@@ -144,7 +142,7 @@ type ReconcileConstraintStatus struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraintStatus) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
