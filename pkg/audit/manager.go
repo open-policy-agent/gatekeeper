@@ -185,8 +185,8 @@ func (am *Manager) audit(ctx context.Context) error {
 	var resp *constraintTypes.Responses
 	var res []*constraintTypes.Result
 
-	updateLists := make(map[string][]auditResult)
-	totalViolationsPerConstraint := make(map[string]int64)
+	updateLists := make(map[util.KindVersionResource][]auditResult)
+	totalViolationsPerConstraint := make(map[util.KindVersionResource]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 	// resetting total violations per enforcement action
 	for _, action := range util.KnownEnforcementActions {
@@ -236,8 +236,8 @@ func (am *Manager) audit(ctx context.Context) error {
 func (am *Manager) auditResources(
 	ctx context.Context,
 	constraintsGVK []schema.GroupVersionKind,
-	updateLists map[string][]auditResult,
-	totalViolationsPerConstraint map[string]int64,
+	updateLists map[util.KindVersionResource][]auditResult,
+	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
@@ -464,14 +464,14 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
-	updateLists map[string][]auditResult,
+	updateLists map[util.KindVersionResource][]auditResult,
 	res []*constraintTypes.Result,
-	totalViolationsPerConstraint map[string]int64,
+	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
 	for _, r := range res {
-		selfLink := r.Constraint.GetSelfLink()
-		totalViolationsPerConstraint[selfLink]++
+		key := util.GetUniqueKey(*r.Constraint)
+		totalViolationsPerConstraint[key]++
 		name := r.Constraint.GetName()
 		namespace := r.Constraint.GetNamespace()
 		apiVersion := r.Constraint.GetAPIVersion()
@@ -486,7 +486,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		rkind := resource.GetKind()
 		rnamespace := resource.GetNamespace()
 		// append audit results only if it is below violations limit
-		if uint(len(updateLists[selfLink])) < *constraintViolationsLimit {
+		if uint(len(updateLists[key])) < *constraintViolationsLimit {
 			result := auditResult{
 				cgvk:              gvk,
 				capiversion:       apiVersion,
@@ -499,7 +499,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 				enforcementAction: enforcementAction,
 				constraint:        r.Constraint,
 			}
-			updateLists[selfLink] = append(updateLists[selfLink], result)
+			updateLists[key] = append(updateLists[key], result)
 		}
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
@@ -511,7 +511,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	return nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[string][]auditResult, timestamp string, totalViolations map[string]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionResource][]auditResult, timestamp string, totalViolations map[util.KindVersionResource]int64) {
 	// if there is a previous reporting thread, close it before starting a new one
 	if am.ucloop != nil {
 		// this is closing the previous audit reporting thread
@@ -622,20 +622,20 @@ func truncateString(str string, size int) string {
 }
 
 type updateConstraintLoop struct {
-	uc      map[string]unstructured.Unstructured
+	uc      map[util.KindVersionResource]unstructured.Unstructured
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
-	ul      map[string][]auditResult
+	ul      map[util.KindVersionResource][]auditResult
 	ts      string
-	tv      map[string]int64
+	tv      map[util.KindVersionResource]int64
 	log     logr.Logger
 }
 
 func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) {
 	defer close(ucloop.stopped)
 
-	ucloop.uc = make(map[string]unstructured.Unstructured)
+	ucloop.uc = make(map[util.KindVersionResource]unstructured.Unstructured)
 
 	// get constraints for each Kind
 	for _, constraintGvk := range constraintsGVKs {
@@ -657,7 +657,8 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 
 		// get each constraint
 		for _, item := range instanceList.Items {
-			ucloop.uc[item.GetSelfLink()] = item
+			key := util.GetUniqueKey(item)
+			ucloop.uc[key] = item
 		}
 	}
 
@@ -682,19 +683,21 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 					Name:      name,
 					Namespace: namespace,
 				}
+				key := util.GetUniqueKey(item)
 				// get the latest constraint
 				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", name, "namespace", namespace)
-						delete(ucloop.uc, item.GetSelfLink())
+						delete(ucloop.uc, key)
 					} else {
 						ucloop.log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
 						continue
 					}
 				}
-				totalViolations := ucloop.tv[latestItem.GetSelfLink()]
-				if constraintAuditResults, ok := ucloop.ul[latestItem.GetSelfLink()]; !ok {
+				latestItemKey := util.GetUniqueKey(latestItem)
+				totalViolations := ucloop.tv[latestItemKey]
+				if constraintAuditResults, ok := ucloop.ul[latestItemKey]; !ok {
 					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
 						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
@@ -708,7 +711,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 						continue
 					}
 				}
-				delete(ucloop.uc, item.GetSelfLink())
+				delete(ucloop.uc, key)
 			}
 		}
 		if len(ucloop.uc) == 0 {
