@@ -12,7 +12,7 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/open-policy-agent/cert-controller v0.0.0-20201118195149-7df0cfffc634
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210121003109-e55b2bb4cf1c
 	github.com/open-policy-agent/opa v0.24.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
@@ -30,5 +30,3 @@ require (
 )
 
 replace github.com/open-policy-agent/cert-controller => github.com/stijndehaes/cert-controller v0.0.0-20210114145504-e0beabda7d4c
-
-replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210116005857-6b97e8710a06

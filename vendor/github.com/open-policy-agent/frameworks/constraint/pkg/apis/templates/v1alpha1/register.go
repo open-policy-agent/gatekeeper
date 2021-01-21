@@ -38,7 +38,7 @@ var (
 
 	localSchemeBuilder = runtime.NewSchemeBuilder(SchemeBuilder.AddToScheme)
 
-	AddToScheme        = localSchemeBuilder.AddToScheme
+	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 // Resource is required by pkg/client/listers/...

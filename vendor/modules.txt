@@ -159,7 +159,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.0.0-20201118195149-7df0cfffc634 => github.com/stijndehaes/cert-controller v0.0.0-20210114145504-e0beabda7d4c
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20201020161305-2e11d4556af8 => github.com/sozercan/frameworks/constraint v0.0.0-20210116005857-6b97e8710a06
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210121003109-e55b2bb4cf1c
 ## explicit
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
@@ -693,4 +693,3 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit
 sigs.k8s.io/yaml
 # github.com/open-policy-agent/cert-controller => github.com/stijndehaes/cert-controller v0.0.0-20210114145504-e0beabda7d4c
-# github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210116005857-6b97e8710a06
