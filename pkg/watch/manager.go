@@ -33,7 +33,7 @@ import (
 
 var log = logf.Log.WithName("watch-manager")
 
-// WatchManager allows us to dynamically configure what kinds are watched
+// Manager allows us to dynamically configure what kinds are watched
 type Manager struct {
 	cache      RemovableCache
 	startedMux sync.Mutex
@@ -102,11 +102,11 @@ func (wm *Manager) Start(ctx context.Context) error {
 		return err
 	}
 
-	grp, gctx := errgroup.WithContext(context.Background())
+	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
 		select {
 		case <-ctx.Done():
-		case <-gctx.Done():
+		default:
 		}
 		// Unblock any informer event handlers
 		close(wm.stopped)

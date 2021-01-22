@@ -47,7 +47,6 @@ func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
 // Start implements the Runnable interface
 func (um *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Upgrade Manager")
-	defer ctx.Done()
 	defer log.Info("Stopping upgrade manager workers")
 	errCh := make(chan error)
 	go func() { errCh <- um.upgrade(ctx) }()

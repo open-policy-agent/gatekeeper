@@ -431,7 +431,6 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 // Start implements controller.Controller
 func (am *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Audit Manager")
-	defer ctx.Done()
 	go am.auditManagerLoop(ctx)
 	<-ctx.Done()
 	log.Info("Stopping audit manager workers")

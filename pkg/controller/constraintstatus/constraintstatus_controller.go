@@ -77,7 +77,8 @@ func newReconciler(
 
 type PackerMap func(obj client.Object) []reconcile.Request
 
-func ConstraintPodStatusMapFunc(packerMap PackerMap) handler.MapFunc {
+// PodStatusToConstraintMapper correlates a ConstraintPodStatus with its corresponding constraint
+func PodStatusToConstraintMapper(packerMap handler.MapFunc) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintNameLabel]
@@ -108,7 +109,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &v1beta1.ConstraintPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(ConstraintPodStatusMapFunc(PackerMap(util.EventPackerMapFunc()))),
+		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintMapper(util.EventPackerMapFunc())),
 	)
 	if err != nil {
 		return err
@@ -126,7 +127,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraintStatus reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraintStatus struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -142,7 +143,7 @@ type ReconcileConstraintStatus struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -168,7 +169,7 @@ func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconci
 
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
-	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
+	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
 		// If the constraint does not exist, we are done
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
@@ -180,7 +181,7 @@ func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconci
 
 	sObjs := &v1beta1.ConstraintPodStatusList{}
 	if err := r.reader.List(
-		context.TODO(),
+		ctx,
 		sObjs,
 		client.MatchingLabels{
 			v1beta1.ConstraintNameLabel: instance.GetName(),

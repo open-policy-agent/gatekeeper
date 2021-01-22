@@ -150,8 +150,8 @@ func (ip *specificInformersMap) Start(ctx context.Context) {
 		ip.stop = ctx.Done()
 
 		// Start each informer
-		for _, informer := range ip.informersByGVK {
-			go informer.Informer.Run(ctx.Done())
+		for _, entry := range ip.informersByGVK {
+			go entry.Start(ctx.Done())
 		}
 
 		// Set started to true so we immediately start any informers added later.

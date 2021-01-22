@@ -74,8 +74,8 @@ func newReconciler(
 	}
 }
 
-// MapFunc correlates a ConstraintTemplatePodStatus with its corresponding constraint template
-func MapFunc() handler.MapFunc {
+// PodStatusToConstraintTemplateMapper correlates a ConstraintTemplatePodStatus with its corresponding constraint template
+func PodStatusToConstraintTemplateMapper() handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintTemplateNameLabel]
@@ -98,7 +98,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		&source.Kind{Type: &v1beta1.ConstraintTemplatePodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(MapFunc()),
+		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintTemplateMapper()),
 	)
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraintStatus reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraintStatus struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -131,7 +131,7 @@ type ReconcileConstraintStatus struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -143,7 +143,7 @@ func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconci
 	template := &unstructured.Unstructured{}
 	gv := constrainttemplatev1beta1.SchemeGroupVersion
 	template.SetGroupVersionKind(gv.WithKind("ConstraintTemplate"))
-	if err := r.reader.Get(context.TODO(), request.NamespacedName, template); err != nil {
+	if err := r.reader.Get(ctx, request.NamespacedName, template); err != nil {
 		// If the template does not exist, we are done
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
@@ -155,7 +155,7 @@ func (r *ReconcileConstraintStatus) Reconcile(_ context.Context, request reconci
 
 	sObjs := &v1beta1.ConstraintTemplatePodStatusList{}
 	if err := r.reader.List(
-		context.TODO(),
+		ctx,
 		sObjs,
 		client.MatchingLabels{v1beta1.ConstraintTemplateNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),

@@ -29,8 +29,6 @@ func SetupTracker(mgr manager.Manager) (*Tracker, error) {
 	tracker := NewTracker(mgr.GetAPIReader())
 
 	err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		defer ctx.Done()
-
 		return tracker.Run(ctx)
 	}))
 	if err != nil {

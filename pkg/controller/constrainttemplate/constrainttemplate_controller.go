@@ -202,7 +202,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.ConstraintTemplatePodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.MapFunc()),
+		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper()),
 	)
 	if err != nil {
 		return err
@@ -261,7 +261,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	// Fetch the ConstraintTemplate instance
 	deleted := false
 	ct := &v1beta1.ConstraintTemplate{}
-	err := r.Get(context.TODO(), request.NamespacedName, ct)
+	err := r.Get(ctx, request.NamespacedName, ct)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -286,7 +286,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		ctRef := &templates.ConstraintTemplate{}
 		ctRef.SetNamespace(request.Namespace)
 		ctRef.SetName(request.Name)
-		ctUnversioned, err := r.opa.GetTemplate(context.TODO(), ctRef)
+		ctUnversioned, err := r.opa.GetTemplate(ctx, ctRef)
 		result := reconcile.Result{}
 		if err != nil {
 			log.Info("missing constraint template in OPA cache, no deletion necessary")
@@ -360,7 +360,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	// Check if the constraint CRD already exists
 	action := updatedAction
 	currentCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, currentCRD)
+	err = r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, currentCRD)
 	switch {
 	case err == nil:
 		break
