@@ -69,15 +69,14 @@ func TestMain(m *testing.M) {
 }
 
 // StartTestManager adds recFn
-func StartTestManager(mgr manager.Manager, g *gomega.GomegaWithT) (context.Context, context.CancelFunc, *sync.WaitGroup) {
-	ctx, cancelFunc := context.WithCancel(context.Background())
+func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
 	}()
-	return ctx, cancelFunc, wg
+	return wg
 }
 
 // Bootstrap the gatekeeper-system namespace for use in tests

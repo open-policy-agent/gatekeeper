@@ -146,7 +146,8 @@ func TestReconcile(t *testing.T) {
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -293,7 +294,8 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	defer func() {
 		once.Do(func() {
@@ -400,7 +402,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -545,7 +548,8 @@ func TestConfig_Retries(t *testing.T) {
 		},
 	}
 
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {

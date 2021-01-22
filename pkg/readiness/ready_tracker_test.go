@@ -147,7 +147,8 @@ func Test_Tracker(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
 		cancelFunc()
 		mgrStopped.Wait()
@@ -225,7 +226,8 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
 		cancelFunc()
 		mgrStopped.Wait()
@@ -259,7 +261,8 @@ func Test_CollectDeleted(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
 
-	ctx, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
 		cancelFunc()
 		mgrStopped.Wait()

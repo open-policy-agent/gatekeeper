@@ -162,7 +162,8 @@ violation[{"msg": "denied!"}] {
 
 	cstr := newDenyAllCstr()
 
-	ctx, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -470,7 +471,8 @@ violation[{"msg": "denied!"}] {
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-	_, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {

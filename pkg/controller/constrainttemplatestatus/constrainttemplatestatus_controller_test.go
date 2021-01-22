@@ -136,7 +136,8 @@ violation[{"msg": "denied!"}] {
 	}
 	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
