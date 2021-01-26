@@ -17,6 +17,8 @@ const (
 	validationRequestCountMetricName    = "validation_request_count"
 	validationRequestDurationMetricName = "validation_request_duration_seconds"
 
+	validationRequestPending = "validation_request_pending"
+
 	mutationRequestCountMetricName    = "mutation_request_count"
 	mutationRequestDurationMetricName = "mutation_request_duration_seconds"
 )
@@ -37,6 +39,11 @@ var (
 		"The response time in seconds",
 		stats.UnitSeconds)
 
+	validationRequestPendingM = stats.Float64(
+		validationRequestPending,
+		"Validation requests pending",
+		stats.UnitDimensionless)
+
 	admissionStatusKey = tag.MustNewKey("admission_status")
 	mutationStatusKey  = tag.MustNewKey("mutation_status")
 )
@@ -51,6 +58,7 @@ func init() {
 type StatsReporter interface {
 	ReportValidationRequest(response requestResponse, d time.Duration) error
 	ReportMutationRequest(response requestResponse, d time.Duration) error
+	ReportPendingValidationRequests(v int64) error
 }
 
 // reporter implements StatsReporter interface
@@ -58,7 +66,7 @@ type reporter struct {
 	ctx context.Context
 }
 
-// newStatsReporter creaters a reporter for webhook metrics
+// newStatsReporter creates a reporter for webhook metrics
 func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),
@@ -79,6 +87,10 @@ func (r *reporter) ReportValidationRequest(response requestResponse, d time.Dura
 
 func (r *reporter) ReportMutationRequest(response requestResponse, d time.Duration) error {
 	return r.reportRequest(response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
+}
+
+func (r *reporter) ReportPendingValidationRequests(v int64) error {
+	return r.report(r.ctx, validationRequestPendingM.M(float64(v)))
 }
 
 // Captures req count metric, recording the count and the duration
@@ -128,6 +140,12 @@ func register() error {
 			Measure:     validationResponseTimeInSecM,
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{admissionStatusKey},
+		},
+		{
+			Name:        validationRequestPending,
+			Description: validationRequestPendingM.Description(),
+			Measure:     validationRequestPendingM,
+			Aggregation: view.LastValue(),
 		},
 		{
 			Name:        mutationRequestCountMetricName,

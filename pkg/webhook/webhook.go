@@ -16,14 +16,28 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+type OpaClient interface {
+	CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error)
+	Dump(ctx context.Context) (string, error)
+	Review(ctx context.Context, obj interface{}, opts ...opa.QueryOpt) (*rtypes.Responses, error)
+	ValidateConstraint(ctx context.Context, constraint *unstructured.Unstructured) error
+}
+
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager, *client.Client, *process.Excluder, *mutation.System) error
+var AddToManagerFuncs []func(manager.Manager, OpaClient, *process.Excluder, *mutation.System) error
 
 // The below autogen directive is currently disabled because controller-gen has
 // no way of specifying the resource name restriction

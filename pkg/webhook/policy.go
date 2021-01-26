@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -64,7 +65,7 @@ func init() {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationCache *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, opa OpaClient, processExcluder *process.Excluder, mutationCache *mutation.System) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
@@ -103,8 +104,9 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa       *opa.Client
+	opa       OpaClient
 	semaphore chan struct{}
+	pending   int64
 }
 
 // Handle the validation request
@@ -331,20 +333,58 @@ func (h *validationHandler) validateConfigResource(ctx context.Context, req admi
 	return nil
 }
 
+// acquire tries to acquire the validation semaphore.
+// Blocks until the semaphore has capacity or the context is canceled.
+// Returns true if acquired successfully - the caller is responsible
+// for calling release() when true is returned.
+func (h *validationHandler) acquire(ctx context.Context) bool {
+	if h.semaphore == nil {
+		if h.reporter != nil {
+			_ = h.reporter.ReportPendingValidationRequests(0)
+		}
+		return true
+	}
+	if h.reporter != nil {
+		v := atomic.AddInt64(&h.pending, 1)
+		_ = h.reporter.ReportPendingValidationRequests(v)
+
+		defer func() {
+			v := atomic.AddInt64(&h.pending, -1)
+			_ = h.reporter.ReportPendingValidationRequests(v)
+		}()
+	}
+
+	select {
+	case h.semaphore <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (h *validationHandler) release() {
+	if h.semaphore == nil {
+		return
+	}
+	<-h.semaphore
+}
+
+// pendingValidationRequests returns the number of requests blocked
+// waiting for the validation lock.
+// NOTE: Currently incremented only if a statsReporter has been set.
+func (h *validationHandler) pendingValidationRequests() int64 {
+	return atomic.LoadInt64(&h.pending)
+}
+
 // traceSwitch returns true if a request should be traced
 func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Request) (*rtypes.Responses, error) {
 	// if we have a maximum number of concurrent serving goroutines, try to acquire
 	// a lock and block until we succeed
-	if h.semaphore != nil {
-		select {
-		case h.semaphore <- struct{}{}:
-			defer func() {
-				<-h.semaphore
-			}()
-		case <-ctx.Done():
-			return nil, errors.New("serving context canceled, aborting request")
-		}
+	if !h.acquire(ctx) {
+		return nil, errors.New("serving context canceled, aborting request")
 	}
+	defer h.release()
+
 	trace, dump := h.tracingLevel(ctx, req)
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See

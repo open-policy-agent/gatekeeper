@@ -2,7 +2,9 @@ package webhook
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ghodss/yaml"
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -16,6 +18,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -702,4 +705,141 @@ func TestValidateConfigResource(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Validate the pending requests counter is incremented for
+// requests as they wait for their turn to use opa.
+func Test_PendingValidationRequests(t *testing.T) {
+	opa := fakeOpa{
+		reviewFn: func(ctx context.Context) {
+			<-ctx.Done()
+		},
+	}
+	cfg := &v1alpha1.Config{
+		Spec: v1alpha1.ConfigSpec{
+			Validation: v1alpha1.Validation{
+				Traces: []v1alpha1.Trace{},
+			},
+		},
+	}
+	review := atypes.Request{
+		AdmissionRequest: admissionv1beta1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Object: runtime.RawExtension{
+				Raw: []byte(
+					`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
+			},
+			Namespace: "ns1",
+		},
+	}
+
+	const maxThreads = 5
+	sem := make(chan struct{}, maxThreads)
+
+	r, err := newStatsReporter()
+	if err != nil {
+		t.Fatalf("creating stats reporter: %v", err)
+	}
+	handler := validationHandler{opa: opa,
+		webhookHandler: webhookHandler{
+			injectedConfig: cfg,
+			client:         &nsGetter{},
+			reader:         &nsGetter{},
+			reporter:       r,
+		},
+		semaphore: sem,
+	}
+
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	defer firstCancel()
+	var firstBatch sync.WaitGroup
+	firstBatch.Add(maxThreads)
+	for i := 0; i < maxThreads; i++ {
+		go func(wg *sync.WaitGroup) {
+			wg.Done() // Unblocks the initial Wait().
+			_, _ = handler.reviewRequest(firstCtx, review)
+			wg.Done() // Unblocks the final Wait() at test exit.
+		}(&firstBatch)
+	}
+
+	// Wait for the initial goroutines to acquire the block in opa.Review().
+	firstBatch.Wait()
+	firstBatch.Add(maxThreads) // Used for a second Wait() at test exit.
+
+	// All resources should be in use, but no requests should be pending.
+	if pending := handler.pendingValidationRequests(); pending != 0 {
+		t.Errorf("unexpected pending count, got: %d, expected: %d", pending, 0)
+	}
+
+	// Queue requests that should all block and be pending
+	secondCtx, secondCancel := context.WithCancel(context.Background())
+	defer secondCancel()
+	var secondBatch sync.WaitGroup
+	const expectPending = 5
+	secondBatch.Add(expectPending)
+	for i := 0; i < expectPending; i++ {
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			_, _ = handler.reviewRequest(secondCtx, review)
+		}(&secondBatch)
+	}
+
+	// Eventually, all the above routines should be blocked trying to acquire the validation lock
+	for i := 0; i < 20; i++ {
+		if pending := handler.pendingValidationRequests(); pending == expectPending {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if pending := handler.pendingValidationRequests(); pending != expectPending {
+		t.Errorf("unexpected pending count, got: %d, expected: %d", pending, expectPending)
+	}
+
+	// Release the first batch of reviews
+	firstCancel()
+
+	// Eventually, the first batch will complete and the second batch will be allowed to proceed.
+	// Check that the pending count drops back to zero.
+	for i := 0; i < 20; i++ {
+		if pending := handler.pendingValidationRequests(); pending == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pending := handler.pendingValidationRequests(); pending != 0 {
+		t.Errorf("unexpected final pending count, got: %d, expected: %d", pending, 0)
+	}
+
+	secondCancel()
+
+	firstBatch.Wait()
+	secondBatch.Wait()
+}
+
+type fakeOpa struct {
+	reviewFn func(ctx context.Context)
+}
+
+func (f fakeOpa) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+	return nil, nil
+}
+
+func (f fakeOpa) Dump(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (f fakeOpa) Review(ctx context.Context, obj interface{}, opts ...client.QueryOpt) (*rtypes.Responses, error) {
+	if f.reviewFn != nil {
+		f.reviewFn(ctx)
+	}
+	return nil, nil
+}
+
+func (f fakeOpa) ValidateConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
+	return nil
 }
