@@ -30,6 +30,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -51,6 +52,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+var (
+	// defaultRefilRate is the default rate at which potential calls are
+	// added back to the "bucket" of allowed calls.
+	defaultRefillRate = 5
+	// defaultLimitSize is the default starting/max number of potential calls
+	// per second.  Once a call is used, it's added back to the bucket at a rate
+	// of defaultRefillRate per second.
+	defaultLimitSize = 5
 )
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
@@ -224,7 +235,7 @@ loop:
 func TestRegistrar_Reconnect(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -301,7 +312,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 func Test_Registrar_Replay(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
