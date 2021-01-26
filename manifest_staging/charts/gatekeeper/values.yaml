@@ -9,7 +9,7 @@ emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.2.2
+  release: v3.2.3
   pullPolicy: IfNotPresent
 nodeSelector: { kubernetes.io/os: linux }
 affinity: {}
