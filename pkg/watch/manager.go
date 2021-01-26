@@ -104,10 +104,7 @@ func (wm *Manager) Start(ctx context.Context) error {
 
 	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
-		select {
-		case <-ctx.Done():
-		default:
-		}
+		<-ctx.Done()
 		// Unblock any informer event handlers
 		close(wm.stopped)
 		return context.Canceled

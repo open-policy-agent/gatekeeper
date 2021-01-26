@@ -393,7 +393,18 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	// Setup the Manager
 	mgr, wm := setupManager(t)
 	c := &testclient.RetryClient{Client: mgr.GetClient()}
-	ctx := context.Background()
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	// start manager that will start tracker and controller
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := sync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}
+	defer testMgrStopped()
 
 	// Create the constraint template object and expect the Reconcile to be created when controller starts
 	instance := &v1beta1.ConstraintTemplate{
@@ -419,7 +430,7 @@ violation[{"msg": "denied!"}] {
 			},
 		},
 	}
-	err := c.Create(context.TODO(), instance)
+	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
@@ -437,7 +448,7 @@ violation[{"msg": "denied!"}] {
 
 	// Create the constraint for constraint template
 	cstr := newDenyAllCstr()
-	err = c.Create(context.Background(), cstr)
+	err = c.Create(ctx, cstr)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// creating the gatekeeper-system namespace is necessary because that's where
@@ -470,18 +481,6 @@ violation[{"msg": "denied!"}] {
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, nil, func() (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-	// start manager that will start tracker and controller
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-	defer testMgrStopped()
-
 	// get the object tracker for the constraint
 	ot := tracker.For(gvk)
 	tr, ok := ot.(testExpectations)
@@ -495,7 +494,7 @@ violation[{"msg": "denied!"}] {
 
 	// Delete the constraint , the delete event will be reconciled by controller
 	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(context.TODO(), cstr)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Delete(ctx, cstr)).NotTo(gomega.HaveOccurred())
 
 	// set event channel to receive request for constraint
 	events <- event.GenericEvent{
