@@ -34,7 +34,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
-	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,20 +52,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var (
-	expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-		Name:      "config",
-		Namespace: "gatekeeper-system",
-	}}
-
-	// defaultRefilRate is the default rate at which potential calls are
-	// added back to the "bucket" of allowed calls.
-	defaultRefillRate = 5
-	// defaultLimitSize is the default starting/max number of potential calls
-	// per second.  Once a call is used, it's added back to the bucket at a rate
-	// of defaultRefillRate per second.
-	defaultLimitSize = 5
-)
+var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+	Name:      "config",
+	Namespace: "gatekeeper-system",
+}}
 
 const timeout = time.Second * 20
 
@@ -132,7 +121,7 @@ func TestReconcile(t *testing.T) {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -247,7 +236,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// create the Config object and expect the Reconcile to be created when controller starts
 	instance := &configv1alpha1.Config{
@@ -400,7 +389,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
@@ -528,7 +517,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()

@@ -23,30 +23,48 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	// defaultRefilRate is the default rate at which potential calls are
+	// added back to the "bucket" of allowed calls.
+	defaultRefillRate = 5
+	// defaultLimitSize is the default starting/max number of potential calls
+	// per second.  Once a call is used, it's added back to the bucket at a rate
+	// of defaultRefillRate per second.
+	defaultLimitSize = 5
+)
+
 // RetryClient wraps a client to provide rate-limiter respecting retry behavior.
 type RetryClient struct {
-	// mu      sync.RWMutex
 	Limiter *rate.Limiter
 	client.Client
+}
+
+func NewRetryClient(c client.Client) *RetryClient {
+	return &RetryClient{
+		Client:  c,
+		Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize),
+	}
 }
 
 // retry will run the provided function, retrying if it fails due to rate limiting.
 // If context is cancelled, it will return early.
 func retry(ctx context.Context, limiter *rate.Limiter, f func() error) error {
-	if err := ctx.Err(); err != nil {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := f()
+
+		if meta.IsNoMatchError(err) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			_ = limiter.Wait(ctx)
+		}
 		return err
 	}
-	err := f()
-
-	if meta.IsNoMatchError(err) {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		_ = limiter.Wait(ctx)
-	}
-	return err
 }
 
 func (c *RetryClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {

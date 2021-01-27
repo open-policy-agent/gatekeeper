@@ -12,7 +12,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -37,16 +36,6 @@ import (
 )
 
 const timeout = time.Second * 15
-
-var (
-	// defaultRefilRate is the default rate at which potential calls are
-	// added back to the "bucket" of allowed calls.
-	defaultRefillRate = 5
-	// defaultLimitSize is the default starting/max number of potential calls
-	// per second.  Once a call is used, it's added back to the bucket at a rate
-	// of defaultRefillRate per second.
-	defaultLimitSize = 5
-)
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -113,7 +102,7 @@ violation[{"msg": "denied!"}] {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient(), Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize)}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
