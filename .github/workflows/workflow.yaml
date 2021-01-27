@@ -99,6 +99,8 @@ jobs:
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e:latest
           make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+          # there should be no additional manifest changes
+          git diff --exit-code
           make test-e2e
 
       - name: Save logs
