@@ -51,12 +51,9 @@ webhooks:
     - ""
     apiVersions:
     - '*'
-    operations: 
+    operations:
     - CREATE
     - UPDATE
-    {{- if .Values.enableDeleteOperations }}
-    - DELETE
-    {{- end}}
     resources:
     - namespaces
   sideEffects: None

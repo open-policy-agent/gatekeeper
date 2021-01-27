@@ -132,11 +132,3 @@ webhooks:
       path: /v1/admitlabel
   name: check-ignore-label.gatekeeper.sh
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - '*'
-    operations: HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
-    resources:
-    - namespaces
