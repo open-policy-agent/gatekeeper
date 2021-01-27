@@ -144,7 +144,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	}()
 
 	// namespace is excluded from webhook using config
-	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest)
+	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest, process.Mutation)
 	if err != nil {
 		log.Error(err, "error while excluding namespace")
 	}
