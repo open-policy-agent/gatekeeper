@@ -60,8 +60,9 @@ func retry(ctx context.Context, limiter *rate.Limiter, f func() error) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
+				_ = limiter.Wait(ctx)
+				continue
 			}
-			_ = limiter.Wait(ctx)
 		}
 		return err
 	}
