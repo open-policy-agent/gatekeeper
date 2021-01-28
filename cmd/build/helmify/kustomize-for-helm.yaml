@@ -68,6 +68,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING
+      hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -95,6 +96,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
       nodeSelector: HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING
+      hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
 ---
 apiVersion: v1
 kind: Secret
