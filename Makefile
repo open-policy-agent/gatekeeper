@@ -137,17 +137,17 @@ e2e-helm-upgrade-init: e2e-helm-install
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
 		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
 			--version ${BASE_RELEASE} --name gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 	else\
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
 		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
 			--version ${BASE_RELEASE} --name-template gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 	fi;
 
 e2e-helm-upgrade:
 	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-		--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+		--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 
 # Build manager binary
 manager: generate
