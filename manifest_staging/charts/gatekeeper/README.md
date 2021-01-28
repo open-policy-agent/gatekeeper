@@ -37,5 +37,3 @@ template, please edit `kustomization.yaml` and `replacements.go` under that
 directory and then run `make manifests`. Your changes will show up in the
 `manifest_staging` directory and will be promoted to the root `charts` directory
 the next time a Gatekeeper release is cut.
-
-test
