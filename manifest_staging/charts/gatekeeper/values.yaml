@@ -4,8 +4,6 @@ constraintViolationsLimit: 20
 auditFromCache: false
 createNamespace: true
 disableValidatingWebhook: false
-validatingWebhookTimeoutSeconds: 3
-enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
 emitAdmissionEvents: false
@@ -19,6 +17,7 @@ podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
 secretAnnotations: {}
 controllerManager:
+  hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity:
     podAntiAffinity:
@@ -42,6 +41,7 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
 audit:
+  hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity: {}
   tolerations: []
