@@ -147,7 +147,8 @@ e2e-helm-upgrade-init: e2e-helm-install
 
 e2e-helm-upgrade:
 	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-		--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
+		--set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} \
+		--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
 
 # Build manager binary
 manager: generate
