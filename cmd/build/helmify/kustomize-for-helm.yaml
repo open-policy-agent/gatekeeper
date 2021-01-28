@@ -102,3 +102,33 @@ metadata:
   annotations: HELMSUBST_SECRET_ANNOTATIONS
   name: gatekeeper-webhook-server-cert
   namespace: gatekeeper-system
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-validating-webhook-configuration
+webhooks:
+- clientConfig:
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admit
+  name: validation.gatekeeper.sh
+  timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+  rules:
+  - apiGroups:
+    - "*"
+    apiVersions:
+    - '*'
+    operations: HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
+    resources:
+    - '*'
+- clientConfig:
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/admitlabel
+  name: check-ignore-label.gatekeeper.sh
+  timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
