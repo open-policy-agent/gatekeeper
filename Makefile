@@ -124,9 +124,9 @@ e2e-helm-deploy: e2e-helm-install
 		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
 		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
 		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --debug  --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	else\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	fi;
 
 e2e-helm-upgrade-init: e2e-helm-install
@@ -137,17 +137,18 @@ e2e-helm-upgrade-init: e2e-helm-install
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
 		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
 			--version ${BASE_RELEASE} --name gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 	else\
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
 		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
 			--version ${BASE_RELEASE} --name-template gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 	fi;
 
 e2e-helm-upgrade:
 	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-		--set emitAdmissionEvents=true --set emitAuditEvents=true --wait;\
+		--set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} \
+		--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 
 # Build manager binary
 manager: generate
