@@ -7,6 +7,10 @@ var replacements = map[string]string{
 	"HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES": `
 {{ toYaml .Values.audit.resources | indent 10 }}`,
 
+        "HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK": `{{ .Values.controllerManager.hostNetwork }}`,
+
+        "HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
+
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING": `
 {{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
       affinity:
