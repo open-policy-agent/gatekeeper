@@ -18,4 +18,14 @@ var replacements = map[string]string{
 	`HELMSUBST_ANNOTATIONS: ""`: `{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
+
+	`HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT: ""`: `{{- toYaml .Values.validatingWebhookTimeoutSeconds | nindent 8 }}`,
+
+
+	"HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES": `
+    - CREATE
+    - UPDATE
+    {{- if .Values.enableDeleteOperations }}
+    - DELETE
+    {{- end}}`,
 }

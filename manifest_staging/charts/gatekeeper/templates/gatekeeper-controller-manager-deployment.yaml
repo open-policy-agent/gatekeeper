@@ -86,6 +86,7 @@ spec:
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -93,6 +94,15 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+<<<<<<< HEAD
+=======
+      nodeSelector: 
+{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.controllerManager.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
+>>>>>>> master
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:

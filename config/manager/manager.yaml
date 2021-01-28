@@ -31,15 +31,15 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: gatekeeper.sh/operation
-                  operator: In
-                  values:
-                  - webhook
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: gatekeeper.sh/operation
+                      operator: In
+                      values:
+                        - webhook
+                topologyKey: kubernetes.io/hostname
       serviceAccountName: admin
       automountServiceAccountToken: true
       containers:
@@ -50,7 +50,7 @@ spec:
             - "--logtostderr"
             - "--exempt-namespace=gatekeeper-system"
             - "--operation=webhook"
-          image: openpolicyagent/gatekeeper:v3.3.0-beta.2
+          image: openpolicyagent/gatekeeper:v3.4.0-beta.0
           imagePullPolicy: Always
           name: manager
           ports:
@@ -86,6 +86,7 @@ spec:
               path: /readyz
               port: 9090
           securityContext:
+            readOnlyRootFilesystem: true
             runAsUser: 1000
             runAsGroup: 999
             runAsNonRoot: true
@@ -103,7 +104,7 @@ metadata:
   name: audit
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: audit-controller
     gatekeeper.sh/operation: audit
 spec:
   selector:
@@ -137,7 +138,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-          image: openpolicyagent/gatekeeper:v3.3.0-beta.2
+          image: openpolicyagent/gatekeeper:v3.4.0-beta.0
           imagePullPolicy: Always
           livenessProbe:
             httpGet:
@@ -163,6 +164,7 @@ spec:
               cpu: 100m
               memory: 256Mi
           securityContext:
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:

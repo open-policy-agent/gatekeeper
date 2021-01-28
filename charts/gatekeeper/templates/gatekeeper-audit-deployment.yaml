@@ -4,7 +4,7 @@ metadata:
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
-    control-plane: controller-manager
+    control-plane: audit-controller
     gatekeeper.sh/operation: audit
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
@@ -84,10 +84,12 @@ spec:
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
       nodeSelector: 
+<<<<<<< HEAD
 {{- toYaml .Values.nodeSelector | nindent 8 }}
       affinity:
 {{- toYaml .Values.affinity | nindent 8 }}
@@ -97,6 +99,17 @@ spec:
 {{- toYaml .Values.image.pullSecrets | nindent 8 }}
 {{- with .Values.audit.priorityClassName }}
       priorityClassName: {{ . | quote }}
+=======
+{{ toYaml .Values.audit.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.audit.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.audit.tolerations | indent 8 }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}
+{{- if .Values.audit.priorityClassName }}
+      priorityClassName: {{ .Values.audit.priorityClassName }}
+>>>>>>> master
 {{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60

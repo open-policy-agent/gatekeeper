@@ -70,8 +70,8 @@ type Tracker struct {
 func NewTracker(lister Lister) *Tracker {
 	return &Tracker{
 		lister:             lister,
-		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate")),
-		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config")),
+		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), nil),
+		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config"), nil),
 		constraints:        newTrackerMap(),
 		data:               newTrackerMap(),
 		ready:              make(chan struct{}),

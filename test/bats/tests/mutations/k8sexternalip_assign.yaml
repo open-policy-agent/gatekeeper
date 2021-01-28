@@ -1,0 +1,13 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: k8sexternalip
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Service"]
+    versions: ["v1"]
+  location: "spec.externalIPs"
+  parameters:
+    assign:
+      value: []

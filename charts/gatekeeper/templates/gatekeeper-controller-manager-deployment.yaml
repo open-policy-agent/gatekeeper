@@ -96,6 +96,7 @@ spec:
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -104,6 +105,7 @@ spec:
           name: cert
           readOnly: true
       nodeSelector: 
+<<<<<<< HEAD
 {{- toYaml .Values.nodeSelector | nindent 8 }}
       affinity:
 {{- toYaml .Values.affinity | nindent 8 }}
@@ -113,6 +115,17 @@ spec:
 {{- toYaml .Values.image.pullSecrets | nindent 8 }}
 {{- with .Values.controllerManager.priorityClassName }}
       priorityClassName: {{ . | quote }}
+=======
+{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.controllerManager.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | indent 8 }}
+{{- if .Values.controllerManager.priorityClassName }}
+      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
+>>>>>>> master
 {{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60

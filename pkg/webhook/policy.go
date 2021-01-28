@@ -17,6 +17,8 @@ package webhook
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"strings"
@@ -27,6 +29,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
@@ -43,6 +46,10 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+var (
+	maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
 )
 
 func init() {
@@ -68,19 +75,21 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	recorder := eventBroadcaster.NewRecorder(
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
-	wh := &admission.Webhook{
-		Handler: &validationHandler{
-			opa: opa,
-			webhookHandler: webhookHandler{
-				client:          mgr.GetClient(),
-				reader:          mgr.GetAPIReader(),
-				reporter:        reporter,
-				processExcluder: processExcluder,
-				eventRecorder:   recorder,
-				gkNamespace:     util.GetNamespace(),
-			},
+	handler := &validationHandler{
+		opa: opa,
+		webhookHandler: webhookHandler{
+			client:          mgr.GetClient(),
+			reader:          mgr.GetAPIReader(),
+			reporter:        reporter,
+			processExcluder: processExcluder,
+			eventRecorder:   recorder,
+			gkNamespace:     util.GetNamespace(),
 		},
 	}
+	if *maxServingThreads > 0 {
+		handler.semaphore = make(chan struct{}, *maxServingThreads)
+	}
+	wh := &admission.Webhook{Handler: handler}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
 	if err := wh.InjectLogger(log); err != nil {
@@ -94,7 +103,8 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa *opa.Client
+	opa       *opa.Client
+	semaphore chan struct{}
 }
 
 // Handle the validation request
@@ -147,12 +157,13 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}()
 
 	// namespace is excluded from webhook using config
-	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest)
+	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest, process.Webhook)
 	if err != nil {
 		log.Error(err, "error while excluding namespace")
 	}
 
 	if isExcludedNamespace {
+
 		requestResponse = allowResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
@@ -256,12 +267,19 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req admission.Request) (bool, error) {
-	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" && req.AdmissionRequest.Kind.Kind == "ConstraintTemplate" {
+	gvk := req.AdmissionRequest.Kind
+
+	switch {
+	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
-	}
-	if req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" {
+	case gvk.Group == "constraints.gatekeeper.sh":
 		return h.validateConstraint(ctx, req)
+	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
+		if err := h.validateConfigResource(ctx, req); err != nil {
+			return true, err
+		}
 	}
+
 	return false, nil
 }
 
@@ -307,8 +325,27 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 	return false, nil
 }
 
+func (h *validationHandler) validateConfigResource(ctx context.Context, req admission.Request) error {
+	if req.Name != keys.Config.Name {
+		return fmt.Errorf("Config resource must have name 'config'")
+	}
+	return nil
+}
+
 // traceSwitch returns true if a request should be traced
 func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Request) (*rtypes.Responses, error) {
+	// if we have a maximum number of concurrent serving goroutines, try to acquire
+	// a lock and block until we succeed
+	if h.semaphore != nil {
+		select {
+		case h.semaphore <- struct{}{}:
+			defer func() {
+				<-h.semaphore
+			}()
+		case <-ctx.Done():
+			return nil, errors.New("serving context canceled, aborting request")
+		}
+	}
 	trace, dump := h.tracingLevel(ctx, req)
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
