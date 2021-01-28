@@ -104,6 +104,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       nodeSelector: 
 {{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
       affinity:
