@@ -341,8 +341,10 @@ status:
     name: kube-system
 ```
 
+- Run a gatekeeper `Deployment` with `--operation audit` 
 - Audit interval: set `--audit-interval=123` (defaults to every `60` seconds)
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
+- Audit chunk size: set `--audit-chunk-size=500` (defaults to `0` = infinite) to limit memory consumption of the auditing `Pod`
 - Disable: set `--audit-interval=0`
 
 By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.

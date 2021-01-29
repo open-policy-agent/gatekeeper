@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	violationsM    = stats.Int64(violationsMetricName, "Total number of violations per constraint", stats.UnitDimensionless)
+	violationsM    = stats.Int64(violationsMetricName, "Total number of audited violations", stats.UnitDimensionless)
 	auditDurationM = stats.Float64(auditDurationMetricName, "Latency of audit operation in seconds", stats.UnitSeconds)
 	lastRunTimeM   = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
 
