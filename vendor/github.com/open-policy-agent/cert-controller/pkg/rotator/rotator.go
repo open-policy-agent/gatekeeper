@@ -540,7 +540,6 @@ func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(object client.Object) []reconcile.Request {
 	return func(object client.Object) []reconcile.Request {
 		whKey := types.NamespacedName{Name: webhook.Name}
-		object.GetNamespace()
 		if object.GetNamespace() != whKey.Namespace {
 			return nil
 		}

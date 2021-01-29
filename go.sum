@@ -428,6 +428,8 @@ github.com/onsi/gomega v1.10.1 h1:o0+MgICZLuZ7xjH7Vx6zS/zcu93/BEp1VwkIW1mEXCE=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/onsi/gomega v1.10.2 h1:aY/nuoWlKJud2J6U0E3NWsjlg+0GtwXxgEqthRdzlcs=
 github.com/onsi/gomega v1.10.2/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
+github.com/open-policy-agent/cert-controller v0.1.1-0.20210129015139-6ff9721a1c47 h1:Hv+rgk7BGtp5izbzpayji+9Vnx5r+19BTMh2wGQB2L4=
+github.com/open-policy-agent/cert-controller v0.1.1-0.20210129015139-6ff9721a1c47/go.mod h1:vZFB1b92JmUOIDEWHGO/lCnrKqrCQA5jCZkwPlF2nmc=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20210121003109-e55b2bb4cf1c h1:ArW4LOS0LuB9u+oyiYHNoKXjZvW4pP8jh5ty/8szIz4=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20210121003109-e55b2bb4cf1c/go.mod h1:vvhkBONv7Uah2fvS/bQ/N1u0rSLvxZOs2ErR6m+4QtQ=
 github.com/open-policy-agent/opa v0.24.0 h1:fnGOIux+TTGZsC0du1bRBtV8F+KPN55Hks12uE3Fq3E=
@@ -518,8 +520,6 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/spf13/viper v1.4.0/go.mod h1:PTJ7Z/lr49W6bUbkmS1V3by4uWynFiR9p7+dSq/yZzE=
 github.com/spf13/viper v1.7.0/go.mod h1:8WkrPz2fc9jxqZNCJI/76HCieCp4Q8HaLFoCha5qpdg=
-github.com/stijndehaes/cert-controller v0.0.0-20210114145504-e0beabda7d4c h1:wGWRH2vxX5wT8sBHRh2YRNIqQHbzPtyJB77qW1NszL4=
-github.com/stijndehaes/cert-controller v0.0.0-20210114145504-e0beabda7d4c/go.mod h1:vZFB1b92JmUOIDEWHGO/lCnrKqrCQA5jCZkwPlF2nmc=
 github.com/stoewer/go-strcase v1.2.0/go.mod h1:IBiWB2sKIp3wVVQ3Y035++gc+knqhUQag1KpM8ahLw8=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
