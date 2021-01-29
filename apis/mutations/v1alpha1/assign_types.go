@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -52,9 +53,6 @@ type Parameters struct {
 	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=MustExist;MustNotExist
-type Condition string
-
 // PathTests allows the user to customize how the mutation works if parent
 // paths are missing. It traverses the list in order. All sub paths are
 // tested against the provided condition, if the test fails, the mutation is
@@ -66,8 +64,8 @@ type Condition string
 // * MustExist    - the path must exist or do not mutate
 // * MustNotExist - the path must not exist or do not mutate
 type PathTest struct {
-	SubPath   string    `json:"subPath,omitempty"`
-	Condition Condition `json:"condition,omitempty"`
+	SubPath   string           `json:"subPath,omitempty"`
+	Condition tester.Condition `json:"condition,omitempty"`
 }
 
 // AssignStatus defines the observed state of Assign

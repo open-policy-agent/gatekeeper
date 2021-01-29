@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	patht "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -23,6 +24,7 @@ type AssignMutator struct {
 	assign   *mutationsv1alpha1.Assign
 	path     *parser.Path
 	bindings []schema.Binding
+	tester   *patht.Tester
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -37,8 +39,41 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
+func (m *AssignMutator) gatherPathTests() ([]patht.Test, error) {
+	pts := m.assign.Spec.Parameters.PathTests
+	var pathTests []patht.Test
+	for _, pt := range pts {
+		p, err := parser.Parse(pt.SubPath)
+		if err != nil {
+			return nil, err
+		}
+		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
+	}
+	return pathTests, nil
+}
+
+func (m *AssignMutator) getTester() (*patht.Tester, error) {
+	if m.tester != nil {
+		return m.tester, nil
+	}
+	pathTests, err := m.gatherPathTests()
+	if err != nil {
+		return nil, err
+	}
+	tester, err := patht.New(pathTests)
+	if err != nil {
+		return nil, err
+	}
+	m.tester = tester
+	return tester, nil
+}
+
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
-	return Mutate(m, obj)
+	tester, err := m.getTester()
+	if err != nil {
+		return err
+	}
+	return mutate(m, tester, obj)
 }
 func (m *AssignMutator) ID() types.ID {
 	return m.id
@@ -166,6 +201,22 @@ func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	}
 
 	err = validateObjectAssignedToList(path, value)
+	if err != nil {
+		return err
+	}
+	m, err := MutatorForAssign(assign)
+	if err != nil {
+		return err
+	}
+	pts, err := m.gatherPathTests()
+	if err != nil {
+		return err
+	}
+	err = patht.ValidatePathTests(m.Path(), pts)
+	if err != nil {
+		return err
+	}
+	_, err = m.getTester()
 	if err != nil {
 		return err
 	}
