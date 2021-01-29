@@ -103,11 +103,11 @@ type Reconciler struct {
 
 // Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
 // and what is in the Assign.Spec
-func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
 	assign := &mutationsv1alpha1.Assign{}
-	err := r.Get(context.TODO(), request.NamespacedName, assign)
+	err := r.Get(ctx, request.NamespacedName, assign)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err

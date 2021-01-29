@@ -22,9 +22,7 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +33,7 @@ import (
 
 var log = logf.Log.WithName("watch-manager")
 
-// WatchManager allows us to dynamically configure what kinds are watched
+// Manager allows us to dynamically configure what kinds are watched
 type Manager struct {
 	cache      RemovableCache
 	startedMux sync.Mutex
@@ -61,9 +59,9 @@ type AddFunction func(manager.Manager) error
 // It supports non-blocking calls to get informers, as well as the
 // ability to remove an informer dynamically.
 type RemovableCache interface {
-	GetInformerNonBlocking(obj runtime.Object) (cache.Informer, error)
-	List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error
-	Remove(obj runtime.Object) error
+	GetInformerNonBlocking(obj client.Object) (cache.Informer, error)
+	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+	Remove(obj client.Object) error
 }
 
 func New(c RemovableCache) (*Manager, error) {
@@ -99,17 +97,14 @@ func (wm *Manager) RemoveRegistrar(parentName string) error {
 
 // Start runs the watch manager, processing events received from dynamic informers and distributing them
 // to registrars.
-func (wm *Manager) Start(done <-chan struct{}) error {
+func (wm *Manager) Start(ctx context.Context) error {
 	if err := wm.checkStarted(); err != nil {
 		return err
 	}
 
-	grp, ctx := errgroup.WithContext(context.Background())
+	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
-		select {
-		case <-ctx.Done():
-		case <-done:
-		}
+		<-ctx.Done()
 		// Unblock any informer event handlers
 		close(wm.stopped)
 		return context.Canceled
@@ -324,19 +319,13 @@ func (wm *Manager) eventLoop(stop <-chan struct{}) {
 
 // distributeEvent distributes a single event to all registrars listening for that resource kind.
 func (wm *Manager) distributeEvent(stop <-chan struct{}, obj interface{}) {
-	o, ok := obj.(runtime.Object)
+	o, ok := obj.(client.Object)
 	if !ok || o == nil {
 		// Invalid object, drop it
 		return
 	}
 	gvk := o.GetObjectKind().GroupVersionKind()
-	acc, err := meta.Accessor(o)
-	if err != nil {
-		// Invalid object, drop it
-		return
-	}
 	e := event.GenericEvent{
-		Meta:   acc,
 		Object: o,
 	}
 

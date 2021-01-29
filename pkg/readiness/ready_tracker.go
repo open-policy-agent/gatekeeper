@@ -46,7 +46,7 @@ const (
 
 // Lister lists resources from a cache.
 type Lister interface {
-	List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error
+	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 }
 
 // Tracker tracks readiness for templates, constraints and data.

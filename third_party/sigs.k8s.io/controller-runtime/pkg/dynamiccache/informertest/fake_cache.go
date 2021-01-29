@@ -67,7 +67,7 @@ func (c *FakeInformers) FakeInformerForKind(ctx context.Context, gvk schema.Grou
 }
 
 // GetInformer implements Informers
-func (c *FakeInformers) GetInformer(ctx context.Context, obj runtime.Object) (cache.Informer, error) {
+func (c *FakeInformers) GetInformer(ctx context.Context, obj client.Object) (cache.Informer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
 	}
@@ -80,7 +80,7 @@ func (c *FakeInformers) GetInformer(ctx context.Context, obj runtime.Object) (ca
 }
 
 // WaitForCacheSync implements Informers
-func (c *FakeInformers) WaitForCacheSync(stop <-chan struct{}) bool {
+func (c *FakeInformers) WaitForCacheSync(ctx context.Context) bool {
 	if c.Synced == nil {
 		return true
 	}
@@ -121,21 +121,21 @@ func (c *FakeInformers) informerFor(gvk schema.GroupVersionKind, _ runtime.Objec
 }
 
 // Start implements Informers
-func (c *FakeInformers) Start(stopCh <-chan struct{}) error {
+func (c *FakeInformers) Start(ctx context.Context) error {
 	return c.Error
 }
 
 // IndexField implements Cache
-func (c *FakeInformers) IndexField(ctx context.Context, obj runtime.Object, field string, extractValue client.IndexerFunc) error {
+func (c *FakeInformers) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	return nil
 }
 
 // Get implements Cache
-func (c *FakeInformers) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (c *FakeInformers) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	return nil
 }
 
 // List implements Cache
-func (c *FakeInformers) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+func (c *FakeInformers) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return nil
 }

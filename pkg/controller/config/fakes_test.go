@@ -127,10 +127,10 @@ func (f *fakeOpa) Len() int {
 // hookReader is a client.Reader with overrideable methods.
 type hookReader struct {
 	client.Reader
-	ListFunc func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error
+	ListFunc func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 }
 
-func (r hookReader) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+func (r hookReader) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	if r.ListFunc != nil {
 		return r.ListFunc(ctx, list, opts...)
 	}

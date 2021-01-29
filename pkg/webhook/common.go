@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +57,10 @@ var (
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	// webhookName is deprecated, set this on the manifest YAML if needed"
 )
+
+func init() {
+	_ = apis.AddToScheme(runtimeScheme)
+}
 
 func isGkServiceAccount(user authenticationv1.UserInfo) bool {
 	return user.Username == serviceaccount
@@ -121,7 +126,7 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request
 	return traceEnabled, dump
 }
 
-func (h *webhookHandler) skipExcludedNamespace(req admissionv1beta1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
+func (h *webhookHandler) skipExcludedNamespace(req admissionv1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
 		return false, err

@@ -37,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -98,7 +97,7 @@ func setupController(mgr manager.Manager, r reconcile.Reconciler, events chan ev
 			Source:         events,
 			DestBufferSize: 1024,
 		},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
 	)
 }
 
@@ -112,7 +111,7 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
-		return mgr.Start(ctx.Done())
+		return mgr.Start(ctx)
 	})
 
 	events := make(chan event.GenericEvent)
@@ -142,7 +141,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
-		return mgr.Start(ctx.Done())
+		return mgr.Start(ctx)
 	})
 
 	// Events will be used to receive events from dynamic watches registered
@@ -154,12 +153,11 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	}
 	events := make(chan event.GenericEvent, 1024)
 	events <- event.GenericEvent{
-		Meta:   errObj,
 		Object: errObj,
 	}
 
 	requests := make(chan reconcile.Request)
-	rec := func(request reconcile.Request) (reconcile.Result, error) {
+	rec := func(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 		select {
 		case requests <- request:
 		case <-ctx.Done():
@@ -226,14 +224,14 @@ loop:
 func TestRegistrar_Reconnect(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
-		return mgr.Start(ctx.Done())
+		return mgr.Start(ctx)
 	})
 
 	events := make(chan event.GenericEvent)
@@ -241,7 +239,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating registrar")
 
 	req := make(chan reconcile.Request)
-	rec := reconcile.Func(func(request reconcile.Request) (reconcile.Result, error) {
+	rec := reconcile.Func(func(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 		select {
 		case req <- request:
 		case <-ctx.Done():
@@ -303,7 +301,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 func Test_Registrar_Replay(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -318,7 +316,7 @@ func Test_Registrar_Replay(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "creating registrar")
 
 		requests := make(chan reconcile.Request)
-		rec := func(request reconcile.Request) (reconcile.Result, error) {
+		rec := func(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 			select {
 			case requests <- request:
 			case <-ctx.Done():
@@ -348,7 +346,7 @@ func Test_Registrar_Replay(t *testing.T) {
 	}
 
 	grp.Go(func() error {
-		return mgr.Start(ctx.Done())
+		return mgr.Start(ctx)
 	})
 
 	gvk := schema.GroupVersionKind{
@@ -411,7 +409,7 @@ func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1beta1.C
 }
 
 // applyCRD applies a CRD and waits for it to register successfully.
-func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd runtime.Object) error {
+func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
 	err := client.Create(ctx, crd)
 	if err != nil {
 		return fmt.Errorf("creating %+v: %w", gvk, err)

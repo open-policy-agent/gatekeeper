@@ -10,7 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,12 +41,12 @@ func processWipeData() (bool, string, interface{}, error) {
 }
 
 type AugmentedReview struct {
-	AdmissionRequest *admissionv1beta1.AdmissionRequest
+	AdmissionRequest *admissionv1.AdmissionRequest
 	Namespace        *corev1.Namespace
 }
 
 type gkReview struct {
-	*admissionv1beta1.AdmissionRequest
+	*admissionv1.AdmissionRequest
 	Unstable *unstable `json:"_unstable,omitempty"`
 }
 
@@ -90,9 +90,9 @@ func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interf
 
 func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, error) {
 	switch data := obj.(type) {
-	case admissionv1beta1.AdmissionRequest:
+	case admissionv1.AdmissionRequest:
 		return true, data, nil
-	case *admissionv1beta1.AdmissionRequest:
+	case *admissionv1.AdmissionRequest:
 		return true, data, nil
 	case AugmentedReview:
 		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
@@ -141,13 +141,13 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkRevie
 	return review, nil
 }
 
-func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1beta1.AdmissionRequest, error) {
+func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.AdmissionRequest, error) {
 	resourceJSON, err := json.Marshal(obj.Object)
 	if err != nil {
-		return admissionv1beta1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
+		return admissionv1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
 	}
 
-	req := admissionv1beta1.AdmissionRequest{
+	req := admissionv1.AdmissionRequest{
 		Kind: metav1.GroupVersionKind{
 			Group:   obj.GetObjectKind().GroupVersionKind().Group,
 			Version: obj.GetObjectKind().GroupVersionKind().Version,

@@ -13,7 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -201,7 +201,7 @@ func TestTemplateValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "templates.gatekeeper.sh",
 						Version: "v1beta1",
@@ -227,7 +227,7 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -242,7 +242,7 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
 	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
 }
 
@@ -295,7 +295,7 @@ func TestReviewRequest(t *testing.T) {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -391,7 +391,7 @@ func TestConstraintValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "constraints.gatekeeper.sh",
 						Version: "v1beta1",
@@ -511,7 +511,7 @@ func TestTracing(t *testing.T) {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -643,7 +643,7 @@ func TestGetDenyMessages(t *testing.T) {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -687,7 +687,7 @@ func TestValidateConfigResource(t *testing.T) {
 		t.Run(tt.TestName, func(t *testing.T) {
 			handler := validationHandler{}
 			req := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.Name,
 				},
 			}

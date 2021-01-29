@@ -103,7 +103,7 @@ func (h *handler) HandleViolation(result *types.Result) error {
 func (h *handler) MatchSchema() apiextensions.JSONSchemaProps {
 	return apiextensions.JSONSchemaProps{
 		Properties: map[string]apiextensions.JSONSchemaProps{
-			"label": apiextensions.JSONSchemaProps{Type: "string"},
+			"label": {Type: "string"},
 		},
 	}
 }

@@ -17,32 +17,50 @@ package clients
 
 import (
 	"context"
-	"time"
 
-	"k8s.io/apimachinery/pkg/runtime"
+	"golang.org/x/time/rate"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+)
+
+var (
+	// defaultRefilRate is the default rate at which potential calls are
+	// added back to the "bucket" of allowed calls.
+	defaultRefillRate = 5
+	// defaultLimitSize is the default starting/max number of potential calls
+	// per second.  Once a call is used, it's added back to the bucket at a rate
+	// of defaultRefillRate per second.
+	defaultLimitSize = 5
 )
 
 // RetryClient wraps a client to provide rate-limiter respecting retry behavior.
 type RetryClient struct {
+	Limiter *rate.Limiter
 	client.Client
 }
 
+func NewRetryClient(c client.Client) *RetryClient {
+	return &RetryClient{
+		Client:  c,
+		Limiter: rate.NewLimiter(rate.Limit(defaultRefillRate), defaultLimitSize),
+	}
+}
+
 // retry will run the provided function, retrying if it fails due to rate limiting.
-// It will respect the rate limiters delay guidance. If context is cancelled, it will
-// return early.
-func retry(ctx context.Context, f func() error) error {
+// If context is cancelled, it will return early.
+func retry(ctx context.Context, limiter *rate.Limiter, f func() error) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		err := f()
-		if delay, needDelay := apiutil.DelayIfRateLimited(err); needDelay {
+
+		if meta.IsNoMatchError(err) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(delay):
+			default:
+				_ = limiter.Wait(ctx)
 				continue
 			}
 		}
@@ -50,64 +68,65 @@ func retry(ctx context.Context, f func() error) error {
 	}
 }
 
-func (c *RetryClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Get(ctx, key, obj)
 	})
 }
 
-func (c *RetryClient) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.List(ctx, list, opts...)
 	})
 }
 
-func (c *RetryClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Create(ctx, obj, opts...)
 	})
 }
 
-func (c *RetryClient) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Delete(ctx, obj, opts...)
 	})
 }
 
-func (c *RetryClient) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Update(ctx, obj, opts...)
 	})
 }
 
-func (c *RetryClient) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.Patch(ctx, obj, patch, opts...)
 	})
 }
 
-func (c *RetryClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
-	return retry(ctx, func() error {
+func (c *RetryClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.Client.DeleteAllOf(ctx, obj, opts...)
 	})
 }
 
 func (c *RetryClient) Status() client.StatusWriter {
-	return &RetryStatusWriter{c.Client.Status()}
+	return &RetryStatusWriter{StatusWriter: c.Client.Status(), Limiter: c.Limiter}
 }
 
 type RetryStatusWriter struct {
 	client.StatusWriter
+	Limiter *rate.Limiter
 }
 
-func (c *RetryStatusWriter) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
-	return retry(ctx, func() error {
+func (c *RetryStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.StatusWriter.Update(ctx, obj, opts...)
 	})
 }
 
-func (c *RetryStatusWriter) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
-	return retry(ctx, func() error {
+func (c *RetryStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	return retry(ctx, c.Limiter, func() error {
 		return c.StatusWriter.Patch(ctx, obj, patch, opts...)
 	})
 }

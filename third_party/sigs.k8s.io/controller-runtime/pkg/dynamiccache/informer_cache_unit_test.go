@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.6.0/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.7.0/pkg/cache)
 
 package dynamiccache
 
@@ -25,6 +25,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 
@@ -42,12 +43,6 @@ var _ = Describe("ip.objectTypeForListObject", func() {
 	ip := &dynamicInformerCache{
 		InformersMap: &internal.InformersMap{Scheme: scheme.Scheme},
 	}
-
-	It("should error on non-list types", func() {
-		_, _, err := ip.objectTypeForListObject(&corev1.Pod{})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(Equal(`non-list type *v1.Pod (kind "/v1, Kind=Pod") passed as output`))
-	})
 
 	It("should find the object type for unstructured lists", func() {
 		unstructuredList := &unstructured.UnstructuredList{}
@@ -78,13 +73,14 @@ var _ = Describe("ip.objectTypeForListObject", func() {
 
 	It("should find the object type of a list with a slice of pointers items field", func() {
 		By("registering the type", func() {
+			ip.Scheme = runtime.NewScheme()
 			err := (&crscheme.Builder{
 				GroupVersion: schema.GroupVersion{Group: itemPointerSliceTypeGroupName, Version: itemPointerSliceTypeVersion},
 			}).
 				Register(
 					&controllertest.UnconventionalListType{},
 					&controllertest.UnconventionalListTypeList{},
-				).AddToScheme(scheme.Scheme)
+				).AddToScheme(ip.Scheme)
 			Expect(err).To(BeNil())
 		})
 

@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -29,28 +30,26 @@ func UnpackRequest(r reconcile.Request) (schema.GroupVersionKind, reconcile.Requ
 	}}, nil
 }
 
-// EventPacker implements handler.Mapper to pack incoming events into requests
-// with embedded GVK info. These requests can be unpacked in Reconcile() using UnpackRequest().
-type EventPacker struct{}
-
-// Map maps an event into a reconcile.Request with embedded GVK information. Must
+// EventPackerMapFunc maps an event into a reconcile.Request with embedded GVK information. Must
 // be unpacked with UnpackRequest() before use.
-func (EventPacker) Map(obj handler.MapObject) []reconcile.Request {
-	if obj.Object == nil || obj.Meta == nil {
-		return nil
-	}
-	gvk := obj.Object.GetObjectKind().GroupVersionKind()
-	if gvk.Version == "" {
-		gvk.Version = "v1"
-	}
-	encodedGVK := fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Version, gvk.Group)
+func EventPackerMapFunc() handler.MapFunc {
+	return func(obj client.Object) []reconcile.Request {
+		if obj == nil {
+			return nil
+		}
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		if gvk.Version == "" {
+			gvk.Version = "v1"
+		}
+		encodedGVK := fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Version, gvk.Group)
 
-	packed := fmt.Sprintf("gvk:%s:%s", encodedGVK, obj.Meta.GetName())
-	return []reconcile.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Namespace: obj.Meta.GetNamespace(),
-				Name:      packed,
-			}},
+		packed := fmt.Sprintf("gvk:%s:%s", encodedGVK, obj.GetName())
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Namespace: obj.GetNamespace(),
+					Name:      packed,
+				}},
+		}
 	}
 }
