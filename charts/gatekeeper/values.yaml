@@ -1,23 +1,23 @@
-replicas: 3
-auditInterval: 60
-constraintViolationsLimit: 20
-auditFromCache: false
+replicas: 3 # The number of Gatekeeper replicas to deploy for the webhook
+auditInterval: 60 # The frequency with which audit is run
+constraintViolationsLimit: 20 # The maximum # of audit violations reported on a constraint
+auditFromCache: false # Take the roster of resources to audit from the OPA cache
 createNamespace: true
-disableValidatingWebhook: false
-validatingWebhookTimeoutSeconds: 3
-enableDeleteOperations: false
-auditChunkSize: 0
-logLevel: INFO
-emitAdmissionEvents: false
-emitAuditEvents: false
+disableValidatingWebhook: false # Disable the validating webhook
+validatingWebhookTimeoutSeconds: 3 # The timeout for the validating webhook in seconds
+enableDeleteOperations: false # Enable validating webhook for delete operations
+auditChunkSize: 0 # Chunk size for listing cluster resources for audit (alpha feature)
+logLevel: INFO # Minimum log level
+emitAdmissionEvents: false # Emit K8s events in gatekeeper namespace for admission violations (alpha feature)
+emitAuditEvents: false # Emit K8s events in gatekeeper namespace for audit violations (alpha feature)
 image:
-  repository: openpolicyagent/gatekeeper
-  release: v3.4.0-beta.0
-  pullPolicy: IfNotPresent
-  pullSecrets: []
-podAnnotations:
+  repository: openpolicyagent/gatekeeper # Image repository
+  release: v3.4.0-beta.0 # The image release tag to use
+  pullPolicy: IfNotPresent # The image pull policy
+  pullSecrets: [] # Specify an array of imagePullSecrets
+podAnnotations: # The annotations to add to the Gatekeeper pods
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
-secretAnnotations: {}
+secretAnnotations: {} # The annotations to add to the Gatekeeper secrets
 controllerManager:
   priorityClassName: system-cluster-critical
   affinity:
@@ -42,6 +42,7 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
 audit:
+  hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity: {}
   tolerations: []
@@ -54,4 +55,7 @@ audit:
       cpu: 100m
       memory: 256Mi
 customResourceDefinitions:
+  # Whether the release should install CRDs.
+  # Regardless of this value, Helm v3+ will install the CRDs if those are not present already.
+  # Use --skip-crds with helm install if you want to skip CRD creation
   create: true
