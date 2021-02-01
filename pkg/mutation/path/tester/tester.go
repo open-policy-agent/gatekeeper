@@ -107,3 +107,16 @@ func (pt *Tester) MissingOkay(depth int) bool {
 	}
 	return c == MustNotExist
 }
+
+// DeepCopy returns a deep copy of the tester
+func (pt *Tester) DeepCopy() *Tester {
+	if pt == nil {
+		return nil
+	}
+	t := &Tester{}
+	t.tests = make(map[int]Condition, len(pt.tests))
+	for k, v := range pt.tests {
+		t.tests[k] = v
+	}
+	return t
+}

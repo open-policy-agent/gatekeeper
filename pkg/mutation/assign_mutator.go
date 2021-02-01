@@ -137,7 +137,7 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	copy(res.bindings, m.bindings)
 	m.mux.RLock()
 	defer m.mux.RUnlock()
-	res.tester = m.tester
+	res.tester = m.tester.DeepCopy()
 	return res
 }
 
