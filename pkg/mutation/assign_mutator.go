@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -25,6 +26,7 @@ type AssignMutator struct {
 	path     *parser.Path
 	bindings []schema.Binding
 	tester   *patht.Tester
+	mux      sync.RWMutex
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -53,14 +55,21 @@ func (m *AssignMutator) gatherPathTests() ([]patht.Test, error) {
 }
 
 func (m *AssignMutator) getTester() (*patht.Tester, error) {
-	if m.tester != nil {
+	tester := func() *patht.Tester {
+		m.mux.RLock()
+		defer m.mux.RUnlock()
+		return m.tester
+	}()
+	if tester != nil {
 		return m.tester, nil
 	}
+	m.mux.Lock()
+	defer m.mux.Unlock()
 	pathTests, err := m.gatherPathTests()
 	if err != nil {
 		return nil, err
 	}
-	tester, err := patht.New(pathTests)
+	tester, err = patht.New(pathTests)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +135,9 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
+	m.mux.RLock()
+	defer m.mux.RUnlock()
+	res.tester = m.tester
 	return res
 }
 
