@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -25,6 +26,7 @@ type AssignMutator struct {
 	path     *parser.Path
 	bindings []schema.Binding
 	tester   *patht.Tester
+	mux      sync.RWMutex
 }
 
 // AssignMutator implements mutatorWithSchema
