@@ -63,7 +63,7 @@ func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
 	if err != nil {
 		return err
 	}
-	return mutate(m, t, obj)
+	return mutate(m, t, nil, obj)
 }
 func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id
