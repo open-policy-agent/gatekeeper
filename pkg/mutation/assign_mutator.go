@@ -47,7 +47,7 @@ func (m *AssignMutator) gatherPathTests() ([]patht.Test, error) {
 	for _, pt := range pts {
 		p, err := parser.Parse(pt.SubPath)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s`", pt.SubPath))
 		}
 		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
 	}

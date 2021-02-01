@@ -60,7 +60,7 @@ func isPrefix(short, long *parser.Path) bool {
 func ValidatePathTests(location *parser.Path, pathTests []Test) error {
 	for _, pathTest := range pathTests {
 		if !isPrefix(pathTest.SubPath, location) {
-			return errors.New("All subpaths must be a prefix of the `location` value of the mutation")
+			return errors.New("all subpaths must be a prefix of the `location` value of the mutation")
 		}
 	}
 	if _, err := New(pathTests); err != nil {
