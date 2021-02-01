@@ -573,6 +573,11 @@ func TestGetDenyMessages(t *testing.T) {
 		Constraint:        newConstraint("Foo", "ph", "deny", t),
 		EnforcementAction: "deny",
 	}
+	resWarn := &rtypes.Result{
+		Msg:               "test",
+		Constraint:        newConstraint("Foo", "ph", "warn", t),
+		EnforcementAction: "warn",
+	}
 	resRandom := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "random", t),
@@ -599,6 +604,13 @@ func TestGetDenyMessages(t *testing.T) {
 			ExpectedMsgCount: 1,
 		},
 		{
+			Name: "Only One Warn",
+			Result: []*rtypes.Result{
+				resWarn,
+			},
+			ExpectedMsgCount: 1,
+		},
+		{
 			Name: "One Dry Run and One Deny",
 			Result: []*rtypes.Result{
 				resDryRun,
@@ -607,10 +619,27 @@ func TestGetDenyMessages(t *testing.T) {
 			ExpectedMsgCount: 1,
 		},
 		{
+			Name: "One Dry Run, One Deny, One Warn",
+			Result: []*rtypes.Result{
+				resDryRun,
+				resDeny,
+				resWarn,
+			},
+			ExpectedMsgCount: 2,
+		},
+		{
 			Name: "Two Deny",
 			Result: []*rtypes.Result{
 				resDeny,
 				resDeny,
+			},
+			ExpectedMsgCount: 2,
+		},
+		{
+			Name: "Two Warn",
+			Result: []*rtypes.Result{
+				resWarn,
+				resWarn,
 			},
 			ExpectedMsgCount: 2,
 		},
@@ -654,7 +683,7 @@ func TestGetDenyMessages(t *testing.T) {
 					},
 				},
 			}
-			msgs := handler.getDenyMessages(tt.Result, review)
+			msgs, _ := handler.getDenyMessages(tt.Result, review)
 			if len(msgs) != tt.ExpectedMsgCount {
 				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
 			}

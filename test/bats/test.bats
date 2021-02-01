@@ -99,7 +99,7 @@ teardown_file() {
   kubectl patch ns gatekeeper-system --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
 }
 
-@test "required labels dryrun test" {
+@test "required labels warn and dryrun test" {
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
@@ -108,6 +108,16 @@ teardown_file() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
   assert_match 'denied the request' "${output}"
   assert_failure
+
+  kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-warn.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
+
+  # deploying a violation with warn enforcement action will be accepted
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
+  assert_match 'Warning' "${output}"
+  assert_success
+
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
 
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-dryrun.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"

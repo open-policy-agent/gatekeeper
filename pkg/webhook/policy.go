@@ -163,7 +163,6 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	if isExcludedNamespace {
-
 		requestResponse = allowResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
@@ -181,14 +180,24 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	msgs := h.getDenyMessages(res, req)
+	msgs, enforcementAction := h.getDenyMessages(res, req)
 	if len(msgs) > 0 {
-		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+		var vResp admission.Response
 		if vResp.Result == nil {
 			vResp.Result = &metav1.Status{}
 		}
-		vResp.Result.Code = http.StatusForbidden
-		requestResponse = denyResponse
+
+		if enforcementAction == string(util.Warn) {
+			vResp = admission.ValidationResponse(true, strings.Join(msgs, "\n"))
+			vResp.Warnings = msgs
+			vResp.Result.Code = 299
+			requestResponse = allowResponse
+		} else {
+			vResp = admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+			vResp.Result.Code = http.StatusForbidden
+			requestResponse = denyResponse
+		}
+
 		return vResp
 	}
 
@@ -196,9 +205,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return admission.ValidationResponse(true, "")
 }
 
-func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
+func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) ([]string, string) {
 	var msgs []string
-	var resourceName string
+	var resourceName, enforcementAction string
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
@@ -211,7 +220,8 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 	}
 	for _, r := range res {
-		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
+		enforcementAction = r.EnforcementAction
+		if err := util.ValidateEnforcementAction(util.EnforcementAction(enforcementAction)); err == nil {
 			if *logDenies {
 				log.WithValues(
 					logging.Process, "admission",
@@ -220,7 +230,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
 					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, r.EnforcementAction,
+					logging.ConstraintAction, enforcementAction,
 					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
@@ -237,7 +247,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
 					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
 					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     r.EnforcementAction,
+					logging.ConstraintAction:     enforcementAction,
 					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
 					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
 					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
@@ -247,21 +257,37 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 				}
 				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
 				reason := "FailedAdmission"
-				if r.EnforcementAction == "dryrun" {
+				if enforcementAction == string(util.Dryrun) || enforcementAction == string(util.Warn) {
 					eventMsg = "Dryrun violation"
 					reason = "DryrunViolation"
 				}
-				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, req.AdmissionRequest.Namespace, r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace())
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+				ref := getViolationRef(
+					h.gkNamespace,
+					req.AdmissionRequest.Kind.Kind,
+					resourceName,
+					req.AdmissionRequest.Namespace,
+					r.Constraint.GetKind(),
+					r.Constraint.GetName(),
+					r.Constraint.GetNamespace())
+				h.eventRecorder.AnnotatedEventf(
+					ref,
+					annotations,
+					corev1.EventTypeWarning,
+					reason,
+					"%s, Resource Namespace: %s, Constraint: %s, Message: %s",
+					eventMsg,
+					req.AdmissionRequest.Namespace,
+					r.Constraint.GetName(),
+					r.Msg)
 			}
-
 		}
-		// only deny enforcementAction should prompt deny admission response
-		if r.EnforcementAction == "deny" {
+
+		// only deny or warn enforcement actions should prompt admission response
+		if enforcementAction == string(util.Deny) || enforcementAction == string(util.Warn) {
 			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 		}
 	}
-	return msgs
+	return msgs, enforcementAction
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
@@ -327,7 +353,7 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 
 func (h *validationHandler) validateConfigResource(ctx context.Context, req admission.Request) error {
 	if req.Name != keys.Config.Name {
-		return fmt.Errorf("Config resource must have name 'config'")
+		return fmt.Errorf("config resource must have name 'config'")
 	}
 	return nil
 }
