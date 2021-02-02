@@ -207,7 +207,8 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) ([]string, string) {
 	var msgs []string
-	var resourceName, enforcementAction string
+	var resourceName string
+	enforcementAction := "deny"
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
@@ -220,8 +221,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 	}
 	for _, r := range res {
-		enforcementAction = r.EnforcementAction
-		if err := util.ValidateEnforcementAction(util.EnforcementAction(enforcementAction)); err == nil {
+		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err == nil {
 			if *logDenies {
 				log.WithValues(
 					logging.Process, "admission",
@@ -230,7 +230,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
 					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, enforcementAction,
+					logging.ConstraintAction, r.EnforcementAction,
 					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
@@ -247,7 +247,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
 					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
 					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     enforcementAction,
+					logging.ConstraintAction:     r.EnforcementAction,
 					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
 					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
 					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
@@ -257,7 +257,7 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 				}
 				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
 				reason := "FailedAdmission"
-				if enforcementAction == string(util.Dryrun) || enforcementAction == string(util.Warn) {
+				if r.EnforcementAction == string(util.Dryrun) || r.EnforcementAction == string(util.Warn) {
 					eventMsg = "Dryrun violation"
 					reason = "DryrunViolation"
 				}
@@ -283,7 +283,8 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 
 		// only deny or warn enforcement actions should prompt admission response
-		if enforcementAction == string(util.Deny) || enforcementAction == string(util.Warn) {
+		if r.EnforcementAction == string(util.Deny) || r.EnforcementAction == string(util.Warn) {
+			enforcementAction = r.EnforcementAction
 			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 		}
 	}
