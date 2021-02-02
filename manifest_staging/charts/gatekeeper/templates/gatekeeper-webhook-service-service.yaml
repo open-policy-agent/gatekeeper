@@ -8,7 +8,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-webhook-service
-  namespace: gatekeeper-system
+  namespace: '{{ .Release.Namespace }}'
 spec:
   ports:
   - port: 443

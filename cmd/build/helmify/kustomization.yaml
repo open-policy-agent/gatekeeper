@@ -1,3 +1,4 @@
+namespace: "{{ .Release.Namespace }}"
 commonLabels:
   app: '{{ template "gatekeeper.name" . }}'
   chart: '{{ template "gatekeeper.name" . }}'

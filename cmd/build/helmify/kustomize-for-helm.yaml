@@ -62,7 +62,7 @@ spec:
             - --logtostderr
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
             - --log-level={{ .Values.logLevel }}
-            - --exempt-namespace=gatekeeper-system
+            - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"

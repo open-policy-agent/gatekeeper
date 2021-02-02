@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
-  namespace: gatekeeper-system
+  namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -54,7 +54,7 @@ spec:
         - --logtostderr
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
         - --log-level={{ .Values.logLevel }}
-        - --exempt-namespace=gatekeeper-system
+        - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         command:
         - /manager
