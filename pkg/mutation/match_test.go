@@ -1,6 +1,7 @@
 package mutation_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -127,7 +128,7 @@ func TestMatch(t *testing.T) {
 			match: mutationsv1.Match{
 				Namespaces: []string{"nonmatching", "namespace"},
 			},
-			namespace:   &corev1.Namespace{},
+			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
 			shouldMatch: true,
 		},
 		{
@@ -177,7 +178,7 @@ func TestMatch(t *testing.T) {
 				},
 				Scope: apiextensionsv1beta1.NamespaceScoped,
 			},
-			namespace:   &corev1.Namespace{},
+			namespace:   nil,
 			shouldMatch: false,
 		},
 		{
@@ -321,7 +322,7 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			tname: "namespace selector is applied to the namespace, and does not matches",
+			tname: "namespace selector is applied to the namespace, and does not match",
 			toMatch: makeNamespace("namespace", func(o *unstructured.Unstructured) {
 				meta, _ := meta.Accessor(o)
 				meta.SetLabels(map[string]string{
@@ -341,7 +342,21 @@ func TestMatch(t *testing.T) {
 	}
 	for _, tc := range table {
 		t.Run(tc.tname, func(t *testing.T) {
-			matches, err := mutation.Matches(tc.match, tc.toMatch, tc.namespace)
+			ns := tc.namespace
+			nsgk := schema.GroupKind{Group: "", Kind: "Namespace"}
+			if tc.toMatch.GetObjectKind().GroupVersionKind().GroupKind() == nsgk {
+				b, err := json.Marshal(tc.toMatch.Object)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ns = &corev1.Namespace{}
+				if err := json.Unmarshal(b, ns); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// namespace is not populated in the object metadata for mutation requests
+			tc.toMatch.SetNamespace("")
+			matches, err := mutation.Matches(tc.match, tc.toMatch, ns)
 			if err != nil {
 				t.Error("Match failed for ", tc.tname)
 			}
@@ -379,7 +394,7 @@ func makeNamespace(name string, options ...func(*unstructured.Unstructured)) *un
 	namespace := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Namespace",
-			APIVersion: "",
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
