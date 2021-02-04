@@ -17,6 +17,10 @@ Check out our [installation instructions](https://open-policy-agent.github.io/ga
 
 Please see our [docs](https://open-policy-agent.github.io/gatekeeper/website/docs/howto) for more in-depth information.
 
+## Policy Library
+
+See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
+
 ## Want to help?
 
 Join us to help define the direction and implementation of this project!
