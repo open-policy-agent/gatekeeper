@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -11,6 +12,12 @@ import (
 
 func mutate(mutator types.Mutator, tester *path.Tester, obj *unstructured.Unstructured) error {
 	s := &mutatorState{mutator: mutator, tester: tester}
+	if len(mutator.Path().Nodes) == 0 {
+		return fmt.Errorf("mutator %v has an empty target location", mutator.ID())
+	}
+	if obj == nil {
+		return errors.New("attempting to mutate a nil object")
+	}
 	_, _, err := s.mutateInternal(obj.Object, 0)
 	return err
 }
@@ -146,6 +153,9 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 	}
 
 	key := listPathEntry.KeyField
+	if listPathEntry.KeyValue == nil {
+		return false, nil, errors.New("encountered nil key value when setting a new list element")
+	}
 	keyValue := *listPathEntry.KeyValue
 
 	for i, listElement := range currentAsList {
@@ -187,6 +197,9 @@ func (s *mutatorState) createMissingElement(depth int) (interface{}, error) {
 		nextAsObject, ok := next.(map[string]interface{})
 		if !ok { // Path entry type does not match current object
 			return nil, fmt.Errorf("two consecutive list path entries not allowed: %+v %+v", castPathEntry, nextPathEntry)
+		}
+		if castPathEntry.KeyValue == nil {
+			return nil, fmt.Errorf("list entry has no key value")
 		}
 		nextAsObject[castPathEntry.KeyField] = *castPathEntry.KeyValue
 	}

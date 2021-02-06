@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -26,7 +25,6 @@ type AssignMutator struct {
 	path     *parser.Path
 	bindings []schema.Binding
 	tester   *patht.Tester
-	mux      sync.RWMutex
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -41,48 +39,8 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *AssignMutator) gatherPathTests() ([]patht.Test, error) {
-	pts := m.assign.Spec.Parameters.PathTests
-	var pathTests []patht.Test
-	for _, pt := range pts {
-		p, err := parser.Parse(pt.SubPath)
-		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s`", pt.SubPath))
-		}
-		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
-	}
-	return pathTests, nil
-}
-
-func (m *AssignMutator) getTester() (*patht.Tester, error) {
-	tester := func() *patht.Tester {
-		m.mux.RLock()
-		defer m.mux.RUnlock()
-		return m.tester
-	}()
-	if tester != nil {
-		return m.tester, nil
-	}
-	m.mux.Lock()
-	defer m.mux.Unlock()
-	pathTests, err := m.gatherPathTests()
-	if err != nil {
-		return nil, err
-	}
-	tester, err = patht.New(pathTests)
-	if err != nil {
-		return nil, err
-	}
-	m.tester = tester
-	return tester, nil
-}
-
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
-	tester, err := m.getTester()
-	if err != nil {
-		return err
-	}
-	return mutate(m, tester, obj)
+	return mutate(m, m.tester, obj)
 }
 func (m *AssignMutator) ID() types.ID {
 	return m.id
@@ -135,8 +93,6 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
-	m.mux.RLock()
-	defer m.mux.RUnlock()
 	res.tester = m.tester.DeepCopy()
 	return res
 }
@@ -154,12 +110,39 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 		return nil, errors.Wrap(err, "Failed to parse the location specified")
 	}
 
+	pathTests, err := gatherPathTests(assign)
+	if err != nil {
+		return nil, err
+	}
+	err = patht.ValidatePathTests(path, pathTests)
+	if err != nil {
+		return nil, err
+	}
+	tester, err := patht.New(pathTests)
+	if err != nil {
+		return nil, err
+	}
+
 	return &AssignMutator{
 		id:       id,
 		assign:   assign.DeepCopy(),
 		bindings: applyToToBindings(assign.Spec.ApplyTo),
 		path:     path,
+		tester:   tester,
 	}, nil
+}
+
+func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
+	pts := assign.Spec.Parameters.PathTests
+	var pathTests []patht.Test
+	for _, pt := range pts {
+		p, err := parser.Parse(pt.SubPath)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s`", pt.SubPath))
+		}
+		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
+	}
+	return pathTests, nil
 }
 
 func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
@@ -216,19 +199,7 @@ func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	if err != nil {
 		return err
 	}
-	m, err := MutatorForAssign(assign)
-	if err != nil {
-		return err
-	}
-	pts, err := m.gatherPathTests()
-	if err != nil {
-		return err
-	}
-	err = patht.ValidatePathTests(m.Path(), pts)
-	if err != nil {
-		return err
-	}
-	_, err = m.getTester()
+	_, err = MutatorForAssign(assign)
 	if err != nil {
 		return err
 	}
