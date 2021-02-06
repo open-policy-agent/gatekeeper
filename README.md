@@ -11,17 +11,17 @@ Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.o
 
 ## Getting started
 
-Check out our [installation instructions](https://open-policy-agent.github.io/gatekeeper/website/docs/install) to deploy Gatekeeper components to your Kubernetes cluster.
+Check out the [installation instructions](https://open-policy-agent.github.io/gatekeeper/website/docs/install) to deploy Gatekeeper components to your Kubernetes cluster.
 
 ## Documentation
 
-Please see our [docs](https://open-policy-agent.github.io/gatekeeper/website/docs/howto) for more in-depth information.
+Please see the [docs](https://open-policy-agent.github.io/gatekeeper/website/docs/howto) for more in-depth information.
 
 ## Policy Library
 
 See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
 
-## Want to help?
+## Community
 
 Join us to help define the direction and implementation of this project!
 
