@@ -17,6 +17,7 @@ package parser
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -277,6 +278,59 @@ func TestParser(t *testing.T) {
 		})
 	}
 
+}
+
+func TestDeepCopy(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input Node
+	}{
+		{
+			name:  "test object deepcopy",
+			input: Object{Reference: "foo\nbar"},
+		},
+		{
+			name:  "test list deepcopy",
+			input: List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+		},
+		{
+			name:  "test list deepcopy with nil nexted pointer",
+			input: List{KeyField: "much full", KeyValue: nil},
+		},
+		{
+			name: "test path deepcopy",
+			input: Path{
+				Nodes: []Node{
+					List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+					List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
+					Object{Reference: "foo\nbar"},
+					Path{
+						Nodes: []Node{
+							List{KeyField: "innername", KeyValue: strPtr("*"), Glob: false},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out Node
+			switch n := tc.input.(type) {
+			case Object:
+				out = n.DeepCopy()
+			case List:
+				out = n.DeepCopy()
+			case Path:
+				out = n.DeepCopy()
+			default:
+				t.Error("unrecognized input node type")
+			}
+			if !reflect.DeepEqual(tc.input, out) {
+				t.Errorf("input and output differ, in: %v :: out %v", tc.input, out)
+			}
+		})
+	}
 }
 
 func strPtr(s string) *string {
