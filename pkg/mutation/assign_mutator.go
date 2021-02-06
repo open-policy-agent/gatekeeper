@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -26,7 +25,6 @@ type AssignMutator struct {
 	path     *parser.Path
 	bindings []schema.Binding
 	tester   *patht.Tester
-	mux      sync.RWMutex
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -39,42 +37,6 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 		return false
 	}
 	return matches
-}
-
-func (m *AssignMutator) gatherPathTests() ([]patht.Test, error) {
-	pts := m.assign.Spec.Parameters.PathTests
-	var pathTests []patht.Test
-	for _, pt := range pts {
-		p, err := parser.Parse(pt.SubPath)
-		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s`", pt.SubPath))
-		}
-		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
-	}
-	return pathTests, nil
-}
-
-func (m *AssignMutator) getTester() (*patht.Tester, error) {
-	tester := func() *patht.Tester {
-		m.mux.RLock()
-		defer m.mux.RUnlock()
-		return m.tester
-	}()
-	if tester != nil {
-		return m.tester, nil
-	}
-	m.mux.Lock()
-	defer m.mux.Unlock()
-	pathTests, err := m.gatherPathTests()
-	if err != nil {
-		return nil, err
-	}
-	tester, err = patht.New(pathTests)
-	if err != nil {
-		return nil, err
-	}
-	m.tester = tester
-	return tester, nil
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
@@ -131,8 +93,6 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
-	m.mux.RLock()
-	defer m.mux.RUnlock()
 	res.tester = m.tester.DeepCopy()
 	return res
 }
