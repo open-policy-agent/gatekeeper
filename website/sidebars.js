@@ -12,6 +12,7 @@ module.exports = {
       'sync',
       'exempt-namespaces',
       'library',
+      'customize-startup',
       'customize-admission',
       'debug',
       'emergency',
