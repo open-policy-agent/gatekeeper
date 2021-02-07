@@ -171,6 +171,12 @@ deploy-mutation: patch-image
 	kustomize build config/overlays/mutation_webhook | kubectl apply -f -
 	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
 
+undeploy-mutation:
+	kustomize build config/overlays/mutation_webhook | kubectl delete -f -
+	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl delete -f -
+
+
+
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
 	kustomize build config/overlays/dev | kubectl apply -f -
