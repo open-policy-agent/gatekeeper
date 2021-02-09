@@ -220,6 +220,8 @@ spec:
                       not exist or do not mutate"
                     properties:
                       condition:
+                        description: Condition describes whether the path either MustExist
+                          or MustNotExist in the original object
                         enum:
                         - MustExist
                         - MustNotExist
