@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -122,7 +121,7 @@ func TestReconcile(t *testing.T) {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -147,11 +146,12 @@ func TestReconcile(t *testing.T) {
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -236,7 +236,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	// setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// create the Config object and expect the Reconcile to be created when controller starts
 	instance := &configv1alpha1.Config{
@@ -294,11 +294,12 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	defer func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}()
@@ -332,7 +333,6 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	events <- event.GenericEvent{
-		Meta:   podObj,
 		Object: podObj,
 	}
 
@@ -389,7 +389,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
@@ -402,11 +402,12 @@ func TestConfig_CacheContents(t *testing.T) {
 	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -516,7 +517,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Setup the Manager and Controller.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	opa := &fakeOpa{}
 	cs := watch.NewSwitch()
@@ -533,7 +534,7 @@ func TestConfig_Retries(t *testing.T) {
 	failPlease := make(chan string, 1)
 	rec.reader = hookReader{
 		Reader: mgr.GetCache(),
-		ListFunc: func(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			// Return an error the first go-around.
 			var failKind string
 			select {
@@ -547,11 +548,12 @@ func TestConfig_Retries(t *testing.T) {
 		},
 	}
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}

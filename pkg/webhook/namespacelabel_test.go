@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
-	types "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,21 +23,21 @@ func TestAdmission(t *testing.T) {
 		name          string
 		kind          metav1.GroupVersionKind
 		obj           runtime.Object
-		op            types.Operation
+		op            admissionv1.Operation
 		expectAllowed bool
 	}{
 		{
 			name:          "Wrong group",
 			kind:          gvk("random", "v1", "Namespace"),
 			obj:           &unstructured.Unstructured{},
-			op:            types.Create,
+			op:            admissionv1.Create,
 			expectAllowed: true,
 		},
 		{
 			name:          "Wrong kind",
 			kind:          gvk("", "v1", "Arbitrary"),
 			obj:           &unstructured.Unstructured{},
-			op:            types.Create,
+			op:            admissionv1.Create,
 			expectAllowed: true,
 		},
 		{
@@ -50,7 +49,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Create,
+			op:            admissionv1.Create,
 			expectAllowed: false,
 		},
 		{
@@ -62,7 +61,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Update,
+			op:            admissionv1.Update,
 			expectAllowed: false,
 		},
 		{
@@ -74,7 +73,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Delete,
+			op:            admissionv1.Delete,
 			expectAllowed: true,
 		},
 		{
@@ -85,7 +84,7 @@ func TestAdmission(t *testing.T) {
 					Name: "random-namespace",
 				},
 			},
-			op:            types.Create,
+			op:            admissionv1.Create,
 			expectAllowed: true,
 		},
 		{
@@ -97,7 +96,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{"some-label": "true"},
 				},
 			},
-			op:            types.Update,
+			op:            admissionv1.Update,
 			expectAllowed: true,
 		},
 		{
@@ -109,7 +108,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Create,
+			op:            admissionv1.Create,
 			expectAllowed: true,
 		},
 		{
@@ -121,7 +120,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Update,
+			op:            admissionv1.Update,
 			expectAllowed: true,
 		},
 		{
@@ -133,7 +132,7 @@ func TestAdmission(t *testing.T) {
 					Labels: map[string]string{ignoreLabel: "true"},
 				},
 			},
-			op:            types.Delete,
+			op:            admissionv1.Delete,
 			expectAllowed: true,
 		},
 	}
@@ -147,7 +146,7 @@ func TestAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := admission.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind:      tt.kind,
 					Object:    runtime.RawExtension{Raw: bytes},
 					Operation: tt.op,
@@ -164,10 +163,10 @@ func TestAdmission(t *testing.T) {
 
 func TestBadSerialization(t *testing.T) {
 	req := admission.Request{
-		AdmissionRequest: admissionv1beta1.AdmissionRequest{
+		AdmissionRequest: admissionv1.AdmissionRequest{
 			Kind:      gvk("", "v1", "Namespace"),
 			Object:    runtime.RawExtension{Raw: []byte("asdfadsfa  awdf+-=-=pasdf")},
-			Operation: types.Create,
+			Operation: admissionv1.Create,
 		},
 	}
 	handler := &namespaceLabelHandler{}

@@ -72,7 +72,7 @@
 
 - Name: `violations`
 
-    Description: `Total number of violations per constraint`
+    Description: `Total number of audited violations`
 
     Tags:
 

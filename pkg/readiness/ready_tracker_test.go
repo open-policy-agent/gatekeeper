@@ -147,9 +147,10 @@ func Test_Tracker(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
-		close(stopMgr)
+		cancelFunc()
 		mgrStopped.Wait()
 	}()
 
@@ -164,7 +165,6 @@ func Test_Tracker(t *testing.T) {
 	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify cache (tracks testdata fixtures)
-	ctx := context.Background()
 	for _, ct := range testTemplates {
 		_, err := opaClient.GetTemplate(ctx, ct)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for template")
@@ -226,9 +226,10 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
-		close(stopMgr)
+		cancelFunc()
 		mgrStopped.Wait()
 	}()
 
@@ -260,14 +261,14 @@ func Test_CollectDeleted(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	defer func() {
-		close(stopMgr)
+		cancelFunc()
 		mgrStopped.Wait()
 	}()
 
 	client := mgr.GetClient()
-	ctx := context.Background()
 
 	g.Expect(tracker.Satisfied(ctx)).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
 

@@ -90,15 +90,7 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-<<<<<<< HEAD
-=======
-      nodeSelector: 
-{{ toYaml .Values.audit.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.audit.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.audit.tolerations | indent 8 }}
->>>>>>> master
+      hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:

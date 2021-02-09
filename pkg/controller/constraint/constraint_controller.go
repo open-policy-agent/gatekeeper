@@ -151,7 +151,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 			Source:         events,
 			DestBufferSize: 1024,
 		},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: util.EventPacker{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
 	)
 	if err != nil {
 		return err
@@ -160,7 +160,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &constraintstatusv1beta1.ConstraintPodStatus{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &constraintstatus.Mapper{}})
+		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(util.EventPackerMapFunc())),
+	)
 	if err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraint{}
 
-// ReconcileSync reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraint reconciles an arbitrary constraint object described by Kind
 type ReconcileConstraint struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -189,7 +190,7 @@ type ReconcileConstraint struct {
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
 // and what is in the constraint.Spec
-func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -217,7 +218,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 	deleted := false
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
-	if err := r.reader.Get(context.TODO(), unpackedRequest.NamespacedName, instance); err != nil {
+	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			return reconcile.Result{}, err
 		}
@@ -260,14 +261,14 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
-		if c, err := r.opa.GetConstraint(context.TODO(), instance); err != nil || !constraints.SemanticEqual(instance, c) {
+		if c, err := r.opa.GetConstraint(ctx, instance); err != nil || !constraints.SemanticEqual(instance, c) {
 			if err := r.cacheConstraint(instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
 				})
 				status.Status.Errors = append(status.Status.Errors, constraintstatusv1beta1.Error{Message: err.Error()})
-				if err2 := r.writer.Update(context.TODO(), status); err2 != nil {
+				if err2 := r.writer.Update(ctx, status); err2 != nil {
 					log.Error(err2, "could not report constraint error status")
 				}
 				reportMetrics = true
@@ -310,7 +311,7 @@ func (r *ReconcileConstraint) Reconcile(request reconcile.Request) (reconcile.Re
 		statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
 		statusObj.SetName(sName)
 		statusObj.SetNamespace(util.GetNamespace())
-		if err := r.writer.Delete(context.TODO(), statusObj); err != nil {
+		if err := r.writer.Delete(ctx, statusObj); err != nil {
 			if !errors.IsNotFound(err) {
 				return reconcile.Result{}, err
 			}

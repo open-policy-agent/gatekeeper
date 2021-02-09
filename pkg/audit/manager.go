@@ -429,12 +429,10 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 }
 
 // Start implements controller.Controller
-func (am *Manager) Start(stop <-chan struct{}) error {
+func (am *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Audit Manager")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	go am.auditManagerLoop(ctx)
-	<-stop
+	<-ctx.Done()
 	log.Info("Stopping audit manager workers")
 	return nil
 }

@@ -106,3 +106,8 @@ func (f *FakeInformer) GetController() cache.Controller {
 func (f *FakeInformer) LastSyncResourceVersion() string {
 	return ""
 }
+
+// SetWatchErrorHandler does nothing.  TODO(community): Implement this.
+func (f *FakeInformer) SetWatchErrorHandler(cache.WatchErrorHandler) error {
+	return nil
+}

@@ -103,11 +103,11 @@ type Reconciler struct {
 
 // Reconcile reads that state of the cluster for a AssignMetadata object and makes changes based on the state read
 // and what is in the AssignMetadata.Spec
-func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
 	assignMetadata := &mutationsv1alpha1.AssignMetadata{}
-	err := r.Get(context.TODO(), request.NamespacedName, assignMetadata)
+	err := r.Get(ctx, request.NamespacedName, assignMetadata)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err

@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -166,13 +165,7 @@ func (wm *Manager) replayEvents(ctx context.Context, r *Registrar, gvk schema.Gr
 
 	for _, o := range lst.Items {
 		o := o
-		acc, err := meta.Accessor(&o)
-		if err != nil {
-			// Invalid object, drop it
-			continue
-		}
 		e := event.GenericEvent{
-			Meta:   acc,
 			Object: &o,
 		}
 		select {

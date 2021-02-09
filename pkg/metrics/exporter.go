@@ -39,15 +39,13 @@ func new(mgr manager.Manager) (*runner, error) {
 }
 
 // Start implements the Runnable interface
-func (r *runner) Start(stop <-chan struct{}) error {
+func (r *runner) Start(ctx context.Context) error {
 	log.Info("Starting metrics runner")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	defer log.Info("Stopping metrics runner workers")
 	errCh := make(chan error)
 	go func() { errCh <- r.newMetricsExporter() }()
 	select {
-	case <-stop:
+	case <-ctx.Done():
 		return r.shutdownMetricsExporter(ctx)
 	case err := <-errCh:
 		if err != nil {

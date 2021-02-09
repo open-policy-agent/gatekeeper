@@ -24,7 +24,7 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
+      annotations:
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
@@ -77,8 +77,8 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
-{{- toYaml .Values.audit.resources | nindent 10 }}
+        resources:
+{{ toYaml .Values.audit.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -88,18 +88,7 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-      nodeSelector: 
-<<<<<<< HEAD
-{{- toYaml .Values.nodeSelector | nindent 8 }}
-      affinity:
-{{- toYaml .Values.affinity | nindent 8 }}
-      tolerations:
-{{- toYaml .Values.tolerations | nindent 8 }}
-      imagePullSecrets:
-{{- toYaml .Values.image.pullSecrets | nindent 8 }}
-{{- with .Values.audit.priorityClassName }}
-      priorityClassName: {{ . | quote }}
-=======
+      nodeSelector:
 {{ toYaml .Values.audit.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.audit.affinity | indent 8 }}
@@ -109,7 +98,6 @@ spec:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
 {{- if .Values.audit.priorityClassName }}
       priorityClassName: {{ .Values.audit.priorityClassName }}
->>>>>>> master
 {{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60

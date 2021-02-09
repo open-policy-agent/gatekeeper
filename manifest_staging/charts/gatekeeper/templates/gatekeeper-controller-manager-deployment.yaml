@@ -94,15 +94,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-<<<<<<< HEAD
-=======
-      nodeSelector: 
-{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.controllerManager.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
->>>>>>> master
+      hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:

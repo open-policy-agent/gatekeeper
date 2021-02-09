@@ -102,8 +102,7 @@ violation[{"msg": "denied!"}] {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
-	c := &testclient.RetryClient{Client: mgr.GetClient()}
-	ctx := context.Background()
+	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
@@ -137,11 +136,12 @@ violation[{"msg": "denied!"}] {
 	}
 	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
-			close(stopMgr)
+			cancelFunc()
 			mgrStopped.Wait()
 		})
 	}
@@ -150,7 +150,7 @@ violation[{"msg": "denied!"}] {
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	mgr.GetCache().WaitForCacheSync(waitCtx.Done())
+	mgr.GetCache().WaitForCacheSync(waitCtx)
 
 	templateCpy := template.DeepCopy()
 	t.Run("Constraint template status gets created and reported", func(t *testing.T) {
