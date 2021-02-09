@@ -20,11 +20,12 @@ import (
 // AssignMutator is a mutator object built out of a
 // Assign instance.
 type AssignMutator struct {
-	id       types.ID
-	assign   *mutationsv1alpha1.Assign
-	path     *parser.Path
-	bindings []schema.Binding
-	tester   *patht.Tester
+	id        types.ID
+	assign    *mutationsv1alpha1.Assign
+	path      *parser.Path
+	bindings  []schema.Binding
+	tester    *patht.Tester
+	valueTest *mutationsv1alpha1.AssignIf
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -40,8 +41,41 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
-	return mutate(m, m.tester, obj)
+	return mutate(m, m.tester, m.testValue, obj)
 }
+
+// valueTest returns true if it is okay for the mutation func to override the value
+func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
+	if len(m.valueTest.In) != 0 {
+		ifInMatched := false
+		if !exists {
+			// a missing value cannot satisfy the "In" test
+			return false
+		}
+		for _, obj := range m.valueTest.In {
+			if cmp.Equal(v, obj) {
+				ifInMatched = true
+				break
+			}
+		}
+		if !ifInMatched {
+			return false
+		}
+	}
+
+	if !exists {
+		// a missing value cannot violate NotIn
+		return true
+	}
+
+	for _, obj := range m.valueTest.NotIn {
+		if cmp.Equal(v, obj) {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *AssignMutator) ID() types.ID {
 	return m.id
 }
@@ -94,6 +128,7 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
 	res.tester = m.tester.DeepCopy()
+	res.valueTest = m.valueTest.DeepCopy()
 	return res
 }
 
@@ -102,12 +137,12 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
 	id, err := types.MakeID(assign)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to retrieve id for assign type")
+		return nil, errors.Wrap(err, "failed to retrieve id for assign type")
 	}
 
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to parse the location specified")
+		return nil, errors.Wrap(err, "failed to parse the location specified")
 	}
 
 	pathTests, err := gatherPathTests(assign)
@@ -122,13 +157,18 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	if err != nil {
 		return nil, err
 	}
+	valueTests, err := assign.ValueTests()
+	if err != nil {
+		return nil, err
+	}
 
 	return &AssignMutator{
-		id:       id,
-		assign:   assign.DeepCopy(),
-		bindings: applyToToBindings(assign.Spec.ApplyTo),
-		path:     path,
-		tester:   tester,
+		id:        id,
+		assign:    assign.DeepCopy(),
+		bindings:  applyToToBindings(assign.Spec.ApplyTo),
+		path:      path,
+		tester:    tester,
+		valueTest: &valueTests,
 	}, nil
 }
 
@@ -199,10 +239,10 @@ func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	if err != nil {
 		return err
 	}
-	_, err = MutatorForAssign(assign)
-	if err != nil {
+	if _, err := MutatorForAssign(assign); err != nil {
 		return err
 	}
+
 	return nil
 }
 

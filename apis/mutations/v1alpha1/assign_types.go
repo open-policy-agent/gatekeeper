@@ -16,9 +16,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -44,16 +46,17 @@ type ApplyTo struct {
 
 type Parameters struct {
 	PathTests []PathTest `json:"pathTests,omitempty"`
-	// IfIn Only mutate if the current value is in the supplied list
-	IfIn []string `json:"ifIn,omitempty"`
-	// IfNotIn Only mutate if the current value is NOT in the supplied list
-	IfNotIn []string `json:"ifNotIn,omitempty"`
+
+	// once https://github.com/kubernetes-sigs/controller-tools/pull/528
+	// is merged, we can use an actual object
+	AssignIf runtime.RawExtension `json:"assignIf,omitempty"`
+
 	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
 	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
 
-// PathTests allows the user to customize how the mutation works if parent
+// PathTest allows the user to customize how the mutation works if parent
 // paths are missing. It traverses the list in order. All sub paths are
 // tested against the provided condition, if the test fails, the mutation is
 // not applied. All `subPath` entries must be a prefix of `location`. Any
@@ -98,4 +101,43 @@ type AssignList struct {
 
 func init() {
 	SchemeBuilder.Register(&Assign{}, &AssignList{})
+}
+
+// ValueTests returns tests that the mutator is expected
+// to run against the value
+func (a *Assign) ValueTests() (AssignIf, error) {
+	raw := a.Spec.Parameters.AssignIf
+	out := AssignIf{}
+	if len(raw.Raw) == 0 {
+		return out, nil
+	}
+	if err := json.Unmarshal(raw.Raw, &out); err != nil {
+		return AssignIf{}, err
+	}
+	return out, nil
+}
+
+// +kubebuilder:object:generate=false
+
+// AssignIf describes tests against the pre-existing value.
+// The object will be mutated only if assertions pass
+type AssignIf struct {
+	// In Asserts that the value is a member of the provided list before mutating
+	In []interface{} `json:"in,omitempty"`
+
+	// NotIn Asserts that the value is not a member of the provided list before mutating
+	NotIn []interface{} `json:"notIn,omitempty"`
+}
+
+func (a *AssignIf) DeepCopy() *AssignIf {
+	if a == nil {
+		return nil
+	}
+	in := runtime.DeepCopyJSONValue(a.In)
+	notIn := runtime.DeepCopyJSONValue(a.NotIn)
+
+	return &AssignIf{
+		In:    in.([]interface{}),
+		NotIn: notIn.([]interface{}),
+	}
 }
