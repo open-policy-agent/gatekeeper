@@ -315,17 +315,7 @@ func TestDeepCopy(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var out Node
-			switch n := tc.input.(type) {
-			case Object:
-				out = n.DeepCopy()
-			case List:
-				out = n.DeepCopy()
-			case Path:
-				out = n.DeepCopy()
-			default:
-				t.Error("unrecognized input node type")
-			}
+			out := tc.input.DeepCopyNode()
 			if !reflect.DeepEqual(tc.input, out) {
 				t.Errorf("input and output differ, in: %v :: out %v", tc.input, out)
 			}

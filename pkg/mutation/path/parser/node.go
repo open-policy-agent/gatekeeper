@@ -25,6 +25,7 @@ const (
 
 type Node interface {
 	Type() NodeType
+	DeepCopyNode() Node
 }
 
 // Path represents an entire parsed path specification
@@ -38,21 +39,16 @@ func (r Path) Type() NodeType {
 	return PathNode
 }
 
+func (r Path) DeepCopyNode() Node {
+	return r.DeepCopy()
+}
+
 func (r Path) DeepCopy() Path {
 	out := Path{
 		Nodes: make([]Node, len(r.Nodes)),
 	}
 	for i := 0; i < len(r.Nodes); i++ {
-		var c Node
-		switch n := r.Nodes[i].(type) {
-		case Path:
-			c = n.DeepCopy()
-		case List:
-			c = n.DeepCopy()
-		case Object:
-			c = n.DeepCopy()
-		}
-		out.Nodes[i] = c
+		out.Nodes[i] = r.Nodes[i].DeepCopyNode()
 	}
 	return out
 }
@@ -65,6 +61,10 @@ var _ Node = Object{}
 
 func (o Object) Type() NodeType {
 	return ObjectNode
+}
+
+func (o Object) DeepCopyNode() Node {
+	return o.DeepCopy()
 }
 
 func (o Object) DeepCopy() Object {
@@ -83,6 +83,10 @@ var _ Node = List{}
 
 func (l List) Type() NodeType {
 	return ListNode
+}
+
+func (l List) DeepCopyNode() Node {
+	return l.DeepCopy()
 }
 
 func (l List) DeepCopy() List {
