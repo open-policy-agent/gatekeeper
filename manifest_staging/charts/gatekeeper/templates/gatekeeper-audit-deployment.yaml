@@ -27,6 +27,9 @@ spec:
       annotations: 
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+        {{- if .Values.podLabels }}
+        {{- toYaml .Values.podLabels | nindent 8 }}
+        {{- end }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: audit-controller
