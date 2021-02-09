@@ -380,7 +380,7 @@ func (m *TestMutator) Value() (interface{}, error) {
 
 func (m *TestMutator) Mutate(obj *unstructured.Unstructured) error {
 	t, _ := pathtester.New(nil)
-	return mutate(m, t, obj)
+	return mutate(m, t, func(_ interface{}, _ bool) bool { return true }, obj)
 }
 
 // TODO: rename after TestListsAsLastElementAlreadyExistsWithKeyConflict is deleted

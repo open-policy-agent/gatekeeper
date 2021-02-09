@@ -10,8 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func mutate(mutator types.Mutator, tester *path.Tester, obj *unstructured.Unstructured) error {
-	s := &mutatorState{mutator: mutator, tester: tester}
+func mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) error {
+	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
 	if len(mutator.Path().Nodes) == 0 {
 		return fmt.Errorf("mutator %v has an empty target location", mutator.ID())
 	}
@@ -25,6 +25,9 @@ func mutate(mutator types.Mutator, tester *path.Tester, obj *unstructured.Unstru
 type mutatorState struct {
 	mutator types.Mutator
 	tester  *path.Tester
+	// valueTest takes the input value and whether that value already existed.
+	// It returns true if the value should be mutated
+	valueTest func(interface{}, bool) bool
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
@@ -49,6 +52,9 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		}
 		// we have hit the end of our path, this is the base case
 		if len(s.mutator.Path().Nodes)-1 == depth {
+			if s.valueTest != nil && !s.valueTest(next, exists) {
+				return false, nil, nil
+			}
 			value, err := s.mutator.Value()
 			if err != nil {
 				return false, nil, err

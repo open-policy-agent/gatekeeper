@@ -9,6 +9,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -145,7 +146,7 @@ func TestAssignHasDiff(t *testing.T) {
 		{
 			"differentParameters",
 			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.IfIn = []string{"Foo", "Bar"}
+				a.Spec.Parameters.AssignIf = runtime.RawExtension{Raw: []byte(`{"in": ["Foo","Bar"]}`)}
 			},
 			true,
 		},
