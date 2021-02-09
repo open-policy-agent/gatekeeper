@@ -3,6 +3,8 @@ id: sync
 title: Replicating Data
 ---
 
+> The "Config" resource has to be named "config" for it to be reconciled by Gatekeeper. Gatekeeper will ignore the resource if you do not name it "config".
+
 Some constraints are impossible to write without access to more state than just the object under test. For example, it is impossible to know if an ingress's hostname is unique among all ingresses unless a rule has access to all other ingresses. To make such rules possible, we enable syncing of data into OPA.
 
 The [audit](audit.md) feature does not require replication by default. However, when the ``audit-from-cache`` flag is set to true, the OPA cache will be used as the source-of-truth for audit queries; thus, an object must first be cached before it can be audited for constraint violations.
