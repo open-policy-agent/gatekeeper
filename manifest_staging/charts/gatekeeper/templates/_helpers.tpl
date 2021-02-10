@@ -1,4 +1,17 @@
 {{/*
+If createNamespace is set to true, sets the namespace to "gatekeeper-system"
+If createNamespace is set to false, sets the namespace to the {{ .Release.Namespace }}
+*/}}
+{{- define "gatekeeper.namespace" -}}
+{{- if .Values.createNamespace }}
+{{- printf "gatekeeper-system" }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end -}}
+
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "gatekeeper.name" -}}

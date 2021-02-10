@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-audit
-  namespace: '{{ .Release.Namespace }}'
+  namespace: '{{ include "gatekeeper.namespace" . }}'
 spec:
   replicas: 1
   selector:

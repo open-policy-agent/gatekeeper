@@ -9,7 +9,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-manager-role
-  namespace: '{{ .Release.Namespace }}'
+  namespace: '{{ include "gatekeeper.namespace" . }}'
 rules:
 - apiGroups:
   - ""

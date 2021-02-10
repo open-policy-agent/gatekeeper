@@ -97,9 +97,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-system" && kind == "Namespace" {
-				//Do not generate the Namespace definition.
-				//Namespace is handled by {{ .Release.Namespace }} of the helm chart.
-				continue
+				obj = "{{- if .Values.createNamespace }}\n" + obj + "{{- end }}\n"
 			}
 
 			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
