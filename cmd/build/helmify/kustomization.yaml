@@ -1,3 +1,4 @@
+namespace: '{{ include "gatekeeper.namespace" . }}'
 commonLabels:
   app: '{{ template "gatekeeper.name" . }}'
   chart: '{{ template "gatekeeper.name" . }}'
