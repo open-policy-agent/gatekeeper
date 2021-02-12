@@ -24,8 +24,8 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
-{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
@@ -37,17 +37,7 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: gatekeeper.sh/operation
-                  operator: In
-                  values:
-                  - webhook
-              topologyKey: kubernetes.io/hostname
-            weight: 100
+        {{- toYaml .Values.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -90,8 +80,8 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
-{{ toYaml .Values.controllerManager.resources | indent 10 }}
+        resources:
+          {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -106,19 +96,14 @@ spec:
           name: cert
           readOnly: true
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
-      nodeSelector: 
-{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.controllerManager.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
       imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
-{{- if .Values.controllerManager.priorityClassName }}
-      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
-{{- end }}
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
       volumes:
       - name: cert
         secret:

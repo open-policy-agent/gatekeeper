@@ -32,3 +32,30 @@ patchesJson6902:
       kind: CustomResourceDefinition
       name: configs.config.gatekeeper.sh
     path: labels_patch.yaml
+  # these are defined in the chart values rather than hard-coded
+  - target:
+      kind: Deployment
+      name: gatekeeper-audit
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests
+      - op: remove
+        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
+      - op: remove
+        path: /spec/template/spec/nodeSelector/kubernetes.io~1os
+  - target:
+      kind: Deployment
+      name: gatekeeper-controller-manager
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests
+      - op: remove
+        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
+      - op: remove
+        path: /spec/template/spec/nodeSelector/kubernetes.io~1os
+      - op: remove
+        path: /spec/template/spec/affinity/podAntiAffinity

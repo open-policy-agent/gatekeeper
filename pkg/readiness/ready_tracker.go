@@ -262,6 +262,7 @@ func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, 
 		unsatisfiedmap[o] = struct{}{}
 	}
 	for _, o := range ul.Items {
+		o := o
 		k, err := objKeyFromObject(&o)
 		if err != nil {
 			return errors.Wrapf(err, "while getting key for %v in collectForObjectTracker", o)
@@ -351,6 +352,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
 	for _, ct := range templates.Items {
+		ct := ct
 		log.V(1).Info("expecting template", "name", ct.GetName())
 		t.templates.Expect(&ct)
 
