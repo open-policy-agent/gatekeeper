@@ -27,6 +27,7 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+{{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: controller-manager
