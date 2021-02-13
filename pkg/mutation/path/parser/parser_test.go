@@ -287,26 +287,26 @@ func TestDeepCopy(t *testing.T) {
 	}{
 		{
 			name:  "test object deepcopy",
-			input: Object{Reference: "foo\nbar"},
+			input: &Object{Reference: "foo\nbar"},
 		},
 		{
 			name:  "test list deepcopy",
-			input: List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+			input: &List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
 		},
 		{
 			name:  "test list deepcopy with nil nexted pointer",
-			input: List{KeyField: "much full", KeyValue: nil},
+			input: &List{KeyField: "much full", KeyValue: nil},
 		},
 		{
 			name: "test path deepcopy",
-			input: Path{
+			input: &Path{
 				Nodes: []Node{
-					List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
-					List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
-					Object{Reference: "foo\nbar"},
-					Path{
+					&List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+					&List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
+					&Object{Reference: "foo\nbar"},
+					&Path{
 						Nodes: []Node{
-							List{KeyField: "innername", KeyValue: strPtr("*"), Glob: false},
+							&List{KeyField: "innername", KeyValue: strPtr("*"), Glob: false},
 						},
 					},
 				},

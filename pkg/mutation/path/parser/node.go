@@ -40,7 +40,8 @@ func (r Path) Type() NodeType {
 }
 
 func (r Path) DeepCopyNode() Node {
-	return r.DeepCopy()
+	rout := r.DeepCopy()
+	return &rout
 }
 
 func (r Path) DeepCopy() Path {
@@ -64,7 +65,8 @@ func (o Object) Type() NodeType {
 }
 
 func (o Object) DeepCopyNode() Node {
-	return o.DeepCopy()
+	oout := o.DeepCopy()
+	return &oout
 }
 
 func (o Object) DeepCopy() Object {
@@ -86,7 +88,8 @@ func (l List) Type() NodeType {
 }
 
 func (l List) DeepCopyNode() Node {
-	return l.DeepCopy()
+	lout := l.DeepCopy()
+	return &lout
 }
 
 func (l List) DeepCopy() List {
