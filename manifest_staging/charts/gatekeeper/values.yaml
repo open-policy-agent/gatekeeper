@@ -17,6 +17,7 @@ image:
   pullSecrets: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+podLabels: {}
 secretAnnotations: {}
 controllerManager:
   hostNetwork: false
