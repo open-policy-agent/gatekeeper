@@ -100,6 +100,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if .Values.createNamespace }}\n" + obj + "{{- end }}\n"
 			}
 
+			if kind == "Deployment" {
+				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
+			}
+
 			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
 				return err
 			}

@@ -91,14 +91,12 @@ func (m *AssignMetadataMutator) HasDiff(mutator types.Mutator) bool {
 }
 
 func (m *AssignMetadataMutator) DeepCopy() types.Mutator {
+	p := m.path.DeepCopy()
 	res := &AssignMetadataMutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
-		path: &parser.Path{
-			Nodes: make([]parser.Node, len(m.path.Nodes)),
-		},
+		path:           &p,
 	}
-	copy(res.path.Nodes, m.path.Nodes)
 	return res
 }
 
