@@ -15,15 +15,19 @@ package mutation
 import (
 	"flag"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // MutationEnabled indicates if the mutation feature is enabled
 var (
-	MutationEnabled *bool
-	log             = logf.Log.WithName("mutation")
+	MutationEnabled        *bool
+	MutationLoggingEnabled *bool
+	log                    = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 )
 
 func init() {
 	MutationEnabled = flag.Bool("enable-mutation", false, "(alpha) Enable the mutation feature")
+	MutationLoggingEnabled = flag.Bool("log-mutation-events", false, "(alpha) Enable detailed logging of mutation events")
+
 }

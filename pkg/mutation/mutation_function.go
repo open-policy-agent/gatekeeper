@@ -10,16 +10,16 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) error {
+func mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
 	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
 	if len(mutator.Path().Nodes) == 0 {
-		return fmt.Errorf("mutator %v has an empty target location", mutator.ID())
+		return false, fmt.Errorf("mutator %v has an empty target location", mutator.ID())
 	}
 	if obj == nil {
-		return errors.New("attempting to mutate a nil object")
+		return false, errors.New("attempting to mutate a nil object")
 	}
-	_, _, err := s.mutateInternal(obj.Object, 0)
-	return err
+	mutated, _, err := s.mutateInternal(obj.Object, 0)
+	return mutated, err
 }
 
 type mutatorState struct {

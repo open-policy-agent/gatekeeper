@@ -3,9 +3,11 @@ package mutation
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -83,11 +85,17 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
+	allAppliedMutations := [][]types.Mutator{}
+
 	for i := 0; i < maxIterations; i++ {
+		appliedMutations := []types.Mutator{}
 		old := obj.DeepCopy()
 		for _, m := range s.orderedMutators {
 			if m.Matches(obj, ns) {
-				err := m.Mutate(obj)
+				mutated, err := m.Mutate(obj)
+				if mutated && *MutationLoggingEnabled {
+					appliedMutations = append(appliedMutations, m)
+				}
 				if err != nil {
 					return false, errors.Wrapf(err, "mutation failed for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
 				}
@@ -98,12 +106,70 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 				return false, nil
 			}
 			if cmp.Equal(original, obj) {
+				if *MutationLoggingEnabled {
+					logAppliedMutations("Oscillating mutation.", original, allAppliedMutations)
+				}
 				return false, fmt.Errorf("oscillating mutation for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+			}
+			if *MutationLoggingEnabled {
+				logAppliedMutations("Mutation applied", original, allAppliedMutations)
 			}
 			return true, nil
 		}
+		if *MutationLoggingEnabled {
+			allAppliedMutations = append(allAppliedMutations, appliedMutations)
+		}
+	}
+	if *MutationLoggingEnabled {
+		logAppliedMutations("Mutation not converging", original, allAppliedMutations)
 	}
 	return false, fmt.Errorf("mutation not converging for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+}
+
+func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
+	iterations := []interface{}{}
+	for i, appliedMutations := range allAppliedMutations {
+		if len(appliedMutations) == 0 {
+			continue
+		}
+		var appliedMutationsText strings.Builder
+		mutationSeparator := ""
+		for _, mutator := range appliedMutations {
+			fmt.Fprintf(&appliedMutationsText, "%s%s", mutationSeparator, mutatorKey(mutator))
+			mutationSeparator = ", "
+		}
+		iterations = append(append(iterations, fmt.Sprintf("iteration_%d", i)), appliedMutationsText.String())
+	}
+	if len(iterations) > 0 {
+		logDetails := []interface{}{}
+		logDetails = append(logDetails, logging.EventType, logging.MutationApplied)
+		logDetails = append(logDetails, logging.ResourceGroup, obj.GroupVersionKind().Group)
+		logDetails = append(logDetails, logging.ResourceKind, obj.GroupVersionKind().Kind)
+		logDetails = append(logDetails, logging.ResourceAPIVersion, obj.GroupVersionKind().Version)
+		logDetails = append(logDetails, logging.ResourceNamespace, obj.GetNamespace())
+		logDetails = append(logDetails, logging.ResourceName, obj.GetName())
+		logDetails = append(logDetails, iterations...)
+		log.Info(message, logDetails...)
+	}
+}
+
+func mutatorKey(mutator types.Mutator) string {
+	mutatorType := ""
+	resourceVersion := ""
+	switch castMutator := mutator.(type) {
+	case *AssignMutator:
+		mutatorType = "Assign"
+		resourceVersion = castMutator.assign.GetResourceVersion()
+	case *AssignMetadataMutator:
+		mutatorType = "AssignMetadata"
+		resourceVersion = castMutator.assignMetadata.GetResourceVersion()
+	}
+	mutatorKey := mutator.ID().Name
+	if len(mutator.ID().Namespace) > 0 {
+		mutatorKey = fmt.Sprintf("%s/%s", mutator.ID().Namespace, mutatorKey)
+	}
+	mutatorKey = fmt.Sprintf("%s/%s:%s", mutatorType, mutatorKey, resourceVersion)
+	return mutatorKey
 }
 
 // Remove removes the mutator from the mutation system

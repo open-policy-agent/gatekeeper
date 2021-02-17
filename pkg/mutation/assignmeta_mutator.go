@@ -56,12 +56,12 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 	return matches
 }
 
-func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, err := tester.New([]tester.Test{
 		{SubPath: m.Path(), Condition: tester.MustNotExist},
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	return mutate(m, t, nil, obj)
 }

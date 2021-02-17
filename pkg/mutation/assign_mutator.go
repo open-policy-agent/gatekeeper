@@ -40,7 +40,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return mutate(m, m.tester, m.testValue, obj)
 }
 

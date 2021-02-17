@@ -356,7 +356,7 @@ func testAssignMetadataMutation(
 }
 
 func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
-	err := mutator.Mutate(unstructured)
+	_, err := mutator.Mutate(unstructured)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (m *TestMutator) Value() (interface{}, error) {
 	return m.value, nil
 }
 
-func (m *TestMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *TestMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, _ := pathtester.New(nil)
 	return mutate(m, t, func(_ interface{}, _ bool) bool { return true }, obj)
 }
@@ -390,7 +390,7 @@ func TestListsAsLastElementAlreadyExistsWithKeyConflict_WithCustomMutator(t *tes
 		path:  path,
 		value: map[string]interface{}{"name": "conflictingName"},
 	}
-	err := mutator.Mutate(prepareTestPod(t))
+	_, err := mutator.Mutate(prepareTestPod(t))
 
 	if err == nil {
 		t.Errorf("Expected error not raised. Conflicting name must not be applied.")

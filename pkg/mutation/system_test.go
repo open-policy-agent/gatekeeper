@@ -29,14 +29,14 @@ func (m *MockMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return true // always matches
 }
 
-func (m *MockMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *MockMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	m.MutationCount++
 	if m.Labels == nil {
-		return nil
+		return false, nil
 	}
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	current := accessor.GetLabels()
@@ -52,7 +52,7 @@ func (m *MockMutator) Mutate(obj *unstructured.Unstructured) error {
 	}
 	accessor.SetLabels(current)
 
-	return nil
+	return true, nil
 }
 
 func (m *MockMutator) ID() types.ID {
