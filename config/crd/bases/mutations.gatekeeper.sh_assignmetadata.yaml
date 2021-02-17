@@ -165,8 +165,6 @@ spec:
                   description: ResourceScope is an enum defining the different scopes
                     available to a custom resource
                   type: string
-              required:
-              - scope
               type: object
             parameters:
               properties:

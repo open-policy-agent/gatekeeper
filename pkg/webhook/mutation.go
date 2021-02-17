@@ -193,6 +193,8 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req admission.Reque
 				return admission.Errored(int32(http.StatusInternalServerError), err), nil
 			}
 		}
+	} else {
+		ns = nil
 	}
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(req.Object.Raw)
