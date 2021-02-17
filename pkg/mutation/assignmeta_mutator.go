@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -56,7 +57,13 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 }
 
 func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
-	return Mutate(m, obj)
+	t, err := tester.New([]tester.Test{
+		{SubPath: m.Path(), Condition: tester.MustNotExist},
+	})
+	if err != nil {
+		return err
+	}
+	return mutate(m, t, nil, obj)
 }
 func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id
@@ -84,14 +91,12 @@ func (m *AssignMetadataMutator) HasDiff(mutator types.Mutator) bool {
 }
 
 func (m *AssignMetadataMutator) DeepCopy() types.Mutator {
+	p := m.path.DeepCopy()
 	res := &AssignMetadataMutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
-		path: &parser.Path{
-			Nodes: make([]parser.Node, len(m.path.Nodes)),
-		},
+		path:           &p,
 	}
-	copy(res.path.Nodes, m.path.Nodes)
 	return res
 }
 
