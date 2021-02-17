@@ -8,6 +8,10 @@ module.exports = {
   organizationName: 'open-policy-agent',
   projectName: 'gatekeeper',
   themeConfig: {
+    algolia: {
+      apiKey: '8fe2f10b6a869179c50b6f0c1bf015d9',
+      indexName: 'gatekeeper',
+    },
     colorMode: {
       defaultMode: 'light',
       disableSwitch: false,
