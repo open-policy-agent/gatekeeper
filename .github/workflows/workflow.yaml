@@ -46,6 +46,16 @@ jobs:
         run: |
           make lint
 
+      - name: Checkout Source
+        uses: actions/checkout@v2
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-exclude=G108 ./...'
+        env:
+          GOLANGCILINT_VERSION: 1.30.0
+
   test:
     name: "Unit test"
     runs-on: ubuntu-latest
