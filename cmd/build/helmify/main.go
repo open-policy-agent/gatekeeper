@@ -78,7 +78,7 @@ func (ks *kindSet) Write() error {
 				subPath = "crds"
 				parentDir := path.Join(*outputDir, subPath)
 				fmt.Printf("Making %s\n", parentDir)
-				if err := os.Mkdir(parentDir, 0755); err != nil {
+				if err := os.Mkdir(parentDir, 0750); err != nil {
 					return err
 				}
 			}
@@ -104,7 +104,7 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}
 
-			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
+			if err := ioutil.WriteFile(destFile, []byte(obj), 0600); err != nil {
 				return err
 			}
 		}
@@ -131,19 +131,21 @@ func copyStaticFiles(root string, subdirs ...string) error {
 		destination := path.Join(append([]string{*outputDir}, newSubDirs...)...)
 		if f.IsDir() {
 			fmt.Printf("Making %s\n", destination)
-			if err := os.Mkdir(destination, 0755); err != nil {
+			if err := os.Mkdir(destination, 0750); err != nil {
 				return err
 			}
 			if err := copyStaticFiles(root, newSubDirs...); err != nil {
 				return err
 			}
 		} else {
+			/* #nosec */
+			//ignore G304 gosec issue
 			contents, err := ioutil.ReadFile(path.Join(p, f.Name()))
 			if err != nil {
 				return err
 			}
 			fmt.Printf("Writing %s\n", destination)
-			if err := ioutil.WriteFile(destination, contents, 0644); err != nil {
+			if err := ioutil.WriteFile(destination, contents, 0600); err != nil {
 				return err
 			}
 		}
