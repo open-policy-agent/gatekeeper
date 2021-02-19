@@ -52,7 +52,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: '-exclude=G108 ./...'
+          args: '-exclude=G109 ./...'
         env:
           GOLANGCILINT_VERSION: 1.30.0
 
