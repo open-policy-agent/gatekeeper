@@ -1,5 +1,7 @@
 module github.com/open-policy-agent/gatekeeper
 
+go 1.15
+
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/davecgh/go-spew v1.1.1
