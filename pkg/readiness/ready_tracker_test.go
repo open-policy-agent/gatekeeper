@@ -317,9 +317,9 @@ func Test_CollectDeleted(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
 		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
 
-		for _, i := range ul.Items {
-			err = client.Delete(ctx, &i)
-			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, i.GetName())
+		for index := range ul.Items {
+			err = client.Delete(ctx, &ul.Items[index])
+			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, ul.Items[index].GetName())
 		}
 
 		g.Eventually(func() (bool, error) {
