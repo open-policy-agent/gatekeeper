@@ -46,12 +46,12 @@ jobs:
         run: |
           make lint
 
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: '-exclude=G108 ./...'
-        env:
-          GOLANGCILINT_VERSION: 1.30.0
+      #- name: Run Gosec Security Scanner
+      #  uses: securego/gosec@master
+      #  with:
+      #    args: '-exclude=G108 ./...'
+      #  env:
+      #    GOLANGCILINT_VERSION: 1.30.0
 
   test:
     name: "Unit test"
