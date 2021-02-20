@@ -46,9 +46,6 @@ jobs:
         run: |
           make lint
 
-      - name: Checkout Source
-        uses: actions/checkout@v2
-
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
