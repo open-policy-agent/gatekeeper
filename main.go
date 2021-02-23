@@ -193,7 +193,7 @@ func main() {
 	sw := watch.NewSwitch()
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr)
+	tracker, err := readiness.SetupTracker(mgr, *mutation.MutationEnabled)
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		os.Exit(1)
