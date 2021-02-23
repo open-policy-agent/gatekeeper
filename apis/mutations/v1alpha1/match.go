@@ -22,7 +22,7 @@ import (
 
 type Match struct {
 	Kinds              []Kinds                            `json:"kinds,omitempty"`
-	Scope              apiextensionsv1beta1.ResourceScope `json:"scope" protobuf:"bytes,4,opt,name=scope,casttype=ResourceScope"`
+	Scope              apiextensionsv1beta1.ResourceScope `json:"scope,omitempty"`
 	Namespaces         []string                           `json:"namespaces,omitempty"`
 	ExcludedNamespaces []string                           `json:"excludedNamespaces,omitempty"`
 	LabelSelector      *metav1.LabelSelector              `json:"labelSelector,omitempty"`
