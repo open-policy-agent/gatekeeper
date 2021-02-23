@@ -1,4 +1,5 @@
-{{- if .Values.mutationEnable }}
+
+{{- if .Values.experimentalEnableMutation }}
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
 metadata:

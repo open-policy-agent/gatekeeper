@@ -9,6 +9,7 @@ enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
 emitAdmissionEvents: false
+experimentalEnableMutation: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper

@@ -104,6 +104,11 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}
 
+			if kind == "ClusterRole" && name == "gatekeeper-manager-role" {
+				mutationIndex := strings.LastIndex(obj, "- apiGroups:")
+				obj = obj[:mutationIndex] + "{{- if .Values.experimentalEnableMutation }}\n" + obj[mutationIndex:] + "{{- end }}\n"
+			}
+
 			if err := ioutil.WriteFile(destFile, []byte(obj), 0644); err != nil {
 				return err
 			}

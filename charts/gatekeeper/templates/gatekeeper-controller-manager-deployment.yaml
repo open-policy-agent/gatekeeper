@@ -56,9 +56,6 @@ spec:
         - --log-level={{ .Values.logLevel }}
         - --exempt-namespace=gatekeeper-system
         - --operation=webhook
-{{- if .Values.mutationEnable }}
-        - --enable-mutation=true
-{{- end }}
         command:
         - /manager
         env:
