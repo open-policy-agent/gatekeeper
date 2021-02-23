@@ -1,0 +1,14 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignMetadata
+metadata:
+  name: demo
+spec:
+    match:
+      scope: Namespaced
+      kinds:
+        - apiGroups: ["*"]
+          kinds: ["Pod"]
+    location: "metadata.labels.demolabel"
+    parameters:
+      assign:
+        value:  "demo"
