@@ -32,6 +32,7 @@
 | podLabels                           | The labels to add to the Gatekeeper pods                                                                                                                                                                 | `{}` |
 | secretAnnotations                   | The annotations to add to the Gatekeeper secrets                                                                                                                                                       | `{}`                                                                      |
 | customResourceDefinitions.create    | Whether the release should install CRDs. Regardless of this value, Helm v3+ will install the CRDs if those are not present already. Use --skip-crds with helm install if you want to skip CRD creation | `true`                                                                    |
+| pdb.controllerManager.minAvailable  | The number of controller manager pods that must still be available after an eviction                                                                                                                   | 1                                                                         |
 
 ## Contributing Changes
 

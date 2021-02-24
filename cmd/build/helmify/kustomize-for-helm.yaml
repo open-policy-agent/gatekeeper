@@ -297,3 +297,16 @@ rules:
   - patch
   - update
   - watch
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  minAvailable: HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"

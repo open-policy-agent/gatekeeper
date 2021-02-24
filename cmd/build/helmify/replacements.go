@@ -39,4 +39,6 @@ var replacements = map[string]string{
     {{- if .Values.enableDeleteOperations }}
     - DELETE
     {{- end}}`,
+
+	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
 }
