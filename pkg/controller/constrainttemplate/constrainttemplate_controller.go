@@ -515,8 +515,8 @@ func (r *ReconcileConstraintTemplate) deleteAllStatus(ctName string) error {
 	})); err != nil {
 		return err
 	}
-	for _, s := range cstrStatusObjs.Items {
-		if err := r.Delete(context.TODO(), &s); err != nil {
+	for index := range cstrStatusObjs.Items {
+		if err := r.Delete(context.TODO(), &cstrStatusObjs.Items[index]); err != nil {
 			if !errors.IsNotFound(err) {
 				return err
 			}
