@@ -94,6 +94,10 @@ func (m *MockMutator) DeepCopy() types.Mutator {
 	return res
 }
 
+func (m *MockMutator) String() string {
+	return ""
+}
+
 var mutators = []types.Mutator{
 	&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},

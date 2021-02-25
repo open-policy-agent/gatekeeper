@@ -132,13 +132,11 @@ func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppl
 		if len(appliedMutations) == 0 {
 			continue
 		}
-		var appliedMutationsText strings.Builder
-		mutationSeparator := ""
+		var appliedMutationsText []string
 		for _, mutator := range appliedMutations {
-			fmt.Fprintf(&appliedMutationsText, "%s%s", mutationSeparator, mutatorKey(mutator))
-			mutationSeparator = ", "
+			appliedMutationsText = append(appliedMutationsText, mutator.String())
 		}
-		iterations = append(append(iterations, fmt.Sprintf("iteration_%d", i)), appliedMutationsText.String())
+		iterations = append(iterations, fmt.Sprintf("iteration_%d", i), strings.Join(appliedMutationsText, ", "))
 	}
 	if len(iterations) > 0 {
 		logDetails := []interface{}{}
@@ -151,25 +149,6 @@ func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppl
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)
 	}
-}
-
-func mutatorKey(mutator types.Mutator) string {
-	mutatorType := ""
-	resourceVersion := ""
-	switch castMutator := mutator.(type) {
-	case *AssignMutator:
-		mutatorType = "Assign"
-		resourceVersion = castMutator.assign.GetResourceVersion()
-	case *AssignMetadataMutator:
-		mutatorType = "AssignMetadata"
-		resourceVersion = castMutator.assignMetadata.GetResourceVersion()
-	}
-	mutatorKey := mutator.ID().Name
-	if len(mutator.ID().Namespace) > 0 {
-		mutatorKey = fmt.Sprintf("%s/%s", mutator.ID().Namespace, mutatorKey)
-	}
-	mutatorKey = fmt.Sprintf("%s/%s:%s", mutatorType, mutatorKey, resourceVersion)
-	return mutatorKey
 }
 
 // Remove removes the mutator from the mutation system

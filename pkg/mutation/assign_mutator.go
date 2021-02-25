@@ -132,6 +132,10 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	return res
 }
 
+func (m *AssignMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assign.GetGeneration())
+}
+
 // MutatorForAssign returns an AssignMutator built from
 // the given assign instance.
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {

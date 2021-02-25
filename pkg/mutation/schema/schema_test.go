@@ -40,6 +40,10 @@ func (m *mockMutator) HasDiff(other types.Mutator) bool {
 	return !reflect.DeepEqual(m, other)
 }
 
+func (m *mockMutator) String() string {
+	return ""
+}
+
 func deepCopyBindings(bindings []Binding) []Binding {
 	cpy := []Binding{}
 	for _, b := range bindings {

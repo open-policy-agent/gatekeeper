@@ -113,6 +113,10 @@ func (m *AssignMetadataMutator) Value() (interface{}, error) {
 	}
 }
 
+func (m *AssignMetadataMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
+}
+
 // MutatorForAssignMetadata builds an AssignMetadataMutator from the given AssignMetadata object.
 func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*AssignMetadataMutator, error) {
 	id, err := types.MakeID(assignMeta)

@@ -34,6 +34,7 @@ type Mutator interface {
 	DeepCopy() Mutator
 	Value() (interface{}, error)
 	Path() *parser.Path
+	String() string
 }
 
 // MakeID builds an ID object for the given object
