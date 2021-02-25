@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -278,6 +279,10 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		if err := h.validateConfigResource(ctx, req); err != nil {
 			return true, err
 		}
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignMetadata":
+		return h.validateAssignMetadata(ctx, req)
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign":
+		return h.validateAssign(ctx, req)
 	}
 
 	return false, nil
@@ -330,6 +335,41 @@ func (h *validationHandler) validateConfigResource(ctx context.Context, req admi
 		return fmt.Errorf("Config resource must have name 'config'")
 	}
 	return nil
+}
+
+func (h *validationHandler) validateAssignMetadata(ctx context.Context, req admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.AssignMetadata{})
+	if err != nil {
+		return false, err
+	}
+	assignMetadata, ok := obj.(*mutationsv1alpha1.AssignMetadata)
+	if !ok {
+		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
+	}
+	err = mutation.IsValidAssignMetadata(assignMetadata)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (h *validationHandler) validateAssign(ctx context.Context, req admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.Assign{})
+	if err != nil {
+		return false, err
+	}
+	assign, ok := obj.(*mutationsv1alpha1.Assign)
+	if !ok {
+		return false, fmt.Errorf("Deserialized object is not of type Assign")
+	}
+
+	err = mutation.IsValidAssign(assign)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
 }
 
 // traceSwitch returns true if a request should be traced
