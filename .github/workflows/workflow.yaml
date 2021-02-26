@@ -34,13 +34,18 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
       - name: Install golangci-lint
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
         env:
-          GOLANGCILINT_VERSION: 1.30.0
+          GOLANGCILINT_VERSION: 1.37.1
 
       - name: Make lint
         run: |
@@ -51,11 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Set up Go 1.15
+      - name: Set up Go 1.16
         uses: actions/setup-go@v2
         with:
-          go-version: 1.15
-        id: go
+          go-version: 1.16
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -88,6 +92,11 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
+
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
 
       - name: Bootstrap e2e
         run: |
@@ -159,6 +168,11 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
+
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
 
       - name: Bootstrap e2e
         run: |

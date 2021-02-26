@@ -18,7 +18,7 @@ package readiness_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -30,7 +30,7 @@ import (
 
 // Applies fixture YAMLs directly under the provided path in alpha-sorted order.
 func applyFixtures(path string) error {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return fmt.Errorf("reading path %s: %w", path, err)
 	}
@@ -50,7 +50,7 @@ func applyFixtures(path string) error {
 	sort.StringSlice(sorted).Sort()
 
 	for _, entry := range sorted {
-		b, err := ioutil.ReadFile(filepath.Join(path, entry))
+		b, err := os.ReadFile(filepath.Join(path, entry))
 		if err != nil {
 			return fmt.Errorf("reading file %s: %w", entry, err)
 		}
