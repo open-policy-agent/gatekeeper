@@ -180,24 +180,24 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	msgs, enforcementAction := h.getDenyMessages(res, req)
-	if len(msgs) > 0 {
-		var vResp admission.Response
-		if vResp.Result == nil {
-			vResp.Result = &metav1.Status{}
-		}
+	denyMsgs, warnMsgs := h.getAdmissionMessages(res, req)
+	var vResp admission.Response
+	if vResp.Result == nil {
+		vResp.Result = &metav1.Status{}
+	}
 
-		if enforcementAction == string(util.Warn) {
-			vResp = admission.ValidationResponse(true, strings.Join(msgs, "\n"))
-			vResp.Warnings = msgs
-			vResp.Result.Code = 299
-			requestResponse = allowResponse
-		} else {
-			vResp = admission.ValidationResponse(false, strings.Join(msgs, "\n"))
-			vResp.Result.Code = http.StatusForbidden
-			requestResponse = denyResponse
-		}
+	if len(warnMsgs) > 0 {
+		vResp.Warnings = warnMsgs
+		vResp.Result.Code = 299
+	}
 
+	if len(denyMsgs) > 0 {
+		vResp := admission.ValidationResponse(false, strings.Join(denyMsgs, "\n"))
+		if len(warnMsgs) > 0 {
+			vResp.Warnings = warnMsgs
+		}
+		vResp.Result.Code = http.StatusForbidden
+		requestResponse = denyResponse
 		return vResp
 	}
 
@@ -205,10 +205,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return admission.ValidationResponse(true, "")
 }
 
-func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) ([]string, string) {
-	var msgs []string
+func (h *validationHandler) getAdmissionMessages(res []*rtypes.Result, req admission.Request) ([]string, []string) {
+	var denyMsgs, warnMsgs []string
 	var resourceName string
-	enforcementAction := "deny"
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
@@ -255,11 +254,17 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 					logging.ResourceName:         resourceName,
 					logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
 				}
-				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
-				reason := "FailedAdmission"
-				if r.EnforcementAction == string(util.Dryrun) || r.EnforcementAction == string(util.Warn) {
+				var eventMsg, reason string
+				switch r.EnforcementAction {
+				case string(util.Dryrun):
 					eventMsg = "Dryrun violation"
 					reason = "DryrunViolation"
+				case string(util.Warn):
+					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" would have denied the request"
+					reason = "WarningAdmission"
+				default:
+					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
+					reason = "FailedAdmission"
 				}
 				ref := getViolationRef(
 					h.gkNamespace,
@@ -283,12 +288,15 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 
 		// only deny or warn enforcement actions should prompt admission response
-		if r.EnforcementAction == string(util.Deny) || r.EnforcementAction == string(util.Warn) {
-			enforcementAction = r.EnforcementAction
-			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+		if r.EnforcementAction == string(util.Deny) {
+			denyMsgs = append(denyMsgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+		}
+
+		if r.EnforcementAction == string(util.Warn) {
+			warnMsgs = append(warnMsgs, fmt.Sprintf("[would have denied by %s] %s", r.Constraint.GetName(), r.Msg))
 		}
 	}
-	return msgs, enforcementAction
+	return denyMsgs, warnMsgs
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors

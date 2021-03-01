@@ -562,7 +562,7 @@ func newConstraint(kind, name string, enforcementAction string, t *testing.T) *u
 	return c
 }
 
-func TestGetDenyMessages(t *testing.T) {
+func TestGetAdmissionMessages(t *testing.T) {
 	resDryRun := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
@@ -585,30 +585,34 @@ func TestGetDenyMessages(t *testing.T) {
 	}
 
 	tc := []struct {
-		Name             string
-		Result           []*rtypes.Result
-		ExpectedMsgCount int
+		Name                 string
+		Result               []*rtypes.Result
+		ExpectedDenyMsgCount int
+		ExpectedWarnMsgCount int
 	}{
 		{
 			Name: "Only One Dry Run",
 			Result: []*rtypes.Result{
 				resDryRun,
 			},
-			ExpectedMsgCount: 0,
+			ExpectedDenyMsgCount: 0,
+			ExpectedWarnMsgCount: 0,
 		},
 		{
 			Name: "Only One Deny",
 			Result: []*rtypes.Result{
 				resDeny,
 			},
-			ExpectedMsgCount: 1,
+			ExpectedDenyMsgCount: 1,
+			ExpectedWarnMsgCount: 0,
 		},
 		{
 			Name: "Only One Warn",
 			Result: []*rtypes.Result{
 				resWarn,
 			},
-			ExpectedMsgCount: 1,
+			ExpectedDenyMsgCount: 0,
+			ExpectedWarnMsgCount: 1,
 		},
 		{
 			Name: "One Dry Run and One Deny",
@@ -616,7 +620,8 @@ func TestGetDenyMessages(t *testing.T) {
 				resDryRun,
 				resDeny,
 			},
-			ExpectedMsgCount: 1,
+			ExpectedDenyMsgCount: 1,
+			ExpectedWarnMsgCount: 0,
 		},
 		{
 			Name: "One Dry Run, One Deny, One Warn",
@@ -625,7 +630,8 @@ func TestGetDenyMessages(t *testing.T) {
 				resDeny,
 				resWarn,
 			},
-			ExpectedMsgCount: 2,
+			ExpectedDenyMsgCount: 1,
+			ExpectedWarnMsgCount: 1,
 		},
 		{
 			Name: "Two Deny",
@@ -633,7 +639,8 @@ func TestGetDenyMessages(t *testing.T) {
 				resDeny,
 				resDeny,
 			},
-			ExpectedMsgCount: 2,
+			ExpectedDenyMsgCount: 2,
+			ExpectedWarnMsgCount: 0,
 		},
 		{
 			Name: "Two Warn",
@@ -641,7 +648,8 @@ func TestGetDenyMessages(t *testing.T) {
 				resWarn,
 				resWarn,
 			},
-			ExpectedMsgCount: 2,
+			ExpectedDenyMsgCount: 0,
+			ExpectedWarnMsgCount: 2,
 		},
 		{
 			Name: "Two Dry Run",
@@ -649,14 +657,16 @@ func TestGetDenyMessages(t *testing.T) {
 				resDryRun,
 				resDryRun,
 			},
-			ExpectedMsgCount: 0,
+			ExpectedDenyMsgCount: 0,
+			ExpectedWarnMsgCount: 0,
 		},
 		{
 			Name: "Random EnforcementAction",
 			Result: []*rtypes.Result{
 				resRandom,
 			},
-			ExpectedMsgCount: 0,
+			ExpectedDenyMsgCount: 0,
+			ExpectedWarnMsgCount: 0,
 		},
 	}
 
@@ -683,9 +693,12 @@ func TestGetDenyMessages(t *testing.T) {
 					},
 				},
 			}
-			msgs, _ := handler.getDenyMessages(tt.Result, review)
-			if len(msgs) != tt.ExpectedMsgCount {
-				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
+			denyMsgs, warnMsgs := handler.getAdmissionMessages(tt.Result, review)
+			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
+				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
+			}
+			if len(warnMsgs) != tt.ExpectedWarnMsgCount {
+				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedWarnMsgCount, len(warnMsgs))
 			}
 		}
 		t.Run(tt.Name, testFn)
