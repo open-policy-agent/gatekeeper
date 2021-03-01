@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	patht "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -19,10 +20,12 @@ import (
 // AssignMutator is a mutator object built out of a
 // Assign instance.
 type AssignMutator struct {
-	id       types.ID
-	assign   *mutationsv1alpha1.Assign
-	path     *parser.Path
-	bindings []schema.Binding
+	id        types.ID
+	assign    *mutationsv1alpha1.Assign
+	path      *parser.Path
+	bindings  []schema.Binding
+	tester    *patht.Tester
+	valueTest *mutationsv1alpha1.AssignIf
 }
 
 // AssignMutator implements mutatorWithSchema
@@ -38,8 +41,41 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
-	return Mutate(m, obj)
+	return mutate(m, m.tester, m.testValue, obj)
 }
+
+// valueTest returns true if it is okay for the mutation func to override the value
+func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
+	if len(m.valueTest.In) != 0 {
+		ifInMatched := false
+		if !exists {
+			// a missing value cannot satisfy the "In" test
+			return false
+		}
+		for _, obj := range m.valueTest.In {
+			if cmp.Equal(v, obj) {
+				ifInMatched = true
+				break
+			}
+		}
+		if !ifInMatched {
+			return false
+		}
+	}
+
+	if !exists {
+		// a missing value cannot violate NotIn
+		return true
+	}
+
+	for _, obj := range m.valueTest.NotIn {
+		if cmp.Equal(v, obj) {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *AssignMutator) ID() types.ID {
 	return m.id
 }
@@ -91,6 +127,8 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
+	res.tester = m.tester.DeepCopy()
+	res.valueTest = m.valueTest.DeepCopy()
 	return res
 }
 
@@ -99,20 +137,52 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
 	id, err := types.MakeID(assign)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to retrieve id for assign type")
+		return nil, errors.Wrap(err, "failed to retrieve id for assign type")
 	}
 
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to parse the location specified")
+		return nil, errors.Wrapf(err, "failed to parse the location specified for mutator %v, location: %s", id, assign.Spec.Location)
+	}
+
+	pathTests, err := gatherPathTests(assign)
+	if err != nil {
+		return nil, err
+	}
+	err = patht.ValidatePathTests(path, pathTests)
+	if err != nil {
+		return nil, err
+	}
+	tester, err := patht.New(pathTests)
+	if err != nil {
+		return nil, err
+	}
+	valueTests, err := assign.ValueTests()
+	if err != nil {
+		return nil, err
 	}
 
 	return &AssignMutator{
-		id:       id,
-		assign:   assign.DeepCopy(),
-		bindings: applyToToBindings(assign.Spec.ApplyTo),
-		path:     path,
+		id:        id,
+		assign:    assign.DeepCopy(),
+		bindings:  applyToToBindings(assign.Spec.ApplyTo),
+		path:      path,
+		tester:    tester,
+		valueTest: &valueTests,
 	}, nil
+}
+
+func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
+	pts := assign.Spec.Parameters.PathTests
+	var pathTests []patht.Test
+	for _, pt := range pts {
+		p, err := parser.Parse(pt.SubPath)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s` for Assign %s", pt.SubPath, assign.GetName()))
+		}
+		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
+	}
+	return pathTests, nil
 }
 
 func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
@@ -142,14 +212,14 @@ func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
 func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
-		return errors.Wrap(err, "invalid location format")
+		return errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
 	}
 
 	if hasMetadataRoot(path) {
-		return errors.New("assign can't change metadata")
+		return errors.New(fmt.Sprintf("assign %s can't change metadata", assign.GetName()))
 	}
 
-	err = checkKeyNotChanged(path)
+	err = checkKeyNotChanged(path, assign.GetName())
 	if err != nil {
 		return err
 	}
@@ -157,18 +227,22 @@ func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	toAssign := make(map[string]interface{})
 	err = json.Unmarshal([]byte(assign.Spec.Parameters.Assign.Raw), &toAssign)
 	if err != nil {
-		return errors.Wrap(err, "invalid format for parameters.assign")
+		return errors.Wrapf(err, "invalid format for parameters.assign %s for Assign %s", assign.Spec.Parameters.Assign.Raw, assign.GetName())
 	}
 
 	value, ok := toAssign["value"]
 	if !ok {
-		return errors.New("spec.parameters.assign must have a value field")
+		return errors.New(fmt.Sprintf("spec.parameters.assign for Assign %s must have a value field", assign.GetName()))
 	}
 
-	err = validateObjectAssignedToList(path, value)
+	err = validateObjectAssignedToList(path, value, assign.GetName())
 	if err != nil {
 		return err
 	}
+	if _, err := MutatorForAssign(assign); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -185,7 +259,7 @@ func hasMetadataRoot(path *parser.Path) bool {
 
 // checkKeyNotChanged does not allow to change the key field of
 // a list element. A path like foo[name: bar].name is rejected
-func checkKeyNotChanged(p *parser.Path) error {
+func checkKeyNotChanged(p *parser.Path, assignName string) error {
 	if len(p.Nodes) == 0 || p.Nodes == nil {
 		return errors.New("empty path")
 	}
@@ -199,24 +273,24 @@ func checkKeyNotChanged(p *parser.Path) error {
 		return nil
 	}
 	if lastNode.Type() != parser.ObjectNode {
-		return errors.New("invalid path format: child of a list can't be a list")
+		return errors.New(fmt.Sprintf("invalid path format in Assign %s: child of a list can't be a list", assignName))
 	}
 	addedObject, ok := lastNode.(*parser.Object)
 	if !ok {
-		return errors.New("failed converting an ObjectNodeType to Object")
+		return errors.New("failed converting an ObjectNodeType to Object in Assign " + assignName)
 	}
 	listNode, ok := secondLastNode.(*parser.List)
 	if !ok {
-		return errors.New("failed converting a ListNodeType to List")
+		return errors.New("failed converting a ListNodeType to List in Assign " + assignName)
 	}
 
 	if addedObject.Reference == listNode.KeyField {
-		return errors.New("invalid path format: changing the item key is not allowed")
+		return errors.New(fmt.Sprintf("invalid path format in Assign %s: changing the item key is not allowed", assignName))
 	}
 	return nil
 }
 
-func validateObjectAssignedToList(p *parser.Path, value interface{}) error {
+func validateObjectAssignedToList(p *parser.Path, value interface{}, assignName string) error {
 	if len(p.Nodes) == 0 || p.Nodes == nil {
 		return errors.New("empty path")
 	}
@@ -225,20 +299,20 @@ func validateObjectAssignedToList(p *parser.Path, value interface{}) error {
 	}
 	listNode, ok := p.Nodes[len(p.Nodes)-1].(*parser.List)
 	if !ok {
-		return errors.New("failed converting a ListNodeType to List")
+		return errors.New("failed converting a ListNodeType to List, Assign: " + assignName)
 	}
 	if listNode.Glob {
-		return errors.New("can't append to a globbed list")
+		return errors.New("can't append to a globbed list, Assign: " + assignName)
 	}
 	if listNode.KeyValue == nil {
-		return errors.New("invalid key value for a non globbed object")
+		return errors.New("invalid key value for a non globbed object, Assign: " + assignName)
 	}
 	valueMap, ok := value.(map[string]interface{})
 	if !ok {
-		return errors.New("only full objects can be appended to lists")
+		return errors.New("only full objects can be appended to lists, Assign: " + assignName)
 	}
 	if *listNode.KeyValue != valueMap[listNode.KeyField] {
-		return fmt.Errorf("adding object to list with different key %s: list key %s, object key %s", listNode.KeyField, *listNode.KeyValue, valueMap[listNode.KeyField])
+		return fmt.Errorf("adding object to list with different key %s: list key %s, object key %s, assign: %s", listNode.KeyField, *listNode.KeyValue, valueMap[listNode.KeyField], assignName)
 	}
 
 	return nil

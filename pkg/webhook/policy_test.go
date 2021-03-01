@@ -695,10 +695,10 @@ func TestGetAdmissionMessages(t *testing.T) {
 			}
 			denyMsgs, warnMsgs := handler.getAdmissionMessages(tt.Result, review)
 			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
-				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
+				t.Errorf("denyMsgs: expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
 			}
 			if len(warnMsgs) != tt.ExpectedWarnMsgCount {
-				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedWarnMsgCount, len(warnMsgs))
+				t.Errorf("warnMsgs: expected count = %d; actual count = %d", tt.ExpectedWarnMsgCount, len(warnMsgs))
 			}
 		}
 		t.Run(tt.Name, testFn)

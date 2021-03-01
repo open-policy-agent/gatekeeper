@@ -17,6 +17,7 @@ image:
   pullSecrets: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+podLabels: {}
 secretAnnotations: {}
 controllerManager:
   hostNetwork: false
@@ -57,3 +58,6 @@ audit:
       memory: 256Mi
 customResourceDefinitions:
   create: true
+pdb:
+  controllerManager:
+    minAvailable: 1

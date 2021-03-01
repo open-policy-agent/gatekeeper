@@ -53,7 +53,8 @@ spec:
   replicas: HELMSUBST_DEPLOYMENT_REPLICAS
   template:
     metadata:
-      annotations: HELMSUBST_ANNOTATIONS
+      annotations:
+        HELMSUBST_ANNOTATIONS: ""
     spec:
       containers:
         - name: manager
@@ -66,8 +67,16 @@ spec:
             - --operation=webhook
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SCHEDULING
+          resources:
+            HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
+      nodeSelector:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""
+      affinity:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""
+      tolerations:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""
+      imagePullSecrets:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
 ---
 apiVersion: apps/v1
@@ -78,7 +87,8 @@ metadata:
 spec:
   template:
     metadata:
-      annotations: HELMSUBST_ANNOTATIONS
+      annotations:
+        HELMSUBST_ANNOTATIONS: ""
     spec:
       containers:
         - name: manager
@@ -94,8 +104,16 @@ spec:
             - --logtostderr
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
-          resources: HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES
-      nodeSelector: HELMSUBST_DEPLOYMENT_AUDIT_POD_SCHEDULING
+          resources:
+            HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
+      nodeSelector:
+        HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""
+      affinity:
+        HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""
+      tolerations:
+        HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""
+      imagePullSecrets:
+        HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
 ---
 apiVersion: v1
@@ -134,3 +152,16 @@ webhooks:
       path: /v1/admitlabel
   name: check-ignore-label.gatekeeper.sh
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  minAvailable: HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"

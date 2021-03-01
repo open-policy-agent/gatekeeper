@@ -24,7 +24,7 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
+      annotations:
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
@@ -89,7 +89,7 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
+        resources:
 {{ toYaml .Values.controllerManager.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
@@ -104,7 +104,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector: 
+      nodeSelector:
 {{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
       affinity:
 {{ toYaml .Values.controllerManager.affinity | indent 8 }}
