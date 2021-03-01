@@ -51,12 +51,12 @@ func MakeID(obj runtime.Object) (ID, error) {
 	}, nil
 }
 
-// UnmarshalValue unmarhsals the value a mutation is meant to assign
+// UnmarshalValue unmarshals the value a mutation is meant to assign
 func UnmarshalValue(data []byte) (interface{}, error) {
 	value := make(map[string]interface{})
 	err := json.Unmarshal(data, &value)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to unmarshal value")
+		return nil, errors.Wrapf(err, "Failed to unmarshal value %s", data)
 	}
 	return value["value"], nil
 }

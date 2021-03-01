@@ -58,3 +58,6 @@ audit:
       memory: 256Mi
 customResourceDefinitions:
   create: true
+pdb:
+  controllerManager:
+    minAvailable: 1

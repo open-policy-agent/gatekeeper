@@ -1,7 +1,5 @@
 module github.com/onsi/gomega
 
-go 1.15
-
 require (
 	github.com/golang/protobuf v1.4.2
 	github.com/onsi/ginkgo v1.12.1

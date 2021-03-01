@@ -245,7 +245,8 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	stringList := &apiextensions.JSONSchemaPropsOrArray{
-		Schema: &apiextensions.JSONSchemaProps{Type: "string"}}
+		// nullable also allows for the empty string
+		Schema: &apiextensions.JSONSchemaProps{Type: "string", Nullable: true}}
 	labelSelectorSchema := apiextensions.JSONSchemaProps{
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333

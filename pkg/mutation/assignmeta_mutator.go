@@ -164,10 +164,10 @@ func isValidMetadataPath(path *parser.Path) bool {
 func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
-		return errors.Wrap(err, "invalid location format")
+		return errors.Wrapf(err, "invalid location format for Assign %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
 	}
 	if !isValidMetadataPath(path) {
-		return fmt.Errorf("invalid location for assignmetadata: %s", assignMeta.Spec.Location)
+		return fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
 	}
 
 	assign := make(map[string]interface{})
@@ -177,10 +177,10 @@ func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
 	}
 	value, ok := assign["value"]
 	if !ok {
-		return errors.New("spec.parameters.assign must have a string value field")
+		return errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
 	}
 	if _, ok := value.(string); !ok {
-		return errors.New("spec.parameters.assign must be a string")
+		return errors.New("spec.parameters.assign must be a string for AssignMetadata " + assignMeta.GetName())
 	}
 	return nil
 }

@@ -50,7 +50,7 @@ func (s *System) Upsert(m types.Mutator) error {
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
-			return errors.Wrapf(err, "Schema upsert failed")
+			return errors.Wrapf(err, "Schema upsert failed for %v", m.ID())
 		}
 	}
 
@@ -97,7 +97,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return false, errors.Wrapf(err, "mutation failed for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+					return false, errors.Wrapf(err, "mutation %v failed for %s %s %s %s", m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 				}
 			}
 		}
@@ -109,7 +109,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 				if *MutationLoggingEnabled {
 					logAppliedMutations("Oscillating mutation.", original, allAppliedMutations)
 				}
-				return false, fmt.Errorf("oscillating mutation for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 			}
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", original, allAppliedMutations)
@@ -123,7 +123,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 	if *MutationLoggingEnabled {
 		logAppliedMutations("Mutation not converging", original, allAppliedMutations)
 	}
-	return false, fmt.Errorf("mutation not converging for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+	return false, fmt.Errorf("mutation not converging for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 }
 
 func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
@@ -183,6 +183,11 @@ func (s *System) Remove(id types.ID) error {
 	s.orderedMutators[len(s.orderedMutators)-1] = nil
 	s.orderedMutators = s.orderedMutators[:len(s.orderedMutators)-1]
 	return nil
+}
+
+// Get mutator for given id
+func (s *System) Get(id types.ID) types.Mutator {
+	return s.mutatorsMap[id].DeepCopy()
 }
 
 func greaterOrEqual(id1, id2 types.ID) bool {
