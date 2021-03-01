@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type assignTestCfg struct {
@@ -21,6 +22,7 @@ type assignTestCfg struct {
 	pathTests []mutationsv1alpha1.PathTest
 	in        []interface{}
 	notIn     []interface{}
+	applyTo   []mutationsv1alpha1.ApplyTo
 }
 
 func makeValue(v interface{}) runtime.RawExtension {
@@ -43,6 +45,7 @@ func newAssignMutator(cfg *assignTestCfg) *AssignMutator {
 	m.Spec.Parameters.Assign = cfg.value
 	m.Spec.Location = cfg.path
 	m.Spec.Parameters.PathTests = cfg.pathTests
+	m.Spec.ApplyTo = cfg.applyTo
 	vt := &mutationsv1alpha1.AssignIf{
 		In:    cfg.in,
 		NotIn: cfg.notIn,
@@ -1364,6 +1367,60 @@ func TestValueTests(t *testing.T) {
 			}
 			if err := test.fn(obj); err != nil {
 				t.Errorf("failed test: %v", err)
+			}
+		})
+	}
+}
+
+// TestApplyTo merely tests that ApplyTo is called, its internal
+// logic is tested elsewhere
+func TestApplyTo(t *testing.T) {
+	tests := []struct {
+		name          string
+		applyTo       []mutationsv1alpha1.ApplyTo
+		group         string
+		version       string
+		kind          string
+		matchExpected bool
+	}{
+		{
+			name: "matches applyTo",
+			applyTo: []mutationsv1alpha1.ApplyTo{{
+				Groups:   []string{""},
+				Kinds:    []string{"Foo"},
+				Versions: []string{"v1"},
+			}},
+			group:         "",
+			version:       "v1",
+			kind:          "Foo",
+			matchExpected: true,
+		},
+		{
+			name: "does not match applyTo",
+			applyTo: []mutationsv1alpha1.ApplyTo{{
+				Groups:   []string{""},
+				Kinds:    []string{"Foo"},
+				Versions: []string{"v1"},
+			}},
+			group:         "",
+			version:       "v1",
+			kind:          "Bar",
+			matchExpected: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &assignTestCfg{applyTo: test.applyTo}
+			mutator := newAssignMutator(cfg)
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   test.group,
+				Version: test.version,
+				Kind:    test.kind,
+			})
+			matches := mutator.Matches(obj, nil)
+			if matches != test.matchExpected {
+				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
 			}
 		})
 	}
