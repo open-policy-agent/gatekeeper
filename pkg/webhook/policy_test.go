@@ -562,7 +562,7 @@ func newConstraint(kind, name string, enforcementAction string, t *testing.T) *u
 	return c
 }
 
-func TestGetAdmissionMessages(t *testing.T) {
+func TestGetValidationMessages(t *testing.T) {
 	resDryRun := &rtypes.Result{
 		Msg:               "test",
 		Constraint:        newConstraint("Foo", "ph", "dryrun", t),
@@ -693,7 +693,7 @@ func TestGetAdmissionMessages(t *testing.T) {
 					},
 				},
 			}
-			denyMsgs, warnMsgs := handler.getAdmissionMessages(tt.Result, review)
+			denyMsgs, warnMsgs := handler.getValidationMessages(tt.Result, review)
 			if len(denyMsgs) != tt.ExpectedDenyMsgCount {
 				t.Errorf("denyMsgs: expected count = %d; actual count = %d", tt.ExpectedDenyMsgCount, len(denyMsgs))
 			}

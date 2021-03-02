@@ -181,19 +181,13 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	denyMsgs, warnMsgs := h.getAdmissionMessages(res, req)
-	var vResp admission.Response
-	if vResp.Result == nil {
-		vResp.Result = &metav1.Status{}
-	}
-
-	if len(warnMsgs) > 0 {
-		vResp.Warnings = warnMsgs
-		vResp.Result.Code = 299
-	}
+	denyMsgs, warnMsgs := h.getValidationMessages(res, req)
 
 	if len(denyMsgs) > 0 {
 		vResp := admission.ValidationResponse(false, strings.Join(denyMsgs, "\n"))
+		if vResp.Result == nil {
+			vResp.Result = &metav1.Status{}
+		}
 		if len(warnMsgs) > 0 {
 			vResp.Warnings = warnMsgs
 		}
@@ -203,10 +197,18 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	requestResponse = allowResponse
-	return admission.ValidationResponse(true, "")
+	vResp := admission.ValidationResponse(true, "")
+	if vResp.Result == nil {
+		vResp.Result = &metav1.Status{}
+	}
+	if len(warnMsgs) > 0 {
+		vResp.Warnings = warnMsgs
+		vResp.Result.Code = 299
+	}
+	return vResp
 }
 
-func (h *validationHandler) getAdmissionMessages(res []*rtypes.Result, req admission.Request) ([]string, []string) {
+func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req admission.Request) ([]string, []string) {
 	var denyMsgs, warnMsgs []string
 	var resourceName string
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
@@ -221,74 +223,74 @@ func (h *validationHandler) getAdmissionMessages(res []*rtypes.Result, req admis
 		}
 	}
 	for _, r := range res {
-		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err == nil {
-			if *logDenies {
-				log.WithValues(
-					logging.Process, "admission",
-					logging.EventType, "violation",
-					logging.ConstraintName, r.Constraint.GetName(),
-					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, r.EnforcementAction,
-					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-					logging.ResourceName, resourceName,
-					logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-				).Info("denied admission")
+		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err != nil {
+			continue
+		}
+		if *logDenies {
+			log.WithValues(
+				logging.Process, "admission",
+				logging.EventType, "violation",
+				logging.ConstraintName, r.Constraint.GetName(),
+				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind, r.Constraint.GetKind(),
+				logging.ConstraintAction, r.EnforcementAction,
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.ResourceName, resourceName,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+			).Info("denied admission")
+		}
+		if *emitAdmissionEvents {
+			annotations := map[string]string{
+				logging.Process:              "admission",
+				logging.EventType:            "violation",
+				logging.ConstraintName:       r.Constraint.GetName(),
+				logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind:       r.Constraint.GetKind(),
+				logging.ConstraintAction:     r.EnforcementAction,
+				logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
+				logging.ResourceName:         resourceName,
+				logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
 			}
-			if *emitAdmissionEvents {
-				annotations := map[string]string{
-					logging.Process:              "admission",
-					logging.EventType:            "violation",
-					logging.ConstraintName:       r.Constraint.GetName(),
-					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     r.EnforcementAction,
-					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
-					logging.ResourceName:         resourceName,
-					logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
-				}
-				var eventMsg, reason string
-				switch r.EnforcementAction {
-				case string(util.Dryrun):
-					eventMsg = "Dryrun violation"
-					reason = "DryrunViolation"
-				case string(util.Warn):
-					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" would have denied the request"
-					reason = "WarningAdmission"
-				default:
-					eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
-					reason = "FailedAdmission"
-				}
-				ref := getViolationRef(
-					h.gkNamespace,
-					req.AdmissionRequest.Kind.Kind,
-					resourceName,
-					req.AdmissionRequest.Namespace,
-					r.Constraint.GetKind(),
-					r.Constraint.GetName(),
-					r.Constraint.GetNamespace())
-				h.eventRecorder.AnnotatedEventf(
-					ref,
-					annotations,
-					corev1.EventTypeWarning,
-					reason,
-					"%s, Resource Namespace: %s, Constraint: %s, Message: %s",
-					eventMsg,
-					req.AdmissionRequest.Namespace,
-					r.Constraint.GetName(),
-					r.Msg)
+			var eventMsg, reason string
+			switch r.EnforcementAction {
+			case string(util.Dryrun):
+				eventMsg = "Dryrun violation"
+				reason = "DryrunViolation"
+			case string(util.Warn):
+				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" raised a warning for this request"
+				reason = "WarningAdmission"
+			default:
+				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
+				reason = "FailedAdmission"
 			}
+			ref := getViolationRef(
+				h.gkNamespace,
+				req.AdmissionRequest.Kind.Kind,
+				resourceName,
+				req.AdmissionRequest.Namespace,
+				r.Constraint.GetKind(),
+				r.Constraint.GetName(),
+				r.Constraint.GetNamespace())
+			h.eventRecorder.AnnotatedEventf(
+				ref,
+				annotations,
+				corev1.EventTypeWarning,
+				reason,
+				"%s, Resource Namespace: %s, Constraint: %s, Message: %s",
+				eventMsg,
+				req.AdmissionRequest.Namespace,
+				r.Constraint.GetName(),
+				r.Msg)
 		}
 
-		// only deny or warn enforcement actions should prompt admission response
 		if r.EnforcementAction == string(util.Deny) {
 			denyMsgs = append(denyMsgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
 		}
