@@ -17,7 +17,6 @@ package webhook
 
 import (
 	"context"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -71,8 +70,8 @@ func getFiles(dir string) ([]string, error) {
 	if _, err = os.Stat(dir); err != nil {
 		return nil, err
 	}
-	var files []os.FileInfo
-	if files, err = ioutil.ReadDir(dir); err != nil {
+	var files []os.DirEntry
+	if files, err = os.ReadDir(dir); err != nil {
 		return nil, err
 	}
 	// white-list file extensions
@@ -98,7 +97,7 @@ func readTemplates(dir string) ([]templates.ConstraintTemplate, error) {
 	}
 	result := make([]templates.ConstraintTemplate, len(fileList))
 	for i, file := range fileList {
-		yamlString, err := ioutil.ReadFile(file)
+		yamlString, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +139,7 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	}
 	result := make([]unstructured.Unstructured, len(fileList))
 	for i, file := range fileList {
-		yamlString, err := ioutil.ReadFile(file)
+		yamlString, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}

@@ -97,7 +97,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.AssignMeta))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -270,7 +270,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.Assign))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
