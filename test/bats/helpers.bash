@@ -67,16 +67,16 @@ wait_for_process() {
 
 get_ca_cert() {
   destination="$1"
-  if [ $(kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then
+  if [ $(kubectl get secret -n ${GATEKEEPER_NAMESPACE} gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | wc -w) -eq 0 ]; then
     return 1
   fi
-  kubectl get secret -n gatekeeper-system gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d >$destination
+  kubectl get secret -n ${GATEKEEPER_NAMESPACE} gatekeeper-webhook-server-cert -o jsonpath='{.data.ca\.crt}' | base64 -d >$destination
 }
 
 constraint_enforced() {
   local kind="$1"
   local name="$2"
-  local pod_list="$(kubectl -n gatekeeper-system get pod -l gatekeeper.sh/operation=webhook -o json)"
+  local pod_list="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -o json)"
   if [[ $? -ne 0 ]]; then
     echo "error gathering pods"
     return 1

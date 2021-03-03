@@ -40,6 +40,13 @@ func extractName(s string) (string, error) {
 	return strings.Trim(matches[1], `"'`), nil
 }
 
+//extractNamespaceName returns the default "gatekeeper-system" namespace.
+//Because the namespace is '{{ include "gatekeeper.namespace" . }}' it fails to be found in extractName.
+//There should only ever be 1 Namespace so this should be safe
+func extractNamespaceName(s string) (string, error) {
+	return "gatekeeper-system", nil
+}
+
 func extractCRDKind(obj string) (string, error) {
 	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := yaml.Unmarshal([]byte(obj), crd); err != nil {
@@ -81,7 +88,10 @@ func (ks *kindSet) Write() error {
 					return err
 				}
 			}
+		} else if kind == "Namespace" {
+			nameExtractor = extractNamespaceName
 		}
+
 		for _, obj := range objs {
 			name, err := nameExtractor(obj)
 			if err != nil {

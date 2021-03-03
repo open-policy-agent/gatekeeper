@@ -15,6 +15,8 @@ KUSTOMIZE_VERSION ?= 3.8.8
 BATS_VERSION ?= 1.2.1
 KUBECTL_KUSTOMIZE_VERSION ?= 1.20.1-${KUSTOMIZE_VERSION}
 HELM_VERSION ?= 2.17.0
+HELM_ARGS ?=
+GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -40,7 +42,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
-\n        - --exempt-namespace=gatekeeper-system\
+\n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n---\
 \napiVersion: apps/v1\
@@ -110,7 +112,7 @@ e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
-	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
+	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
 
 e2e-helm-install:
 	rm -rf .staging/helm
@@ -120,13 +122,20 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install
+ifneq ($(GATEKEEPER_NAMESPACE),gatekeeper-system)
+	kubectl create namespace $(GATEKEEPER_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	kubectl label ns $(GATEKEEPER_NAMESPACE) admission.gatekeeper.sh/ignore=no-self-managing
+	kubectl label ns $(GATEKEEPER_NAMESPACE) gatekeeper.sh/system="yes"
+	$(eval HELM_ARGS := --namespace $(GATEKEEPER_NAMESPACE) --set createNamespace=false)
+endif
+
 	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
 		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
 		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
 		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --debug ${HELM_ARGS} --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	else\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper ${HELM_ARGS} --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	fi;
 
 e2e-helm-upgrade-init: e2e-helm-install
