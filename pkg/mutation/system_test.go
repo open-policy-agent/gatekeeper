@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +17,7 @@ import (
 // Leveraging existing resource types to create custom mutators in order to validate
 // the cache.
 type MockMutator struct {
-	Mocked           ID
+	Mocked           types.ID
 	RelevantField    string // relevant for comparison
 	NotRelevantField string // not relevant for comparison
 	Labels           map[string]string
@@ -54,7 +55,7 @@ func (m *MockMutator) Mutate(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (m *MockMutator) ID() ID {
+func (m *MockMutator) ID() types.ID {
 	return m.Mocked
 }
 
@@ -66,7 +67,7 @@ func (m *MockMutator) Value() (interface{}, error) {
 	return nil, nil
 }
 
-func (m *MockMutator) HasDiff(mutator Mutator) bool {
+func (m *MockMutator) HasDiff(mutator types.Mutator) bool {
 	mock, ok := mutator.(*MockMutator)
 	if !ok {
 		return false
@@ -74,7 +75,7 @@ func (m *MockMutator) HasDiff(mutator Mutator) bool {
 	return m.RelevantField != mock.RelevantField
 }
 
-func (m *MockMutator) DeepCopy() Mutator {
+func (m *MockMutator) DeepCopy() types.Mutator {
 	res := &MockMutator{
 		Mocked:           m.Mocked,
 		RelevantField:    m.RelevantField,
@@ -93,78 +94,78 @@ func (m *MockMutator) DeepCopy() Mutator {
 	return res
 }
 
-var mutators = []Mutator{
-	&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-	&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
-	&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-	&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
-	&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-	&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
+var mutators = []types.Mutator{
+	&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
+	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
+	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
+	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+	&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
 }
 
 func TestSorting(t *testing.T) {
 	table := []struct {
 		tname    string
-		initial  []Mutator
-		expected []Mutator
+		initial  []types.Mutator
+		expected []types.Mutator
 		action   func(*System) error
 	}{
 		{
 			tname:   "testsort",
 			initial: mutators,
-			expected: []Mutator{
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+			expected: []types.Mutator{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error { return nil },
 		},
 		{
 			tname:   "testremove",
 			initial: mutators,
-			expected: []Mutator{
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+			expected: []types.Mutator{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Remove(ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"})
+				return s.Remove(types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"})
 			},
 		},
 		{
 			tname:   "testaddingsame",
 			initial: mutators,
-			expected: []Mutator{
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+			expected: []types.Mutator{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Upsert(&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
+				return s.Upsert(&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
 					NotRelevantField: "notrelevantvalue"})
 			},
 		},
 		{
 			tname:   "testaddingdifferent",
 			initial: mutators,
-			expected: []Mutator{
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}, RelevantField: "relevantvalue"},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
-				&MockMutator{Mocked: ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+			expected: []types.Mutator{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"}, RelevantField: "relevantvalue"},
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
+				&MockMutator{Mocked: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Upsert(&MockMutator{Mocked: ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
+				return s.Upsert(&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
 					RelevantField: "relevantvalue"})
 			},
 		},
@@ -191,7 +192,7 @@ func TestSorting(t *testing.T) {
 				t.Errorf("%s: Cache content is not consistent: %s", tc.tname, cmp.Diff(c.orderedMutators, tc.expected))
 			}
 
-			expectedMap := make(map[ID]Mutator)
+			expectedMap := make(map[types.ID]types.Mutator)
 			for _, m := range tc.expected {
 				expectedMap[m.ID()] = m
 			}
@@ -213,10 +214,10 @@ func TestMutation(t *testing.T) {
 		{
 			tname: "mutate",
 			mutations: [](*MockMutator){
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
 					"ka": "va",
 				}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
 					"kb": "vb",
 				}},
 			},
@@ -229,10 +230,10 @@ func TestMutation(t *testing.T) {
 		{
 			tname: "neverconverge",
 			mutations: [](*MockMutator){
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
 					"ka": "va",
 				}, UnstableFor: 5},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
 					"kb": "vb",
 				}},
 			},
@@ -241,16 +242,16 @@ func TestMutation(t *testing.T) {
 		{
 			tname: "convergeafter3",
 			mutations: [](*MockMutator){
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}, Labels: map[string]string{
 					"ka": "va",
 				}, UnstableFor: 3},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "bbb"}, Labels: map[string]string{
 					"kb": "vb",
 				}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "ccc"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "ccc"}, Labels: map[string]string{
 					"kb": "vb",
 				}},
-				&MockMutator{Mocked: ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "ddd"}, Labels: map[string]string{
+				&MockMutator{Mocked: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "ddd"}, Labels: map[string]string{
 					"kb": "vb",
 				}},
 			},
@@ -283,7 +284,7 @@ func TestMutation(t *testing.T) {
 					t.Errorf(tc.tname, "Failed inserting %dth object", i)
 				}
 			}
-			err = c.Mutate(toMutate, nil)
+			mutated, err := c.Mutate(toMutate, nil)
 			if tc.expectError && err == nil {
 				t.Fatal(tc.tname, "Expecting error from mutate, did not fail")
 			}
@@ -302,6 +303,11 @@ func TestMutation(t *testing.T) {
 			}
 
 			newLabels := accessor.GetLabels()
+
+			if !mutated {
+				t.Error(tc.tname, "Mutation not as expected", cmp.Diff(newLabels, tc.expectedLabels))
+			}
+
 			if !cmp.Equal(newLabels, tc.expectedLabels) {
 				t.Error(tc.tname, "Mutation not as expected", cmp.Diff(newLabels, tc.expectedLabels))
 			}

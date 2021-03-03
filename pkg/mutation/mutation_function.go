@@ -1,56 +1,121 @@
 package mutation
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func Mutate(mutator Mutator, obj *unstructured.Unstructured) error {
-	return mutate(mutator, obj.Object, nil, 0)
+func mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) error {
+	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
+	if len(mutator.Path().Nodes) == 0 {
+		return fmt.Errorf("mutator %v has an empty target location", mutator.ID())
+	}
+	if obj == nil {
+		return errors.New("attempting to mutate a nil object")
+	}
+	_, _, err := s.mutateInternal(obj.Object, 0)
+	return err
 }
 
-func mutate(m Mutator, current interface{}, previous interface{}, depth int) error {
-	if len(m.Path().Nodes)-1 == depth {
-		return addValue(m, current, previous, depth)
-	}
-	pathEntry := m.Path().Nodes[depth]
+type mutatorState struct {
+	mutator types.Mutator
+	tester  *path.Tester
+	// valueTest takes the input value and whether that value already existed.
+	// It returns true if the value should be mutated
+	valueTest func(interface{}, bool) bool
+}
+
+// mutateInternal mutates the resource recursively. It returns false if there has been no change
+// to any downstream objects in the tree, indicating that the mutation should not be persisted
+func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, interface{}, error) {
+	pathEntry := s.mutator.Path().Nodes[depth]
 	switch castPathEntry := pathEntry.(type) {
 	case *parser.Object:
 		currentAsObject, ok := current.(map[string]interface{})
 		if !ok { // Path entry type does not match current object
-			return fmt.Errorf("mismatch between path entry (type: object) and received object (type: %T). Path: %+v", current, castPathEntry)
+			return false, nil, fmt.Errorf("mismatch between path entry (type: object) and received object (type: %T). Path: %+v", current, castPathEntry)
 		}
-		next, ok := currentAsObject[castPathEntry.Reference]
-		if !ok { // Next element is missing and needs to be added
-			next = createMissingElement(m, currentAsObject, previous, depth)
+		next, exists := currentAsObject[castPathEntry.Reference]
+		if exists {
+			if !s.tester.ExistsOkay(depth) {
+				return false, nil, nil
+			}
+		} else {
+			if !s.tester.MissingOkay(depth) {
+				return false, nil, nil
+			}
 		}
-		if err := mutate(m, next, current, depth+1); err != nil {
-			return err
+		// we have hit the end of our path, this is the base case
+		if len(s.mutator.Path().Nodes)-1 == depth {
+			if s.valueTest != nil && !s.valueTest(next, exists) {
+				return false, nil, nil
+			}
+			value, err := s.mutator.Value()
+			if err != nil {
+				return false, nil, err
+			}
+			currentAsObject[castPathEntry.Reference] = value
+			return true, currentAsObject, nil
 		}
-		return nil
+		if !exists { // Next element is missing and needs to be added
+			var err error
+			next, err = s.createMissingElement(depth)
+			if err != nil {
+				return false, nil, err
+			}
+		}
+		mutated, next, err := s.mutateInternal(next, depth+1)
+		if err != nil {
+			return false, nil, err
+		}
+		if mutated {
+			currentAsObject[castPathEntry.Reference] = next
+		}
+		return mutated, currentAsObject, nil
 	case *parser.List:
 		elementFound := false
 		currentAsList, ok := current.([]interface{})
 		if !ok { // Path entry type does not match current object
-			return fmt.Errorf("mismatch between path entry (type: List) and received object (type: %T). Path: %+v", current, castPathEntry)
+			return false, nil, fmt.Errorf("mismatch between path entry (type: List) and received object (type: %T). Path: %+v", current, castPathEntry)
 		}
+		shallowCopy := make([]interface{}, len(currentAsList))
+		copy(shallowCopy, currentAsList)
+		if len(s.mutator.Path().Nodes)-1 == depth {
+			return s.setListElementToValue(shallowCopy, castPathEntry, depth)
+		}
+
 		glob := castPathEntry.Glob
 		key := castPathEntry.KeyField
-		for _, listElement := range currentAsList {
+		// if someone says "MustNotExist" for a glob, that condition can never be satisfied
+		if glob && !s.tester.ExistsOkay(depth) {
+			return false, nil, nil
+		}
+		mutated := false
+		for _, listElement := range shallowCopy {
 			if glob {
-				if err := mutate(m, listElement, current, depth+1); err != nil {
-					return err
+				m, _, err := s.mutateInternal(listElement, depth+1)
+				if err != nil {
+					return false, nil, err
 				}
+				mutated = mutated || m
 				elementFound = true
 			} else {
 				if listElementAsObject, ok := listElement.(map[string]interface{}); ok {
 					if elementValue, ok := listElementAsObject[key]; ok {
 						if *castPathEntry.KeyValue == elementValue {
-							if err := mutate(m, listElement, current, depth+1); err != nil {
-								return err
+							if !s.tester.ExistsOkay(depth) {
+								return false, nil, nil
 							}
+							m, _, err := s.mutateInternal(listElement, depth+1)
+							if err != nil {
+								return false, nil, err
+							}
+							mutated = mutated || m
 							elementFound = true
 						}
 					}
@@ -59,108 +124,71 @@ func mutate(m Mutator, current interface{}, previous interface{}, depth int) err
 		}
 		// If no matching element in the array was found in non Globbed list, create a new element
 		if !castPathEntry.Glob && !elementFound {
-			next := createMissingElement(m, current, previous, depth)
-			if err := mutate(m, next, current, depth+1); err != nil {
-				return err
+			if !s.tester.MissingOkay(depth) {
+				return false, nil, nil
 			}
+			next, err := s.createMissingElement(depth)
+			if err != nil {
+				return false, nil, err
+			}
+			shallowCopy = append(shallowCopy, next)
+			m, _, err := s.mutateInternal(next, depth+1)
+			if err != nil {
+				return false, nil, err
+			}
+			mutated = mutated || m
 		}
+		return mutated, shallowCopy, nil
 	default:
-		return fmt.Errorf("invalid type pathEntry type: %T", pathEntry)
+		return false, nil, fmt.Errorf("invalid type pathEntry type: %T", pathEntry)
 	}
-	return nil
 }
 
-func addValue(m Mutator, current interface{}, previous interface{}, depth int) error {
-	pathEntry := m.Path().Nodes[depth]
-	switch castPathEntry := pathEntry.(type) {
-	case *parser.Object:
-		return setObjectValue(m, castPathEntry, current, depth)
-	case *parser.List:
-		return setListElementToValue(m, current, previous, castPathEntry, depth)
-	}
-	return nil
-}
-
-func setObjectValue(m Mutator, pathEntry *parser.Object, current interface{}, depth int) error {
-	key := pathEntry.Reference
-	switch m.(type) {
-	case *AssignMetadataMutator:
-		if elementValue, found, err := nestedString(current, key); err != nil {
-			return err
-		} else if found {
-			log.Info("Mutated value already present", "field", key, "value", elementValue)
-			return nil
-		}
-	}
-	value, err := m.Value()
-	if err != nil {
-		return err
-	}
-	if err = setNestedField(current, value, key); err != nil {
-		log.Error(err, "Failed to mutate object", "field", key, "value", value)
-		return err
-	}
-	return nil
-}
-
-func setListElementToValue(m Mutator, current interface{}, previous interface{}, listPathEntry *parser.List, depth int) error {
-	currentAsList, ok := current.([]interface{})
-	if !ok {
-		return fmt.Errorf("mismatch between path entry (type: list) and received object (type: %T). Path: %+v", current, listPathEntry)
-	}
+func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPathEntry *parser.List, depth int) (bool, []interface{}, error) {
 	if listPathEntry.Glob {
-		return fmt.Errorf("last path entry can not be globbed")
+		return false, nil, fmt.Errorf("last path entry can not be globbed")
 	}
-	newValue, err := m.Value()
+	newValue, err := s.mutator.Value()
 	if err != nil {
-		log.Error(err, "error getting mutator value for mutator %+v", m)
-		return err
+		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
+		return false, nil, err
 	}
 	newValueAsObject, ok := newValue.(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("last path entry of type list requires an object value, pathEntry: %+v", listPathEntry)
+		return false, nil, fmt.Errorf("last path entry of type list requires an object value, pathEntry: %+v", listPathEntry)
 	}
 
 	key := listPathEntry.KeyField
+	if listPathEntry.KeyValue == nil {
+		return false, nil, errors.New("encountered nil key value when setting a new list element")
+	}
 	keyValue := *listPathEntry.KeyValue
 
-	elementFound := false
 	for i, listElement := range currentAsList {
 		if elementValue, found, err := nestedString(listElement, key); err != nil {
-			return err
+			return false, nil, err
 		} else if found && keyValue == elementValue {
 			newKeyValue, ok := newValueAsObject[key]
 			if !ok || newKeyValue != keyValue {
-				return fmt.Errorf("key value of replaced object must not change")
+				return false, nil, fmt.Errorf("key value of replaced object must not change")
 			}
-			elementFound = true
+			if !s.tester.ExistsOkay(depth) {
+				return false, nil, nil
+			}
 			currentAsList[i] = newValueAsObject
+			return true, currentAsList, nil
 		}
 	}
-	if !elementFound {
-		return appendNewObjectToList(m, currentAsList, previous, newValueAsObject, listPathEntry, depth)
+	if !s.tester.MissingOkay(depth) {
+		return false, nil, nil
 	}
-	return nil
+	return true, append(currentAsList, newValueAsObject), nil
 }
 
-func appendNewObjectToList(m Mutator, currentAsList []interface{}, previous interface{}, newValueAsObject map[string]interface{}, listPathEntry *parser.List, depth int) error {
-	currentAsList = append(currentAsList, newValueAsObject)
-	previousPath, ok := m.Path().Nodes[depth-1].(*parser.Object)
-	if !ok {
-		return fmt.Errorf("two consecutive list path entries not allowed: %+v %+v", listPathEntry, m.Path().Nodes[depth-1])
-	}
-	previousAsMap, ok := previous.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("unable to handle nested arrays in mutated resources: %+v %+v", previous, currentAsList)
-	}
-	previousAsMap[previousPath.Reference] = currentAsList
-	return nil
-}
-
-func createMissingElement(m Mutator, current interface{}, previous interface{}, depth int) interface{} {
+func (s *mutatorState) createMissingElement(depth int) (interface{}, error) {
 	var next interface{}
-	pathEntry := m.Path().Nodes[depth]
-	nextPathEntry := m.Path().Nodes[depth+1]
+	pathEntry := s.mutator.Path().Nodes[depth]
+	nextPathEntry := s.mutator.Path().Nodes[depth+1]
 
 	// Create new element of type
 	switch nextPathEntry.(type) {
@@ -170,36 +198,18 @@ func createMissingElement(m Mutator, current interface{}, previous interface{}, 
 		next = make([]interface{}, 0)
 	}
 
-	// Append to element of type
-	switch castPathEntry := pathEntry.(type) {
-	case *parser.Object:
-		currentAsObject, ok := current.(map[string]interface{})
-		if !ok { // Path entry type does not match current object
-			return fmt.Errorf("mismatch between path entry (type: object) and received object (type: %T). Path: %+v", current, castPathEntry)
-		}
-		currentAsObject[castPathEntry.Reference] = next
-	case *parser.List:
-		currentAsList, ok := current.([]interface{})
-		if !ok { // Path entry type does not match current object
-			return fmt.Errorf("mismatch between path entry (type: List) and received object (type: %T). Path: %+v", current, castPathEntry)
-		}
-		current = append(currentAsList, next)
+	// Set new keyfield
+	if castPathEntry, ok := pathEntry.(*parser.List); ok {
 		nextAsObject, ok := next.(map[string]interface{})
 		if !ok { // Path entry type does not match current object
-			return fmt.Errorf("two consecutive list path entries not allowed: %+v %+v", castPathEntry, nextPathEntry)
+			return nil, fmt.Errorf("two consecutive list path entries not allowed: %+v %+v", castPathEntry, nextPathEntry)
+		}
+		if castPathEntry.KeyValue == nil {
+			return nil, fmt.Errorf("list entry has no key value")
 		}
 		nextAsObject[castPathEntry.KeyField] = *castPathEntry.KeyValue
-		previousPathAsObject, ok := m.Path().Nodes[depth-1].(*parser.Object)
-		if !ok {
-			return fmt.Errorf("two consecutive list path entries not allowed: %+v %+v", castPathEntry, m.Path().Nodes[depth-1])
-		}
-		previousAsObject, ok := previous.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("two consecutive list objects not allowed: %+v %+v", current, previous)
-		}
-		previousAsObject[previousPathAsObject.Reference] = current
 	}
-	return next
+	return next, nil
 }
 
 func nestedString(current interface{}, key string) (string, bool, error) {
@@ -208,13 +218,4 @@ func nestedString(current interface{}, key string) (string, bool, error) {
 		return "", false, fmt.Errorf("cast error, unable to case %T to map[string]interface{}", current)
 	}
 	return unstructured.NestedString(currentAsMap, key)
-
-}
-
-func setNestedField(current interface{}, value interface{}, key string) error {
-	currentAsMap, ok := current.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("cast error, unable to case %T to map[string]interface{}", current)
-	}
-	return unstructured.SetNestedField(currentAsMap, value, key)
 }

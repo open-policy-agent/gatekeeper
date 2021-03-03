@@ -40,26 +40,23 @@ func validateTargets(templ *templates.ConstraintTemplate) error {
 func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvider) (*apiextensions.JSONSchemaProps, error) {
 	props := map[string]apiextensions.JSONSchemaProps{
 		"match":             target.MatchSchema(),
-		"enforcementAction": apiextensions.JSONSchemaProps{Type: "string"},
+		"enforcementAction": {Type: "string"},
 	}
 	if templ.Spec.CRD.Spec.Validation != nil && templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema != nil {
-		internalSchema := &apiextensions.JSONSchemaProps{}
-		if err := h.scheme.Convert(templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema, internalSchema, nil); err != nil {
-			return nil, err
-		}
-		props["parameters"] = *internalSchema
+		internalSchema := *templ.Spec.CRD.Spec.Validation.OpenAPIV3Schema.DeepCopy()
+		props["parameters"] = internalSchema
 	}
 	schema := &apiextensions.JSONSchemaProps{
 		Properties: map[string]apiextensions.JSONSchemaProps{
-			"metadata": apiextensions.JSONSchemaProps{
+			"metadata": {
 				Properties: map[string]apiextensions.JSONSchemaProps{
-					"name": apiextensions.JSONSchemaProps{
+					"name": {
 						Type:      "string",
 						MaxLength: func(i int64) *int64 { return &i }(63),
 					},
 				},
 			},
-			"spec": apiextensions.JSONSchemaProps{
+			"spec": {
 				Properties: props,
 			},
 		},

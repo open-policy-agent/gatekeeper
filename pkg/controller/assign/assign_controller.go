@@ -18,11 +18,13 @@ package assign
 
 import (
 	"context"
+	"fmt"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -101,11 +103,11 @@ type Reconciler struct {
 
 // Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
 // and what is in the Assign.Spec
-func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false
 	assign := &mutationsv1alpha1.Assign{}
-	err := r.Get(context.TODO(), request.NamespacedName, assign)
+	err := r.Get(ctx, request.NamespacedName, assign)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -118,14 +120,14 @@ func (r *Reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Assign",
-				APIVersion: "mutations.gatekeeper.sh",
+				APIVersion: fmt.Sprintf("%s/%s", mutationsv1alpha1.GroupVersion.Group, mutationsv1alpha1.GroupVersion.Version),
 			},
 		}
 	}
 	deleted = deleted || !assign.GetDeletionTimestamp().IsZero()
 
 	if deleted {
-		id, err := mutation.MakeID(assign)
+		id, err := types.MakeID(assign)
 		if err != nil {
 			log.Error(err, "Failed to get id out of assign")
 			return ctrl.Result{}, nil

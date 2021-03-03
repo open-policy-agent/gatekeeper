@@ -185,7 +185,7 @@ type ReconcileConfig struct {
 // and what is in the Config.Spec
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync)
 // update is needed for finalizers
-func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
 		running := r.cs.Enter()
@@ -202,7 +202,6 @@ func (r *ReconcileConfig) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 	exists := true
 	instance := &configv1alpha1.Config{}
-	ctx := context.Background()
 	err := r.reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		// if config is not found, we should remove cached data
@@ -312,7 +311,7 @@ func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 
 		// reset sync cache before sending the metric
 		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+		r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: ctx})
 
 		r.needsWipe = false
 	}
@@ -337,7 +336,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
-		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: context.TODO()})
+		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{Ctx: ctx})
 
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())

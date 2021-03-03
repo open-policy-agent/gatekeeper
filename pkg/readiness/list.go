@@ -22,14 +22,13 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type listerFunc func(ctx context.Context, out runtime.Object, opts ...client.ListOption) error
+type listerFunc func(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error
 
-func (f listerFunc) List(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
+func (f listerFunc) List(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error {
 	return f(ctx, out, opts...)
 }
 
@@ -39,7 +38,7 @@ func (f listerFunc) List(ctx context.Context, out runtime.Object, opts ...client
 // the predicate returns false, the error is terminal and the operation will be
 // abandoned.  If predicate is nil, all errors are considered recoverable.
 func retryLister(r Lister, predicate retryPredicate) Lister {
-	return listerFunc(func(ctx context.Context, out runtime.Object, opts ...client.ListOption) error {
+	return listerFunc(func(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error {
 		if out == nil {
 			return errors.New("nil output resource")
 		}

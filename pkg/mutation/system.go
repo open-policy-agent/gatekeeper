@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,23 +16,24 @@ import (
 // System keeps the list of mutations and
 // provides an interface to apply mutations.
 type System struct {
-	schemaDB        SchemaDB
-	orderedMutators []Mutator
-	mutatorsMap     map[ID]Mutator
+	schemaDB        schema.DB
+	orderedMutators []types.Mutator
+	mutatorsMap     map[types.ID]types.Mutator
 	sync.RWMutex
 }
 
 // NewSystem initializes an empty mutation system
 func NewSystem() *System {
 	return &System{
-		orderedMutators: make([]Mutator, 0),
-		mutatorsMap:     make(map[ID]Mutator),
+		schemaDB:        *schema.New(),
+		orderedMutators: make([]types.Mutator, 0),
+		mutatorsMap:     make(map[types.ID]types.Mutator),
 	}
 }
 
 // Upsert updates or insert the given object, and returns
 // an error in case of conflicts
-func (s *System) Upsert(m Mutator) error {
+func (s *System) Upsert(m types.Mutator) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -42,10 +45,10 @@ func (s *System) Upsert(m Mutator) error {
 	toAdd := m.DeepCopy()
 
 	// Checking schema consistency only if the mutator has schema
-	if withSchema, ok := toAdd.(MutatorWithSchema); ok {
+	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
-			return errors.Wrapf(err, "Schema upsert failed")
+			return errors.Wrapf(err, "Schema upsert failed for %v", m.ID())
 		}
 	}
 
@@ -72,11 +75,12 @@ func (s *System) Upsert(m Mutator) error {
 	return nil
 }
 
-// Mutate applies the mutation in place to the given object
-func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) error {
+// Mutate applies the mutation in place to the given object. Returns
+// true if a mutation was performed.
+func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.RLock()
 	defer s.RUnlock()
-
+	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
 	for i := 0; i < maxIterations; i++ {
@@ -85,20 +89,25 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) er
 			if m.Matches(obj, ns) {
 				err := m.Mutate(obj)
 				if err != nil {
-					return errors.Wrapf(err, "Mutation failed for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+					return false, errors.Wrapf(err, "mutation %v failed for %s %s %s %s", m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 				}
 			}
 		}
 		if cmp.Equal(old, obj) {
-			return nil
+			if i == 0 {
+				return false, nil
+			}
+			if cmp.Equal(original, obj) {
+				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+			}
+			return true, nil
 		}
 	}
-
-	return fmt.Errorf("Mutation not converging for %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind)
+	return false, fmt.Errorf("mutation not converging for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 }
 
 // Remove removes the mutator from the mutation system
-func (s *System) Remove(id ID) error {
+func (s *System) Remove(id types.ID) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -106,13 +115,7 @@ func (s *System) Remove(id ID) error {
 		return nil
 	}
 
-	err := s.schemaDB.Remove(id)
-	// TODO: get back on this once schemaDB implementation is done
-	// and understand how to recover from a failed remove.
-	// One option is to rebuild the schema from scratch using the cache content.
-	if err != nil {
-		return errors.Wrapf(err, "Schema remove failed")
-	}
+	s.schemaDB.Remove(id)
 
 	i := sort.Search(len(s.orderedMutators), func(i int) bool {
 		res := equal(s.orderedMutators[i].ID(), id)
@@ -137,7 +140,12 @@ func (s *System) Remove(id ID) error {
 	return nil
 }
 
-func greaterOrEqual(id1, id2 ID) bool {
+// Get mutator for given id
+func (s *System) Get(id types.ID) types.Mutator {
+	return s.mutatorsMap[id].DeepCopy()
+}
+
+func greaterOrEqual(id1, id2 types.ID) bool {
 	if id1.Group > id2.Group {
 		return true
 	}
@@ -165,7 +173,7 @@ func greaterOrEqual(id1, id2 ID) bool {
 	return true
 }
 
-func equal(id1, id2 ID) bool {
+func equal(id1, id2 types.ID) bool {
 	if id1.Group == id2.Group &&
 		id1.Kind == id2.Kind &&
 		id1.Namespace == id2.Namespace &&

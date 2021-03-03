@@ -16,22 +16,19 @@ limitations under the License.
 package readiness
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // SetupTracker sets up a readiness tracker and registers it to run under control of the
 // provided Manager object.
 // NOTE: Must be called _before_ the manager is started.
-func SetupTracker(mgr manager.Manager) (*Tracker, error) {
-	tracker := NewTracker(mgr.GetAPIReader())
+func SetupTracker(mgr manager.Manager, mutationEnabled bool) (*Tracker, error) {
+	tracker := NewTracker(mgr.GetAPIReader(), mutationEnabled)
 
-	err := mgr.Add(manager.RunnableFunc(func(done <-chan struct{}) error {
-		ctx, cancel := syncutil.ContextForChannel(done)
-		defer cancel()
-
+	err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return tracker.Run(ctx)
 	}))
 	if err != nil {

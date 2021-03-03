@@ -6,17 +6,24 @@ BATS_TESTS_DIR=test/bats/tests
 WAIT_TIME=120
 SLEEP_TIME=1
 CLEAN_CMD="echo cleaning..."
+GATEKEEPER_NAMESPACE=${GATEKEEPER_NAMESPACE:-gatekeeper-system}
 
 teardown() {
   bash -c "${CLEAN_CMD}"
 }
 
+teardown_file() {
+  kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
+  kubectl delete constrainttemplates k8scontainerlimits k8srequiredlabels k8suniquelabel || true
+  kubectl delete configs.config.gatekeeper.sh config -n ${GATEKEEPER_NAMESPACE} || true
+}
+
 @test "gatekeeper-controller-manager is running" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n ${GATEKEEPER_NAMESPACE} wait --for=condition=Ready --timeout=60s pod -l control-plane=controller-manager"
 }
 
 @test "gatekeeper-audit is running" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n gatekeeper-system wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl -n ${GATEKEEPER_NAMESPACE} wait --for=condition=Ready --timeout=60s pod -l control-plane=audit-controller"
 }
 
 @test "namespace label webhook is serving" {
@@ -28,7 +35,7 @@ teardown() {
   kubectl wait --for=condition=Ready --timeout=60s pod temp
   kubectl cp ${cert} temp:/cacert
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl -f --cacert /cacert --connect-timeout 1 --max-time 2  https://gatekeeper-webhook-service.gatekeeper-system.svc:443/v1/admitlabel"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl -f --cacert /cacert --connect-timeout 1 --max-time 2  https://gatekeeper-webhook-service.${GATEKEEPER_NAMESPACE}.svc:443/v1/admitlabel"
   kubectl delete pod temp
 }
 
@@ -36,12 +43,40 @@ teardown() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/constrainttemplates.templates.gatekeeper.sh"
 }
 
+@test "mutation crds are established" {
+  if [ -z $ENABLE_MUTATION_TESTS ]; then
+    skip "skipping mutation tests"
+  fi
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assign.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignmetadata.mutations.gatekeeper.sh"
+}
+
 @test "waiting for validating webhook" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io gatekeeper-validating-webhook-configuration"
 }
 
+@test "gatekeeper mutation test" {
+  if [ -z $ENABLE_MUTATION_TESTS ]; then
+    skip "skipping mutation tests"
+  fi
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_cm.yaml"
+  run kubectl get cm mutate-cm -o jsonpath="{.metadata.labels.owner}"
+  assert_equal 'gatekeeper' "${output}"
+
+  kubectl delete --ignore-not-found cm mutate-cm
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sexternalip_assign.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_svc.yaml"
+  run kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}"
+  assert_equal "" "${output}"
+
+  kubectl delete --ignore-not-found svc mutate-svc
+}
+
 @test "applying sync config" {
-  kubectl apply -f ${BATS_TESTS_DIR}/sync.yaml
+  kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync.yaml
 }
 
 # creating namespaces and audit constraints early so they will have time to reconcile
@@ -61,8 +96,8 @@ teardown() {
   assert_failure
 }
 
-@test "gatekeeper-system ignore label can be patched" {
-  kubectl patch ns gatekeeper-system --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
+@test "gatekeeper ns ignore label can be patched" {
+  kubectl patch ns ${GATEKEEPER_NAMESPACE} --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
 }
 
 @test "required labels dryrun test" {
@@ -78,7 +113,7 @@ teardown() {
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-dryrun.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
-  # deploying a violation with dryrun enforcement action will be accepted
+  # deploying a violation with dryrun enforcement action will be accepted
   kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
 
   kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
@@ -106,8 +141,8 @@ teardown() {
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
   num_namespaces=$(kubectl get ns -o json | jq '.items | length')
-  local pod_ip="$(kubectl -n gatekeeper-system get pod -l gatekeeper.sh/operation=webhook -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl http://${pod_ip}.gatekeeper-system.pod:8888/metrics | grep 'gatekeeper_sync{kind=\"Namespace\",status=\"active\"} ${num_namespaces}'"
+  local pod_ip="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -ojson | jq --raw-output '[.items[].status.podIP][0]' | sed 's#\.#-#g')"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl exec -it temp -- curl http://${pod_ip}.${GATEKEEPER_NAMESPACE}.pod:8888/metrics | grep 'gatekeeper_sync{kind=\"Namespace\",status=\"active\"} ${num_namespaces}'"
   kubectl delete pod temp
 }
 
@@ -151,14 +186,14 @@ __required_labels_audit_test() {
 
 @test "emit events test" {
   # list events for easy debugging
-  kubectl get events -n gatekeeper-system
-  events=$(kubectl get events -n gatekeeper-system --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  kubectl get events -n ${GATEKEEPER_NAMESPACE}
+  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 
-  events=$(kubectl get events -n gatekeeper-system --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 
-  events=$(kubectl get events -n gatekeeper-system --field-selector reason=AuditViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=AuditViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 }
 
@@ -170,6 +205,6 @@ __required_labels_audit_test() {
   assert_match 'denied the request' "${output}"
   assert_failure
 
-  kubectl apply -f ${BATS_TESTS_DIR}/sync_with_exclusion.yaml
+  kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl create configmap should-succeed -n gatekeeper-excluded-namespace"
 }

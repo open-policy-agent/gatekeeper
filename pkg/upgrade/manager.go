@@ -45,15 +45,13 @@ func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
 }
 
 // Start implements the Runnable interface
-func (um *Manager) Start(stop <-chan struct{}) error {
+func (um *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Upgrade Manager")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	defer log.Info("Stopping upgrade manager workers")
 	errCh := make(chan error)
 	go func() { errCh <- um.upgrade(ctx) }()
 	select {
-	case <-stop:
+	case <-ctx.Done():
 		return nil
 	case err := <-errCh:
 		if err != nil {
@@ -61,7 +59,7 @@ func (um *Manager) Start(stop <-chan struct{}) error {
 		}
 	}
 	// We must block indefinitely or manager will exit
-	<-stop
+	<-ctx.Done()
 	return nil
 }
 

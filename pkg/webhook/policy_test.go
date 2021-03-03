@@ -13,7 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -201,7 +201,7 @@ func TestTemplateValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "templates.gatekeeper.sh",
 						Version: "v1beta1",
@@ -227,7 +227,7 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -242,7 +242,7 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj runtime.Object) error {
+func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
 	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
 }
 
@@ -284,14 +284,18 @@ func TestReviewRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -311,7 +315,11 @@ func TestReviewRequest(t *testing.T) {
 			if err == nil && tt.Error {
 				t.Error("err = nil; want non-nil")
 			}
-		})
+		}
+		t.Run(tt.Name, testFn)
+
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
 	}
 
 }
@@ -383,7 +391,7 @@ func TestConstraintValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "constraints.gatekeeper.sh",
 						Version: "v1beta1",
@@ -481,7 +489,8 @@ func TestTracing(t *testing.T) {
 		},
 	}
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
@@ -498,8 +507,11 @@ func TestTracing(t *testing.T) {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -529,7 +541,10 @@ func TestTracing(t *testing.T) {
 					t.Error("Trace when no trace is expected")
 				}
 			}
-		})
+		}
+		t.Run(tt.Name, testFn)
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
 	}
 }
 
@@ -615,15 +630,20 @@ func TestGetDenyMessages(t *testing.T) {
 			ExpectedMsgCount: 0,
 		},
 	}
+
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		maxThreads := -1
+		testFn := func(t *testing.T) {
 			opa, err := makeOpaClient()
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			if maxThreads > 0 {
+				handler.semaphore = make(chan struct{}, maxThreads)
+			}
 			review := atypes.Request{
-				AdmissionRequest: admissionv1beta1.AdmissionRequest{
+				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
 						Version: "v1",
@@ -637,6 +657,48 @@ func TestGetDenyMessages(t *testing.T) {
 			msgs := handler.getDenyMessages(tt.Result, review)
 			if len(msgs) != tt.ExpectedMsgCount {
 				t.Errorf("expected count = %d; actual count = %d", tt.ExpectedMsgCount, len(msgs))
+			}
+		}
+		t.Run(tt.Name, testFn)
+
+		maxThreads = 1
+		t.Run(tt.Name+" with max threads", testFn)
+	}
+}
+
+func TestValidateConfigResource(t *testing.T) {
+	tc := []struct {
+		TestName string
+		Name     string
+		Err      bool
+	}{
+		{
+			TestName: "Wrong name",
+			Name:     "FooBar",
+			Err:      true,
+		},
+		{
+			TestName: "Correct name",
+			Name:     "config",
+		},
+	}
+
+	for _, tt := range tc {
+		t.Run(tt.TestName, func(t *testing.T) {
+			handler := validationHandler{}
+			req := atypes.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Name: tt.Name,
+				},
+			}
+
+			err := handler.validateConfigResource(context.Background(), req)
+
+			if tt.Err && err == nil {
+				t.Errorf("Expected error but received nil")
+			}
+			if !tt.Err && err != nil {
+				t.Errorf("Did not expect error but received: %v", err)
 			}
 		})
 	}

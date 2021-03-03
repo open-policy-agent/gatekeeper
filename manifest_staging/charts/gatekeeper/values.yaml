@@ -4,22 +4,39 @@ constraintViolationsLimit: 20
 auditFromCache: false
 createNamespace: true
 disableValidatingWebhook: false
+validatingWebhookTimeoutSeconds: 3
+enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
+logDenies: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.3.0-beta.2
+  release: v3.4.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
-nodeSelector: { kubernetes.io/os: linux }
-affinity: {}
-tolerations: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+podLabels: {}
 secretAnnotations: {}
 controllerManager:
+  hostNetwork: false
+  priorityClassName: system-cluster-critical
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: gatekeeper.sh/operation
+                  operator: In
+                  values:
+                    - webhook
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  tolerations: []
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       cpu: 1000m
@@ -28,6 +45,11 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
 audit:
+  hostNetwork: false
+  priorityClassName: system-cluster-critical
+  affinity: {}
+  tolerations: []
+  nodeSelector: { kubernetes.io/os: linux }
   resources:
     limits:
       cpu: 1000m
@@ -37,3 +59,6 @@ audit:
       memory: 256Mi
 customResourceDefinitions:
   create: true
+pdb:
+  controllerManager:
+    minAvailable: 1

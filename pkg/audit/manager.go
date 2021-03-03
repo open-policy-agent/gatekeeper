@@ -361,9 +361,9 @@ func (am *Manager) auditResources(
 					continue kindsLoop
 				}
 
-				for _, obj := range objList.Items {
-					objNamespace := obj.GetNamespace()
-					isExcludedNamespace, err := am.skipExcludedNamespace(&obj)
+				for index := range objList.Items {
+					objNamespace := objList.Items[index].GetNamespace()
+					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
 						log.Error(err, "error while excluding namespaces")
 					}
@@ -382,7 +382,7 @@ func (am *Manager) auditResources(
 					}
 
 					augmentedObj := target.AugmentedUnstructured{
-						Object:    obj,
+						Object:    objList.Items[index],
 						Namespace: &ns,
 					}
 					resp, err := am.opa.Review(ctx, augmentedObj)
@@ -429,12 +429,10 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 }
 
 // Start implements controller.Controller
-func (am *Manager) Start(stop <-chan struct{}) error {
+func (am *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Audit Manager")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	go am.auditManagerLoop(ctx)
-	<-stop
+	<-ctx.Done()
 	log.Info("Stopping audit manager workers")
 	return nil
 }

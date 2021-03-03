@@ -11,7 +11,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/pkg/errors"
-	types "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -68,7 +68,7 @@ var _ admission.Handler = &namespaceLabelHandler{}
 type namespaceLabelHandler struct{}
 
 func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
-	if req.Operation == types.Delete {
+	if req.Operation == admissionv1.Delete {
 		return admission.Allowed("Delete is always allowed")
 	}
 	if req.AdmissionRequest.Kind.Group != "" || req.AdmissionRequest.Kind.Kind != namespaceKind {

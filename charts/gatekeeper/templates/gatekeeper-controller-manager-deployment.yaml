@@ -24,7 +24,7 @@ spec:
       release: '{{ .Release.Name }}'
   template:
     metadata:
-      annotations: 
+      annotations:
 {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
@@ -89,13 +89,14 @@ spec:
           httpGet:
             path: /readyz
             port: 9090
-        resources: 
+        resources:
 {{ toYaml .Values.controllerManager.resources | indent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -103,14 +104,17 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector: 
-{{ toYaml .Values.nodeSelector | indent 8 }}
+      nodeSelector:
+{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
       affinity:
-{{ toYaml .Values.affinity | indent 8 }}
+{{ toYaml .Values.controllerManager.affinity | indent 8 }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
+{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
       imagePullSecrets:
 {{ toYaml .Values.image.pullSecrets | indent 8 }}
+{{- if .Values.controllerManager.priorityClassName }}
+      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
+{{- end }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:

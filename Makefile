@@ -6,13 +6,17 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.3.0-beta.2
+VERSION := v3.4.0-beta.0
 
 KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= v1.19.0
-KUSTOMIZE_VERSION ?= 3.7.0
-HELM_VERSION ?= 2.16.10
+KUSTOMIZE_VERSION ?= 3.8.8
+BATS_VERSION ?= 1.2.1
+KUBECTL_KUSTOMIZE_VERSION ?= 1.20.1-${KUSTOMIZE_VERSION}
+HELM_VERSION ?= 2.17.0
+HELM_ARGS ?= 
+GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
@@ -38,7 +42,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
-\n        - --exempt-namespace=gatekeeper-system\
+\n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n---\
 \napiVersion: apps/v1\
@@ -98,31 +102,62 @@ e2e-bootstrap:
 	# Download and install kustomize
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
-	sudo apt-get -o Acquire::Retries=30 update && sudo apt-get -o Acquire::Retries=30 install -y bats
+	curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && tar -zxvf v${BATS_VERSION}.tar.gz && bash bats-core-${BATS_VERSION}/install.sh ${GITHUB_WORKSPACE}
 	# Check for existing kind cluster
 	if [ $$(kind get clusters) ]; then kind delete cluster; fi
 	# Create a new kind cluster
-	TERM=dumb kind create cluster --image kindest/node:${KUBERNETES_VERSION}
+	TERM=dumb kind create cluster --image kindest/node:${KUBERNETES_VERSION} --wait 5m
 
 e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
-	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n gatekeeper-system -l control-plane=controller-manager
+	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
 
-e2e-helm-deploy:
+e2e-helm-install:
 	rm -rf .staging/helm
 	mkdir -p .staging/helm
 	curl https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz > .staging/helm/helmbin.tar.gz
 	cd .staging/helm && tar -xvf helmbin.tar.gz
+	./.staging/helm/linux-amd64/helm version --client
+
+e2e-helm-deploy: e2e-helm-install
+ifneq ($(GATEKEEPER_NAMESPACE),gatekeeper-system)
+	kubectl create namespace $(GATEKEEPER_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	kubectl label ns $(GATEKEEPER_NAMESPACE) admission.gatekeeper.sh/ignore=no-self-managing
+	kubectl label ns $(GATEKEEPER_NAMESPACE) gatekeeper.sh/system="yes"
+	$(eval HELM_ARGS := --namespace $(GATEKEEPER_NAMESPACE) --set createNamespace=false)
+endif
+
 	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
 		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
 		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
 		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --debug ${HELM_ARGS} --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	else\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
+		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper ${HELM_ARGS} --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
 	fi;
+
+e2e-helm-upgrade-init: e2e-helm-install
+	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
+		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
+		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
+		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
+		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
+		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
+			--version ${BASE_RELEASE} --name gatekeeper \
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
+	else\
+		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
+		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
+			--version ${BASE_RELEASE} --name-template gatekeeper \
+			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
+	fi;
+
+e2e-helm-upgrade:
+	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
+		--set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} \
+		--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
 
 # Build manager binary
 manager: generate
@@ -155,11 +190,11 @@ manifests: __controller-gen
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
-	kustomize build config/default -o manifest_staging/deploy/gatekeeper.yaml
-	kustomize build cmd/build/helmify | go run cmd/build/helmify/*.go
+	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
+	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 lint:
-	golangci-lint -v run ./... --timeout 5m
+	golangci-lint -v run --exclude G108 ./... --timeout 5m
 
 # Generate code
 generate: __controller-gen target-template-source

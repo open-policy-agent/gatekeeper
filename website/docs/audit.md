@@ -41,11 +41,11 @@ status:
 
 ## Configuring Audit
 
-- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds)
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
-- Disable: set `--audit-interval=0`
+- Audit chunk size: set `--audit-chunk-size=500` (defaults to `0` = infinite) to limit memory consumption of the auditing `Pod`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
 
-By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](#replicating-data) section for more information.
+By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
 
 ### Audit using kinds specified in the constraints only
 

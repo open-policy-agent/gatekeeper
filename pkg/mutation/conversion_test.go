@@ -7,7 +7,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -42,7 +44,7 @@ func TestAssignToMutator(t *testing.T) {
 	}
 
 	bindings := mutatorWithSchema.SchemaBindings()
-	expectedBindings := []mutation.SchemaBinding{
+	expectedBindings := []mschema.Binding{
 		{
 			Groups:   []string{"group1", "group2"},
 			Kinds:    []string{"kind1", "kind2", "kind3"},
@@ -144,7 +146,7 @@ func TestAssignHasDiff(t *testing.T) {
 		{
 			"differentParameters",
 			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.IfIn = []string{"Foo", "Bar"}
+				a.Spec.Parameters.AssignIf = runtime.RawExtension{Raw: []byte(`{"in": ["Foo","Bar"]}`)}
 			},
 			true,
 		},

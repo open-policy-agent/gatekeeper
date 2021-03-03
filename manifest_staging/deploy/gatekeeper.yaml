@@ -636,7 +636,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    control-plane: controller-manager
+    control-plane: audit-controller
     gatekeeper.sh/operation: audit
     gatekeeper.sh/system: "yes"
   name: gatekeeper-audit
@@ -675,7 +675,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.3.0-beta.2
+        image: openpolicyagent/gatekeeper:v3.4.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -705,6 +705,7 @@ spec:
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -769,7 +770,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.3.0-beta.2
+        image: openpolicyagent/gatekeeper:v3.4.0-beta.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -802,6 +803,7 @@ spec:
           capabilities:
             drop:
             - all
+          readOnlyRootFilesystem: true
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
@@ -819,10 +821,24 @@ spec:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
 ---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
-  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration

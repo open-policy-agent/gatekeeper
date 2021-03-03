@@ -1,12 +1,13 @@
-package mutation_test
+package mutation
 
 import (
 	"fmt"
 	"testing"
 
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	pathtester "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -235,9 +236,12 @@ func TestNonExistingPathEntry(t *testing.T) {
 
 func TestNonExistingListPathEntry(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {
-		element, _, err := unstructured.NestedFieldNoCopy(u.Object, "spec", "element")
+		element, found, err := unstructured.NestedFieldNoCopy(u.Object, "spec", "element")
 		if err != nil {
 			t.Error("Unexpected error", err)
+		}
+		if !found {
+			t.Fatal("resource not found")
 		}
 		element2 := element.([]interface{})[0].(map[string]interface{})["element2"].(map[string]interface{})
 		if element2["added"] != TestValue {
@@ -319,7 +323,7 @@ func testAssignMutation(
 			},
 		},
 	}
-	mutator, err := mutation.MutatorForAssign(&assign)
+	mutator, err := MutatorForAssign(&assign)
 	if err != nil {
 		t.Error("Unexpected error", err)
 	}
@@ -344,14 +348,14 @@ func testAssignMetadataMutation(
 			},
 		},
 	}
-	mutator, err := mutation.MutatorForAssignMetadata(&assignMetadata)
+	mutator, err := MutatorForAssignMetadata(&assignMetadata)
 	if err != nil {
 		t.Error("Unexpected error", err)
 	}
 	return testMutation(mutator, unstructured, testFunc, t)
 }
 
-func testMutation(mutator mutation.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
+func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
 	err := mutator.Mutate(unstructured)
 	if err != nil {
 		return err
@@ -361,7 +365,7 @@ func testMutation(mutator mutation.Mutator, unstructured *unstructured.Unstructu
 }
 
 type TestMutator struct {
-	mutation.AssignMutator
+	AssignMutator
 	path  *parser.Path
 	value interface{}
 }
@@ -375,7 +379,8 @@ func (m *TestMutator) Value() (interface{}, error) {
 }
 
 func (m *TestMutator) Mutate(obj *unstructured.Unstructured) error {
-	return mutation.Mutate(m, obj)
+	t, _ := pathtester.New(nil)
+	return mutate(m, t, func(_ interface{}, _ bool) bool { return true }, obj)
 }
 
 // TODO: rename after TestListsAsLastElementAlreadyExistsWithKeyConflict is deleted
