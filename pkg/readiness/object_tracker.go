@@ -39,7 +39,7 @@ var readinessRetries = flag.Int("readiness-retries", 0, "The number of resource 
 type Expectations interface {
 	Expect(o runtime.Object)
 	CancelExpect(o runtime.Object)
-	TryCancelExpect(o runtime.Object)
+	TryCancelExpect(o runtime.Object) bool
 	ExpectationsDone()
 	Observe(o runtime.Object)
 	Satisfied() bool
@@ -146,19 +146,22 @@ func (t *objectTracker) CancelExpect(o runtime.Object) {
 	t.cancelExpectNoLock(k)
 }
 
-func (t *objectTracker) TryCancelExpect(o runtime.Object) {
+// TryCancelExpect will check the readinessRetries left on an Object, and cancel
+// the expectation for that object if no retries remain.  Returns True if the
+// expectation was cancelled.
+func (t *objectTracker) TryCancelExpect(o runtime.Object) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	// Respect circuit-breaker.
 	if t.allSatisfied {
-		return
+		return false
 	}
 
 	k, err := objKeyFromObject(o)
 	if err != nil {
 		log.Error(err, "skipping")
-		return
+		return false
 	}
 
 	// Check if it's time to delete an expectation or just decrement its allotted retries
@@ -173,6 +176,8 @@ func (t *objectTracker) TryCancelExpect(o runtime.Object) {
 	if shouldDel {
 		t.cancelExpectNoLock(k)
 	}
+
+	return shouldDel
 }
 
 // ExpectationsDone tells the tracker to stop accepting new expectations.
