@@ -49,6 +49,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+// httpStatusWarning is the HTTP return code for displaying warning messages in admission webhook (supported in Kubernetes v1.19+)
+// https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
+const httpStatusWarning = 299
+
 var (
 	maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
 )
@@ -203,7 +207,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 	if len(warnMsgs) > 0 {
 		vResp.Warnings = warnMsgs
-		vResp.Result.Code = 299
+		vResp.Result.Code = httpStatusWarning
 	}
 	return vResp
 }
