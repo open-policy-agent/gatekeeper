@@ -2,6 +2,8 @@ apiVersion: config.gatekeeper.sh/v1alpha1
 kind: Config
 metadata:
   name: config
+  labels:
+    gatekeeper.sh/tests: "yes"
 spec:
   sync:
     syncOnly:
