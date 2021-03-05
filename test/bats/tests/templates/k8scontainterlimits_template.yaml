@@ -2,6 +2,8 @@ apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
   name: k8scontainerlimits
+  labels:
+    gatekeeper.sh/tests: "yes"
 spec:
   crd:
     spec:

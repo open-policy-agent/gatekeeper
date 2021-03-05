@@ -13,9 +13,11 @@ teardown() {
 }
 
 teardown_file() {
+  kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
   kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
-  kubectl delete constrainttemplates k8scontainerlimits k8srequiredlabels k8suniquelabel || true
-  kubectl delete configs.config.gatekeeper.sh config -n ${GATEKEEPER_NAMESPACE} || true
+  kubectl delete "$(kubectl api-resources --api-group=constraints.gatekeeper.sh -o name | tr "\n" "," | sed -e 's/,$//')" -l gatekeeper.sh/tests=yes || true
+  kubectl delete ConstraintTemplates -l gatekeeper.sh/tests=yes || true
+  kubectl delete configs.config.gatekeeper.sh -n ${GATEKEEPER_NAMESPACE} -l gatekeeper.sh/tests=yes || true
 }
 
 @test "gatekeeper-controller-manager is running" {
