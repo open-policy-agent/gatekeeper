@@ -296,11 +296,11 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req admi
 		}
 
 		if r.EnforcementAction == string(util.Deny) {
-			denyMsgs = append(denyMsgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
 		}
 
 		if r.EnforcementAction == string(util.Warn) {
-			warnMsgs = append(warnMsgs, fmt.Sprintf("[would have denied by %s] %s", r.Constraint.GetName(), r.Msg))
+			warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
 		}
 	}
 	return denyMsgs, warnMsgs
