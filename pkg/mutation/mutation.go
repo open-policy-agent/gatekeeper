@@ -28,6 +28,6 @@ var (
 
 func init() {
 	MutationEnabled = flag.Bool("enable-mutation", false, "(alpha) Enable the mutation feature")
-	MutationLoggingEnabled = flag.Bool("log-mutation-events", false, "(alpha) Enable detailed logging of mutation events")
+	MutationLoggingEnabled = flag.Bool("log-mutations", false, "(alpha) Enable detailed logging of mutation events")
 
 }
