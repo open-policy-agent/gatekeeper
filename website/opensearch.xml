@@ -4,8 +4,8 @@
   <ShortName>Gatekeeper</ShortName>
   <Description>Search Gatekeeper</Description>
   <InputEncoding>UTF-8</InputEncoding>
-  <Image width="16" height="16" type="image/x-icon">https://open-policy-agent.github.io/gatekeeper/website/docs/img/favicon.ico</Image>
-  <Url type="text/html" method="get" template="https://open-policy-agent.github.io/gatekeeper/website/docs//search?q={searchTerms}"/>
-  <Url type="application/opensearchdescription+xml" rel="self" template="https://open-policy-agent.github.io/gatekeeper/website/docs//opensearch.xml" />
-  <moz:SearchForm>https://open-policy-agent.github.io/gatekeeper/website/docs/</moz:SearchForm>
+  <Image width="16" height="16" type="image/x-icon">https://open-policy-agent.github.io/gatekeeper/website/docs/gatekeeper/website/img/favicon.ico</Image>
+  <Url type="text/html" method="get" template="https://open-policy-agent.github.io/gatekeeper/website/docs//gatekeeper/website/search?q={searchTerms}"/>
+  <Url type="application/opensearchdescription+xml" rel="self" template="https://open-policy-agent.github.io/gatekeeper/website/docs//gatekeeper/website/opensearch.xml" />
+  <moz:SearchForm>https://open-policy-agent.github.io/gatekeeper/website/docs//gatekeeper/website/</moz:SearchForm>
 </OpenSearchDescription>
