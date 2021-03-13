@@ -139,6 +139,10 @@ kind: Assign
 metadata:
   name: goodAssign
 spec:
+  applyTo:
+    - groups: [""]
+      versions: ["v1"]
+      kinds: ["Pod"]
   location: "spec.containers[name:test].foo"
   parameters:
     assign:
@@ -155,6 +159,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+    - groups: [""]
+      versions: ["v1"]
+      kinds: ["Pod"]
   location: metadata.foo.bar
   parameters:
     assign:
@@ -170,6 +178,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers
   parameters:
     assign:
@@ -185,6 +197,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers
 `,
 			ErrorExpected: true,
@@ -197,6 +213,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers[name:foo].name
   parameters:
     assign:
@@ -212,6 +232,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers[name:foo]
   parameters:
     assign:
@@ -227,6 +251,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers[name:foo]
   parameters:
     assign:
@@ -243,6 +271,10 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
   location: spec.containers[name:foo]
   parameters:
     assign:
@@ -259,11 +291,55 @@ kind: Assign
 metadata:
   name: assignExample
 spec:
-  location: spec.containers[*]
+  applyTo:
+    - groups: [""]
+      versions: ["v1"]
+      kinds: ["Pod"]
+  location: spec.containers[name:*]
   parameters:
     assign:
       value:
         name: bar
+`,
+			ErrorExpected: true,
+		},
+		{
+			Name: "Modifying a globbed list, no key",
+			Assign: `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: assignExample
+spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
+  location: spec.containers[*].image
+  parameters:
+    assign:
+      value:
+        "my-image"
+`,
+			ErrorExpected: true,
+		},
+		{
+			Name: "Modifying a globbed list, no key or glob",
+			Assign: `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: assignExample
+spec:
+  applyTo:
+  - groups: [""]
+    versions: ["v1"]
+    kinds: ["Pod"]
+  location: spec.containers[].image
+  parameters:
+    assign:
+      value:
+        "my-image"
 `,
 			ErrorExpected: true,
 		},
