@@ -14,7 +14,7 @@ webhooks:
     caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
-      namespace: '{{ include "gatekeeper.namespace" . }}'
+      namespace: '{{ .Release.Namespace }}'
       path: /v1/mutate
   failurePolicy: Ignore
   name: mutation.gatekeeper.sh
