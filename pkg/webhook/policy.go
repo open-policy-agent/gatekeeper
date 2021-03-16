@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -47,6 +48,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
+
+// httpStatusWarning is the HTTP return code for displaying warning messages in admission webhook (supported in Kubernetes v1.19+)
+// https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
+const httpStatusWarning = 299
 
 var (
 	maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
@@ -163,7 +168,6 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	if isExcludedNamespace {
-
 		requestResponse = allowResponse
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
@@ -181,11 +185,15 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	msgs := h.getDenyMessages(res, req)
-	if len(msgs) > 0 {
-		vResp := admission.ValidationResponse(false, strings.Join(msgs, "\n"))
+	denyMsgs, warnMsgs := h.getValidationMessages(res, req)
+
+	if len(denyMsgs) > 0 {
+		vResp := admission.ValidationResponse(false, strings.Join(denyMsgs, "\n"))
 		if vResp.Result == nil {
 			vResp.Result = &metav1.Status{}
+		}
+		if len(warnMsgs) > 0 {
+			vResp.Warnings = warnMsgs
 		}
 		vResp.Result.Code = http.StatusForbidden
 		requestResponse = denyResponse
@@ -193,11 +201,19 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	requestResponse = allowResponse
-	return admission.ValidationResponse(true, "")
+	vResp := admission.ValidationResponse(true, "")
+	if vResp.Result == nil {
+		vResp.Result = &metav1.Status{}
+	}
+	if len(warnMsgs) > 0 {
+		vResp.Warnings = warnMsgs
+		vResp.Result.Code = httpStatusWarning
+	}
+	return vResp
 }
 
-func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.Request) []string {
-	var msgs []string
+func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req admission.Request) ([]string, []string) {
+	var denyMsgs, warnMsgs []string
 	var resourceName string
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
@@ -211,57 +227,83 @@ func (h *validationHandler) getDenyMessages(res []*rtypes.Result, req admission.
 		}
 	}
 	for _, r := range res {
-		if r.EnforcementAction == "deny" || r.EnforcementAction == "dryrun" {
-			if *logDenies {
-				log.WithValues(
-					logging.Process, "admission",
-					logging.EventType, "violation",
-					logging.ConstraintName, r.Constraint.GetName(),
-					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind, r.Constraint.GetKind(),
-					logging.ConstraintAction, r.EnforcementAction,
-					logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace, req.AdmissionRequest.Namespace,
-					logging.ResourceName, resourceName,
-					logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-				).Info("denied admission")
-			}
-			if *emitAdmissionEvents {
-				annotations := map[string]string{
-					logging.Process:              "admission",
-					logging.EventType:            "violation",
-					logging.ConstraintName:       r.Constraint.GetName(),
-					logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
-					logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
-					logging.ConstraintKind:       r.Constraint.GetKind(),
-					logging.ConstraintAction:     r.EnforcementAction,
-					logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
-					logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
-					logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
-					logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
-					logging.ResourceName:         resourceName,
-					logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
-				}
-				eventMsg := "Admission webhook \"validation.gatekeeper.sh\" denied request"
-				reason := "FailedAdmission"
-				if r.EnforcementAction == "dryrun" {
-					eventMsg = "Dryrun violation"
-					reason = "DryrunViolation"
-				}
-				ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, req.AdmissionRequest.Namespace, r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace())
-				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
-			}
-
+		if err := util.ValidateEnforcementAction(util.EnforcementAction(r.EnforcementAction)); err != nil {
+			continue
 		}
-		// only deny enforcementAction should prompt deny admission response
-		if r.EnforcementAction == "deny" {
-			msgs = append(msgs, fmt.Sprintf("[denied by %s] %s", r.Constraint.GetName(), r.Msg))
+		if *logDenies {
+			log.WithValues(
+				logging.Process, "admission",
+				logging.EventType, "violation",
+				logging.ConstraintName, r.Constraint.GetName(),
+				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind, r.Constraint.GetKind(),
+				logging.ConstraintAction, r.EnforcementAction,
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.ResourceName, resourceName,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+			).Info("denied admission")
+		}
+		if *emitAdmissionEvents {
+			annotations := map[string]string{
+				logging.Process:              "admission",
+				logging.EventType:            "violation",
+				logging.ConstraintName:       r.Constraint.GetName(),
+				logging.ConstraintGroup:      r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion: r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind:       r.Constraint.GetKind(),
+				logging.ConstraintAction:     r.EnforcementAction,
+				logging.ResourceGroup:        req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion:   req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind:         req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace:    req.AdmissionRequest.Namespace,
+				logging.ResourceName:         resourceName,
+				logging.RequestUsername:      req.AdmissionRequest.UserInfo.Username,
+			}
+			var eventMsg, reason string
+			switch r.EnforcementAction {
+			case string(util.Dryrun):
+				eventMsg = "Dryrun violation"
+				reason = "DryrunViolation"
+			case string(util.Warn):
+				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" raised a warning for this request"
+				reason = "WarningAdmission"
+			default:
+				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
+				reason = "FailedAdmission"
+			}
+			ref := getViolationRef(
+				h.gkNamespace,
+				req.AdmissionRequest.Kind.Kind,
+				resourceName,
+				req.AdmissionRequest.Namespace,
+				r.Constraint.GetKind(),
+				r.Constraint.GetName(),
+				r.Constraint.GetNamespace())
+			h.eventRecorder.AnnotatedEventf(
+				ref,
+				annotations,
+				corev1.EventTypeWarning,
+				reason,
+				"%s, Resource Namespace: %s, Constraint: %s, Message: %s",
+				eventMsg,
+				req.AdmissionRequest.Namespace,
+				r.Constraint.GetName(),
+				r.Msg)
+		}
+
+		if r.EnforcementAction == string(util.Deny) {
+			denyMsgs = append(denyMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
+		}
+
+		if r.EnforcementAction == string(util.Warn) {
+			warnMsgs = append(warnMsgs, fmt.Sprintf("[%s] %s", r.Constraint.GetName(), r.Msg))
 		}
 	}
-	return msgs
+	return denyMsgs, warnMsgs
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
@@ -278,6 +320,10 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		if err := h.validateConfigResource(ctx, req); err != nil {
 			return true, err
 		}
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignMetadata":
+		return h.validateAssignMetadata(ctx, req)
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign":
+		return h.validateAssign(ctx, req)
 	}
 
 	return false, nil
@@ -327,9 +373,44 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 
 func (h *validationHandler) validateConfigResource(ctx context.Context, req admission.Request) error {
 	if req.Name != keys.Config.Name {
-		return fmt.Errorf("Config resource must have name 'config'")
+		return fmt.Errorf("config resource must have name 'config'")
 	}
 	return nil
+}
+
+func (h *validationHandler) validateAssignMetadata(ctx context.Context, req admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.AssignMetadata{})
+	if err != nil {
+		return false, err
+	}
+	assignMetadata, ok := obj.(*mutationsv1alpha1.AssignMetadata)
+	if !ok {
+		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
+	}
+	err = mutation.IsValidAssignMetadata(assignMetadata)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (h *validationHandler) validateAssign(ctx context.Context, req admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.Assign{})
+	if err != nil {
+		return false, err
+	}
+	assign, ok := obj.(*mutationsv1alpha1.Assign)
+	if !ok {
+		return false, fmt.Errorf("Deserialized object is not of type Assign")
+	}
+
+	err = mutation.IsValidAssign(assign)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
 }
 
 // traceSwitch returns true if a request should be traced

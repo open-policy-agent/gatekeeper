@@ -20,7 +20,7 @@ func TestAssignMetaValidation(t *testing.T) {
 		{
 			Name: "Valid Assign",
 			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: AssignMetadata
 metadata:
   name: testAssignMeta
@@ -35,7 +35,7 @@ spec:
 		{
 			Name: "Invalid Path",
 			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: AssignMetadata
 metadata:
   name: testAssignMeta
@@ -50,7 +50,7 @@ spec:
 		{
 			Name: "Invalid Assign",
 			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: AssignMetadata
 metadata:
   name: testAssignMeta
@@ -65,7 +65,7 @@ spec:
 		{
 			Name: "Assign not a string",
 			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: AssignMetadata
 metadata:
   name: testAssignMeta
@@ -81,7 +81,7 @@ spec:
 		{
 			Name: "Assign no value",
 			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: AssignMetadata
 metadata:
   name: testAssignMeta
@@ -97,7 +97,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.AssignMeta))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -134,7 +134,7 @@ func TestAssignValidation(t *testing.T) {
 		{
 			Name: "Valid Assign",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: goodAssign
@@ -150,7 +150,7 @@ spec:
 		{
 			Name: "Changes Metadata",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -165,7 +165,7 @@ spec:
 		{
 			Name: "No Value",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -180,7 +180,7 @@ spec:
 		{
 			Name: "No Assign",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -192,7 +192,7 @@ spec:
 		{
 			Name: "Change the key",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -207,7 +207,7 @@ spec:
 		{
 			Name: "Assigning scalar as list item",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -222,7 +222,7 @@ spec:
 		{
 			Name: "Adding an object without the key",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -238,7 +238,7 @@ spec:
 		{
 			Name: "Adding an object changing the key",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -254,7 +254,7 @@ spec:
 		{
 			Name: "Adding an object to a globbed list",
 			Assign: `
-apiVersion: mutations.gatekeeper.sh
+apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: assignExample
@@ -270,7 +270,7 @@ spec:
 	}
 	for _, tt := range tc {
 		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
+			handler := validationHandler{webhookHandler: webhookHandler{}}
 			b, err := yaml.YAMLToJSON([]byte(tt.Assign))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)

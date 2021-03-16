@@ -8,6 +8,7 @@ validatingWebhookTimeoutSeconds: 3
 enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
+logDenies: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 image:
@@ -58,3 +59,6 @@ audit:
       memory: 256Mi
 customResourceDefinitions:
   create: true
+pdb:
+  controllerManager:
+    minAvailable: 1

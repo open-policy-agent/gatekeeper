@@ -9,7 +9,6 @@ import (
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -126,13 +125,13 @@ func Matches(match mutationsv1.Match, obj runtime.Object, ns *corev1.Namespace) 
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object
-func AppliesTo(applyTo []mutationsv1.ApplyTo, obj *unstructured.Unstructured) bool {
+func AppliesTo(applyTo []mutationsv1.ApplyTo, obj runtime.Object) bool {
+	gvk := obj.GetObjectKind().GroupVersionKind()
 	for _, apply := range applyTo {
 		matchesGroup := false
 		matchesVersion := false
 		matchesKind := false
 
-		gvk := obj.GroupVersionKind()
 		for _, g := range apply.Groups {
 			if g == gvk.Group {
 				matchesGroup = true
