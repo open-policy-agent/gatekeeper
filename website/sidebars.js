@@ -25,7 +25,8 @@ module.exports = {
         'customize-admission',
         'debug',
         'emergency',
-        'vendor-specific'
+        'vendor-specific',
+        'mutation'
       ],
     },
     {
