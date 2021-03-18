@@ -1,26 +1,42 @@
 module.exports = {
-  someSidebar: {
-    "Getting Started": [
-      'intro',
-      'install',
-      'examples'
-    ],
-    "How to use Gatekeeper": [
-      'howto',
-      'audit',
-      'violations',
-      'sync',
-      'exempt-namespaces',
-      'library',
-      'customize-startup',
-      'customize-admission',
-      'debug',
-      'emergency',
-      'vendor-specific'
-    ],
-    "Contributing": [
-      'help',
-      'security'
-    ]
-  },
+  docs: [
+    {
+      type: 'category',
+      label: 'Getting Started',
+      collapsed: false,
+      items: [
+        'intro',
+        'install',
+        'examples'
+      ],
+    },
+    {
+      type: 'category',
+      label: 'How to use Gatekeeper',
+      collapsed: false,
+      items: [
+        'howto',
+        'audit',
+        'violations',
+        'sync',
+        'exempt-namespaces',
+        'library',
+        'customize-startup',
+        'customize-admission',
+        'debug',
+        'emergency',
+        'vendor-specific',
+        'mutation'
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Contributing',
+      collapsed: false,
+      items: [
+        'help',
+        'security'
+      ],
+    }
+  ]
 };

@@ -378,9 +378,9 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 	}
 	log.V(1).Info("setting expectations for AssignMetadata", "AssignMetadata Count", len(assignMetadataList.Items))
 
-	for _, am := range assignMetadataList.Items {
-		log.V(1).Info("expecting AssignMetadata", "name", am.GetName())
-		t.assignMetadata.Expect(&am)
+	for index := range assignMetadataList.Items {
+		log.V(1).Info("expecting AssignMetadata", "name", assignMetadataList.Items[index].GetName())
+		t.assignMetadata.Expect(&assignMetadataList.Items[index])
 	}
 	return nil
 }

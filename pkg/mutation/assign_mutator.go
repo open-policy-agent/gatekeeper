@@ -32,6 +32,9 @@ type AssignMutator struct {
 var _ schema.MutatorWithSchema = &AssignMutator{}
 
 func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+	if !AppliesTo(m.assign.Spec.ApplyTo, obj) {
+		return false
+	}
 	matches, err := Matches(m.assign.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)

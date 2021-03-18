@@ -10,6 +10,7 @@ on:
       - "example/**"
       - "website/**"
       - "**.md"
+      - "!cmd/build/helmify/static/README.md"
   pull_request:
     paths-ignore:
       - ".github/workflows/website.yaml"
@@ -20,6 +21,7 @@ on:
       - "example/**"
       - "website/**"
       - "**.md"
+      - "!cmd/build/helmify/static/README.md"
 
 env:
   GITHUB_REPO: open-policy-agent/gatekeeper
@@ -132,6 +134,7 @@ jobs:
     strategy:
       matrix:
         HELM_VERSION: ["2.17.0", "3.4.2"]
+        GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -145,13 +148,13 @@ jobs:
       - name: Run e2e
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
-          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }}
-          make test-e2e
+          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+          make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
 
       - name: Save logs
         run: |
-          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-controller.json
-          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-audit.json
+          kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
+          kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2

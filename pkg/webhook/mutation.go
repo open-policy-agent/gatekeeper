@@ -15,21 +15,18 @@ package webhook
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/apis"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -115,19 +112,6 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	if req.AdmissionRequest.Operation != admissionv1.Create &&
 		req.AdmissionRequest.Operation != admissionv1.Update {
 		return admission.ValidationResponse(true, "Mutating only on create or update")
-	}
-
-	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {
-		vResp := admission.ValidationResponse(false, err.Error())
-		if vResp.Result == nil {
-			vResp.Result = &metav1.Status{}
-		}
-		if userErr {
-			vResp.Result.Code = http.StatusUnprocessableEntity
-		} else {
-			vResp.Result.Code = http.StatusInternalServerError
-		}
-		return vResp
 	}
 
 	if h.isGatekeeperResource(ctx, req) {
@@ -229,51 +213,4 @@ func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.We
 		})
 	}
 	return webhooks
-}
-
-// validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
-// validating internal resources
-func (h *mutationHandler) validateGatekeeperResources(ctx context.Context, req admission.Request) (bool, error) {
-	if req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignMetadata" {
-		return h.validateAssignMetadata(ctx, req)
-	}
-	if req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign" {
-		return h.validateAssign(ctx, req)
-	}
-	return false, nil
-}
-
-func (h *mutationHandler) validateAssignMetadata(ctx context.Context, req admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.AssignMetadata{})
-	if err != nil {
-		return false, err
-	}
-	assignMetadata, ok := obj.(*mutationsv1alpha1.AssignMetadata)
-	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
-	}
-	err = mutation.IsValidAssignMetadata(assignMetadata)
-	if err != nil {
-		return true, err
-	}
-
-	return false, nil
-}
-
-func (h *mutationHandler) validateAssign(ctx context.Context, req admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.Assign{})
-	if err != nil {
-		return false, err
-	}
-	assign, ok := obj.(*mutationsv1alpha1.Assign)
-	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type Assign")
-	}
-
-	err = mutation.IsValidAssign(assign)
-	if err != nil {
-		return true, err
-	}
-
-	return false, nil
 }
