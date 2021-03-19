@@ -55,7 +55,7 @@ func (d *dummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return mutate(d, t, func(_ interface{}, _ bool) bool { return true }, obj)
 }
 
-func (m *dummyMutator) String() string {
+func (d *dummyMutator) String() string {
 	return ""
 }
 
