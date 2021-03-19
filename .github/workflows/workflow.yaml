@@ -10,6 +10,7 @@ on:
       - "example/**"
       - "website/**"
       - "**.md"
+      - "!cmd/build/helmify/static/README.md"
   pull_request:
     paths-ignore:
       - ".github/workflows/website.yaml"
@@ -20,6 +21,7 @@ on:
       - "example/**"
       - "website/**"
       - "**.md"
+      - "!cmd/build/helmify/static/README.md"
 
 env:
   GITHUB_REPO: open-policy-agent/gatekeeper

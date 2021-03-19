@@ -2,6 +2,8 @@ apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
   name: cm-must-have-gk-audit
+  labels:
+    gatekeeper.sh/tests: "yes"
 spec:
   match:
     namespaces: ["gatekeeper-test-playground"]
