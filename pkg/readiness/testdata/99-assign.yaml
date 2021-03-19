@@ -3,12 +3,16 @@ kind: Assign
 metadata:
   name: demo
 spec:
-    match:
-      scope: Namespaced
-      kinds:
-        - apiGroups: ["*"]
-          kinds: ["Pod"]
-    location: "spec.dnsPolicy"
-    parameters:
-      assign:
-        value:  "None"
+  applyTo:
+    - groups: [""]
+      versions: ["v1"]
+      kinds: ["Pod"]
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: ["*"]
+        kinds: ["Pod"]
+  location: "spec.dnsPolicy"
+  parameters:
+    assign:
+      value:  "None"

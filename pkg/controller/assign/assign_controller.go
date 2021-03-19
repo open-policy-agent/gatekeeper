@@ -156,6 +156,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 		tracker.CancelExpect(assign)
+		return reconcile.Result{}, err
 	}
 
 	if err := r.system.Upsert(mutator); err != nil {
