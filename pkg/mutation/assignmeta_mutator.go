@@ -133,7 +133,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 		return nil, errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
 	}
 	if _, ok := value.(string); !ok {
-		return nil, errors.New("spec.parameters.assign must be a string for AssignMetadata " + assignMeta.GetName())
+		return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
 	}
 	id, err := types.MakeID(assignMeta)
 	if err != nil {
