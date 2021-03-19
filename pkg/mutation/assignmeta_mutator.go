@@ -117,7 +117,7 @@ func (m *AssignMetadataMutator) Value() (interface{}, error) {
 func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*AssignMetadataMutator, error) {
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid location format for Assign %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
+		return nil, errors.Wrapf(err, "invalid location format for AssignMetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
 	}
 	if !isValidMetadataPath(path) {
 		return nil, fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
