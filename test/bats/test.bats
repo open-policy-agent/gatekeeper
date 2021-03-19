@@ -13,9 +13,11 @@ teardown() {
 }
 
 teardown_file() {
+  kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
   kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
-  kubectl delete constrainttemplates k8scontainerlimits k8srequiredlabels k8suniquelabel || true
-  kubectl delete configs.config.gatekeeper.sh config -n ${GATEKEEPER_NAMESPACE} || true
+  kubectl delete "$(kubectl api-resources --api-group=constraints.gatekeeper.sh -o name | tr "\n" "," | sed -e 's/,$//')" -l gatekeeper.sh/tests=yes || true
+  kubectl delete ConstraintTemplates -l gatekeeper.sh/tests=yes || true
+  kubectl delete configs.config.gatekeeper.sh -n ${GATEKEEPER_NAMESPACE} -l gatekeeper.sh/tests=yes || true
 }
 
 @test "gatekeeper-controller-manager is running" {
@@ -100,7 +102,7 @@ teardown_file() {
   kubectl patch ns ${GATEKEEPER_NAMESPACE} --type=json -p='[{"op": "replace", "path": "/metadata/labels/admission.gatekeeper.sh~1ignore", "value": "ignore-label-test-passed"}]'
 }
 
-@test "required labels dryrun test" {
+@test "required labels warn and dryrun test" {
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
@@ -109,6 +111,16 @@ teardown_file() {
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
   assert_match 'denied the request' "${output}"
   assert_failure
+
+  kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-warn.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
+
+  # deploying a violation with warn enforcement action will be accepted
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
+  assert_match 'Warning' "${output}"
+  assert_success
+
+  kubectl delete --ignore-not-found -f ${BATS_TESTS_DIR}/bad/bad_cm.yaml
 
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper-dryrun.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"

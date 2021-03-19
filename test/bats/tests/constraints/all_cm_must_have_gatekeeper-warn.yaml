@@ -5,7 +5,7 @@ metadata:
   labels:
     gatekeeper.sh/tests: "yes"
 spec:
-  enforcementAction: dryrun
+  enforcementAction: warn
   match:
     kinds:
       - apiGroups: [""]
