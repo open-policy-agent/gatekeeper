@@ -32,9 +32,11 @@ func TestAssignToMutator(t *testing.T) {
 					Versions: []string{"version1"},
 				},
 			},
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "spec.foo",
-			Parameters: mutationsv1alpha1.Parameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "spec.foo",
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 
@@ -69,9 +71,11 @@ func TestAssignMetadataToMutator(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "metadata.labels.foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "metadata.labels.foo",
+			Parameters: mutationsv1alpha1.MetadataParameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 
@@ -104,9 +108,11 @@ func TestAssignHasDiff(t *testing.T) {
 					Versions: []string{"version1"},
 				},
 			},
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "spec.foo",
-			Parameters: mutationsv1alpha1.Parameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "spec.foo",
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 	// This is normally filled during the serialization
@@ -183,9 +189,11 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "metadata.labels.foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "metadata.labels.foo",
+			Parameters: mutationsv1alpha1.MetadataParameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 
@@ -270,14 +278,16 @@ func TestParseShouldFail(t *testing.T) {
 					Versions: []string{"version1"},
 				},
 			},
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "aaa..bb",
-			Parameters: mutationsv1alpha1.Parameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "aaa..bb",
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 
 	_, err := mutation.MutatorForAssign(assign)
-	if err == nil || !strings.Contains(err.Error(), "parse") {
+	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign: %v", err)
 	}
 
@@ -287,13 +297,15 @@ func TestParseShouldFail(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:      mutationsv1alpha1.Match{},
-			Location:   "spec...foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{},
+			Match:    mutationsv1alpha1.Match{},
+			Location: "spec...foo",
+			Parameters: mutationsv1alpha1.MetadataParameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 	_, err = mutation.MutatorForAssignMetadata(assignMeta)
-	if err == nil || !strings.Contains(err.Error(), "parse") {
+	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign metadata: %v", err)
 	}
 }
@@ -305,8 +317,10 @@ func TestPathValidation(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:      mutationsv1alpha1.Match{},
-			Parameters: mutationsv1alpha1.MetadataParameters{},
+			Match: mutationsv1alpha1.Match{},
+			Parameters: mutationsv1alpha1.MetadataParameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+			},
 		},
 	}
 

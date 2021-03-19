@@ -44,6 +44,10 @@ var testAssignMetadata = []*mutationsv1alpha1.AssignMetadata{
 	makeAssignMetadata("demo"),
 }
 
+var testAssign = []*mutationsv1alpha1.Assign{
+	makeAssign("demo"),
+}
+
 func makeTemplate(name string) *templates.ConstraintTemplate {
 	return &templates.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,6 +75,21 @@ func makeAssignMetadata(name string) *mutationsv1alpha1.AssignMetadata {
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
 			Location: "metadata.labels.demolabel",
+		},
+	}
+}
+
+func makeAssign(name string) *mutationsv1alpha1.Assign {
+	return &mutationsv1alpha1.Assign{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
+			Kind:       "Assign",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: mutationsv1alpha1.AssignSpec{
+			Location: "spec.dnsPolicy",
 		},
 	}
 }

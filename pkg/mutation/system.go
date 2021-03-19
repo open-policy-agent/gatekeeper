@@ -21,7 +21,7 @@ type System struct {
 	schemaDB        schema.DB
 	orderedMutators []types.Mutator
 	mutatorsMap     map[types.ID]types.Mutator
-	sync.RWMutex
+	mux             sync.RWMutex
 }
 
 // NewSystem initializes an empty mutation system
@@ -36,8 +36,8 @@ func NewSystem() *System {
 // Upsert updates or insert the given object, and returns
 // an error in case of conflicts
 func (s *System) Upsert(m types.Mutator) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	current, ok := s.mutatorsMap[m.ID()]
 	if ok && !m.HasDiff(current) {
@@ -80,8 +80,8 @@ func (s *System) Upsert(m types.Mutator) error {
 // Mutate applies the mutation in place to the given object. Returns
 // true if a mutation was performed.
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
-	s.RLock()
-	defer s.RUnlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
@@ -153,8 +153,8 @@ func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppl
 
 // Remove removes the mutator from the mutation system
 func (s *System) Remove(id types.ID) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	if _, ok := s.mutatorsMap[id]; !ok {
 		return nil
