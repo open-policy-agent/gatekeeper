@@ -50,9 +50,13 @@ func (d *dummyMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (d *dummyMutator) Mutate(obj *unstructured.Unstructured) error {
+func (d *dummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, _ := path.New(nil)
 	return mutate(d, t, func(_ interface{}, _ bool) bool { return true }, obj)
+}
+
+func (m *dummyMutator) String() string {
+	return ""
 }
 
 func newDummyMutator(name, path string, value interface{}) *dummyMutator {
