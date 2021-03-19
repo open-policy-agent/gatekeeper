@@ -99,6 +99,7 @@ var (
 	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	enableProfile       = flag.Bool("enable-pprof", false, "enable pprof profiling")
 	profilePort         = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
+	disabledBuiltins    = util.NewFlagSet()
 )
 
 func init() {
@@ -110,6 +111,7 @@ func init() {
 	_ = statusv1beta1.AddToScheme(scheme)
 	_ = mutationsv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
 }
 
 func main() {
@@ -236,7 +238,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	<-setupFinished
 
 	// initialize OPA
-	driver := local.New(local.Tracing(false))
+	driver := local.New(local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...))
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA backend")
