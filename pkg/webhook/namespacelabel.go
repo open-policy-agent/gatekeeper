@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"strings"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -18,12 +19,14 @@ import (
 )
 
 var (
-	exemptNamespace = newNSSet()
+	exemptNamespace       = newNSSet()
+	exemptNamespacePrefix = newNSSet()
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddLabelWebhook)
 	flag.Var(exemptNamespace, "exempt-namespace", "The specified namespace is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
+	flag.Var(exemptNamespacePrefix, "exempt-namespace-prefix", "A namespace with the specified prefix is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple prefixes, this flag can be declared more than once.")
 }
 
 const ignoreLabel = "admission.gatekeeper.sh/ignore"
@@ -80,7 +83,7 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 		r.Result.Code = http.StatusInternalServerError
 		return r
 	}
-	if exemptNamespace[obj.GetName()] {
+	if exemptNamespace[obj.GetName()] || matchesPrefix(obj.GetName()) {
 		return admission.Allowed(fmt.Sprintf("Namespace %s is allowed to set %s", obj.GetName(), ignoreLabel))
 	}
 	for label := range obj.GetLabels() {
@@ -89,4 +92,13 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 		}
 	}
 	return admission.Allowed(fmt.Sprintf("Namespace is not setting the %s label", ignoreLabel))
+}
+
+func matchesPrefix(s string) bool {
+	for p := range exemptNamespacePrefix {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
