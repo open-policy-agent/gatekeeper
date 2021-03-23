@@ -717,7 +717,7 @@ func TestPathTests(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := newFoo(test.spec)
-			err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(obj)
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
@@ -1432,7 +1432,7 @@ func TestValueTests(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := newFoo(test.spec)
-			err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(obj)
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}

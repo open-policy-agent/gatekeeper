@@ -56,12 +56,12 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 	return matches
 }
 
-func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, err := tester.New([]tester.Test{
 		{SubPath: m.Path(), Condition: tester.MustNotExist},
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	return mutate(m, t, nil, obj)
 }
@@ -111,6 +111,10 @@ func (m *AssignMetadataMutator) Value() (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("incorrect value for AssignMetadataMutator. Value must be a string. Value: %s Type: %s", value, t)
 	}
+}
+
+func (m *AssignMetadataMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
 }
 
 // MutatorForAssignMetadata builds an AssignMetadataMutator from the given AssignMetadata object.

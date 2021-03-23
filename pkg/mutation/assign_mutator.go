@@ -43,7 +43,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return mutate(m, m.tester, m.testValue, obj)
 }
 
@@ -133,6 +133,10 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	res.tester = m.tester.DeepCopy()
 	res.valueTest = m.valueTest.DeepCopy()
 	return res
+}
+
+func (m *AssignMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assign.GetGeneration())
 }
 
 // MutatorForAssign returns an AssignMutator built from

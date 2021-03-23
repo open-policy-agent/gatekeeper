@@ -377,7 +377,7 @@ func testAssignMetadataMutation(
 }
 
 func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
-	err := mutator.Mutate(unstructured)
+	_, err := mutator.Mutate(unstructured)
 	if err != nil {
 		return err
 	}

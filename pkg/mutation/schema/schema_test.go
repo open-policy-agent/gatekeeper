@@ -27,7 +27,7 @@ type mockMutator struct {
 
 func (m *mockMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool { return false }
 
-func (m *mockMutator) Mutate(obj *unstructured.Unstructured) error { return nil }
+func (m *mockMutator) Mutate(obj *unstructured.Unstructured) (bool, error) { return false, nil }
 
 func (m *mockMutator) Value() (interface{}, error) { return nil, nil }
 
@@ -38,6 +38,10 @@ func (m *mockMutator) HasDiff(other types.Mutator) bool {
 		return true
 	}
 	return !reflect.DeepEqual(m, other)
+}
+
+func (m *mockMutator) String() string {
+	return ""
 }
 
 func deepCopyBindings(bindings []Binding) []Binding {
