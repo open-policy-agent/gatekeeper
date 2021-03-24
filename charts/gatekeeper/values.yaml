@@ -8,17 +8,20 @@ validatingWebhookTimeoutSeconds: 3
 enableDeleteOperations: false
 auditChunkSize: 0
 logLevel: INFO
+logDenies: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.4.0-beta.0
+  release: v3.4.0-rc.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+podLabels: {}
 secretAnnotations: {}
 controllerManager:
+  hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity:
     podAntiAffinity:
@@ -42,6 +45,7 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
 audit:
+  hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity: {}
   tolerations: []
@@ -55,3 +59,6 @@ audit:
       memory: 256Mi
 customResourceDefinitions:
   create: true
+pdb:
+  controllerManager:
+    minAvailable: 1

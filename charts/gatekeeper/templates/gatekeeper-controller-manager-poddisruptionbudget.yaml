@@ -1,0 +1,22 @@
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-controller-manager
+  namespace: '{{ include "gatekeeper.namespace" . }}'
+spec:
+  minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      chart: '{{ template "gatekeeper.name" . }}'
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
