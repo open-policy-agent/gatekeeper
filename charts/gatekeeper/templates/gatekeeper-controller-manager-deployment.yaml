@@ -36,17 +36,7 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: gatekeeper.sh/operation
-                  operator: In
-                  values:
-                  - webhook
-              topologyKey: kubernetes.io/hostname
-            weight: 100
+{{ toYaml .Values.controllerManager.affinity | indent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -106,8 +96,6 @@ spec:
           readOnly: true
       nodeSelector:
 {{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.controllerManager.affinity | indent 8 }}
       tolerations:
 {{ toYaml .Values.controllerManager.tolerations | indent 8 }}
       imagePullSecrets:
