@@ -24,7 +24,9 @@ func (n noopExpectations) Expect(o runtime.Object) {}
 
 func (n noopExpectations) CancelExpect(o runtime.Object) {}
 
-func (n noopExpectations) TryCancelExpect(o runtime.Object) {}
+func (n noopExpectations) TryCancelExpect(o runtime.Object) bool {
+	return false
+}
 
 func (n noopExpectations) ExpectationsDone() {}
 
