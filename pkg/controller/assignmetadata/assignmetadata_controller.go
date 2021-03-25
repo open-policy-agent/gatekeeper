@@ -156,7 +156,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 		tracker.CancelExpect(assignMetadata)
-		return ctrl.Result{}, err // TODO: reque all request on error now. change this once a decision is made on how to process errors
+		return ctrl.Result{}, err
 	}
 	if !deleted {
 		if err := r.system.Upsert(mutator); err != nil {
