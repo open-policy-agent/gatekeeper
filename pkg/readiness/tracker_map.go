@@ -25,12 +25,14 @@ type trackerMap struct {
 	mu      sync.RWMutex
 	m       map[schema.GroupVersionKind]*objectTracker
 	removed map[schema.GroupVersionKind]struct{}
+	fn      objDataFactory
 }
 
-func newTrackerMap() *trackerMap {
+func newTrackerMap(fn objDataFactory) *trackerMap {
 	return &trackerMap{
 		m:       make(map[schema.GroupVersionKind]*objectTracker),
 		removed: make(map[schema.GroupVersionKind]struct{}),
+		fn:      fn,
 	}
 }
 
@@ -64,7 +66,7 @@ func (t *trackerMap) Get(gvk schema.GroupVersionKind) Expectations {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entry := newObjTracker(gvk, nil)
+	entry := newObjTracker(gvk, t.fn)
 	t.m[gvk] = entry
 	return entry
 }
@@ -95,6 +97,18 @@ func (t *trackerMap) Satisfied() bool {
 	defer t.mu.RUnlock()
 	for _, ot := range t.m {
 		if !ot.Satisfied() {
+			return false
+		}
+	}
+	return true
+}
+
+// Populated returns true if all objectTrackers are populated
+func (t *trackerMap) Populated() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	for _, ot := range t.m {
+		if !ot.Populated() {
 			return false
 		}
 	}
