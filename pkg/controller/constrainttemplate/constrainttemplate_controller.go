@@ -324,7 +324,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 	}
 	unversionedProposedCRD, err := r.opa.CreateCRD(context.Background(), unversionedCT)
 	if err != nil {
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
+		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		var createErr *v1beta1.CreateCRDError
 		if parseErrs, ok := err.(ast.Errors); ok {
@@ -347,7 +347,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 
 	proposedCRD := &apiextensionsv1beta1.CustomResourceDefinition{}
 	if err := r.scheme.Convert(unversionedProposedCRD, proposedCRD, nil); err != nil {
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
+		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(err, "conversion error")
 		logError(request.NamespacedName.Name)
@@ -419,7 +419,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 			log.Error(err, "failed to report constraint template ingestion duration")
 		}
 		err := r.reportErrorOnCTStatus("ingest_error", "Could not ingest Rego", status, err)
-		r.tracker.CancelTemplate(unversionedCT) // Don't track templates that failed compilation
+		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
 

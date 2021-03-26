@@ -358,7 +358,6 @@ func Test_ObjectTracker_TryCancelExpect_CancelBeforeExpected(t *testing.T) {
 	ot.TryCancelExpect(ct) // 0 retries --> DELETE
 
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
-
 }
 
 // Verify that unexpected observations do not prevent the tracker from reaching its satisfied state.
