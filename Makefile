@@ -13,6 +13,7 @@ KIND_VERSION ?= 0.8.1
 KUBERNETES_VERSION ?= v1.19.0
 KUSTOMIZE_VERSION ?= 3.8.8
 BATS_VERSION ?= 1.2.1
+BATS_TESTS_FILE ?= test/bats/test.bats
 KUBECTL_KUSTOMIZE_VERSION ?= 1.20.1-${KUSTOMIZE_VERSION}
 HELM_VERSION ?= 2.17.0
 HELM_ARGS ?=
@@ -92,7 +93,7 @@ test:
 	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
 test-e2e:
-	bats -t test/bats/test.bats
+	bats -t ${BATS_TESTS_FILE}
 
 e2e-bootstrap:
 	# Download and install kind
@@ -284,7 +285,7 @@ release-manifest:
 	$(MAKE) manifests
 
 promote-staging-manifest:
-	@rm -rf deploy
+	@rm -f deploy/gatekeeper.yaml
 	@cp -r manifest_staging/deploy .
 	@rm -rf charts
 	@cp -r manifest_staging/charts .

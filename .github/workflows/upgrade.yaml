@@ -9,7 +9,7 @@ on:
       - "manifest_staging/charts/**"
 
 env:
-  BASE_RELEASE: 3.1.1
+  BASE_RELEASE: 3.2.3
 
 jobs:
   helm_upgrade:
@@ -35,13 +35,23 @@ jobs:
 
       - name: Run e2e after install
         run: |
-          make test-e2e
+          # running tests matching the base release
+          git clone https://github.com/open-policy-agent/gatekeeper.git -b v${{ env.BASE_RELEASE }} --sparse --depth 1 /tmp/gatekeeper-tests-v${{ env.BASE_RELEASE }}
+          cd /tmp/gatekeeper-tests-v${{ env.BASE_RELEASE }}
+          git sparse-checkout set test/bats
+          bats -t test/bats/test.bats
 
       - name: Save logs
         if: ${{ always() }}
         run: |
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-${{ matrix.HELM_VERSION }}-controller-pre-upgrade.json
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-${{ matrix.HELM_VERSION }}-audit-pre-upgrade.json
+
+      - name: Cleanup
+        run: |
+          kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
+          kubectl delete constrainttemplates --all || true
+          kubectl delete configs --all || true
 
       - name: Upgrade Helm version
         run: |

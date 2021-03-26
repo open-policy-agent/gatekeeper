@@ -2,7 +2,7 @@
 
 load helpers
 
-BATS_TESTS_DIR=test/bats/tests
+BATS_TESTS_DIR=${BATS_TESTS_DIR:-test/bats/tests}
 WAIT_TIME=120
 SLEEP_TIME=1
 CLEAN_CMD="echo cleaning..."

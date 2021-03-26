@@ -72,20 +72,24 @@ type Tracker struct {
 
 // NewTracker creates a new Tracker and initializes the internal trackers
 func NewTracker(lister Lister, mutationEnabled bool) *Tracker {
+	return newTracker(lister, mutationEnabled, nil)
+}
+
+func newTracker(lister Lister, mutationEnabled bool, fn objDataFactory) *Tracker {
 	tracker := Tracker{
 		lister:             lister,
-		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), nil),
-		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config"), nil),
-		constraints:        newTrackerMap(),
-		data:               newTrackerMap(),
+		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), fn),
+		config:             newObjTracker(configv1alpha1.GroupVersion.WithKind("Config"), fn),
+		constraints:        newTrackerMap(fn),
+		data:               newTrackerMap(fn),
 		ready:              make(chan struct{}),
 		constraintTrackers: &syncutil.SingleRunner{},
 
 		mutationEnabled: mutationEnabled,
 	}
 	if mutationEnabled {
-		tracker.assignMetadata = newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), nil)
-		tracker.assign = newObjTracker(mutationv1alpha.GroupVersion.WithKind("Assign"), nil)
+		tracker.assignMetadata = newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), fn)
+		tracker.assign = newObjTracker(mutationv1alpha.GroupVersion.WithKind("Assign"), fn)
 	}
 	return &tracker
 }
@@ -138,14 +142,28 @@ func (t *Tracker) ForData(gvk schema.GroupVersionKind) Expectations {
 	return t.data.Get(gvk)
 }
 
-// CancelTemplate stops expecting the provided ConstraintTemplate and associated Constraints.
-func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
-	log.V(1).Info("cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
-	t.templates.CancelExpect(ct)
+func (t *Tracker) templateCleanup(ct *templates.ConstraintTemplate) {
 	gvk := constraintGVK(ct)
 	t.constraints.Remove(gvk)
 	<-t.ready // constraintTrackers are setup in Run()
 	t.constraintTrackers.Cancel(gvk.String())
+}
+
+// CancelTemplate stops expecting the provided ConstraintTemplate and associated Constraints.
+func (t *Tracker) CancelTemplate(ct *templates.ConstraintTemplate) {
+	log.V(1).Info("cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
+	t.templates.CancelExpect(ct)
+	t.templateCleanup(ct)
+}
+
+// TryCancelTemplate will check the readiness retries left on a CT and
+// cancel the expectation for that CT and its associated Constraints if
+// no retries remain.
+func (t *Tracker) TryCancelTemplate(ct *templates.ConstraintTemplate) {
+	log.V(1).Info("try to cancel tracking for template", "namespace", ct.GetNamespace(), "name", ct.GetName())
+	if t.templates.TryCancelExpect(ct) {
+		t.templateCleanup(ct)
+	}
 }
 
 // CancelData stops expecting data for the specified resource kind.
@@ -260,6 +278,15 @@ func (t *Tracker) Run(ctx context.Context) error {
 	_ = grp.Wait()
 	_ = t.constraintTrackers.Wait() // Must appear after grp.Wait() - allows trackConstraintTemplates() time to schedule its sub-tasks.
 	return nil
+}
+
+func (t *Tracker) Populated() bool {
+	mutationPopulated := true
+	if t.mutationEnabled {
+		// If !t.mutationEnabled and we call this, it yields a null pointer exception
+		mutationPopulated = t.assignMetadata.Populated() && t.assign.Populated()
+	}
+	return t.templates.Populated() && t.config.Populated() && mutationPopulated && t.constraints.Populated() && t.data.Populated()
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
