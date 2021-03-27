@@ -3,9 +3,11 @@ package mutation
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -19,7 +21,7 @@ type System struct {
 	schemaDB        schema.DB
 	orderedMutators []types.Mutator
 	mutatorsMap     map[types.ID]types.Mutator
-	sync.RWMutex
+	mux             sync.RWMutex
 }
 
 // NewSystem initializes an empty mutation system
@@ -34,8 +36,8 @@ func NewSystem() *System {
 // Upsert updates or insert the given object, and returns
 // an error in case of conflicts
 func (s *System) Upsert(m types.Mutator) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	current, ok := s.mutatorsMap[m.ID()]
 	if ok && !m.HasDiff(current) {
@@ -78,16 +80,22 @@ func (s *System) Upsert(m types.Mutator) error {
 // Mutate applies the mutation in place to the given object. Returns
 // true if a mutation was performed.
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
-	s.RLock()
-	defer s.RUnlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
+	allAppliedMutations := [][]types.Mutator{}
+
 	for i := 0; i < maxIterations; i++ {
+		appliedMutations := []types.Mutator{}
 		old := obj.DeepCopy()
 		for _, m := range s.orderedMutators {
 			if m.Matches(obj, ns) {
-				err := m.Mutate(obj)
+				mutated, err := m.Mutate(obj)
+				if mutated && *MutationLoggingEnabled {
+					appliedMutations = append(appliedMutations, m)
+				}
 				if err != nil {
 					return false, errors.Wrapf(err, "mutation %v failed for %s %s %s %s", m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 				}
@@ -98,18 +106,55 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 				return false, nil
 			}
 			if cmp.Equal(original, obj) {
+				if *MutationLoggingEnabled {
+					logAppliedMutations("Oscillating mutation.", original, allAppliedMutations)
+				}
 				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+			}
+			if *MutationLoggingEnabled {
+				logAppliedMutations("Mutation applied", original, allAppliedMutations)
 			}
 			return true, nil
 		}
+		if *MutationLoggingEnabled {
+			allAppliedMutations = append(allAppliedMutations, appliedMutations)
+		}
+	}
+	if *MutationLoggingEnabled {
+		logAppliedMutations("Mutation not converging", original, allAppliedMutations)
 	}
 	return false, fmt.Errorf("mutation not converging for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 }
 
+func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
+	iterations := []interface{}{}
+	for i, appliedMutations := range allAppliedMutations {
+		if len(appliedMutations) == 0 {
+			continue
+		}
+		var appliedMutationsText []string
+		for _, mutator := range appliedMutations {
+			appliedMutationsText = append(appliedMutationsText, mutator.String())
+		}
+		iterations = append(iterations, fmt.Sprintf("iteration_%d", i), strings.Join(appliedMutationsText, ", "))
+	}
+	if len(iterations) > 0 {
+		logDetails := []interface{}{}
+		logDetails = append(logDetails, logging.EventType, logging.MutationApplied)
+		logDetails = append(logDetails, logging.ResourceGroup, obj.GroupVersionKind().Group)
+		logDetails = append(logDetails, logging.ResourceKind, obj.GroupVersionKind().Kind)
+		logDetails = append(logDetails, logging.ResourceAPIVersion, obj.GroupVersionKind().Version)
+		logDetails = append(logDetails, logging.ResourceNamespace, obj.GetNamespace())
+		logDetails = append(logDetails, logging.ResourceName, obj.GetName())
+		logDetails = append(logDetails, iterations...)
+		log.Info(message, logDetails...)
+	}
+}
+
 // Remove removes the mutator from the mutation system
 func (s *System) Remove(id types.ID) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	if _, ok := s.mutatorsMap[id]; !ok {
 		return nil

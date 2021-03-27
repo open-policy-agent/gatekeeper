@@ -2,298 +2,149 @@ package webhook
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
-	"github.com/ghodss/yaml"
+	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-func TestAssignMetaValidation(t *testing.T) {
-	tc := []struct {
-		Name          string
-		AssignMeta    string
-		ErrorExpected bool
-	}{
-		{
-			Name: "Valid Assign",
-			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: AssignMetadata
-metadata:
-  name: testAssignMeta
-spec:
-  location: metadata.labels.foo
-  parameters:
-    assign:
-      value: bar
-`,
-			ErrorExpected: false,
-		},
-		{
-			Name: "Invalid Path",
-			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: AssignMetadata
-metadata:
-  name: testAssignMeta
-spec:
-  location: metadata.foo.bar
-  parameters:
-    assign:
-      value: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Invalid Assign",
-			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: AssignMetadata
-metadata:
-  name: testAssignMeta
-spec:
-  location: metadata.labels.bar
-  parameters:
-    assign:
-      foo: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Assign not a string",
-			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: AssignMetadata
-metadata:
-  name: testAssignMeta
-spec:
-  location: metadata.labels.bar
-  parameters:
-    assign:
-      value:
-        foo: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Assign no value",
-			AssignMeta: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: AssignMetadata
-metadata:
-  name: testAssignMeta
-spec:
-  location: metadata.labels.bar
-  parameters:
-    assign:
-      zzz:
-        foo: bar
-`,
-			ErrorExpected: true,
+func TestWebhookAssign(t *testing.T) {
+	sys := mutation.NewSystem()
+
+	v := &mutationsv1alpha1.Assign{
+		ObjectMeta: metav1.ObjectMeta{Name: "AddFoo"},
+		Spec: mutationsv1alpha1.AssignSpec{
+			ApplyTo:  []mutationsv1alpha1.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Pod"}}},
+			Location: "spec.value",
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foo"}`)},
+			},
 		},
 	}
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
-			b, err := yaml.YAMLToJSON([]byte(tt.AssignMeta))
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
-			review := atypes.Request{
-				AdmissionRequest: admissionv1.AdmissionRequest{
-					Kind: metav1.GroupVersionKind{
-						Group:   "mutations.gatekeeper.sh",
-						Version: "v1alpha1",
-						Kind:    "AssignMetadata",
-					},
-					Object: runtime.RawExtension{
-						Raw: b,
+	if err := mutation.IsValidAssign(v); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := mutation.MutatorForAssign(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sys.Upsert(m); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &mutationHandler{
+		webhookHandler: webhookHandler{
+			injectedConfig: &configv1alpha1.Config{
+				Spec: configv1alpha1.ConfigSpec{
+					Validation: configv1alpha1.Validation{
+						Traces: []configv1alpha1.Trace{},
 					},
 				},
-			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
-			if err != nil && !tt.ErrorExpected {
-				t.Errorf("err = %s; want nil", err)
-			}
-			if err == nil && tt.ErrorExpected {
-				t.Error("err = nil; want non-nil")
-			}
-		})
+			},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: process.New(),
+		},
+		mutationSystem: sys,
+		deserializer:   codecs.UniversalDeserializer(),
+	}
+
+	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
+
+	req := atypes.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Object:    runtime.RawExtension{Raw: raw},
+			Namespace: "ns1",
+			Operation: admissionv1.Create,
+		},
+	}
+
+	resp := h.Handle(context.Background(), req)
+
+	expectedVal := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}, "spec": {"value": "foo"}}`)
+	expected := admission.PatchResponseFromRaw(raw, expectedVal)
+
+	if !reflect.DeepEqual(resp, expected) {
+		t.Errorf("unexpected response: %+v\n\nexpected: %+v", resp, expected)
 	}
 }
 
-func TestAssignValidation(t *testing.T) {
-	tc := []struct {
-		Name          string
-		Assign        string
-		ErrorExpected bool
-	}{
-		{
-			Name: "Valid Assign",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: goodAssign
-spec:
-  location: "spec.containers[name:test].foo"
-  parameters:
-    assign:
-      value:
-        aa: bb
-`,
-			ErrorExpected: false,
-		},
-		{
-			Name: "Changes Metadata",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: metadata.foo.bar
-  parameters:
-    assign:
-      value: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "No Value",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers
-  parameters:
-    assign:
-      zzz: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "No Assign",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Change the key",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers[name:foo].name
-  parameters:
-    assign:
-      value: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Assigning scalar as list item",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers[name:foo]
-  parameters:
-    assign:
-      value: xxx
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Adding an object without the key",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers[name:foo]
-  parameters:
-    assign:
-      value:
-        aa: bb
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Adding an object changing the key",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers[name:foo]
-  parameters:
-    assign:
-      value:
-        name: bar
-`,
-			ErrorExpected: true,
-		},
-		{
-			Name: "Adding an object to a globbed list",
-			Assign: `
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: assignExample
-spec:
-  location: spec.containers[*]
-  parameters:
-    assign:
-      value:
-        name: bar
-`,
-			ErrorExpected: true,
+func TestWebhookAssignMetadata(t *testing.T) {
+	sys := mutation.NewSystem()
+
+	v := &mutationsv1alpha1.AssignMetadata{
+		ObjectMeta: metav1.ObjectMeta{Name: "AddFoo"},
+		Spec: mutationsv1alpha1.AssignMetadataSpec{
+			Location: "metadata.labels.foo",
+			Parameters: mutationsv1alpha1.MetadataParameters{
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "bar"}`)},
+			},
 		},
 	}
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			handler := mutationHandler{webhookHandler: webhookHandler{}}
-			b, err := yaml.YAMLToJSON([]byte(tt.Assign))
-			if err != nil {
-				t.Fatalf("Error parsing yaml: %s", err)
-			}
-			review := atypes.Request{
-				AdmissionRequest: admissionv1.AdmissionRequest{
-					Kind: metav1.GroupVersionKind{
-						Group:   "mutations.gatekeeper.sh",
-						Version: "v1alpha1",
-						Kind:    "Assign",
-					},
-					Object: runtime.RawExtension{
-						Raw: b,
+	if err := mutation.IsValidAssignMetadata(v); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := mutation.MutatorForAssignMetadata(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sys.Upsert(m); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &mutationHandler{
+		webhookHandler: webhookHandler{
+			injectedConfig: &configv1alpha1.Config{
+				Spec: configv1alpha1.ConfigSpec{
+					Validation: configv1alpha1.Validation{
+						Traces: []configv1alpha1.Trace{},
 					},
 				},
-			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
-			if err != nil && !tt.ErrorExpected {
-				t.Errorf("%s: err = %s; want nil", tt.Name, err)
-			}
-			if err == nil && tt.ErrorExpected {
-				t.Errorf("%s: err = nil; want non-nil", tt.Name)
-			}
-		})
+			},
+			client:          &nsGetter{},
+			reader:          &nsGetter{},
+			processExcluder: process.New(),
+		},
+		mutationSystem: sys,
+		deserializer:   codecs.UniversalDeserializer(),
+	}
+
+	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
+
+	req := atypes.Request{
+		AdmissionRequest: admissionv1.AdmissionRequest{
+			Kind: metav1.GroupVersionKind{
+				Group:   "",
+				Version: "v1",
+				Kind:    "Pod",
+			},
+			Object:    runtime.RawExtension{Raw: raw},
+			Namespace: "ns1",
+			Operation: admissionv1.Create,
+		},
+	}
+
+	resp := h.Handle(context.Background(), req)
+
+	expectedVal := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd", "namespace": "ns1", "labels": {"foo":"bar"}}}`)
+	expected := admission.PatchResponseFromRaw(raw, expectedVal)
+
+	if !reflect.DeepEqual(resp, expected) {
+		t.Errorf("unexpected response: %+v\n\nexpected: %+v", resp, expected)
 	}
 }

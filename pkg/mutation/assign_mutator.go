@@ -32,6 +32,9 @@ type AssignMutator struct {
 var _ schema.MutatorWithSchema = &AssignMutator{}
 
 func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+	if !AppliesTo(m.assign.Spec.ApplyTo, obj) {
+		return false
+	}
 	matches, err := Matches(m.assign.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)
@@ -40,7 +43,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return mutate(m, m.tester, m.testValue, obj)
 }
 
@@ -132,17 +135,46 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	return res
 }
 
+func (m *AssignMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assign.GetGeneration())
+}
+
 // MutatorForAssign returns an AssignMutator built from
 // the given assign instance.
 func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
+	path, err := parser.Parse(assign.Spec.Location)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
+	}
+
+	if hasMetadataRoot(path) {
+		return nil, errors.New(fmt.Sprintf("assign %s can't change metadata", assign.GetName()))
+	}
+
+	err = checkKeyNotChanged(path, assign.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	toAssign := make(map[string]interface{})
+	err = json.Unmarshal([]byte(assign.Spec.Parameters.Assign.Raw), &toAssign)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid format for parameters.assign %s for Assign %s", assign.Spec.Parameters.Assign.Raw, assign.GetName())
+	}
+
+	value, ok := toAssign["value"]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("spec.parameters.assign for Assign %s must have a value field", assign.GetName()))
+	}
+
+	err = validateObjectAssignedToList(path, value, assign.GetName())
+	if err != nil {
+		return nil, err
+	}
+
 	id, err := types.MakeID(assign)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve id for assign type")
-	}
-
-	path, err := parser.Parse(assign.Spec.Location)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse the location specified for mutator %v, location: %s", id, assign.Spec.Location)
 	}
 
 	pathTests, err := gatherPathTests(assign)
@@ -161,11 +193,20 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	if err != nil {
 		return nil, err
 	}
+	applyTos := applyToToBindings(assign.Spec.ApplyTo)
+	if len(applyTos) == 0 {
+		return nil, fmt.Errorf("applyTo required for Assign mutator %s", assign.GetName())
+	}
+	for _, applyTo := range applyTos {
+		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
+			return nil, fmt.Errorf("invalid applyTo for Assign mutator %s, all of group, version and kind must be specified", assign.GetName())
+		}
+	}
 
 	return &AssignMutator{
 		id:        id,
 		assign:    assign.DeepCopy(),
-		bindings:  applyToToBindings(assign.Spec.ApplyTo),
+		bindings:  applyTos,
 		path:      path,
 		tester:    tester,
 		valueTest: &valueTests,
@@ -210,39 +251,9 @@ func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
 // IsValidAssign returns an error if the given assign object is not
 // semantically valid
 func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
-	path, err := parser.Parse(assign.Spec.Location)
-	if err != nil {
-		return errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
-	}
-
-	if hasMetadataRoot(path) {
-		return errors.New(fmt.Sprintf("assign %s can't change metadata", assign.GetName()))
-	}
-
-	err = checkKeyNotChanged(path, assign.GetName())
-	if err != nil {
-		return err
-	}
-
-	toAssign := make(map[string]interface{})
-	err = json.Unmarshal([]byte(assign.Spec.Parameters.Assign.Raw), &toAssign)
-	if err != nil {
-		return errors.Wrapf(err, "invalid format for parameters.assign %s for Assign %s", assign.Spec.Parameters.Assign.Raw, assign.GetName())
-	}
-
-	value, ok := toAssign["value"]
-	if !ok {
-		return errors.New(fmt.Sprintf("spec.parameters.assign for Assign %s must have a value field", assign.GetName()))
-	}
-
-	err = validateObjectAssignedToList(path, value, assign.GetName())
-	if err != nil {
-		return err
-	}
 	if _, err := MutatorForAssign(assign); err != nil {
 		return err
 	}
-
 	return nil
 }
 

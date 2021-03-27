@@ -17,7 +17,6 @@ package webhook
 
 import (
 	"context"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -71,8 +70,8 @@ func getFiles(dir string) ([]string, error) {
 	if _, err = os.Stat(dir); err != nil {
 		return nil, err
 	}
-	var files []os.FileInfo
-	if files, err = ioutil.ReadDir(dir); err != nil {
+	var files []os.DirEntry
+	if files, err = os.ReadDir(dir); err != nil {
 		return nil, err
 	}
 	// white-list file extensions
@@ -98,7 +97,7 @@ func readTemplates(dir string) ([]templates.ConstraintTemplate, error) {
 	}
 	result := make([]templates.ConstraintTemplate, len(fileList))
 	for i, file := range fileList {
-		yamlString, err := ioutil.ReadFile(file)
+		yamlString, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +139,7 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	}
 	result := make([]unstructured.Unstructured, len(fileList))
 	for i, file := range fileList {
-		yamlString, err := ioutil.ReadFile(file)
+		yamlString, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}
@@ -154,8 +153,8 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 }
 
 func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
-	for _, ct := range list {
-		_, err := opa.AddTemplate(context.TODO(), &ct)
+	for index := range list {
+		_, err := opa.AddTemplate(context.TODO(), &list[index])
 		if err != nil {
 			return err
 		}
@@ -164,8 +163,8 @@ func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
 }
 
 func addConstraints(opa *opa.Client, list []unstructured.Unstructured) error {
-	for _, cr := range list {
-		_, err := opa.AddConstraint(context.TODO(), &cr)
+	for index := range list {
+		_, err := opa.AddConstraint(context.TODO(), &list[index])
 		if err != nil {
 			return err
 		}
@@ -187,7 +186,7 @@ func generateConstraints(M int, crList []unstructured.Unstructured) []unstructur
 func genRandString(n int) string {
 	out := make([]byte, n)
 	for i := 0; i < n; i++ {
-		c := 'a' + rand.Intn(26)
+		c := 'a' + rand.Intn(26) // #nosec G404
 		out[i] = byte(c)
 	}
 	return string(out)

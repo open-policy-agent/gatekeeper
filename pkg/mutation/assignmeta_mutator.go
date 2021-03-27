@@ -56,12 +56,12 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 	return matches
 }
 
-func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) error {
+func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, err := tester.New([]tester.Test{
 		{SubPath: m.Path(), Condition: tester.MustNotExist},
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	return mutate(m, t, nil, obj)
 }
@@ -113,16 +113,35 @@ func (m *AssignMetadataMutator) Value() (interface{}, error) {
 	}
 }
 
+func (m *AssignMetadataMutator) String() string {
+	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
+}
+
 // MutatorForAssignMetadata builds an AssignMetadataMutator from the given AssignMetadata object.
 func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*AssignMetadataMutator, error) {
+	path, err := parser.Parse(assignMeta.Spec.Location)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid location format for AssignMetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
+	}
+	if !isValidMetadataPath(path) {
+		return nil, fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
+	}
+
+	assign := make(map[string]interface{})
+	err = json.Unmarshal([]byte(assignMeta.Spec.Parameters.Assign.Raw), &assign)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid format for parameters.assign")
+	}
+	value, ok := assign["value"]
+	if !ok {
+		return nil, errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
+	}
+	if _, ok := value.(string); !ok {
+		return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
+	}
 	id, err := types.MakeID(assignMeta)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve id for assignMetadata type")
-	}
-
-	path, err := parser.Parse(assignMeta.Spec.Location)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse location for assign metadata")
 	}
 
 	if !isValidMetadataPath(path) {
@@ -158,25 +177,8 @@ func isValidMetadataPath(path *parser.Path) bool {
 // IsValidAssignMetadata returns an error if the given assignmetadata object is not
 // semantically valid
 func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
-	path, err := parser.Parse(assignMeta.Spec.Location)
-	if err != nil {
-		return errors.Wrapf(err, "invalid location format for Assign %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
-	}
-	if !isValidMetadataPath(path) {
-		return fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
-	}
-
-	assign := make(map[string]interface{})
-	err = json.Unmarshal([]byte(assignMeta.Spec.Parameters.Assign.Raw), &assign)
-	if err != nil {
-		return errors.Wrap(err, "invalid format for parameters.assign")
-	}
-	value, ok := assign["value"]
-	if !ok {
-		return errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
-	}
-	if _, ok := value.(string); !ok {
-		return errors.New("spec.parameters.assign must be a string for AssignMetadata " + assignMeta.GetName())
+	if _, err := MutatorForAssignMetadata(assignMeta); err != nil {
+		return err
 	}
 	return nil
 }

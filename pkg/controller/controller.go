@@ -134,7 +134,10 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		deps.GetPod = podGetter.GetPod
 	}
 	if *debugUseFakePod {
-		os.Setenv("POD_NAME", "no-pod")
+		err := os.Setenv("POD_NAME", "no-pod")
+		if err != nil {
+			return err
+		}
 		podstatus.DisablePodOwnership()
 		fakePodGetter := func() (*corev1.Pod, error) {
 			pod := &corev1.Pod{}

@@ -1,12 +1,11 @@
 package mutation
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
-	pathtester "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -107,6 +106,7 @@ func TestObjectsAndLists(t *testing.T) {
 	}
 
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		`spec.containers["name": "testname2"].ports["name": "portName2B"].hostIP`,
 		ParameterTestValue,
 		prepareTestPod(t),
@@ -120,7 +120,7 @@ func TestObjectsAndLists(t *testing.T) {
 func TestListsAsLastElementWithStringValue(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {}
 
-	if err := testAssignMutation(
+	if err := testDummyMutation(
 		`spec.containers["name": "notExists"]`,
 		ParameterTestValue,
 		prepareTestPod(t),
@@ -148,6 +148,7 @@ func TestListsAsLastElement(t *testing.T) {
 	}
 
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		`spec.containers["name": "notExists"]`,
 		"{\"name\": \"notExists\", \"foo\": \"foovalue\"}",
 		prepareTestPod(t),
@@ -175,6 +176,7 @@ func TestListsAsLastElementAlreadyExists(t *testing.T) {
 	}
 
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		`spec.containers["name": "testname1"]`,
 		"{\"name\": \"testname1\", \"foo\": \"bar\"}",
 		prepareTestPod(t),
@@ -203,6 +205,7 @@ func TestGlobbedList(t *testing.T) {
 	}
 
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		`spec.containers["name": *].ports["name": *].protocol`,
 		ParameterTestValue,
 		prepareTestPod(t),
@@ -224,6 +227,7 @@ func TestNonExistingPathEntry(t *testing.T) {
 		}
 	}
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		"spec.element.should.be.added",
 		ParameterTestValue,
 		prepareTestPod(t),
@@ -249,6 +253,7 @@ func TestNonExistingListPathEntry(t *testing.T) {
 		}
 	}
 	if err := testAssignMutation(
+		"", "v1", "Pod",
 		`spec.element["name": "value"].element2.added`,
 		ParameterTestValue,
 		prepareTestPod(t),
@@ -281,18 +286,21 @@ func TestAssignMetadataDoesNotUpdateExistingLabel(t *testing.T) {
 }
 
 func TestAssignDoesNotMatchObjectStructure(t *testing.T) {
-	if err := testAssignMutation(`spec.containers.ports.protocol`, ParameterTestValue, prepareTestPod(t), nil, t); err == nil {
+	if err := testAssignMutation("", "v1", "Pod", `spec.containers.ports.protocol`, ParameterTestValue, prepareTestPod(t), nil, t); err == nil {
 		t.Errorf("Error should be returned for mismatched path and object structure")
 	}
 }
 
-// TODO: this test will start failing once validation is added and conficting key values are checked.
-// At this stage the test can be safely removed. The feature is also checked by: TestListsAsLastElementAlreadyExistsWithKeyConflict_WithCustomMutator
 func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {}
-	if err := testAssignMutation(
+	var v interface{}
+	err := json.Unmarshal([]byte("{\"name\": \"conflictingName\", \"foo\": \"bar\"}"), &v)
+	if err != nil {
+		panic(err)
+	}
+	if err := testDummyMutation(
 		`spec.containers["name": "testname1"]`,
-		"{\"name\": \"conflictingName\", \"foo\": \"bar\"}",
+		v,
 		prepareTestPod(t),
 		testFunc,
 		t,
@@ -305,7 +313,19 @@ func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
 	}
 }
 
+func testDummyMutation(
+	location string,
+	value interface{},
+	unstructured *unstructured.Unstructured,
+	testFunc func(*unstructured.Unstructured),
+	t *testing.T) error {
+
+	mutator := newDummyMutator("dummy", location, value)
+	return testMutation(mutator, unstructured, testFunc, t)
+}
+
 func testAssignMutation(
+	group, version, kind string,
 	location string,
 	value string,
 	unstructured *unstructured.Unstructured,
@@ -315,6 +335,7 @@ func testAssignMutation(
 	assign := mutationsv1alpha1.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsv1alpha1.AssignSpec{
+			ApplyTo:  []mutationsv1alpha1.ApplyTo{{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}},
 			Location: location,
 			Parameters: mutationsv1alpha1.Parameters{
 				Assign: runtime.RawExtension{
@@ -356,47 +377,10 @@ func testAssignMetadataMutation(
 }
 
 func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
-	err := mutator.Mutate(unstructured)
+	_, err := mutator.Mutate(unstructured)
 	if err != nil {
 		return err
 	}
 	testFunc(unstructured)
 	return nil
-}
-
-type TestMutator struct {
-	AssignMutator
-	path  *parser.Path
-	value interface{}
-}
-
-func (m *TestMutator) Path() *parser.Path {
-	return m.path
-}
-
-func (m *TestMutator) Value() (interface{}, error) {
-	return m.value, nil
-}
-
-func (m *TestMutator) Mutate(obj *unstructured.Unstructured) error {
-	t, _ := pathtester.New(nil)
-	return mutate(m, t, func(_ interface{}, _ bool) bool { return true }, obj)
-}
-
-// TODO: rename after TestListsAsLastElementAlreadyExistsWithKeyConflict is deleted
-func TestListsAsLastElementAlreadyExistsWithKeyConflict_WithCustomMutator(t *testing.T) {
-	path, _ := parser.Parse(`spec.containers["name": "testname1"]`)
-	mutator := TestMutator{
-		path:  path,
-		value: map[string]interface{}{"name": "conflictingName"},
-	}
-	err := mutator.Mutate(prepareTestPod(t))
-
-	if err == nil {
-		t.Errorf("Expected error not raised. Conflicting name must not be applied.")
-	} else {
-		if err.Error() != "key value of replaced object must not change" {
-			t.Errorf("Incorrect error message: %s", err.Error())
-		}
-	}
 }

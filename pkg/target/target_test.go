@@ -209,7 +209,7 @@ func TestValidateConstraint(t *testing.T) {
 			],
 			"namespaceSelector": {
 				"matchExpressions": [{
-				 		"key": "someKey",
+					"key": "someKey",
 					"operator": "Blah",
 					"values": ["some value"]
 				}]

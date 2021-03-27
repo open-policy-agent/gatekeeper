@@ -174,6 +174,54 @@ func Test_AssignMetadata(t *testing.T) {
 	}
 }
 
+func Test_Assign(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	defer func() {
+		mutationEnabled := false
+		mutation.MutationEnabled = &mutationEnabled
+	}()
+
+	mutationEnabled := true
+	mutation.MutationEnabled = &mutationEnabled
+
+	os.Setenv("POD_NAME", "no-pod")
+	podstatus.DisablePodOwnership()
+
+	// Apply fixtures *before* the controllers are setup.
+	err := applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+	mutationCache := mutation.NewSystem()
+	if err := setupController(mgr, wm, opaClient, mutationCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	defer func() {
+		cancelFunc()
+		mgrStopped.Wait()
+	}()
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the Assign is present in the cache
+	for _, am := range testAssign {
+		id, err := mutationtypes.MakeID(am)
+		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create Assign id")
+		exptectedMutator := mutationCache.Get(id)
+		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+	}
+}
+
 // Test_Tracker verifies that once an initial set of fixtures are loaded into OPA,
 // the readiness probe reflects that Gatekeeper is ready to enforce policy. Adding
 // additional constraints afterwards will not change the readiness state.
@@ -369,9 +417,9 @@ func Test_CollectDeleted(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
 		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
 
-		for _, i := range ul.Items {
-			err = client.Delete(ctx, &i)
-			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, i.GetName())
+		for index := range ul.Items {
+			err = client.Delete(ctx, &ul.Items[index])
+			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, ul.Items[index].GetName())
 		}
 
 		g.Eventually(func() (bool, error) {
