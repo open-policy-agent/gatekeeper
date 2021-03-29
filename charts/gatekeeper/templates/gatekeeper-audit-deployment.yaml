@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-audit
-  namespace: gatekeeper-system
+  namespace: '{{ include "gatekeeper.namespace" . }}'
 spec:
   replicas: 1
   selector:
@@ -25,8 +25,9 @@ spec:
   template:
     metadata:
       annotations:
-{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+{{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: audit-controller
@@ -35,6 +36,8 @@ spec:
         heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -78,7 +81,7 @@ spec:
             path: /readyz
             port: 9090
         resources:
-{{ toYaml .Values.audit.resources | indent 10 }}
+          {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -88,16 +91,12 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
-      nodeSelector:
-{{ toYaml .Values.audit.nodeSelector | indent 8 }}
-      affinity:
-{{ toYaml .Values.audit.affinity | indent 8 }}
-      tolerations:
-{{ toYaml .Values.audit.tolerations | indent 8 }}
+      hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
-{{- if .Values.audit.priorityClassName }}
-      priorityClassName: {{ .Values.audit.priorityClassName }}
-{{- end }}
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
