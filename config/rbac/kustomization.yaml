@@ -19,3 +19,9 @@ patchesJson6902:
     kind: ClusterRole
     name: manager-role
   path: webhook_permissions_patch.yaml
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRole
+    name: manager-role
+  path: webhook_mutaion_permissions_patch.yaml

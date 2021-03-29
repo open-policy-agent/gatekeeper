@@ -5,6 +5,8 @@ resources:
 - bases/config.gatekeeper.sh_configs.yaml
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
+- bases/mutations.gatekeeper.sh_assign.yaml
+- bases/mutations.gatekeeper.sh_assignmetadata.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # TODO: once mutation is deployed by default and not by config/ovelays/mutation, 

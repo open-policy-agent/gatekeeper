@@ -1,4 +1,4 @@
-replicas: 3
+replicas: 1
 auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
@@ -10,6 +10,7 @@ auditChunkSize: 0
 logLevel: INFO
 logDenies: false
 emitAdmissionEvents: false
+experimentalEnableMutation: false
 emitAuditEvents: false
 image:
   repository: openpolicyagent/gatekeeper

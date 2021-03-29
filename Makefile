@@ -177,9 +177,10 @@ install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
 deploy-mutation: patch-image
-	@grep -q -v 'enable-mutation' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev/manager_image_patch.yaml
-	kustomize build config/overlays/mutation_webhook | kubectl apply -f -
-	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
+	@grep -q -v 'enable-mutation' ./config/overlays/dev/manager_image_patch.yaml && gsed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev/manager_image_patch.yaml
+	#kustomize build config/overlays/mutation_webhook | kubectl apply -f -
+	#kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
+	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation 
 
 undeploy-mutation:
 	kustomize build config/overlays/mutation_webhook | kubectl delete -f -

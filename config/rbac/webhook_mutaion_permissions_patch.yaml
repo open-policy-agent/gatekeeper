@@ -4,9 +4,9 @@
     apiGroups:
     - admissionregistration.k8s.io
     resources:
-    - validatingwebhookconfigurations
+    - mutatingwebhookconfigurations
     resourceNames:
-    - gatekeeper-validating-webhook-configuration
+    - gatekeeper-mutating-webhook-configuration
     verbs:
     - create
     - delete
