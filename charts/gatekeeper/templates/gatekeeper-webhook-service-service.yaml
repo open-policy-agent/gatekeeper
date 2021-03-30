@@ -11,8 +11,11 @@ metadata:
   namespace: '{{ include "gatekeeper.namespace" . }}'
 spec:
   ports:
-  - port: 443
+  - name: https
+    port: 443
     targetPort: 8443
+  - name: metrics
+    port: 8888
   selector:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
