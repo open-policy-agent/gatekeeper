@@ -6,6 +6,7 @@ createNamespace: true
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 enableDeleteOperations: false
+experimentalEnableMutation: false
 auditChunkSize: 0
 logLevel: INFO
 logDenies: false

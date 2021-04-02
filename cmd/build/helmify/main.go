@@ -105,6 +105,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
 			}
 
+			if name == "gatekeeper-mutating-webhook-configuration" {
+				obj = "{{- if .Values.experimentalEnableMutation }}\n" + obj + "{{- end }}\n"
+			}
+
 			if name == "gatekeeper-system" {
 				obj = "{{- if .Values.createNamespace }}\n" + obj + "{{- end }}\n"
 			}

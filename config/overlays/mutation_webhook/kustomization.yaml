@@ -5,7 +5,7 @@
 namespace: gatekeeper-system
 
 bases:
-  - ../dev
+  - ../../default
 
 resources:
   - webhook.yaml
