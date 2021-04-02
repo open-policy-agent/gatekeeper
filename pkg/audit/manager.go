@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -674,7 +675,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		return
 	}
 
-	ucloop.log.Info("starting update constraints loop", "constraints", ucloop.uc)
+	ucloop.log.Info("starting update constraints loop", "constraints to update", fmt.Sprintf("%v", ucloop.uc))
 
 	updateLoop := func() (bool, error) {
 		for _, item := range ucloop.uc {
@@ -734,7 +735,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		Jitter:   1,
 		Steps:    5,
 	}, updateLoop); err != nil {
-		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", ucloop.uc)
+		ucloop.log.Error(err, "could not update constraint reached max retries", "remaining update constraints", fmt.Sprintf("%v", ucloop.uc))
 	}
 }
 
