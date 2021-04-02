@@ -51,7 +51,7 @@ By default, the audit will request each resource from the Kubernetes API during 
 
 By default, Gatekeeper will audit all resources in the cluster. This operation can take some time depending on the number of resources.
 
-If all of your constraints match against specific kinds (e.g. "match only pods"), then you can speed up audit runs by setting `--audit-match-kind-only=true` flag. This will only check resources of the kinds specified in all [constraints](#Constraints) defined in the cluster.
+If all of your constraints match against specific kinds (e.g. "match only pods"), then you can speed up audit runs by setting `--audit-match-kind-only=true` flag. This will only check resources of the kinds specified in all [constraints](howto.md#constraints) defined in the cluster.
 
 For example, defining this constraint will only audit `Pod` kind:
 
@@ -68,4 +68,4 @@ spec:
 ...
 ```
 
-If any of the [constraints](#Constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
+If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
