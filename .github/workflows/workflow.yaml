@@ -278,8 +278,7 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        # using latest to fix set-env deprecation
-        uses: "marvinpinto/action-automatic-releases@latest"
+        uses: "marvinpinto/action-automatic-releases@v1.1.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
