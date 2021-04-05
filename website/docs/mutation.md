@@ -109,7 +109,7 @@ The yaml illustrating the above `location`:
 ```yaml
 spec:
   containers:
-  -  name:foo
+  - name: foo
     imagePullPolicy:
 ```
 
