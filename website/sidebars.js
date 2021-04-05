@@ -23,6 +23,7 @@ module.exports = {
         'library',
         'customize-startup',
         'customize-admission',
+        'metrics',
         'debug',
         'emergency',
         'vendor-specific',

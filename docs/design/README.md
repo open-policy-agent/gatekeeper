@@ -5,7 +5,6 @@ Generally, design docs are on Google docs:
 * [Versioning of Constraint Templates](https://docs.google.com/document/d/1vB_2wm60WCVLXoegMrupqwqKAuW6gbwEIxg3vBQj6cs/edit)
 
 ## In Development
-* [Metrics Design Issue](https://github.com/open-policy-agent/gatekeeper/issues/157#issuecomment-553015292)
 
 ## Proposed
 * [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit?usp=sharing)
@@ -16,6 +15,7 @@ Generally, design docs are on Google docs:
    * [OPA Gatekeeper Mutation (alternate proposal)](https://docs.google.com/document/d/1LtNIxd-Y3oh0HPgPYdaVV7t2c6vBSwzYAFcTyxQYZjE/edit)
    * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
+* [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
@@ -28,12 +28,14 @@ Generally, design docs are on Google docs:
 * [Constraint Framework Client Interface](https://docs.google.com/document/d/1NDOgu8F_yQqrxRRVTDiCXGXMsajA3Jtp-lwGrZsDFcI/edit#)
 * [Logging Design Doc](https://docs.google.com/document/d/1ap7AKOupNcR_42s8mkSh5FV9eteXTd4VCqelKst73VY/edit)
 * [Namespace Exclusion Design doc](https://docs.google.com/document/d/1yHuXFs_HQL5N9yT9QVi6AMyflWPtZS4Pg-uXczdqgZ8/edit?usp=sharing)
+* [Metrics Design Issue](https://github.com/open-policy-agent/gatekeeper/issues/157#issuecomment-553015292)
 
 ## Roadmap (in development)
-* [GA Development Path](https://docs.google.com/document/d/1Lolr_jUkVlGSyk4iGhajx1LXWsWRXhLeu3L7s3lLDGY/edit#heading=h.9aae3wnhx5k3)
-* [Post-MVP Features Doc](https://docs.google.com/document/d/1t61-fcFdbNA0o1kTQd-oS2rkaUsouN4Kg6ImW8agfbk/edit#heading=h.57n2tr53h5l)
+* See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)
 
 ## Roadmap (complete)
+* [GA Development Path](https://docs.google.com/document/d/1Lolr_jUkVlGSyk4iGhajx1LXWsWRXhLeu3L7s3lLDGY/edit#heading=h.9aae3wnhx5k3)
+* [Post-MVP Features Doc](https://docs.google.com/document/d/1t61-fcFdbNA0o1kTQd-oS2rkaUsouN4Kg6ImW8agfbk/edit#heading=h.57n2tr53h5l)
 * [MVP for Alpha](https://docs.google.com/document/d/1EPb3zg-hknAK7WqYh96XIXCEXG9mQqr_Cqn8VuEGoLI/edit#heading=h.vu8n6esi249)
 
 ## Discussions
