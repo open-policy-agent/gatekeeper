@@ -37,7 +37,7 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       affinity:
-        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -100,11 +100,11 @@ spec:
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
-        {{- toYaml .Values.nodeSelector | nindent 8 }}
+        {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
-        {{- toYaml .Values.tolerations | nindent 8 }}
+        {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
       volumes:
       - name: cert
         secret:

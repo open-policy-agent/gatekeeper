@@ -37,7 +37,7 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       affinity:
-        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- toYaml .Values.audit.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -99,4 +99,4 @@ spec:
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
-        {{- toYaml .Values.tolerations | nindent 8 }}
+        {{- toYaml .Values.audit.tolerations | nindent 8 }}
