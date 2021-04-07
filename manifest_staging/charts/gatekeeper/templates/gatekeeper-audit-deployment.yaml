@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-audit
-  namespace: '{{ include "gatekeeper.namespace" . }}'
+  namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: 1
   selector:
@@ -95,7 +95,7 @@ spec:
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
-        {{- toYaml .Values.nodeSelector | nindent 8 }}
+        {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:

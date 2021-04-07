@@ -44,6 +44,24 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
 status: null
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: assignmetadata.mutations.gatekeeper.sh
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+status: null
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: assign.mutations.gatekeeper.sh
+  annotations:
+    helm.sh/hook: crd-install
+    helm.sh/hook-delete-policy: before-hook-creation
+status: null
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,8 +82,9 @@ spec:
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
             - --log-level={{ .Values.logLevel }}
-            - --exempt-namespace={{ include "gatekeeper.namespace" . }}
+            - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
+            - --enable-mutation={{ .Values.experimentalEnableMutation}}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources:

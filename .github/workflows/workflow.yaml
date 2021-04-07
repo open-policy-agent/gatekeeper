@@ -133,7 +133,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        HELM_VERSION: ["2.17.0", "3.4.2"]
+        HELM_VERSION: ["3.4.2"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
@@ -239,6 +239,11 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
       - name: Get tag
         id: get_version
         run: |
@@ -273,8 +278,7 @@ jobs:
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
       - name: Create GitHub release
-        # using latest to fix set-env deprecation
-        uses: "marvinpinto/action-automatic-releases@latest"
+        uses: "marvinpinto/action-automatic-releases@v1.1.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false

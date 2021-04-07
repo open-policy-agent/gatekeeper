@@ -24,7 +24,7 @@ func ValidateEnforcementAction(input EnforcementAction) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("could not find the provided enforcementAction value within the supported list %v", supportedEnforcementActions)
+	return fmt.Errorf("could not find the provided enforcementAction value %s within the supported list %v", input, supportedEnforcementActions)
 }
 
 func GetEnforcementAction(item map[string]interface{}) (EnforcementAction, error) {

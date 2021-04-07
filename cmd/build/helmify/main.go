@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	outputDir  = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
-	useCRDsDir = flag.Bool("use-crds-dir", true, `Use the "crds" subdirectory, which requires Helm v3`)
+	outputDir = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
 )
 
 var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
@@ -38,13 +37,6 @@ func extractName(s string) (string, error) {
 		return "", fmt.Errorf("%s does not have a name", s)
 	}
 	return strings.Trim(matches[1], `"'`), nil
-}
-
-//extractNamespaceName returns the default "gatekeeper-system" namespace.
-//Because the namespace is '{{ include "gatekeeper.namespace" . }}' it fails to be found in extractName.
-//There should only ever be 1 Namespace so this should be safe
-func extractNamespaceName(s string) (string, error) {
-	return "gatekeeper-system", nil
 }
 
 func extractCRDKind(obj string) (string, error) {
@@ -80,16 +72,16 @@ func (ks *kindSet) Write() error {
 		nameExtractor := extractName
 		if kind == "CustomResourceDefinition" {
 			nameExtractor = extractCRDKind
-			if *useCRDsDir {
-				subPath = "crds"
-				parentDir := path.Join(*outputDir, subPath)
-				fmt.Printf("Making %s\n", parentDir)
-				if err := os.Mkdir(parentDir, 0750); err != nil {
-					return err
-				}
+			subPath = "crds"
+			parentDir := path.Join(*outputDir, subPath)
+			fmt.Printf("Making %s\n", parentDir)
+			if err := os.Mkdir(parentDir, 0750); err != nil {
+				return err
 			}
-		} else if kind == "Namespace" {
-			nameExtractor = extractNamespaceName
+		}
+
+		if kind == "Namespace" {
+			continue
 		}
 
 		for _, obj := range objs {
@@ -105,8 +97,8 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
 			}
 
-			if name == "gatekeeper-system" {
-				obj = "{{- if .Values.createNamespace }}\n" + obj + "{{- end }}\n"
+			if name == "gatekeeper-mutating-webhook-configuration" {
+				obj = "{{- if .Values.experimentalEnableMutation }}\n" + obj + "{{- end }}\n"
 			}
 
 			if kind == "Deployment" {

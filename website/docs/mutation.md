@@ -3,8 +3,6 @@ id: mutation
 title: Mutation
 ---
 
-#Gatekeeper mutation
-
 The mutation feature allows Gatekeeper to not only validate created Kubernetes resources but also modify them based on defined mutation policies.
 The feature is still in an alpha stage, so the final form can still change.
 
@@ -111,7 +109,7 @@ The yaml illustrating the above `location`:
 ```yaml
 spec:
   containers:
-  -  name:foo
+  - name: foo
     imagePullPolicy:
 ```
 

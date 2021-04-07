@@ -6,15 +6,16 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.4.0-beta.0
+VERSION := v3.4.0-rc.1
 
 KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= v1.19.0
 KUSTOMIZE_VERSION ?= 3.8.8
 BATS_VERSION ?= 1.2.1
+BATS_TESTS_FILE ?= test/bats/test.bats
 KUBECTL_KUSTOMIZE_VERSION ?= 1.20.1-${KUSTOMIZE_VERSION}
-HELM_VERSION ?= 2.17.0
+HELM_VERSION ?= 3.4.2
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
@@ -92,7 +93,7 @@ test:
 	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
 test-e2e:
-	bats -t test/bats/test.bats
+	bats -t ${BATS_TESTS_FILE}
 
 e2e-bootstrap:
 	# Download and install kind
@@ -122,42 +123,27 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install
-ifneq ($(GATEKEEPER_NAMESPACE),gatekeeper-system)
-	kubectl create namespace $(GATEKEEPER_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	kubectl label ns $(GATEKEEPER_NAMESPACE) admission.gatekeeper.sh/ignore=no-self-managing
-	kubectl label ns $(GATEKEEPER_NAMESPACE) gatekeeper.sh/system="yes"
-	$(eval HELM_ARGS := --namespace $(GATEKEEPER_NAMESPACE) --set createNamespace=false)
-endif
-
-	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
-		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
-		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
-		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name=gatekeeper --debug ${HELM_ARGS} --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
-	else\
-		./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper ${HELM_ARGS} --debug --set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} --set emitAdmissionEvents=true --set emitAuditEvents=true;\
-	fi;
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper -n ${GATEKEEPER_NAMESPACE} --create-namespace --debug \
+	--set image.repository=${HELM_REPO} \
+	--set image.release=${HELM_RELEASE} \
+	--set emitAdmissionEvents=true \
+	--set emitAuditEvents=true \
+	--set postInstall.labelNamespace.enabled=true;\
 
 e2e-helm-upgrade-init: e2e-helm-install
-	@if [ $$(echo ${HELM_VERSION} | head -c 1) = "2" ]; then\
-		kubectl create clusterrolebinding tiller-admin --clusterrole=cluster-admin --serviceaccount=kube-system:default;\
-		./.staging/helm/linux-amd64/helm init --wait --history-max=5;\
-		kubectl -n kube-system wait --for=condition=Ready pod -l name=tiller --timeout=300s;\
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
-		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
-			--version ${BASE_RELEASE} --name gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
-	else\
-		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
-		./.staging/helm/linux-amd64/helm install gatekeeper/gatekeeper \
-			--version ${BASE_RELEASE} --name-template gatekeeper \
-			--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
-	fi;
+		./.staging/helm/linux-amd64/helm install gatekeeper gatekeeper/gatekeeper --version ${BASE_RELEASE} --debug --wait \
+		 --set emitAdmissionEvents=true \
+		 --set emitAuditEvents=true \
+		 --set customResourceDefinitions.create=false;\
 
 e2e-helm-upgrade:
-	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
-		--set image.repository=${HELM_REPO} --set image.release=${HELM_RELEASE} \
-		--set emitAdmissionEvents=true --set emitAuditEvents=true --debug --wait;\
+	./helm_migrate.sh
+	./.staging/helm/linux-amd64/helm install -n ${GATEKEEPER_NAMESPACE} gatekeeper manifest_staging/charts/gatekeeper --create-namespace --debug --wait \
+		--set image.repository=${HELM_REPO} \
+		--set image.release=${HELM_RELEASE} \
+		--set emitAdmissionEvents=true \
+		--set emitAuditEvents=true;\
 
 # Build manager binary
 manager: generate
@@ -176,8 +162,8 @@ install: manifests
 	kustomize build config/crd | kubectl apply -f -
 
 deploy-mutation: patch-image
-	@grep -q -v 'enable-mutation' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev/manager_image_patch.yaml
-	kustomize build config/overlays/mutation_webhook | kubectl apply -f -
+	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml
+	kustomize build config/overlays/dev_mutation | kubectl apply -f -
 	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
@@ -257,10 +243,13 @@ docker-buildx-release:
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
 	@bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
+	cp ./config/overlays/dev/manager_image_patch.yaml ./config/overlays/dev_mutation/manager_image_patch.yaml
 ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
+	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev_mutation/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
+	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev_mutation/manager_image_patch.yaml
 
 # Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
 target-template-source:
@@ -284,7 +273,7 @@ release-manifest:
 	$(MAKE) manifests
 
 promote-staging-manifest:
-	@rm -rf deploy
+	@rm -f deploy/gatekeeper.yaml
 	@cp -r manifest_staging/deploy .
 	@rm -rf charts
 	@cp -r manifest_staging/charts .

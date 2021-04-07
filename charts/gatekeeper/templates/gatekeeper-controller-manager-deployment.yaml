@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
-  namespace: gatekeeper-system
+  namespace: '{{ include "gatekeeper.namespace" . }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -25,8 +25,9 @@ spec:
   template:
     metadata:
       annotations:
-{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+{{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
         chart: '{{ template "gatekeeper.name" . }}'
         control-plane: controller-manager
@@ -42,9 +43,10 @@ spec:
       - args:
         - --port=8443
         - --logtostderr
+        - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
         - --log-level={{ .Values.logLevel }}
-        - --exempt-namespace=gatekeeper-system
+        - --exempt-namespace={{ include "gatekeeper.namespace" . }}
         - --operation=webhook
         command:
         - /manager
@@ -80,7 +82,7 @@ spec:
             path: /readyz
             port: 9090
         resources:
-{{ toYaml .Values.controllerManager.resources | indent 10 }}
+          {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -94,17 +96,15 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
-      nodeSelector:
-{{ toYaml .Values.controllerManager.nodeSelector | indent 8 }}
-      tolerations:
-{{ toYaml .Values.controllerManager.tolerations | indent 8 }}
+      hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
-{{ toYaml .Values.image.pullSecrets | indent 8 }}
-{{- if .Values.controllerManager.priorityClassName }}
-      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
-{{- end }}
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
       volumes:
       - name: cert
         secret:
