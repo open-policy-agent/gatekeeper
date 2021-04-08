@@ -27,6 +27,7 @@ module.exports = {
         'debug',
         'emergency',
         'vendor-specific',
+        'failing-closed',
         'mutation'
       ],
     },

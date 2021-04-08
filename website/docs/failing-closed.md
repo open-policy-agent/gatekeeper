@@ -7,7 +7,7 @@ Here we discuss how to configure Gatekeeper to fail closed and some factors you 
 
 ## How to Fail Closed
 
-If you installed Gatekeeper via the manifest, the only needed change is to set Gatekeeper's `ValidatingWebhookConfiguration` to fail. For example:
+If you installed Gatekeeper via the manifest, the only needed change is to set the `failurePolicy` field of Gatekeeper's `ValidatingWebhookConfiguration` to `Fail`. For example:
 
 
 ```yaml
