@@ -66,7 +66,7 @@ module.exports = {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
           editUrl:
-            'https://open-policy-agent.github.io/gatekeeper/website/docs',
+            'https://github.com/open-policy-agent/gatekeeper/edit/master/website',
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
