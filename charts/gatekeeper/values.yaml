@@ -2,18 +2,26 @@ replicas: 3
 auditInterval: 60
 constraintViolationsLimit: 20
 auditFromCache: false
-createNamespace: true
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 enableDeleteOperations: false
+experimentalEnableMutation: false
 auditChunkSize: 0
 logLevel: INFO
 logDenies: false
 emitAdmissionEvents: false
 emitAuditEvents: false
+postInstall:
+  labelNamespace:
+    enabled: true
+    image:
+      repository: openpolicyagent/gatekeeper
+      tag: 1.20.4-4.0.5
+      pullPolicy: IfNotPresent
+      pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.4.0-rc.1
+  release: v3.4.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
@@ -57,8 +65,6 @@ audit:
     requests:
       cpu: 100m
       memory: 256Mi
-customResourceDefinitions:
-  create: true
 pdb:
   controllerManager:
     minAvailable: 1

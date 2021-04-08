@@ -1,9 +1,75 @@
 # Gatekeeper Helm Chart
 
+## Get Repo Info
+
+```console
+helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
+helm repo update
+```
+
+_See [helm repo](https://helm.sh/docs/helm/helm_repo/) for command documentation._
+
+## Install Chart
+
+```console
+# Helm install with gatekeeper-system namespace already created
+$ helm install -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper
+
+# Helm install and create namespace
+$ helm install -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper --create-namespace
+
+```
+
+_See [parameters](#parameters) below._
+
+_See [helm install](https://helm.sh/docs/helm/helm_install/) for command documentation._
+
+## Upgrade Chart
+
+**Upgrading from < v3.4.0**
+Chart 3.4.0 deprecates support for Helm 2 and also removes the creation of the `gatekeeper-system` Namespace from within the chart. This follows Helm 3 Best Practices.
+
+Option 1:  
+A simple way to upgrade is to uninstall first and re-install with 3.4.0 or greater. 
+
+```console
+$ helm uninstall gatekeeper
+$ helm install -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper --create-namespace
+
+```
+
+Option 2:  
+Run the `helm_migrate.sh` script before installing the 3.4.0 or greater chart. This will remove the Helm secret for the original release, while keeping all of the resources. It then updates the annotations of the resources so that the new chart can import and manage them.
+
+```console
+$ helm_migrate.sh
+$ helm install -n gatekeeper-system gatekeeper gatekeeper/gatekeeper
+```
+
+**Upgrading from >= v3.4.0**
+```console
+$ helm upgrade -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper
+```
+
+_See [helm 2 to 3](https://helm.sh/docs/topics/v2_v3_migration/) for Helm 2 migration documentation._
+
+
+## Exempting Namespace
+
+The Helm chart automatically sets the Gatekeeper flag `--exempt-namespace={{ .Release.Namespace }}` in order to exempt the namespace where the chart is installed, and adds the `admission.gatekeeper.sh/ignore` label to the namespace during a post-install hook.
+
+_See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/website/docs/exempt-namespaces) for more information._
+
+
 ## Parameters
 
 | Parameter                           | Description                                                                                                                                                                                            | Default                                                                   |
 | :---------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
+| postInstall.labelNamespace.enabled  | Add labels to the namespace during post install hooks | true | 
+| postInstall.labelNamespace.image.repository | Image with kubectl to label the namespace | line/kubectl-kustomize |
+| postInstall.labelNamespace.image.tag | Image tag | 1.20.4-4.0.5 | 
+| postInstall.labelNamespace.image.pullPolicy | Image pullPolicy | IfNotPresent | 
+| postInstall.labelNamespace.image.pullSecrets | Image pullSecrets | [] | 
 | auditInterval                       | The frequency with which audit is run                                                                                                                                                                  | `60`                                                                      |
 | constraintViolationsLimit           | The maximum # of audit violations reported on a constraint                                                                                                                                             | `20`                                                                      |
 | auditFromCache                      | Take the roster of resources to audit from the OPA cache                                                                                                                                               | `false`                                                                   |
@@ -17,7 +83,7 @@
 | logLevel                            | Minimum log level                                                                                                                                                                                      | `INFO`                                                                    |
 | image.pullPolicy                    | The image pull policy                                                                                                                                                                                  | `IfNotPresent`                                                            |
 | image.repository                    | Image repository                                                                                                                                                                                       | `openpolicyagent/gatekeeper`                                              |
-| image.release                       | The image release tag to use                                                                                                                                                                           | Current release version: `v3.4.0-rc.1`                                  |
+| image.release                       | The image release tag to use                                                                                                                                                                           | Current release version: `v3.4.0`                                  |
 | image.pullSecrets                   | Specify an array of imagePullSecrets                                                                                                                                                                   | `[]`                                                                      |
 | resources                           | The resource request/limits for the container image                                                                                                                                                    | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                            |
 | nodeSelector                        | The node selector to use for pod scheduling                                                                                                                                                            | `kubernetes.io/os: linux`                                                 |
@@ -30,8 +96,7 @@
 | replicas                            | The number of Gatekeeper replicas to deploy for the webhook                                                                                                                                            | `3`                                                                       |
 | podAnnotations                      | The annotations to add to the Gatekeeper pods                                                                                                                                                          | `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default` |
 | podLabels                           | The labels to add to the Gatekeeper pods                                                                                                                                                               | `{}`                                                                      |
-| secretAnnotations                   | The annotations to add to the Gatekeeper secrets                                                                                                                                                       | `{}`                                                                      |
-| customResourceDefinitions.create    | Whether the release should install CRDs. Regardless of this value, Helm v3+ will install the CRDs if those are not present already. Use --skip-crds with helm install if you want to skip CRD creation | `true`                                                                    |
+| secretAnnotations                   | The annotations to add to the Gatekeeper secrets                                                                                                                                                       | `{}`                                                                      |                                                                 |
 | pdb.controllerManager.minAvailable  | The number of controller manager pods that must still be available after an eviction                                                                                                                   | 1                                                                         |
 
 ## Contributing Changes
