@@ -10,7 +10,7 @@ metadata:
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-controller-manager
-  namespace: '{{ include "gatekeeper.namespace" . }}'
+  namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
@@ -37,7 +37,7 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       affinity:
-        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
       - args:
@@ -46,8 +46,9 @@ spec:
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
         - --log-level={{ .Values.logLevel }}
-        - --exempt-namespace={{ include "gatekeeper.namespace" . }}
+        - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
+        - --enable-mutation={{ .Values.experimentalEnableMutation}}
         command:
         - /manager
         env:
@@ -100,11 +101,11 @@ spec:
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
-        {{- toYaml .Values.nodeSelector | nindent 8 }}
+        {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
-        {{- toYaml .Values.tolerations | nindent 8 }}
+        {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
       volumes:
       - name: cert
         secret:
