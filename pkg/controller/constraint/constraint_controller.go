@@ -160,7 +160,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &constraintstatusv1beta1.ConstraintPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(util.EventPackerMapFunc())),
+		handler.EnqueueRequestsFromMapFunc(constraintstatus.PodStatusToConstraintMapper(true, util.EventPackerMapFunc())),
 	)
 	if err != nil {
 		return err

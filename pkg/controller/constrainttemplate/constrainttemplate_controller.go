@@ -202,7 +202,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to ConstraintTemplateStatus
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.ConstraintTemplatePodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper()),
+		handler.EnqueueRequestsFromMapFunc(constrainttemplatestatus.PodStatusToConstraintTemplateMapper(true)),
 	)
 	if err != nil {
 		return err
