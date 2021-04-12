@@ -6,7 +6,7 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.4.0-rc.1
+VERSION := v3.4.0
 
 KIND_VERSION ?= 0.8.1
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -268,7 +268,6 @@ release-manifest:
 	@sed -i "s/version: .*/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
 	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
-	@sed -i "s@repository: .*@repository: ${REPOSITORY}@" ./cmd/build/helmify/static/values.yaml
 	export
 	$(MAKE) manifests
 

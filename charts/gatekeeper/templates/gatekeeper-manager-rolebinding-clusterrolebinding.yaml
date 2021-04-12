@@ -15,4 +15,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: gatekeeper-admin
-  namespace: '{{ include "gatekeeper.namespace" . }}'
+  namespace: '{{ .Release.Namespace }}'
