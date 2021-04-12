@@ -41,4 +41,11 @@ var replacements = map[string]string{
     {{- end}}`,
 
 	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
+
+	`HELMSUBST_SERVICE_TYPE: ""`: `{{- if .Values.service }}
+  type: {{  .Values.service.type | default "ClusterIP" }}
+    {{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+    {{- end }}
+  {{- end }}`,
 }
