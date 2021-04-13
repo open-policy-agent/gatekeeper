@@ -23,6 +23,8 @@ var (
 	lastRunTimeM   = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
+	constraintTypeKey    = tag.MustNewKey("constraint_type")
+	constraintNameKey    = tag.MustNewKey("constraint_name")
 )
 
 func init() {
@@ -37,7 +39,7 @@ func register() error {
 			Name:        violationsMetricName,
 			Measure:     violationsM,
 			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{enforcementActionKey},
+			TagKeys:     []tag.Key{enforcementActionKey, constraintTypeKey, constraintNameKey},
 		},
 		{
 			Name:        auditDurationMetricName,
@@ -54,10 +56,24 @@ func register() error {
 	return view.Register(views...)
 }
 
-func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {
+func (r *reporter) reportTotalViolationsByEnforcementAction(enforcementAction util.EnforcementAction, v int64) error {
 	ctx, err := tag.New(
 		r.ctx,
-		tag.Insert(enforcementActionKey, string(enforcementAction)))
+		tag.Insert(enforcementActionKey, string(enforcementAction)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, violationsM.M(v))
+}
+
+func (r *reporter) reportTotalViolationsByConstraint(constraint util.KindVersionResource, v int64) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(constraintTypeKey, constraint.Kind()),
+		tag.Insert(constraintNameKey, constraint.Name()),
+	)
 	if err != nil {
 		return err
 	}
@@ -79,7 +95,7 @@ func (r *reporter) reportRunStart(t time.Time) error {
 	return metrics.Record(r.ctx, lastRunTimeM.M(val))
 }
 
-// newStatsReporter creaters a reporter for audit metrics
+// newStatsReporter creates a reporter for audit metrics
 func newStatsReporter() (*reporter, error) {
 	ctx, err := tag.New(
 		context.Background(),

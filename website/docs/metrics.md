@@ -83,6 +83,10 @@ Below are the list of metrics provided by Gatekeeper:
 
     - `enforcement_action`: [`deny`, `dryrun`]
 
+    - `constraint_type`: [`<constraint kind>`]
+
+    - `constraint_name`: [`<constraint name>`]
+
     Aggregation: `LastValue`
 
 - Name: `audit_duration_seconds`

@@ -17,3 +17,11 @@ func GetUniqueKey(obj unstructured.Unstructured) KindVersionResource {
 		resource: obj.GetName(),
 	}
 }
+
+func (r KindVersionResource) Name() string {
+	return r.resource
+}
+
+func (r KindVersionResource) Kind() string {
+	return r.kind
+}

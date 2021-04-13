@@ -222,8 +222,14 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
-		if err := am.reporter.reportTotalViolations(k, v); err != nil {
-			am.log.Error(err, "failed to report total violations")
+		if err := am.reporter.reportTotalViolationsByEnforcementAction(k, v); err != nil {
+			am.log.Error(err, "failed to report total violations by enforcement_action")
+		}
+	}
+
+	for k, v := range totalViolationsPerConstraint {
+		if err := am.reporter.reportTotalViolationsByConstraint(k, v); err != nil {
+			am.log.Error(err, "failed to report total violations by constraint")
 		}
 	}
 

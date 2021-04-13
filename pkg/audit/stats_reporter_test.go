@@ -4,10 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"go.opencensus.io/stats/view"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestReportTotalViolations(t *testing.T) {
+func TestReportTotalViolationsByEnforcementAction(t *testing.T) {
 	const expectedValue int64 = 10
 	const expectedRowLength = 1
 	expectedTags := map[string]string{
@@ -18,7 +20,7 @@ func TestReportTotalViolations(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportTotalViolations("deny", expectedValue)
+	err = r.reportTotalViolationsByEnforcementAction("deny", expectedValue)
 	if err != nil {
 		t.Errorf("ReportTotalViolations error %v", err)
 	}
@@ -37,9 +39,97 @@ func TestReportTotalViolations(t *testing.T) {
 	}
 }
 
+func TestReportTotalViolationsByConstraint(t *testing.T) {
+	var expectedValues = []int64{10, 20}
+
+	kind1 := "kind1"
+	kind2 := "kind2"
+	name1 := "name1"
+	name2 := "name2"
+	expectedTags := []map[string]string{
+		{
+			"constraint_type": kind1,
+			"constraint_name": name1,
+		},
+		{
+			"constraint_type": kind2,
+			"constraint_name": name2,
+		},
+	}
+
+	r, err := newStatsReporter()
+	if err != nil {
+		t.Errorf("newStatsReporter() error %v", err)
+	}
+
+	constraint1 := createConstraint(kind1, name1)
+	constraint2 := createConstraint(kind2, name2)
+	constraints := []util.KindVersionResource{constraint1, constraint2}
+
+	for i := range []int{1, 2} {
+		err = r.reportTotalViolationsByConstraint(constraints[i], expectedValues[i])
+		if err != nil {
+			t.Errorf("ReportTotalViolations error %v", err)
+		}
+	}
+
+	rows, err := view.RetrieveData(violationsMetricName)
+	if err != nil {
+		t.Errorf("Error when retrieving data: %v from %v", err, violationsMetricName)
+	}
+
+	// because the view package has a global state, we have a side effect from the previous test case
+	var adjustedRows []*view.Row
+	for _, row := range rows {
+		if row.Tags[0].Key.Name() == "enforcement_action" {
+			continue
+		}
+		adjustedRows = append(adjustedRows, row)
+	}
+	if len(adjustedRows) != 2 {
+		t.Errorf("Expected length %v, got %v", 2, len(adjustedRows))
+	}
+
+	for i := 0; i < len(adjustedRows); i++ {
+		row := adjustedRows[i]
+		if row.Data == nil {
+			t.Errorf("Expected rows data not to be nil")
+		}
+
+		value, ok := row.Data.(*view.LastValueData)
+		if !ok {
+			t.Error("ReportTotalViolations should have aggregation LastValue()")
+		}
+		for _, tag := range row.Tags {
+			if tag.Key.Name() == "enforcement_action" {
+				continue
+			}
+
+			if tag.Value != expectedTags[i][tag.Key.Name()] {
+				t.Errorf("ReportTotalViolations tags does not match for %v", tag.Key.Name())
+			}
+		}
+		if int64(value.Value) != expectedValues[i] {
+			t.Errorf("Metric: %v - Expected %v, got %v", violationsMetricName, value.Value, expectedValues[i])
+		}
+	}
+}
+
+func createConstraint(kind string, name string) util.KindVersionResource {
+	return util.GetUniqueKey(unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       kind,
+			"metadata": map[string]interface{}{
+				"name": name,
+			},
+		},
+	})
+}
+
 func TestReportLatency(t *testing.T) {
-	const expectedLatencyValueMin = time.Duration(100 * time.Second)
-	const expectedLatencyValueMax = time.Duration(500 * time.Second)
+	const expectedLatencyValueMin = 100 * time.Second
+	const expectedLatencyValueMax = 500 * time.Second
 	const expectedLatencyCount int64 = 2
 	const expectedLatencyMin float64 = 100
 	const expectedLatencyMax float64 = 500
