@@ -28,7 +28,7 @@ Prerequisites:
 Usage: `./third_party/k8s.io/kubernetes/hack/cherry_pick_pull.sh upstream/release-3.1 123`
 For example, this will cherry pick PR #123 into `upstream/release-3.1` branch and will create a PR for you.
 
-You can also combine multiple PRs by seperating them with spaces (`./third_party/k8s.io/kubernetes/hack/cherry_pick_pull.sh upstream/release-3.1 123 456`)
+You can also combine multiple PRs by separating them with spaces (`./third_party/k8s.io/kubernetes/hack/cherry_pick_pull.sh upstream/release-3.1 123 456`)
 
 If you want to run the script with dry run mode, set `DRY_RUN` to `true`.
 
