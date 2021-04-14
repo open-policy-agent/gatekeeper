@@ -102,7 +102,7 @@ parameters:
 The `location` element can specify either a simple subelement or an element in a list.
 For example the location `spec.containers[name:foo].imagePullPolicy` would be parsed as follows:
 - ***spec**.containers[name:foo].imagePullPolicy* - the spec element
-- *spec.**containers[name:foo]**.imagePullPolicy* - container subelement of spec. The container element is a list. Out of the list choosen, an element with the `name` element having the value `foo`.
+- *spec.**containers[name:foo]**.imagePullPolicy* - container subelement of spec. The container element is a list. Out of the list chosen, an element with the `name` element having the value `foo`.
  - *spec.containers[name:foo].**imagePullPolicy*** - in the element from the list chosen in the previous step the element `imagePullPolicy` is chosen
 
 The yaml illustrating the above `location`:

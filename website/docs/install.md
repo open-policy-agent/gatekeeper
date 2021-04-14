@@ -114,11 +114,7 @@ helm delete <release name>
 
 Helm v3 will not cleanup Gatekeeper installed CRDs. Run the following to uninstall Gatekeeper CRDs:
 ```sh
-kubectl delete crd \
-  configs.config.gatekeeper.sh \
-  constraintpodstatuses.status.gatekeeper.sh \
-  constrainttemplatepodstatuses.status.gatekeeper.sh \
-  constrainttemplates.templates.gatekeeper.sh
+kubectl delete crd -l gatekeeper.sh/system=yes
 ```
 
 This operation will also delete any user installed config changes, and constraint templates and constraints.
