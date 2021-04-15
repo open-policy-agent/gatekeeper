@@ -83,7 +83,7 @@ kubectl -n opa apply -f ./validating-webhook-configuration.yaml
 
 ## apply the ingress conflict policy definition
 
-The policy is defined in Rego a policy language used by the Open Policy Agent. Each validation policy is a deny rule. In this case, there is a violation if any two ingresses in different namespaces have the same host. 
+The policy is defined in Rego a policy language used by the Open Policy Agent. Each validation policy is a deny rule. In this case, there is a violation if any two ingresses in different namespaces have the same host.
 
 Store the policy in Kubernetes as a ConfigMap. This is automatically uploaded to the policy engine.
 
@@ -131,15 +131,15 @@ kubectl apply -f ./ingress-host.yaml
 
 ## Create ingress with same host in another namespace (This should fail)
 
-Create a test namespace 
+Create a test namespace
 
 ```bash
 kubectl create ns test
 ```
 
-Try create a 
+Try create a
 
-```bash 
+```bash
 kubectl -n test apply -f ./ingress-host.yaml
 ```
 
@@ -156,4 +156,4 @@ Error from server: error when creating "ingress-host.yaml": admission webhook "v
 
 ## Summary
 
-If you have reached this stage you have succesfully created a policy for your cluster using `gatekeeper`. 
+If you have reached this stage you have succesfully created a policy for your cluster using `gatekeeper`.

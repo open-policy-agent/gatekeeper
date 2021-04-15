@@ -1,5 +1,5 @@
 {{- if .Values.experimentalEnableMutation }}
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
@@ -10,7 +10,10 @@ metadata:
     release: '{{ .Release.Name }}'
   name: gatekeeper-mutating-webhook-configuration
 webhooks:
-- clientConfig:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
     caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
@@ -28,4 +31,5 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
 {{- end }}
