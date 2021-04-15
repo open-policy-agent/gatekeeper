@@ -69,3 +69,4 @@ audit:
 pdb:
   controllerManager:
     minAvailable: 1
+service: {}
