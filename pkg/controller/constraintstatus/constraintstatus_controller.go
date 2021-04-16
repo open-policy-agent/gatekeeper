@@ -78,7 +78,8 @@ func newReconciler(
 type PackerMap func(obj client.Object) []reconcile.Request
 
 // PodStatusToConstraintMapper correlates a ConstraintPodStatus with its corresponding constraint
-func PodStatusToConstraintMapper(packerMap handler.MapFunc) handler.MapFunc {
+// `selfOnly` tells the mapper to only map statuses corresponding to the current pod
+func PodStatusToConstraintMapper(selfOnly bool, packerMap handler.MapFunc) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
 		name, ok := labels[v1beta1.ConstraintNameLabel]
@@ -90,6 +91,16 @@ func PodStatusToConstraintMapper(packerMap handler.MapFunc) handler.MapFunc {
 		if !ok {
 			log.Error(fmt.Errorf("constraint status resource with no kind label: %s", obj.GetName()), "missing label while attempting to map a constraint status resource")
 			return nil
+		}
+		if selfOnly {
+			pod, ok := labels[v1beta1.PodLabel]
+			if !ok {
+				log.Error(fmt.Errorf("constraint status resource with no pod label: %s", obj.GetName()), "missing label while attempting to map a constraint status resource")
+			}
+			// Do not attempt to reconcile the resource when other pods have changed their status
+			if pod != util.GetPodName() {
+				return nil
+			}
 		}
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: kind})
@@ -109,7 +120,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 	// Watch for changes to ConstraintStatus
 	err = c.Watch(
 		&source.Kind{Type: &v1beta1.ConstraintPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintMapper(util.EventPackerMapFunc())),
+		handler.EnqueueRequestsFromMapFunc(PodStatusToConstraintMapper(false, util.EventPackerMapFunc())),
 	)
 	if err != nil {
 		return err
