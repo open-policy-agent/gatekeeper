@@ -1,5 +1,6 @@
 replicas: 3
 auditInterval: 60
+auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
@@ -68,3 +69,4 @@ audit:
 pdb:
   controllerManager:
     minAvailable: 1
+service: {}

@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: gatekeeper-webhook-service
   namespace: gatekeeper-system
+spec:
+  HELMSUBST_SERVICE_TYPE: ""
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -100,6 +102,7 @@ spec:
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - --audit-chunk-size={{ .Values.auditChunkSize }}
+            - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - --emit-audit-events={{ .Values.emitAuditEvents }}
             - --operation=audit
             - --operation=status

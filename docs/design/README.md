@@ -47,6 +47,9 @@ decisions
    * A dissection of the mutation problem space, attempting to break down the
      salient behavioral elements and figure out what's needed for a
      user-friendly set of mutation primitives.
+* [Mutation Transience](https://docs.google.com/document/d/1pyM3h5c8gh5W2eKP37qpge9jtEtRAs6Uv_sTyJttm3c/edit?ts=606f8bbf#)
+   * Looking at how a mutation webhook may behave during configuration changes and discussing what that might mean in terms
+     of necessary status fields and best practices for writing mutators.
 * [Finalizers in OPA Gatekeeper](https://docs.google.com/document/d/1lZZsHACi4LnPF4bBvjfg0qpbYGChkZd6mhaaRnvkx6M/view#)
    * This doc discusses the impact the existence of finalizers has on running
      OPA Gatekeeper. Its points have either been addressed or are on track
