@@ -144,9 +144,6 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 		return nil, errors.Wrap(err, "failed to retrieve id for assignMetadata type")
 	}
 
-	if !isValidMetadataPath(path) {
-		return nil, fmt.Errorf("invalid location for assignmetadata: %s", assignMeta.Spec.Location)
-	}
 	return &AssignMetadataMutator{
 		id:             id,
 		assignMetadata: assignMeta.DeepCopy(),
