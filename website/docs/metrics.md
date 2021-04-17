@@ -13,7 +13,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Tags:
 
-    - `enforcement_action`: [`deny`, `dryrun`]
+    - `enforcement_action`: [`deny`, `dryrun`, `warn`]
 
     - `status`: [`active`, `error`]
 
@@ -81,7 +81,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Tags:
 
-    - `enforcement_action`: [`deny`, `dryrun`]
+    - `enforcement_action`: [`deny`, `dryrun`, `warn`]
 
     Aggregation: `LastValue`
 
