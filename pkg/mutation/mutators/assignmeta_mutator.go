@@ -1,4 +1,4 @@
-package mutation
+package mutators
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -48,7 +50,7 @@ type AssignMetadataMutator struct {
 var _ types.Mutator = &AssignMetadataMutator{}
 
 func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	matches, err := Matches(m.assignMetadata.Spec.Match, obj, ns)
+	matches, err := match.Matches(m.assignMetadata.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
 		return false
@@ -63,7 +65,7 @@ func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, er
 	if err != nil {
 		return false, err
 	}
-	return mutate(m, t, nil, obj)
+	return core.Mutate(m, t, nil, obj)
 }
 func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id

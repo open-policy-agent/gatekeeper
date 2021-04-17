@@ -18,72 +18,70 @@ package v1beta1
 import (
 	"strings"
 
+	mtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
-	ConstraintsGroup = "constraints.gatekeeper.sh"
+	MutationsGroup = "mutations.gatekeeper.sh"
 )
 
-// ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus
-type ConstraintPodStatusStatus struct {
+// MutatorPodStatusStatus defines the observed state of MutatorPodStatus
+type MutatorPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	ID string `json:"id,omitempty"`
-	// Storing the constraint UID allows us to detect drift, such as
-	// when a constraint has been recreated after its CRD was deleted
+	// Storing the mutator UID allows us to detect drift, such as
+	// when a mutator has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	ConstraintUID      types.UID `json:"constraintUID,omitempty"`
+	MutatorUID         types.UID `json:"mutatorUID,omitempty"`
 	Operations         []string  `json:"operations,omitempty"`
 	Enforced           bool      `json:"enforced,omitempty"`
 	Errors             []Error   `json:"errors,omitempty"`
 	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
 }
 
-// Error represents a single error caught while adding a constraint to OPA
-type Error struct {
-	Code     string `json:"code"`
-	Message  string `json:"message"`
-	Location string `json:"location,omitempty"`
+// MutatorError represents a single error caught while adding a mutator to a system
+type MutatorError struct {
+	Message string `json:"message"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// ConstraintPodStatus is the Schema for the constraintpodstatuses API
-type ConstraintPodStatus struct {
+// MutatorPodStatus is the Schema for the mutationpodstatuses API
+type MutatorPodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Status ConstraintPodStatusStatus `json:"status,omitempty"`
+	Status MutatorPodStatusStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ConstraintPodStatusList contains a list of ConstraintPodStatus
-type ConstraintPodStatusList struct {
+// MutatorPodStatusList contains a list of MutatorPodStatus
+type MutatorPodStatusList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ConstraintPodStatus `json:"items"`
+	Items           []MutatorPodStatus `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ConstraintPodStatus{}, &ConstraintPodStatusList{})
+	SchemeBuilder.Register(&MutatorPodStatus{}, &MutatorPodStatusList{})
 }
 
 // NewConstraintStatusForPod returns a constraint status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint status controller
-func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstructured, scheme *runtime.Scheme) (*ConstraintPodStatus, error) {
-	obj := &ConstraintPodStatus{}
-	name, err := KeyForConstraint(pod.Name, constraint)
+func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
+	obj := &MutatorPodStatus{}
+	name, err := KeyForMutatorID(pod.Name, mutatorID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +89,11 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 	obj.SetNamespace(util.GetNamespace())
 	obj.Status.ID = pod.Name
 	obj.Status.Operations = operations.AssignedStringList()
+
 	obj.SetLabels(map[string]string{
-		ConstraintNameLabel: constraint.GetName(),
-		ConstraintKindLabel: constraint.GetKind(),
-		PodLabel:            pod.Name,
-		// the template name is the lower-case of the constraint kind
-		ConstraintTemplateNameLabel: strings.ToLower(constraint.GetKind()),
+		MutatorNameLabel: mutatorID.Name,
+		MutatorKindLabel: mutatorID.Kind,
+		PodLabel:         pod.Name,
 	})
 	if PodOwnershipEnabled() {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
@@ -108,11 +105,11 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 
 // KeyForConstraint returns a unique status object name given the Pod ID and
 // a constraint object
-func KeyForConstraint(id string, constraint *unstructured.Unstructured) (string, error) {
-	// We don't need to worry that lower-casing the kind will cause a collision because
-	// the constraint framework requires resource == lower-case kind. We must do this
-	// because K8s requires all lowercase letters for resource names
-	kind := strings.ToLower(constraint.GetObjectKind().GroupVersionKind().Kind)
-	name := constraint.GetName()
+func KeyForMutatorID(id string, mID mtypes.ID) (string, error) {
+	// This adds a requirement that the lowercase of all mutator kinds must be unique.
+	// Though this should already be the case because resource ~= lower(kind) (usually).
+	// We must do this because K8s requires all lowercase letters for resource names
+	kind := strings.ToLower(mID.Kind)
+	name := mID.Name
 	return dashPacker(id, kind, name)
 }

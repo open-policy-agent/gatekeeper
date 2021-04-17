@@ -1,4 +1,4 @@
-package mutation
+package mutators
 
 import (
 	"encoding/json"
@@ -7,6 +7,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	patht "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
@@ -15,6 +18,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var (
+	log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 )
 
 // AssignMutator is a mutator object built out of a
@@ -32,10 +40,10 @@ type AssignMutator struct {
 var _ schema.MutatorWithSchema = &AssignMutator{}
 
 func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	if !AppliesTo(m.assign.Spec.ApplyTo, obj) {
+	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
 		return false
 	}
-	matches, err := Matches(m.assign.Spec.Match, obj, ns)
+	matches, err := match.Matches(m.assign.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)
 		return false
@@ -44,7 +52,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 }
 
 func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	return mutate(m, m.tester, m.testValue, obj)
+	return core.Mutate(m, m.tester, m.testValue, obj)
 }
 
 // valueTest returns true if it is okay for the mutation func to override the value
@@ -226,7 +234,7 @@ func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
 	return pathTests, nil
 }
 
-func applyToToBindings(applyTos []mutationsv1alpha1.ApplyTo) []schema.Binding {
+func applyToToBindings(applyTos []match.ApplyTo) []schema.Binding {
 	res := []schema.Binding{}
 	for _, applyTo := range applyTos {
 		binding := schema.Binding{

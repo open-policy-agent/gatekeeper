@@ -15,6 +15,8 @@ spec:
     plural: assign
     singular: assign
   scope: Cluster
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Assign is the Schema for the assign API
@@ -224,6 +226,46 @@ spec:
           type: object
         status:
           description: AssignStatus defines the observed state of Assign
+          properties:
+            byPod:
+              items:
+                description: MutatorPodStatusStatus defines the observed state of
+                  MutatorPodStatus
+                properties:
+                  enforced:
+                    type: boolean
+                  errors:
+                    items:
+                      description: Error represents a single error caught while adding
+                        a constraint to OPA
+                      properties:
+                        code:
+                          type: string
+                        location:
+                          type: string
+                        message:
+                          type: string
+                      required:
+                      - code
+                      - message
+                      type: object
+                    type: array
+                  id:
+                    type: string
+                  mutatorUID:
+                    description: Storing the mutator UID allows us to detect drift,
+                      such as when a mutator has been recreated after its CRD was
+                      deleted out from under it, interrupting the watch
+                    type: string
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  operations:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              type: array
           type: object
       type: object
   version: v1alpha1
