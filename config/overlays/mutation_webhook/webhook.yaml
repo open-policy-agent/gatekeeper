@@ -8,8 +8,10 @@ metadata:
   creationTimestamp: null
   name: gatekeeper-mutating-webhook-configuration
 webhooks:
-- clientConfig:
-    caBundle: Cg==
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
     service:
       name: webhook-service
       namespace: system
@@ -27,4 +29,3 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
-  admissionReviewVersions: ["v1", "v1beta1"]
