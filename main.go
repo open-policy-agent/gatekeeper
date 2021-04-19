@@ -53,6 +53,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -132,7 +133,9 @@ func main() {
 		eCfg := zap.NewDevelopmentEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		ctrl.SetLogger(crzap.New(crzap.UseDevMode(true), crzap.Encoder(zapcore.NewConsoleEncoder(eCfg))))
+		logger := crzap.New(crzap.UseDevMode(true), crzap.Encoder(zapcore.NewConsoleEncoder(eCfg)))
+		ctrl.SetLogger(logger)
+		klog.SetLogger(logger)
 	case "WARNING", "ERROR":
 		setLoggerForProduction(encoder)
 	case "INFO":
@@ -141,7 +144,9 @@ func main() {
 		eCfg := zap.NewProductionEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		ctrl.SetLogger(crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg))))
+		logger := crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg)))
+		ctrl.SetLogger(logger)
+		klog.SetLogger(logger)
 	}
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
@@ -324,4 +329,5 @@ func setLoggerForProduction(encoder zapcore.LevelEncoder) {
 	zlog = zlog.WithOptions(opts...)
 	newlogger := zapr.NewLogger(zlog)
 	ctrl.SetLogger(newlogger)
+	klog.SetLogger(newlogger)
 }
