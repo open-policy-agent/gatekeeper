@@ -14,7 +14,6 @@ webhooks:
   - v1
   - v1beta1
   clientConfig:
-    caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
