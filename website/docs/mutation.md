@@ -176,9 +176,9 @@ spec:
       value: "admin"
 ```
 
-### Setting security context of a specific container in a Pod in a namespace to be privileged
+### Setting security context of a specific container in a Pod in a namespace to be non-privileged
 
-Set the security context of container named `foo` in a Pod in namespace `bar` to be privileged
+Set the security context of container named `foo` in a Pod in namespace `bar` to be non-privileged
 
 ```yaml
 apiVersion: mutations.gatekeeper.sh/v1alpha1
