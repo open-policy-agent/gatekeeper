@@ -97,6 +97,7 @@ spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -176,3 +177,4 @@ spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
