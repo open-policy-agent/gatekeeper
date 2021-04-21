@@ -138,7 +138,6 @@ jobs:
       matrix:
         HELM_VERSION: ["3.4.2"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
-        KUBERNETES_VERSION: ["v1.19.7", "v1.20.2"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
