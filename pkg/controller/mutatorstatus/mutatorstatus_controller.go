@@ -66,9 +66,7 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {}
 // Add creates a new Mutator Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	// TODO Should we flag-gate this? Probably, as it will raise error logs otherwise, if mutation
-	// is not enabled
-	if !operations.IsAssigned(operations.Status) {
+	if !operations.IsAssigned(operations.MutationStatus) {
 		return nil
 	}
 	r := newReconciler(mgr, a.ControllerSwitch)

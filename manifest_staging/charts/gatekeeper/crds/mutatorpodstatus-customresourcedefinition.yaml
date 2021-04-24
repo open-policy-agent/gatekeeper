@@ -5,11 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: mutatorpodstatuses.status.gatekeeper.sh
 spec:
   group: status.gatekeeper.sh
