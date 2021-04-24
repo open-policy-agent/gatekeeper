@@ -323,8 +323,8 @@ violation[{"msg": "denied!"}] {
 				return err
 			}
 			if ct.Name == "invalidrego" {
-				status := getCTByPodStatus(ct)
-				if status == nil {
+				status, found := getCTByPodStatus(ct)
+				if !found {
 					return fmt.Errorf("could not retrieve CT status for pod, byPod status: %+v", ct.Status.ByPod)
 				}
 				if len(status.Errors) == 0 {
@@ -537,16 +537,14 @@ func newDenyAllCstr() *unstructured.Unstructured {
 	return cstr
 }
 
-func getCTByPodStatus(templ *v1beta1.ConstraintTemplate) *v1beta1.ByPodStatus {
+func getCTByPodStatus(templ *v1beta1.ConstraintTemplate) (v1beta1.ByPodStatus, bool) {
 	statuses := templ.Status.ByPod
-	var status *v1beta1.ByPodStatus
 	for _, s := range statuses {
 		if s.ID == util.GetID() {
-			status = s
-			break
+			return s, true
 		}
 	}
-	return status
+	return v1beta1.ByPodStatus{}, false
 }
 
 func getCByPodStatus(obj *unstructured.Unstructured) (*statusv1beta1.ConstraintPodStatusStatus, error) {
