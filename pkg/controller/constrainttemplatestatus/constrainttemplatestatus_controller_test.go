@@ -213,7 +213,6 @@ violation[{"msg": "denied!"}] {
 	templateCpy = template.DeepCopy()
 	cstr = newDenyAllCstr()
 	t.Run("Deleting a constraint template deletes all statuses for the current pod", func(t *testing.T) {
-		fmt.Println("ENTERING THE TEST NOW\n\n\n\nd")
 		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
 		g.Expect(c.Create(ctx, templateCpy)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())

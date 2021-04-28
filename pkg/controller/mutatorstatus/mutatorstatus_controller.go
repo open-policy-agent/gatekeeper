@@ -145,14 +145,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to mutators
 	err = c.Watch(
 		&source.Kind{Type: &mutationsv1alpha1.Assign{}},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "Assign"})),
 	)
 	if err != nil {
 		return err
 	}
 	return c.Watch(
 		&source.Kind{Type: &mutationsv1alpha1.AssignMetadata{}},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFunc()),
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignMetadata"})),
 	)
 }
 
@@ -184,8 +184,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 
-	r.log.Info("DEBUG A")
-
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
 	if err != nil {
 		// Unrecoverable, do not retry.
@@ -193,16 +191,12 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, nil
 	}
 
-	r.log.Info("DEBUG B")
-
 	// Sanity - make sure it is a mutator resource.
 	if gvk.Group != v1beta1.MutationsGroup {
 		// Unrecoverable, do not retry.
-		log.Error(err, "invalid mutator GroupVersion", "gvk", gvk)
+		log.Error(err, "invalid mutator GroupVersion", "gvk", gvk, "name", unpackedRequest.NamespacedName)
 		return reconcile.Result{}, nil
 	}
-
-	r.log.Info("DEBUG C")
 
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
@@ -213,8 +207,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		}
 		return reconcile.Result{}, err
 	}
-
-	r.log.Info("DEBUG D")
 
 	r.log.Info("handling mutator status update", "instance", instance)
 
@@ -230,7 +222,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	); err != nil {
 		return reconcile.Result{}, err
 	}
-	r.log.Info("DEBUG E")
 
 	statusObjs := make(sortableStatuses, len(sObjs.Items))
 	copy(statusObjs, sObjs.Items)
@@ -259,13 +250,9 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	r.log.Info("DEBUG F")
-
 	if err = r.statusClient.Status().Update(context.Background(), instance); err != nil {
 		return reconcile.Result{Requeue: true}, nil
 	}
-
-	r.log.Info("DEBUG G")
 
 	return reconcile.Result{}, nil
 }
