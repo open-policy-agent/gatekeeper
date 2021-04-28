@@ -27,14 +27,8 @@ func (in *ByPodStatus) DeepCopyInto(out *ByPodStatus) {
 	*out = *in
 	if in.Errors != nil {
 		in, out := &in.Errors, &out.Errors
-		*out = make([]*CreateCRDError, len(*in))
-		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(CreateCRDError)
-				**out = **in
-			}
-		}
+		*out = make([]CreateCRDError, len(*in))
+		copy(*out, *in)
 	}
 	return
 }
@@ -178,13 +172,9 @@ func (in *ConstraintTemplateStatus) DeepCopyInto(out *ConstraintTemplateStatus) 
 	*out = *in
 	if in.ByPod != nil {
 		in, out := &in.ByPod, &out.ByPod
-		*out = make([]*ByPodStatus, len(*in))
+		*out = make([]ByPodStatus, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(ByPodStatus)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	return

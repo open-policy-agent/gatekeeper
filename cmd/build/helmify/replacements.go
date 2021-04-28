@@ -52,4 +52,8 @@ var replacements = map[string]string{
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}
   {{- end }}`,
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN": `
+        {{- range .Values.disabledBuiltins}}
+        - --disable-opa-builtin={{ . }}
+        {{- end }}`,
 }
