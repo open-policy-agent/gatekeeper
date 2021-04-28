@@ -49,6 +49,10 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-mutation={{ .Values.experimentalEnableMutation}}
+        
+        {{- range .Values.disabledBuiltins}}
+        - --disable-opa-builtin={{ . }}
+        {{- end }}
         command:
         - /manager
         env:
