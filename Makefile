@@ -45,6 +45,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --emit-admission-events\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
+\n        - --disable-opa-builtin=http.send\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -128,7 +129,8 @@ e2e-helm-deploy: e2e-helm-install
 	--set image.release=${HELM_RELEASE} \
 	--set emitAdmissionEvents=true \
 	--set emitAuditEvents=true \
-	--set postInstall.labelNamespace.enabled=true;\
+	--set postInstall.labelNamespace.enabled=true \
+	--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade-init: e2e-helm-install
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
@@ -143,7 +145,8 @@ e2e-helm-upgrade:
 		--set image.repository=${HELM_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set emitAdmissionEvents=true \
-		--set emitAuditEvents=true;\
+		--set emitAuditEvents=true \
+		--set disabledBuiltins={http.send};\
 
 # Build manager binary
 manager: generate

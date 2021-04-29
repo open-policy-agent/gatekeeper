@@ -97,6 +97,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
+      priorityClassName: {{ .Values.audit.priorityClassName }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:

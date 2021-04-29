@@ -16,6 +16,7 @@ Generally, design docs are on Google docs:
    * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
 * [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
+* [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)

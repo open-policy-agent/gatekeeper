@@ -69,6 +69,7 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-mutation={{ .Values.experimentalEnableMutation}}
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           resources:
@@ -82,6 +83,7 @@ spec:
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
+      priorityClassName: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -120,6 +122,7 @@ spec:
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
+      priorityClassName: HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME
 ---
 apiVersion: v1
 kind: Secret
