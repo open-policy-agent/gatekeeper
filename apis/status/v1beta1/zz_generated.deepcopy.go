@@ -294,7 +294,7 @@ func (in *MutatorPodStatusStatus) DeepCopyInto(out *MutatorPodStatusStatus) {
 	}
 	if in.Errors != nil {
 		in, out := &in.Errors, &out.Errors
-		*out = make([]Error, len(*in))
+		*out = make([]MutatorError, len(*in))
 		copy(*out, *in)
 	}
 }

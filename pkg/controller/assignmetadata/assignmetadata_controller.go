@@ -215,7 +215,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 		tracker.TryCancelExpect(assignMetadata)
-		status.Status.Errors = append(status.Status.Errors, statusv1beta1.Error{Message: err.Error()})
+		status.Status.Errors = append(status.Status.Errors, statusv1beta1.MutatorError{Message: err.Error()})
 		if err2 := r.Update(ctx, status); err != nil {
 			log.Error(err2, "could not update mutator status")
 		}
@@ -225,7 +225,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.system.Upsert(mutator); err != nil {
 		log.Error(err, "Insert failed", "resource", request.NamespacedName)
 		tracker.TryCancelExpect(assignMetadata)
-		status.Status.Errors = append(status.Status.Errors, statusv1beta1.Error{Message: err.Error()})
+		status.Status.Errors = append(status.Status.Errors, statusv1beta1.MutatorError{Message: err.Error()})
 		if err2 := r.Update(ctx, status); err != nil {
 			log.Error(err2, "could not update mutator status")
 		}

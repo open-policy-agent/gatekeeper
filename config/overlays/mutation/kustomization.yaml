@@ -14,6 +14,7 @@ commonLabels:
 resources:
 - ../../crd/bases/mutations.gatekeeper.sh_assign.yaml  
 - ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
+- ../../crd/bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 
 patchesStrategicMerge:
 - ../../crd/patches/max_name_size_for_assign.yaml

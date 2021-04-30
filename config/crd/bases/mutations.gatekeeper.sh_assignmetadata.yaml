@@ -191,17 +191,12 @@ spec:
                     type: boolean
                   errors:
                     items:
-                      description: Error represents a single error caught while adding
-                        a constraint to OPA
+                      description: MutatorError represents a single error caught while
+                        adding a mutator to a system
                       properties:
-                        code:
-                          type: string
-                        location:
-                          type: string
                         message:
                           type: string
                       required:
-                      - code
                       - message
                       type: object
                     type: array

@@ -40,11 +40,11 @@ type MutatorPodStatusStatus struct {
 	// Storing the mutator UID allows us to detect drift, such as
 	// when a mutator has been recreated after its CRD was deleted
 	// out from under it, interrupting the watch
-	MutatorUID         types.UID `json:"mutatorUID,omitempty"`
-	Operations         []string  `json:"operations,omitempty"`
-	Enforced           bool      `json:"enforced,omitempty"`
-	Errors             []Error   `json:"errors,omitempty"`
-	ObservedGeneration int64     `json:"observedGeneration,omitempty"`
+	MutatorUID         types.UID      `json:"mutatorUID,omitempty"`
+	Operations         []string       `json:"operations,omitempty"`
+	Enforced           bool           `json:"enforced,omitempty"`
+	Errors             []MutatorError `json:"errors,omitempty"`
+	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
 }
 
 // MutatorError represents a single error caught while adding a mutator to a system
@@ -76,9 +76,9 @@ func init() {
 	SchemeBuilder.Register(&MutatorPodStatus{}, &MutatorPodStatusList{})
 }
 
-// NewConstraintStatusForPod returns a constraint status object
+// NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
-// with the constraint status controller
+// with the mutator status controller
 func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
 	obj := &MutatorPodStatus{}
 	name, err := KeyForMutatorID(pod.Name, mutatorID)
@@ -103,8 +103,8 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 	return obj, nil
 }
 
-// KeyForConstraint returns a unique status object name given the Pod ID and
-// a constraint object
+// KeyForMutator returns a unique status object name given the Pod ID and
+// a mutator object
 func KeyForMutatorID(id string, mID mtypes.ID) (string, error) {
 	// This adds a requirement that the lowercase of all mutator kinds must be unique.
 	// Though this should already be the case because resource ~= lower(kind) (usually).
