@@ -28,7 +28,7 @@ github.com/fsnotify/fsnotify
 # github.com/ghodss/yaml v1.0.0
 ## explicit
 github.com/ghodss/yaml
-# github.com/go-logr/logr v0.3.0
+# github.com/go-logr/logr v0.4.0
 ## explicit
 github.com/go-logr/logr
 # github.com/go-logr/zapr v0.2.0
@@ -52,7 +52,7 @@ github.com/gobwas/glob/syntax/ast
 github.com/gobwas/glob/syntax/lexer
 github.com/gobwas/glob/util/runes
 github.com/gobwas/glob/util/strings
-# github.com/gogo/protobuf v1.3.1
+# github.com/gogo/protobuf v1.3.2
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
 # github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
@@ -149,7 +149,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.2.0
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210422220901-804ff2ee8b4f
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210503204408-3f51770b2910
 ## explicit
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
@@ -263,7 +263,7 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 # golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+# golang.org/x/net v0.0.0-20210224082022-3d97a244fca7
 ## explicit
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
@@ -282,10 +282,10 @@ golang.org/x/oauth2/google
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+# golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 ## explicit
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20201119102817-f84b799fce68
+# golang.org/x/sys v0.0.0-20210225134936-a50acf3fe073
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -456,7 +456,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.20.1
+# k8s.io/apiextensions-apiserver v0.20.2
 ## explicit
 k8s.io/apiextensions-apiserver/pkg/apihelpers
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
@@ -522,7 +522,7 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.20.1
+# k8s.io/apiserver v0.20.2
 k8s.io/apiserver/pkg/apis/apiserver
 k8s.io/apiserver/pkg/apis/apiserver/install
 k8s.io/apiserver/pkg/apis/apiserver/v1
@@ -619,10 +619,10 @@ k8s.io/component-base/config/v1alpha1
 k8s.io/component-base/metrics
 k8s.io/component-base/metrics/legacyregistry
 k8s.io/component-base/version
-# k8s.io/klog/v2 v2.4.0
+# k8s.io/klog/v2 v2.8.0
 ## explicit
 k8s.io/klog/v2
-# k8s.io/kube-openapi v0.0.0-20201113171705-d219536bb9fd
+# k8s.io/kube-openapi v0.0.0-20210305001622-591a79e4bda7
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/validation/errors
 k8s.io/kube-openapi/pkg/validation/spec
@@ -685,7 +685,7 @@ sigs.k8s.io/controller-runtime/pkg/webhook/admission
 sigs.k8s.io/controller-runtime/pkg/webhook/conversion
 sigs.k8s.io/controller-runtime/pkg/webhook/internal/certwatcher
 sigs.k8s.io/controller-runtime/pkg/webhook/internal/metrics
-# sigs.k8s.io/structured-merge-diff/v4 v4.0.2
+# sigs.k8s.io/structured-merge-diff/v4 v4.1.0
 sigs.k8s.io/structured-merge-diff/v4/value
 # sigs.k8s.io/yaml v1.2.0
 ## explicit
