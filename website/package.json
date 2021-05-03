@@ -11,7 +11,7 @@
     "serve": "docusaurus serve"
   },
   "dependencies": {
-    "@docusaurus/core": "2.0.0-alpha.71",
+    "@docusaurus/core": "2.0.0-alpha.75",
     "@docusaurus/preset-classic": "2.0.0-alpha.71",
     "@mdx-js/react": "^1.5.8",
     "clsx": "^1.1.1",
