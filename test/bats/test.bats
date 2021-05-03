@@ -220,3 +220,12 @@ __required_labels_audit_test() {
   kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl create configmap should-succeed -n gatekeeper-excluded-namespace"
 }
+
+@test "disable http.send" {
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/use_http_send_template.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced constrainttemplate k8sdenynamehttpsend"
+  run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_http_send.yaml
+  assert_failure
+  run kubectl get constrainttemplate/k8sdenynamehttpsend -o jsonpath="{.status}"
+  assert_match 'undefined function http.send' "${output}"
+}

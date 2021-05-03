@@ -711,6 +711,7 @@ spec:
           runAsUser: 1000
       nodeSelector:
         kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
 ---
@@ -813,6 +814,7 @@ spec:
           readOnly: true
       nodeSelector:
         kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:

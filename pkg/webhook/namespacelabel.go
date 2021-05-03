@@ -11,6 +11,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,8 +20,8 @@ import (
 )
 
 var (
-	exemptNamespace       = newNSSet()
-	exemptNamespacePrefix = newNSSet()
+	exemptNamespace       = util.NewFlagSet()
+	exemptNamespacePrefix = util.NewFlagSet()
 )
 
 func init() {
@@ -30,27 +31,6 @@ func init() {
 }
 
 const ignoreLabel = "admission.gatekeeper.sh/ignore"
-
-type nsSet map[string]bool
-
-var _ flag.Value = nsSet{}
-
-func newNSSet() nsSet {
-	return make(map[string]bool)
-}
-
-func (l nsSet) String() string {
-	contents := make([]string, 0)
-	for k := range l {
-		contents = append(contents, k)
-	}
-	return fmt.Sprintf("%s", contents)
-}
-
-func (l nsSet) Set(s string) error {
-	l[s] = true
-	return nil
-}
 
 // +kubebuilder:webhook:verbs=CREATE;UPDATE,path=/v1/admitlabel,mutating=false,failurePolicy=fail,groups="",resources=namespaces,versions=*,name=check-ignore-label.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1
 

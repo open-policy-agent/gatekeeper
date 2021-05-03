@@ -8,9 +8,9 @@ USE_LOCAL_IMG ?= false
 
 VERSION := v3.4.0
 
-KIND_VERSION ?= 0.8.1
+KIND_VERSION ?= 0.10.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= v1.19.0
+KUBERNETES_VERSION ?= v1.20.2
 KUSTOMIZE_VERSION ?= 3.8.8
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
@@ -45,6 +45,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --emit-admission-events\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
+\n        - --disable-opa-builtin=http.send\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -128,7 +129,8 @@ e2e-helm-deploy: e2e-helm-install
 	--set image.release=${HELM_RELEASE} \
 	--set emitAdmissionEvents=true \
 	--set emitAuditEvents=true \
-	--set postInstall.labelNamespace.enabled=true;\
+	--set postInstall.labelNamespace.enabled=true \
+	--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade-init: e2e-helm-install
 		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
@@ -143,7 +145,8 @@ e2e-helm-upgrade:
 		--set image.repository=${HELM_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set emitAdmissionEvents=true \
-		--set emitAuditEvents=true;\
+		--set emitAuditEvents=true \
+		--set disabledBuiltins={http.send};\
 
 # Build manager binary
 manager: generate
