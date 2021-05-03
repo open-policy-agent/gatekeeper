@@ -18,6 +18,7 @@ webhooks:
       path: /v1/mutate
   failurePolicy: Ignore
   name: mutation.gatekeeper.sh
+  matchPolicy: Exact
   rules:
   - apiGroups:
     - '*'

@@ -19,6 +19,7 @@ webhooks:
       namespace: '{{ .Release.Namespace }}'
       path: /v1/mutate
   failurePolicy: Ignore
+  matchPolicy: Exact
   name: mutation.gatekeeper.sh
   rules:
   - apiGroups:

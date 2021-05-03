@@ -15,6 +15,7 @@ webhooks:
       namespace: system
       path: /v1/admitlabel
   failurePolicy: Fail
+  matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
   rules:
   - apiGroups:
@@ -36,6 +37,7 @@ webhooks:
       namespace: system
       path: /v1/admit
   failurePolicy: Ignore
+  matchPolicy: Exact
   name: validation.gatekeeper.sh
   rules:
   - apiGroups:
