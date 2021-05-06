@@ -1,4 +1,4 @@
-package mutation_test
+package mutators
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	mschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,7 +20,7 @@ func TestAssignToMutator(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignSpec{
-			ApplyTo: []mutationsv1alpha1.ApplyTo{
+			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
@@ -32,7 +32,7 @@ func TestAssignToMutator(t *testing.T) {
 					Versions: []string{"version1"},
 				},
 			},
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "spec.foo",
 			Parameters: mutationsv1alpha1.Parameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
@@ -40,7 +40,7 @@ func TestAssignToMutator(t *testing.T) {
 		},
 	}
 
-	mutatorWithSchema, err := mutation.MutatorForAssign(assign)
+	mutatorWithSchema, err := MutatorForAssign(assign)
 	if err != nil {
 		t.Fatalf("MutatorForAssign failed, %v", err)
 	}
@@ -71,7 +71,7 @@ func TestAssignMetadataToMutator(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
@@ -79,7 +79,7 @@ func TestAssignMetadataToMutator(t *testing.T) {
 		},
 	}
 
-	mutator, err := mutation.MutatorForAssignMetadata(assignMeta)
+	mutator, err := MutatorForAssignMetadata(assignMeta)
 	if err != nil {
 		t.Fatalf("MutatorForAssignMetadata for failed, %v", err)
 	}
@@ -96,7 +96,7 @@ func TestAssignHasDiff(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignSpec{
-			ApplyTo: []mutationsv1alpha1.ApplyTo{
+			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group1", "group2"},
 					Kinds:    []string{"kind1", "kind2", "kind3"},
@@ -108,7 +108,7 @@ func TestAssignHasDiff(t *testing.T) {
 					Versions: []string{"version1"},
 				},
 			},
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "spec.foo",
 			Parameters: mutationsv1alpha1.Parameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
@@ -162,11 +162,11 @@ func TestAssignHasDiff(t *testing.T) {
 		t.Run(tc.tname, func(t *testing.T) {
 			secondAssign := second.DeepCopy()
 			tc.modify(secondAssign)
-			firstMutator, err := mutation.MutatorForAssign(first)
+			firstMutator, err := MutatorForAssign(first)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert first to mutator", err)
 			}
-			secondMutator, err := mutation.MutatorForAssign(secondAssign)
+			secondMutator, err := MutatorForAssign(secondAssign)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert second to mutator", err)
 			}
@@ -189,7 +189,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
@@ -244,11 +244,11 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		t.Run(tc.tname, func(t *testing.T) {
 			secondAssignMeta := second.DeepCopy()
 			tc.modify(secondAssignMeta)
-			firstMutator, err := mutation.MutatorForAssignMetadata(first)
+			firstMutator, err := MutatorForAssignMetadata(first)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert first to mutator", err)
 			}
-			secondMutator, err := mutation.MutatorForAssignMetadata(secondAssignMeta)
+			secondMutator, err := MutatorForAssignMetadata(secondAssignMeta)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert second to mutator", err)
 			}
@@ -271,14 +271,14 @@ func TestParseShouldFail(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignSpec{
-			ApplyTo: []mutationsv1alpha1.ApplyTo{
+			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group3", "group4"},
 					Kinds:    []string{"kind4", "kind2", "kind3"},
 					Versions: []string{"version1"},
 				},
 			},
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "aaa..bb",
 			Parameters: mutationsv1alpha1.Parameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
@@ -286,7 +286,7 @@ func TestParseShouldFail(t *testing.T) {
 		},
 	}
 
-	_, err := mutation.MutatorForAssign(assign)
+	_, err := MutatorForAssign(assign)
 	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign: %v", err)
 	}
@@ -297,14 +297,14 @@ func TestParseShouldFail(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match:    mutationsv1alpha1.Match{},
+			Match:    match.Match{},
 			Location: "spec...foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
 			},
 		},
 	}
-	_, err = mutation.MutatorForAssignMetadata(assignMeta)
+	_, err = MutatorForAssignMetadata(assignMeta)
 	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign metadata: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestPathValidation(t *testing.T) {
 			Namespace: "namespace",
 		},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Match: mutationsv1alpha1.Match{},
+			Match: match.Match{},
 			Parameters: mutationsv1alpha1.MetadataParameters{
 				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
 			},
@@ -355,7 +355,7 @@ func TestPathValidation(t *testing.T) {
 		t.Run(tc.tname, func(t *testing.T) {
 			a := assignMeta.DeepCopy()
 			a.Spec.Location = tc.location
-			_, err := mutation.MutatorForAssignMetadata(a)
+			_, err := MutatorForAssignMetadata(a)
 
 			if tc.isValid && err != nil {
 				t.Errorf("Unexpected error for location %s, %v", tc.location, err)

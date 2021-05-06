@@ -26,10 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const (
-	ConstraintTemplateNameLabel = "internal.gatekeeper.sh/constrainttemplate-name"
-)
-
 // ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
 type ConstraintTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file

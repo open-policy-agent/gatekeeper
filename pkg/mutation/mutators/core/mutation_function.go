@@ -1,16 +1,22 @@
-package mutation
+package core
 
 import (
 	"errors"
 	"fmt"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
+var (
+	log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
+)
+
+func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
 	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
 	if len(mutator.Path().Nodes) == 0 {
 		return false, fmt.Errorf("mutator %v has an empty target location", mutator.ID())

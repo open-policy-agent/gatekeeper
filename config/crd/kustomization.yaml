@@ -5,6 +5,7 @@ resources:
 - bases/config.gatekeeper.sh_configs.yaml
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
+# - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # TODO: once mutation is deployed by default and not by config/ovelays/mutation, 
@@ -17,6 +18,8 @@ bases:
 
 
 patchesStrategicMerge:
+#- patches/max_name_size_for_assign.yaml
+#- patches/max_name_size_for_assignmetadata.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_configs.yaml

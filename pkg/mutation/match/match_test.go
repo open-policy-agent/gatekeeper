@@ -1,12 +1,10 @@
-package mutation_test
+package match
 
 import (
 	"encoding/json"
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -20,15 +18,15 @@ func TestMatch(t *testing.T) {
 	table := []struct {
 		tname       string
 		toMatch     *unstructured.Unstructured
-		match       mutationsv1.Match
+		match       Match
 		namespace   *corev1.Namespace
 		shouldMatch bool
 	}{
 		{
 			tname:   "match kind with *",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"*"},
 						APIGroups: []string{"*"},
@@ -41,8 +39,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "match group and no kinds specified should match",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
 						APIGroups: []string{"*"},
@@ -58,8 +56,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "match kind and no group specified should match",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds: []string{"kind", "neithermatching"},
 					},
@@ -71,8 +69,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "match kind and group explicit",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
 						APIGroups: []string{"*"},
@@ -89,8 +87,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "kind group don't matches",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
 						APIGroups: []string{"*"},
@@ -107,8 +105,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "kind group don't matches",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
 						APIGroups: []string{"*"},
@@ -125,7 +123,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "namespace matches",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
+			match: Match{
 				Namespaces: []string{"nonmatching", "namespace"},
 			},
 			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
@@ -134,7 +132,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "namespace is not in the matches list",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
+			match: Match{
 				Namespaces: []string{"nonmatching", "notmatchingeither"},
 			},
 			namespace:   &corev1.Namespace{},
@@ -143,7 +141,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "namespace fails if clusterscoped",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
+			match: Match{
 				Namespaces: []string{"nonmatching", "namespace"},
 				Scope:      apiextensionsv1beta1.ClusterScoped,
 			},
@@ -153,8 +151,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "namespace is excluded",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -169,8 +167,8 @@ func TestMatch(t *testing.T) {
 		{
 			tname:   "namespace scoped fails if cluster scoped",
 			toMatch: makeObject("kind", "group", "", "name"),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -189,8 +187,8 @@ func TestMatch(t *testing.T) {
 					"labelname": "labelvalue",
 				})
 			}),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -213,8 +211,8 @@ func TestMatch(t *testing.T) {
 					"labelname": "labelvalue",
 				})
 			}),
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -241,8 +239,8 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -267,8 +265,8 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -287,8 +285,8 @@ func TestMatch(t *testing.T) {
 			tname:     "namespace selector not matching, but cluster scoped",
 			toMatch:   makeObject("kind", "group", "", "name"),
 			namespace: nil,
-			match: mutationsv1.Match{
-				Kinds: []mutationsv1.Kinds{
+			match: Match{
+				Kinds: []Kinds{
 					{
 						Kinds:     []string{"kind"},
 						APIGroups: []string{"group"},
@@ -312,7 +310,7 @@ func TestMatch(t *testing.T) {
 				})
 			}),
 			namespace: nil,
-			match: mutationsv1.Match{
+			match: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
@@ -330,7 +328,7 @@ func TestMatch(t *testing.T) {
 				})
 			}),
 			namespace: nil,
-			match: mutationsv1.Match{
+			match: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "badvalue",
@@ -356,7 +354,7 @@ func TestMatch(t *testing.T) {
 			}
 			// namespace is not populated in the object metadata for mutation requests
 			tc.toMatch.SetNamespace("")
-			matches, err := mutation.Matches(tc.match, tc.toMatch, ns)
+			matches, err := Matches(tc.match, tc.toMatch, ns)
 			if err != nil {
 				t.Error("Match failed for ", tc.tname)
 			}
@@ -413,13 +411,13 @@ func TestApplyTo(t *testing.T) {
 	table := []struct {
 		tname       string
 		toMatch     *unstructured.Unstructured
-		applyTo     []mutationsv1.ApplyTo
+		applyTo     []ApplyTo
 		shouldApply bool
 	}{
 		{
 			tname:   "one item, applies",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			applyTo: []mutationsv1.ApplyTo{
+			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"group"},
 					Kinds:    []string{"kind"},
@@ -431,7 +429,7 @@ func TestApplyTo(t *testing.T) {
 		{
 			tname:   "one item, many columns",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			applyTo: []mutationsv1.ApplyTo{
+			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"aa", "bb", "group"},
 					Kinds:    []string{"aa", "bb", "kind"},
@@ -443,7 +441,7 @@ func TestApplyTo(t *testing.T) {
 		{
 			tname:   "first don't match, second does",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			applyTo: []mutationsv1.ApplyTo{
+			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"group"},
 					Kinds:    []string{"not matching"},
@@ -460,7 +458,7 @@ func TestApplyTo(t *testing.T) {
 		{
 			tname:   "no one is matching",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
-			applyTo: []mutationsv1.ApplyTo{
+			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"group"},
 					Kinds:    []string{"not matching"},
@@ -477,7 +475,7 @@ func TestApplyTo(t *testing.T) {
 	}
 	for _, tc := range table {
 		t.Run(tc.tname, func(t *testing.T) {
-			appliesTo := mutation.AppliesTo(tc.applyTo, tc.toMatch)
+			appliesTo := AppliesTo(tc.applyTo, tc.toMatch)
 			if appliesTo != tc.shouldApply {
 				t.Errorf("%s: expecting match to be %v, was %v", tc.tname, tc.shouldApply, appliesTo)
 			}
