@@ -16,9 +16,21 @@ resources:
 - ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - ../../crd/bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 
+patchesJson6902:
+- target:
+    group: apiextensions.k8s.io
+    version: v1
+    kind: CustomResourceDefinition
+    name: assign.mutations.gatekeeper.sh
+  path: ../../crd/patches/max_name_size.yaml
+- target:
+    group: apiextensions.k8s.io
+    version: v1
+    kind: CustomResourceDefinition
+    name: assignmetadata.mutations.gatekeeper.sh
+  path: ../../crd/patches/max_name_size.yaml
+
 patchesStrategicMerge:
-- ../../crd/patches/max_name_size_for_assign.yaml
-- ../../crd/patches/max_name_size_for_assignmetadata.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 #- ../../crd/patches/webhook_in_assignmetadata.yaml

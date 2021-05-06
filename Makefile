@@ -67,9 +67,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
 
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= crd:trivialVersions=true,crdVersions=v1beta1
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -175,7 +172,17 @@ deploy: patch-image manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: __controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./apis/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) \
+		crd \
+		rbac:roleName=manager-role \
+		webhook \
+		paths="./apis/..." \
+		paths="./pkg/..." \
+		output:crd:artifacts:config=config/crd/bases
+	# As mutation CRDs are not ready to be included in our final gatekeeper.yaml, we leave them out of config/crd/kustomization.yaml.
+	# This makes these files unavailable to the helmify step below.  The solve for this was to copy the mutation CRDs into
+	# config/overlays/mutation_webhook/.  To maintain the generation pipeline, we do that copy step here.
+	cp config/crd/bases/mutations* config/overlays/mutation_webhook/
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
@@ -295,3 +302,4 @@ __tooling-image:
 .PHONY: vendor
 vendor:
 	go mod vendor
+	go mod tidy

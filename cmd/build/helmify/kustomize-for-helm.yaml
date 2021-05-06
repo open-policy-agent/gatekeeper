@@ -6,7 +6,7 @@ metadata:
 spec:
   HELMSUBST_SERVICE_TYPE: ""
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: configs.config.gatekeeper.sh
@@ -18,25 +18,25 @@ metadata:
   name: constrainttemplates.templates.gatekeeper.sh
 status: null
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
 status: null
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: constraintpodstatuses.status.gatekeeper.sh
 status: null
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: assignmetadata.mutations.gatekeeper.sh
 status: null
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: assign.mutations.gatekeeper.sh

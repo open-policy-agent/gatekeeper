@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v2"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
 var (
@@ -40,7 +40,7 @@ func extractName(s string) (string, error) {
 }
 
 func extractCRDKind(obj string) (string, error) {
-	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+	crd := &apiextensionsv1.CustomResourceDefinition{}
 	if err := yaml.Unmarshal([]byte(obj), crd); err != nil {
 		return "", err
 	}
