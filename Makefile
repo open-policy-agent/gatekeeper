@@ -67,9 +67,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 
 FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
 
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= crd:trivialVersions=true
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -175,7 +172,11 @@ deploy: patch-image manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: __controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./apis/..." paths="./pkg/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) \
+		crd:trivialVersions=true,crdVersions="v1beta1" \
+		rbac:roleName=manager-role \
+		webhook paths="./apis/..." \
+		output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper

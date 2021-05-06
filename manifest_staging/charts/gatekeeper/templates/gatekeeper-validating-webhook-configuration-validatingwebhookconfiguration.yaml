@@ -11,7 +11,6 @@ metadata:
   name: gatekeeper-validating-webhook-configuration
 webhooks:
 - clientConfig:
-    caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
@@ -38,7 +37,6 @@ webhooks:
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
 - clientConfig:
-    caBundle: Cg==
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
