@@ -1,4 +1,4 @@
-package mutation
+package core_test
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -320,7 +323,7 @@ func testDummyMutation(
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
 
-	mutator := newDummyMutator("dummy", location, value)
+	mutator := testhelpers.NewDummyMutator("dummy", location, value)
 	return testMutation(mutator, unstructured, testFunc, t)
 }
 
@@ -335,7 +338,7 @@ func testAssignMutation(
 	assign := mutationsv1alpha1.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsv1alpha1.AssignSpec{
-			ApplyTo:  []mutationsv1alpha1.ApplyTo{{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}},
+			ApplyTo:  []match.ApplyTo{{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}},
 			Location: location,
 			Parameters: mutationsv1alpha1.Parameters{
 				Assign: runtime.RawExtension{
@@ -344,7 +347,7 @@ func testAssignMutation(
 			},
 		},
 	}
-	mutator, err := MutatorForAssign(&assign)
+	mutator, err := mutators.MutatorForAssign(&assign)
 	if err != nil {
 		t.Error("Unexpected error", err)
 	}
@@ -369,7 +372,7 @@ func testAssignMetadataMutation(
 			},
 		},
 	}
-	mutator, err := MutatorForAssignMetadata(&assignMetadata)
+	mutator, err := mutators.MutatorForAssignMetadata(&assignMetadata)
 	if err != nil {
 		t.Error("Unexpected error", err)
 	}

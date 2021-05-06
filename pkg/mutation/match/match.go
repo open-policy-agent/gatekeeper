@@ -1,10 +1,9 @@
-package mutation
+package match
 
 import (
 	"errors"
 	"fmt"
 
-	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -13,9 +12,41 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// ApplyTo determines what GVKs items the mutation should apply to.
+// Globs are not allowed.
+// +kubebuilder:object:generate=true
+type ApplyTo struct {
+	Groups   []string `json:"groups,omitempty"`
+	Kinds    []string `json:"kinds,omitempty"`
+	Versions []string `json:"versions,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
+type Match struct {
+	Kinds              []Kinds                            `json:"kinds,omitempty"`
+	Scope              apiextensionsv1beta1.ResourceScope `json:"scope,omitempty"`
+	Namespaces         []string                           `json:"namespaces,omitempty"`
+	ExcludedNamespaces []string                           `json:"excludedNamespaces,omitempty"`
+	LabelSelector      *metav1.LabelSelector              `json:"labelSelector,omitempty"`
+	NamespaceSelector  *metav1.LabelSelector              `json:"namespaceSelector,omitempty"`
+}
+
+// Kinds accepts a list of objects with apiGroups and kinds fields
+// that list the groups/kinds of objects to which the mutation will apply.
+// If multiple groups/kinds objects are specified,
+// only one match is needed for the resource to be in scope.
+// +kubebuilder:object:generate=true
+type Kinds struct {
+	// APIGroups is the API groups the resources belong to. '*' is all groups.
+	// If '*' is present, the length of the slice must be one.
+	// Required.
+	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
+	Kinds     []string `json:"kinds,omitempty"`
+}
+
 // Matches verifies if the given object belonging to the given namespace
 // matches the current mutator.
-func Matches(match mutationsv1.Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
+func Matches(match Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
 		return false, fmt.Errorf("accessor failed for %s", obj.GetObjectKind().GroupVersionKind().Kind)
@@ -125,7 +156,7 @@ func Matches(match mutationsv1.Match, obj runtime.Object, ns *corev1.Namespace) 
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object
-func AppliesTo(applyTo []mutationsv1.ApplyTo, obj runtime.Object) bool {
+func AppliesTo(applyTo []ApplyTo, obj runtime.Object) bool {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	for _, apply := range applyTo {
 		matchesGroup := false

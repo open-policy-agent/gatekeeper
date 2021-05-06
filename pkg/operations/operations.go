@@ -13,9 +13,10 @@ import (
 type Operation string
 
 const (
-	Audit   = Operation("audit")
-	Status  = Operation("status")
-	Webhook = Operation("webhook")
+	Audit          = Operation("audit")
+	Status         = Operation("status")
+	MutationStatus = Operation("mutation-status")
+	Webhook        = Operation("webhook")
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 	allOperations = []Operation{
 		Audit,
 		Status,
+		MutationStatus,
 		Webhook,
 	}
 	operations = newOperationSet()
