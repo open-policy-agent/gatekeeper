@@ -13,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Generate deepcopy for apis
-//go:generate deepcopy-gen -O zz_generated.deepcopy -i ./... -h ../../../hack/boilerplate.go.txt
-
 package templates
 
 import (
@@ -49,6 +46,7 @@ type Names struct {
 }
 
 type Validation struct {
+	// +kubebuilder:validation:Schemaless
 	OpenAPIV3Schema *apiextensions.JSONSchemaProps `json:"openAPIV3Schema,omitempty"`
 }
 
@@ -85,6 +83,7 @@ type ConstraintTemplateStatus struct {
 // +genclient
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:skip
 
 // ConstraintTemplate is the Schema for the constrainttemplates API
 // +k8s:openapi-gen=true

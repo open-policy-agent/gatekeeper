@@ -434,8 +434,9 @@ func autoConvert_v1alpha1_Validation_To_templates_Validation(in *Validation, out
 	if in.OpenAPIV3Schema != nil {
 		in, out := &in.OpenAPIV3Schema, &out.OpenAPIV3Schema
 		*out = new(apiextensions.JSONSchemaProps)
-		// TODO: Inefficient conversion - can we improve it?
-		if err := s.Convert(*in, *out, 0); err != nil {
+		// This was edited manually.  A bug in conversion-gen originally left a compilation error here.
+		// For more information see https://github.com/open-policy-agent/frameworks/issues/112
+		if err := v1beta1.Convert_v1beta1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(*in, *out, s); err != nil {
 			return err
 		}
 	} else {
@@ -453,8 +454,7 @@ func autoConvert_templates_Validation_To_v1alpha1_Validation(in *templates.Valid
 	if in.OpenAPIV3Schema != nil {
 		in, out := &in.OpenAPIV3Schema, &out.OpenAPIV3Schema
 		*out = new(v1beta1.JSONSchemaProps)
-		// TODO: Inefficient conversion - can we improve it?
-		if err := s.Convert(*in, *out, 0); err != nil {
+		if err := v1beta1.Convert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps(*in, *out, s); err != nil {
 			return err
 		}
 	} else {
