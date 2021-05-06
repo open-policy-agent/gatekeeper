@@ -135,19 +135,15 @@ spec:
           description: AssignMetadataStatus defines the observed state of AssignMetadata
           properties:
             byPod:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "make" to regenerate code after modifying
-                this file'
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run "make" to regenerate code after modifying this file'
               items:
-                description: MutatorPodStatusStatus defines the observed state of
-                  MutatorPodStatus
+                description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus
                 properties:
                   enforced:
                     type: boolean
                   errors:
                     items:
-                      description: MutatorError represents a single error caught while
-                        adding a mutator to a system
+                      description: MutatorError represents a single error caught while adding a mutator to a system
                       properties:
                         message:
                           type: string
@@ -158,9 +154,7 @@ spec:
                   id:
                     type: string
                   mutatorUID:
-                    description: Storing the mutator UID allows us to detect drift,
-                      such as when a mutator has been recreated after its CRD was
-                      deleted out from under it, interrupting the watch
+                    description: Storing the mutator UID allows us to detect drift, such as when a mutator has been recreated after its CRD was deleted out from under it, interrupting the watch
                     type: string
                   observedGeneration:
                     format: int64
