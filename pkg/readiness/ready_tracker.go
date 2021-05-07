@@ -466,9 +466,12 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
 	for i := range templates.Items {
-		ct := templates.Items[i]
+		// We don't need to shallow-copy the ConstraintTemplate here. The templates
+		// list is used for nothing else, so there is no danger of the object we
+		// pass to templates.Expect() changing from underneath us.
+		ct := &templates.Items[i]
 		log.V(1).Info("expecting template", "name", ct.GetName())
-		t.templates.Expect(&ct)
+		t.templates.Expect(ct)
 
 		gvk := schema.GroupVersionKind{
 			Group:   constraintGroup,
