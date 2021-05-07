@@ -465,8 +465,8 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	log.V(1).Info("setting expectations for templates", "templateCount", len(templates.Items))
 
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
-	for _, ct := range templates.Items {
-		ct := ct
+	for i := range templates.Items {
+		ct := templates.Items[i]
 		log.V(1).Info("expecting template", "name", ct.GetName())
 		t.templates.Expect(&ct)
 
@@ -555,12 +555,13 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 		return nil, fmt.Errorf("listing config: %w", err)
 	}
 
-	for _, c := range lst.Items {
+	for i := range lst.Items {
+		c := &lst.Items[i]
 		if c.GetName() != keys.Config.Name || c.GetNamespace() != keys.Config.Namespace {
 			log.Info("ignoring unsupported config name", "namespace", c.GetNamespace(), "name", c.GetName())
 			continue
 		}
-		return &c, nil
+		return c, nil
 	}
 
 	// Not found.
