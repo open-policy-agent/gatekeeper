@@ -102,7 +102,7 @@ spec:
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
-			review := atypes.Request{
+			review := &atypes.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "mutations.gatekeeper.sh",
@@ -351,7 +351,7 @@ spec:
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
-			review := atypes.Request{
+			review := &atypes.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "mutations.gatekeeper.sh",
