@@ -178,14 +178,14 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	sort.Sort(statusObjs)
 
 	var s []interface{}
-	for _, v := range statusObjs {
+	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the constraint status to be deleted
 		// out from underneath it
-		if v.Status.TemplateUID != template.GetUID() {
+		if statusObjs[i].Status.TemplateUID != template.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(v.Status)
+		j, err := json.Marshal(statusObjs[i].Status)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

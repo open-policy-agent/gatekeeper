@@ -10,7 +10,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
-	"flag"
 	"fmt"
 	"math/big"
 	"os"
@@ -61,8 +60,6 @@ const (
 
 var _ manager.Runnable = &CertRotator{}
 
-var restartOnSecretRefresh = false
-
 //WebhookInfo is used by the rotator to receive info about resources to be updated with certificates
 type WebhookInfo struct {
 	//Name is the name of the webhook for a validating or mutating webhook, or the CRD name in case of a CRD conversion webhook
@@ -70,15 +67,11 @@ type WebhookInfo struct {
 	Type WebhookType
 }
 
-func init() {
-	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
-}
-
 func (w WebhookInfo) gvk() schema.GroupVersionKind {
 	t2g := map[WebhookType]schema.GroupVersionKind{
-		Validating:    schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"},
-		Mutating:      schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "MutatingWebhookConfiguration"},
-		CRDConversion: schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"},
+		Validating:    {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
+		Mutating:      {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
+		CRDConversion: {Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"},
 	}
 	return t2g[w.Type]
 }
@@ -151,19 +144,20 @@ type SyncingReader interface {
 
 // CertRotator contains cert artifacts and a channel to close when the certs are ready.
 type CertRotator struct {
-	reader          SyncingReader
-	writer          client.Writer
-	SecretKey       types.NamespacedName
-	CertDir         string
-	CAName          string
-	CAOrganization  string
-	DNSName         string
-	IsReady         chan struct{}
-	Webhooks        []WebhookInfo
-	certsMounted    chan struct{}
-	certsNotMounted chan struct{}
-	wasCAInjected   *atomic.Bool
-	caNotInjected   chan struct{}
+	reader                 SyncingReader
+	writer                 client.Writer
+	SecretKey              types.NamespacedName
+	CertDir                string
+	CAName                 string
+	CAOrganization         string
+	DNSName                string
+	IsReady                chan struct{}
+	Webhooks               []WebhookInfo
+	RestartOnSecretRefresh bool
+	certsMounted           chan struct{}
+	certsNotMounted        chan struct{}
+	wasCAInjected          *atomic.Bool
+	caNotInjected          chan struct{}
 }
 
 // Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
@@ -224,8 +218,8 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 				return false, nil
 			}
 			crLog.Info("server certs refreshed")
-			if restartOnSecretRefresh {
-				crLog.Info("Secrets have been updated; exiting so pod can be restarted (omit --cert-restart-on-secret-refresh to wait instead of restarting")
+			if cr.RestartOnSecretRefresh {
+				crLog.Info("Secrets have been updated; exiting so pod can be restarted (This behaviour can be changed with the option RestartOnSecretRefresh)")
 				os.Exit(0)
 			}
 			return true, nil
@@ -238,8 +232,8 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 				return false, nil
 			}
 			crLog.Info("server certs refreshed")
-			if restartOnSecretRefresh {
-				crLog.Info("Secrets have been updated; exiting so pod can be restarted (omit --cert-restart-on-secret-refresh to wait instead of restarting")
+			if cr.RestartOnSecretRefresh {
+				crLog.Info("Secrets have been updated; exiting so pod can be restarted (This behaviour can be changed with the option RestartOnSecretRefresh)")
 				os.Exit(0)
 			}
 			return true, nil

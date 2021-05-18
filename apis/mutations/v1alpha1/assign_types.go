@@ -18,6 +18,8 @@ package v1alpha1
 import (
 	"encoding/json"
 
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,18 +32,10 @@ import (
 type AssignSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	ApplyTo    []ApplyTo  `json:"applyTo,omitempty"`
-	Match      Match      `json:"match,omitempty"`
-	Location   string     `json:"location,omitempty"`
-	Parameters Parameters `json:"parameters,omitempty"`
-}
-
-// ApplyTo determines what GVKs items the mutation should apply to.
-// Globs are not allowed.
-type ApplyTo struct {
-	Groups   []string `json:"groups,omitempty"`
-	Kinds    []string `json:"kinds,omitempty"`
-	Versions []string `json:"versions,omitempty"`
+	ApplyTo    []match.ApplyTo `json:"applyTo,omitempty"`
+	Match      match.Match     `json:"match,omitempty"`
+	Location   string          `json:"location,omitempty"`
+	Parameters Parameters      `json:"parameters,omitempty"`
 }
 
 type Parameters struct {
@@ -75,11 +69,14 @@ type PathTest struct {
 type AssignStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path="assign"
 // +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:subresource:status
 
 // Assign is the Schema for the assign API
 type Assign struct {

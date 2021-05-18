@@ -465,10 +465,13 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 	log.V(1).Info("setting expectations for templates", "templateCount", len(templates.Items))
 
 	handled := make(map[schema.GroupVersionKind]bool, len(templates.Items))
-	for _, ct := range templates.Items {
-		ct := ct
+	for i := range templates.Items {
+		// We don't need to shallow-copy the ConstraintTemplate here. The templates
+		// list is used for nothing else, so there is no danger of the object we
+		// pass to templates.Expect() changing from underneath us.
+		ct := &templates.Items[i]
 		log.V(1).Info("expecting template", "name", ct.GetName())
-		t.templates.Expect(&ct)
+		t.templates.Expect(ct)
 
 		gvk := schema.GroupVersionKind{
 			Group:   constraintGroup,
@@ -555,12 +558,13 @@ func (t *Tracker) getConfigResource(ctx context.Context) (*configv1alpha1.Config
 		return nil, fmt.Errorf("listing config: %w", err)
 	}
 
-	for _, c := range lst.Items {
+	for i := range lst.Items {
+		c := &lst.Items[i]
 		if c.GetName() != keys.Config.Name || c.GetNamespace() != keys.Config.Namespace {
 			log.Info("ignoring unsupported config name", "namespace", c.GetNamespace(), "name", c.GetName())
 			continue
 		}
-		return &c, nil
+		return c, nil
 	}
 
 	// Not found.

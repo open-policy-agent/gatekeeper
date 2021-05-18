@@ -1,6 +1,8 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
@@ -8,12 +10,15 @@ spec:
   group: templates.gatekeeper.sh
   names:
     kind: ConstraintTemplate
+    listKind: ConstraintTemplateList
     plural: constrainttemplates
+    singular: constrainttemplate
   scope: Cluster
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
+      description: ConstraintTemplate is the Schema for the constrainttemplates API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -24,6 +29,7 @@ spec:
         metadata:
           type: object
         spec:
+          description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
           properties:
             crd:
               properties:
@@ -39,6 +45,9 @@ spec:
                           type: array
                       type: object
                     validation:
+                      properties:
+                        openAPIV3Schema:
+                          type: object
                       type: object
                   type: object
               type: object
@@ -57,12 +66,15 @@ spec:
               type: array
           type: object
         status:
+          description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
           properties:
             byPod:
               items:
+                description: ByPodStatus defines the observed state of ConstraintTemplate as seen by an individual controller
                 properties:
                   errors:
                     items:
+                      description: CreateCRDError represents a single error caught during parsing, compiling, etc.
                       properties:
                         code:
                           type: string
@@ -86,11 +98,12 @@ spec:
             created:
               type: boolean
           type: object
-  version: v1beta1
+      type: object
+  version: v1alpha1
   versions:
-  - name: v1beta1
-    served: true
-    storage: true
   - name: v1alpha1
     served: true
     storage: false
+  - name: v1beta1
+    served: true
+    storage: true

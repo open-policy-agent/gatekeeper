@@ -31,6 +31,12 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1beta1
       kind: CustomResourceDefinition
+      name: mutatorpodstatuses.status.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1beta1
+      kind: CustomResourceDefinition
       name: configs.config.gatekeeper.sh
     path: labels_patch.yaml
   - target:

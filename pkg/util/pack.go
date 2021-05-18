@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,5 +52,18 @@ func EventPackerMapFunc() handler.MapFunc {
 					Name:      packed,
 				}},
 		}
+	}
+}
+
+// EventPackerMapFuncHardcodeGVK accounts for the fact that typed K8s objects have
+// no GVK associated with them by allowing the caller to set the expected GVK
+func EventPackerMapFuncHardcodeGVK(gvk schema.GroupVersionKind) handler.MapFunc {
+	mf := EventPackerMapFunc()
+	return func(obj client.Object) []reconcile.Request {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+		u.SetNamespace(obj.GetNamespace())
+		u.SetName(obj.GetName())
+		return mf(u)
 	}
 }

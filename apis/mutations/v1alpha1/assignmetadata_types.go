@@ -16,6 +16,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -25,7 +27,7 @@ import (
 
 // AssignMetadataSpec defines the desired state of AssignMetadata
 type AssignMetadataSpec struct {
-	Match      Match              `json:"match,omitempty"`
+	Match      match.Match        `json:"match,omitempty"`
 	Location   string             `json:"location,omitempty"`
 	Parameters MetadataParameters `json:"parameters,omitempty"`
 }
@@ -40,10 +42,12 @@ type MetadataParameters struct {
 type AssignMetadataStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:subresource:status
 
 // AssignMetadata is the Schema for the assignmetadata API
 type AssignMetadata struct {

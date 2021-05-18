@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -65,7 +66,7 @@ func init() {
 	}
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh
+// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager
@@ -387,7 +388,7 @@ func (h *validationHandler) validateAssignMetadata(ctx context.Context, req admi
 	if !ok {
 		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
 	}
-	err = mutation.IsValidAssignMetadata(assignMetadata)
+	err = mutators.IsValidAssignMetadata(assignMetadata)
 	if err != nil {
 		return true, err
 	}
@@ -405,7 +406,7 @@ func (h *validationHandler) validateAssign(ctx context.Context, req admission.Re
 		return false, fmt.Errorf("Deserialized object is not of type Assign")
 	}
 
-	err = mutation.IsValidAssign(assign)
+	err = mutators.IsValidAssign(assign)
 	if err != nil {
 		return true, err
 	}

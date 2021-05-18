@@ -117,8 +117,8 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 
 	// For some reason we have seen duplicate kinds, suppress that
 	uniqueKinds := make(map[string]bool)
-	for _, r := range resourceList.APIResources {
-		uniqueKinds[r.Kind] = true
+	for i := range resourceList.APIResources {
+		uniqueKinds[resourceList.APIResources[i].Kind] = true
 	}
 
 	// get resource for each Kind
