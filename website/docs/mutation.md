@@ -185,8 +185,11 @@ apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: demo-privileged
-  namespace: default
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   match:
     scope: Namespaced
     kinds:
@@ -206,8 +209,11 @@ apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: demo-image-pull-policy
-  namespace: default
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   match:
     scope: Namespaced
     kinds:
@@ -227,8 +233,11 @@ apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: demo-sidecar
-  namespace: default
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   match:
     scope: Namespaced
     kinds:
@@ -252,8 +261,11 @@ apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: demo-dns-policy
-  namespace: default
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   match:
     scope: Namespaced
     kinds:
@@ -268,8 +280,11 @@ apiVersion: mutations.gatekeeper.sh/v1alpha1
 kind: Assign
 metadata:
   name: demo-dns-config
-  namespace: default
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   match:
     scope: Namespaced
     kinds:
