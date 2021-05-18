@@ -449,8 +449,8 @@ loop:
 			return fmt.Errorf("getting resources for group: %+v: %w", gvk.GroupVersion(), err)
 		}
 
-		for _, r := range resourceList.APIResources {
-			if r.Name == plural {
+		for i := range resourceList.APIResources {
+			if resourceList.APIResources[i].Name == plural {
 				select {
 				case <-time.After(100 * time.Millisecond):
 				case <-ctx.Done():

@@ -228,14 +228,14 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	sort.Sort(statusObjs)
 
 	var s []interface{}
-	for _, v := range statusObjs {
+	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the mutator status to be deleted
 		// out from underneath it
-		if v.Status.MutatorUID != instance.GetUID() {
+		if statusObjs[i].Status.MutatorUID != instance.GetUID() {
 			continue
 		}
-		j, err := json.Marshal(v.Status)
+		j, err := json.Marshal(statusObjs[i].Status)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
