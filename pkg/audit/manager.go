@@ -270,10 +270,10 @@ func (am *Manager) auditResources(
 		if _, ok := clusterAPIResources[gv]; !ok {
 			clusterAPIResources[gv] = make(map[string]bool)
 		}
-		for _, resource := range rl.APIResources {
-			for _, verb := range resource.Verbs {
+		for i := range rl.APIResources {
+			for _, verb := range rl.APIResources[i].Verbs {
 				if verb == "list" {
-					clusterAPIResources[gv][resource.Kind] = true
+					clusterAPIResources[gv][rl.APIResources[i].Kind] = true
 					break
 				}
 			}
@@ -457,8 +457,8 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 	version := resourceGV[1]
 	// We have seen duplicate GVK entries on shifting to status client, remove them
 	unique := make(map[schema.GroupVersionKind]bool)
-	for _, i := range l.APIResources {
-		unique[schema.GroupVersionKind{Group: group, Version: version, Kind: i.Kind}] = true
+	for i := range l.APIResources {
+		unique[schema.GroupVersionKind{Group: group, Version: version, Kind: l.APIResources[i].Kind}] = true
 	}
 	var ret []schema.GroupVersionKind
 	for gvk := range unique {
@@ -557,7 +557,8 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 	// create constraint status violations
 	var statusViolations []interface{}
-	for _, ar := range auditResults {
+	for i := range auditResults {
+		ar := &auditResults[i] // avoid large shallow copy in range loop
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
 		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			msg := ar.message
