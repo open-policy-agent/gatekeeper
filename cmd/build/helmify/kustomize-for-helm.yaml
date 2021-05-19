@@ -169,3 +169,19 @@ spec:
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: critical-pods
+  namespace: system
+spec:
+  hard:
+    pods: HELMSUBST_RESOURCEQUOTA_POD_LIMIT
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME
+      - HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME

@@ -178,3 +178,18 @@ spec:
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: critical-pods
+  namespace: system
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - system-cluster-critical
