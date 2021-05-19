@@ -277,11 +277,11 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(err).To(HaveOccurred())
 				})
 
-				It("should return an error when context is cancelled", func() {
-					By("cancelling the context")
+				It("should return an error when context is canceled", func() {
+					By("canceling the context")
 					informerCacheCancel()
 
-					By("listing pods in test-namespace-1 with a cancelled context")
+					By("listing pods in test-namespace-1 with a canceled context")
 					listObj := &kcorev1.PodList{}
 					err := informerCache.List(informerCacheCtx, listObj, client.InNamespace(testNamespaceOne))
 
@@ -825,11 +825,11 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(actual.Name).To(Equal("test-pod-3"))
 				})
 
-				It("should allow for get informer to be cancelled", func() {
-					By("creating a context and cancelling it")
+				It("should allow for get informer to be canceled", func() {
+					By("creating a context and canceling it")
 					informerCacheCancel()
 
-					By("getting a shared index informer for a pod with a cancelled context")
+					By("getting a shared index informer for a pod with a canceled context")
 					pod := &kcorev1.Pod{
 						ObjectMeta: kmetav1.ObjectMeta{
 							Name:      "informer-obj",
@@ -850,11 +850,11 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(errors.IsTimeout(err)).To(BeTrue())
 				})
 
-				It("should allow getting an informer by group/version/kind to be cancelled", func() {
-					By("creating a context and cancelling it")
+				It("should allow getting an informer by group/version/kind to be canceled", func() {
+					By("creating a context and canceling it")
 					informerCacheCancel()
 
-					By("getting an shared index informer for gvk = core/v1/pod with a cancelled context")
+					By("getting an shared index informer for gvk = core/v1/pod with a canceled context")
 					gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 					sii, err := informerCache.GetInformerForKind(informerCacheCtx, gvk)
 					Expect(err).To(HaveOccurred())
@@ -958,11 +958,11 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(actual.GetName()).To(Equal("test-pod-3"))
 				}, 3)
 
-				It("should allow for get informer to be cancelled", func() {
-					By("cancelling the context")
+				It("should allow for get informer to be canceled", func() {
+					By("canceling the context")
 					informerCacheCancel()
 
-					By("getting a shared index informer for a pod with a cancelled context")
+					By("getting a shared index informer for a pod with a canceled context")
 					pod := &unstructured.Unstructured{}
 					pod.SetName("informer-obj2")
 					pod.SetNamespace("default")
@@ -1077,12 +1077,12 @@ func CacheTest(createCacheFunc func(config *rest.Config, opts cache.Options) (ca
 					Expect(actual.GetName()).To(Equal("test-pod-3"))
 				}, 3)
 
-				It("should allow for get informer to be cancelled", func() {
-					By("creating a context and cancelling it")
+				It("should allow for get informer to be canceled", func() {
+					By("creating a context and canceling it")
 					ctx, cancel := context.WithCancel(context.Background())
 					cancel()
 
-					By("getting a shared index informer for a pod with a cancelled context")
+					By("getting a shared index informer for a pod with a canceled context")
 					pod := &kmetav1.PartialObjectMetadata{}
 					pod.SetName("informer-obj2")
 					pod.SetNamespace("default")

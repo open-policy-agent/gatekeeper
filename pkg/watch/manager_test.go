@@ -447,7 +447,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 	}
 }
 
-// Verifies that replay happens asynchronously, can be cancelled.
+// Verifies that replay happens asynchronously, can be canceled.
 func TestRegistrar_Replay_Async(t *testing.T) {
 	listCalled := make(chan struct{})
 	listDone := make(chan struct{})
@@ -455,7 +455,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 		ListFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 			listCalled <- struct{}{}
 
-			// Block until we're cancelled.
+			// Block until we're canceled.
 			<-ctx.Done()
 			listDone <- struct{}{}
 			return nil
@@ -518,10 +518,10 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 	case <-listDone:
 	// Good.
 	case <-time.After(50 * time.Millisecond):
-		t.Fatalf("replay was not cancelled")
+		t.Fatalf("replay was not canceled")
 	}
 
-	// [Scenario 2] - Verify that pending replays are cancelled during watch manager shutdown.
+	// [Scenario 2] - Verify that pending replays are canceled during watch manager shutdown.
 	if err := r2.AddWatch(gvk); err != nil {
 		t.Errorf("adding watch: %v", err)
 	}
@@ -538,7 +538,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 	case <-listDone:
 	// Good.
 	case <-time.After(50 * time.Millisecond):
-		t.Fatalf("replay was not cancelled")
+		t.Fatalf("replay was not canceled")
 	}
 
 	_ = grp.Wait()

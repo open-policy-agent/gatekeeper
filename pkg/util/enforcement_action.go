@@ -6,8 +6,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// EnforcementAction is the response we take to violations.
 type EnforcementAction string
 
+// The set of possible responses to policy violations.
 const (
 	Deny         EnforcementAction = "deny"
 	Dryrun       EnforcementAction = "dryrun"
@@ -16,6 +18,8 @@ const (
 )
 
 var supportedEnforcementActions = []EnforcementAction{Deny, Dryrun, Warn}
+
+// KnownEnforcementActions are all defined EnforcementActions.
 var KnownEnforcementActions = []EnforcementAction{Deny, Dryrun, Warn, Unrecognized}
 
 func ValidateEnforcementAction(input EnforcementAction) error {

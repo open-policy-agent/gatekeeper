@@ -17,6 +17,7 @@ package token
 
 import "fmt"
 
+// The set of Token types.
 const (
 	ERROR     = "ERROR"
 	EOF       = "EOF"

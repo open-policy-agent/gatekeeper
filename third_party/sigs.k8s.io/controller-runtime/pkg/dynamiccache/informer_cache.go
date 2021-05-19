@@ -171,7 +171,7 @@ func (ip *dynamicInformerCache) GetInformerNonBlocking(obj client.Object) (cache
 		return nil, err
 	}
 
-	// Use a cancelled context to signal non-blocking
+	// Use a canceled context to signal non-blocking
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

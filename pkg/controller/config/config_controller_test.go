@@ -227,7 +227,7 @@ func TestReconcile(t *testing.T) {
 	cs.Stop()
 }
 
-// tests that expectations for sync only resource gets cancelled when it gets deleted
+// tests that expectations for sync only resource gets canceled when it gets deleted
 func TestConfig_DeleteSyncResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when sync only resource gets deleted")
 

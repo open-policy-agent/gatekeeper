@@ -47,7 +47,7 @@ func NewRetryClient(c client.Client) *RetryClient {
 }
 
 // retry will run the provided function, retrying if it fails due to rate limiting.
-// If context is cancelled, it will return early.
+// If context is canceled, it will return early.
 func retry(ctx context.Context, limiter *rate.Limiter, f func() error) error {
 	for {
 		if err := ctx.Err(); err != nil {

@@ -17,7 +17,7 @@ package syncutil
 
 import "context"
 
-// contextForChannel derives a child context from a parent channel.
+// ContextForChannel derives a child context from a parent channel.
 //
 // The derived context's Done channel is closed when the returned cancel function
 // is called or when the parent channel is closed, whichever happens first.

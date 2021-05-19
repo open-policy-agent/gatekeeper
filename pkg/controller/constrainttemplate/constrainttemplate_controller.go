@@ -564,20 +564,14 @@ func (r *ReconcileConstraintTemplate) addWatch(kind schema.GroupVersionKind) err
 	if err := r.watcher.AddWatch(kind); err != nil {
 		return err
 	}
-	if err := r.statusWatcher.AddWatch(kind); err != nil {
-		return err
-	}
-	return nil
+	return r.statusWatcher.AddWatch(kind)
 }
 
 func (r *ReconcileConstraintTemplate) removeWatch(kind schema.GroupVersionKind) error {
 	if err := r.watcher.RemoveWatch(kind); err != nil {
 		return err
 	}
-	if err := r.statusWatcher.RemoveWatch(kind); err != nil {
-		return err
-	}
-	return nil
+	return r.statusWatcher.RemoveWatch(kind)
 }
 
 type action string

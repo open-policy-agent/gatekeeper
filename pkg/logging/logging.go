@@ -1,5 +1,6 @@
 package logging
 
+// Log keys.
 const (
 	Process              = "process"
 	EventType            = "event_type"
