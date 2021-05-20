@@ -244,22 +244,36 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 }
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
-	stringList := &apiextensions.JSONSchemaPropsOrArray{
-		// nullable also allows for the empty string
-		Schema: &apiextensions.JSONSchemaProps{Type: "string", Nullable: true}}
+	// Define some repeatedly used sections
+	stringList := apiextensions.JSONSchemaProps{
+		Type: "array",
+		Items: &apiextensions.JSONSchemaPropsOrArray{
+			Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+		},
+	}
+	nullableStringList := apiextensions.JSONSchemaProps{
+		Type: "array",
+		Items: &apiextensions.JSONSchemaPropsOrArray{
+			Schema: &apiextensions.JSONSchemaProps{Type: "string", Nullable: true},
+		},
+	}
+	trueBool := true
 	labelSelectorSchema := apiextensions.JSONSchemaProps{
+		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
-			// Map schema validation will only work in kubernetes versions > 1.10. See https://github.com/kubernetes/kubernetes/pull/62333
-			//"matchLabels": apiextensions.JSONSchemaProps{
-			//	AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
-			//		Allows: true,
-			//		Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-			//	},
-			//},
+			"matchLabels": {
+				Type: "object",
+				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+					Allows: true,
+					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+				},
+				XPreserveUnknownFields: &trueBool,
+			},
 			"matchExpressions": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
+						Type: "object",
 						Properties: map[string]apiextensions.JSONSchemaProps{
 							"key": {Type: "string"},
 							"operator": {
@@ -271,41 +285,33 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 									"DoesNotExist",
 								},
 							},
-							"values": {
-								Type: "array",
-								Items: &apiextensions.JSONSchemaPropsOrArray{
-									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-								},
-							},
+							"values": stringList,
 						},
 					},
 				},
 			},
 		},
 	}
+
 	return apiextensions.JSONSchemaProps{
+		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"kinds": {
 				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
+						Type: "object",
 						Properties: map[string]apiextensions.JSONSchemaProps{
-							"apiGroups": {Items: stringList},
-							"kinds":     {Items: stringList},
+							"apiGroups": nullableStringList,
+							"kinds":     nullableStringList,
 						},
 					},
 				},
 			},
-			"namespaces": {
-				Type: "array",
-				Items: &apiextensions.JSONSchemaPropsOrArray{
-					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
-			"excludedNamespaces": {
-				Type: "array",
-				Items: &apiextensions.JSONSchemaPropsOrArray{
-					Schema: &apiextensions.JSONSchemaProps{Type: "string"}}},
-			"labelSelector":     labelSelectorSchema,
-			"namespaceSelector": labelSelectorSchema,
+			"namespaces":         stringList,
+			"excludedNamespaces": stringList,
+			"labelSelector":      labelSelectorSchema,
+			"namespaceSelector":  labelSelectorSchema,
 			"scope": {
 				Type: "string",
 				Enum: []apiextensions.JSON{

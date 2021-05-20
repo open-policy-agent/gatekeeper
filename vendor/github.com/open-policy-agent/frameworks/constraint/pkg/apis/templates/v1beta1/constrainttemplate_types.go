@@ -46,6 +46,7 @@ type Names struct {
 type Validation struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
 	OpenAPIV3Schema *apiextensionsv1beta1.JSONSchemaProps `json:"openAPIV3Schema,omitempty"`
 }
 
@@ -64,6 +65,7 @@ type CreateCRDError struct {
 
 // ByPodStatus defines the observed state of ConstraintTemplate as seen by
 // an individual controller
+// +kubebuilder:pruning:PreserveUnknownFields
 type ByPodStatus struct {
 	// a unique identifier for the pod that wrote the status
 	ID                 string           `json:"id,omitempty"`

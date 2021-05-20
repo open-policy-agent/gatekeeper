@@ -47,8 +47,10 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 		props["parameters"] = internalSchema
 	}
 	schema := &apiextensions.JSONSchemaProps{
+		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"metadata": {
+				Type: "object",
 				Properties: map[string]apiextensions.JSONSchemaProps{
 					"name": {
 						Type:      "string",
@@ -57,6 +59,7 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 				},
 			},
 			"spec": {
+				Type:       "object",
 				Properties: props,
 			},
 		},
