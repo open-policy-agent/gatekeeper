@@ -1,6 +1,7 @@
 package tester
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -74,15 +75,19 @@ func TestPrefix(t *testing.T) {
 					Condition: MustExist,
 				},
 			}
+			var wantErr error
+			if !test.prefix {
+				wantErr = ErrPrefix
+			}
 			err = ValidatePathTests(l, pts)
-			if (err == nil) != test.prefix {
-				t.Errorf("we expect that we will validate that all paths are a prefix of the location")
+			if !errors.Is(err, wantErr) {
+				t.Errorf(`got ValidatePathTests() error = '%v', want '%v'`, err, wantErr)
 			}
 		})
 	}
 }
 
-func ppath(p string) *parser.Path {
+func mustParse(p string) *parser.Path {
 	pth, err := parser.Parse(p)
 	if err != nil {
 		panic(err)
@@ -92,54 +97,100 @@ func ppath(p string) *parser.Path {
 
 func TestConflictingEntries(t *testing.T) {
 	tests := []struct {
-		ts            []Test
-		errorExpected bool
+		name    string
+		ts      []Test
+		wantErr error
 	}{
 		{
+			name: "contradicting Conditions on same path",
 			ts: []Test{
 				{
-					SubPath:   ppath("spec.some.thing"),
+					SubPath:   mustParse("spec.some.thing"),
 					Condition: MustExist,
 				},
 				{
-					SubPath:   ppath("spec.some.thing"),
+					SubPath:   mustParse("spec.some.thing"),
 					Condition: MustNotExist,
 				},
 			},
-			errorExpected: true,
+			wantErr: ErrConflict,
 		},
 		{
+			name: "same path MustExist twice",
 			ts: []Test{
 				{
-					SubPath:   ppath("spec.some.thing"),
+					SubPath:   mustParse("spec.some.thing"),
 					Condition: MustExist,
 				},
 				{
-					SubPath:   ppath("spec.some.thing"),
+					SubPath:   mustParse("spec.some.thing"),
 					Condition: MustExist,
 				},
 			},
-			errorExpected: false,
+			wantErr: nil,
 		},
 		{
+			name: "same path MustNotExist twice",
 			ts: []Test{
 				{
-					SubPath:   ppath("spec.some"),
-					Condition: MustExist,
+					SubPath:   mustParse("spec.some.thing"),
+					Condition: MustNotExist,
 				},
 				{
-					SubPath:   ppath("spec.some.thing"),
+					SubPath:   mustParse("spec.some.thing"),
 					Condition: MustNotExist,
 				},
 			},
-			errorExpected: false,
+			wantErr: nil,
+		},
+		{
+			name: "parent required but child forbidden",
+			ts: []Test{
+				{
+					SubPath:   mustParse("spec.some"),
+					Condition: MustExist,
+				},
+				{
+					SubPath:   mustParse("spec.some.thing"),
+					Condition: MustNotExist,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "parent forbidden but child required",
+			ts: []Test{
+				{
+					SubPath:   mustParse("spec.some"),
+					Condition: MustNotExist,
+				},
+				{
+					SubPath:   mustParse("spec.some.thing"),
+					Condition: MustExist,
+				},
+			},
+			wantErr: ErrConflict,
+		},
+		{
+			name: "grandparent forbidden but grandchild required",
+			ts: []Test{
+				{
+					SubPath:   mustParse("spec.some"),
+					Condition: MustNotExist,
+				},
+				{
+					SubPath:   mustParse("spec.some.thing.more"),
+					Condition: MustExist,
+				},
+			},
+			wantErr: ErrConflict,
 		},
 	}
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("TestPrefix #%d", i), func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			_, err := New(test.ts)
-			if (err != nil) != test.errorExpected {
-				t.Errorf("Error exists is %v; wanted %v", (err != nil), test.errorExpected)
+			if !errors.Is(err, test.wantErr) {
+				t.Errorf(`got New() error = '%v', want '%v'`, err, test.wantErr)
 			}
 		})
 	}
@@ -149,11 +200,11 @@ func TestExistsOkay(t *testing.T) {
 	tester, err := New(
 		[]Test{
 			{
-				SubPath:   ppath("spec.location.thing"),
+				SubPath:   mustParse("spec.location.thing"),
 				Condition: MustExist,
 			},
 			{
-				SubPath:   ppath("spec.location.thing.and.another"),
+				SubPath:   mustParse("spec.location.thing.and.another"),
 				Condition: MustNotExist,
 			},
 		},
@@ -177,11 +228,11 @@ func TestMissingOkay(t *testing.T) {
 	tester, err := New(
 		[]Test{
 			{
-				SubPath:   ppath("spec.location.thing"),
+				SubPath:   mustParse("spec.location.thing"),
 				Condition: MustExist,
 			},
 			{
-				SubPath:   ppath("spec.location.thing.and.another"),
+				SubPath:   mustParse("spec.location.thing.and.another"),
 				Condition: MustNotExist,
 			},
 		},

@@ -22,6 +22,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/token"
 )
 
+// Base errors for
+var (
+	ErrTrailingSeparator = errors.New("trailing separators are forbidden")
+	ErrUnexpectedToken   = errors.New("unexpected token")
+)
+
 type parser struct {
 	input     string
 	scanner   *token.Scanner
@@ -90,7 +96,7 @@ func (p *parser) Parse() (*Path, error) {
 		case p.expect(token.SEPARATOR):
 			if p.expectPeek(token.EOF) {
 				// block trailing separators
-				p.setError(errors.New("trailing separators are forbidden"))
+				p.setError(ErrTrailingSeparator)
 				return nil, p.err
 			}
 			// Skip past the separator
@@ -98,13 +104,13 @@ func (p *parser) Parse() (*Path, error) {
 		case p.expect(token.EOF):
 			// Allowed. Loop will exit.
 		default:
-			p.setError(fmt.Errorf("expected '.' or eof, got: %s", p.peekToken.String()))
+			p.setError(fmt.Errorf("%w: expected '.' or eof, got: %s", ErrUnexpectedToken, p.peekToken.String()))
 			return nil, p.err
 		}
 	}
 
 	if p.curToken.Type != token.EOF {
-		p.setError(fmt.Errorf("unexpected token: expected field name or eof, got: %s", p.curToken.String()))
+		p.setError(fmt.Errorf("%w: expected field name or eof, got: %s", ErrUnexpectedToken, p.curToken.String()))
 	}
 	if p.err != nil {
 		return nil, p.err
@@ -120,14 +126,14 @@ func (p *parser) parseList() Node {
 
 	// keyField is required
 	if !p.expect(token.IDENT) {
-		p.setError(fmt.Errorf("expected keyField in listSpec, got: %s", p.peekToken.String()))
+		p.setError(fmt.Errorf("%w: expected keyField in listSpec, got: %s", ErrUnexpectedToken, p.peekToken.String()))
 		return nil
 	}
 
 	out.KeyField = p.curToken.Literal
 
 	if !p.expect(token.COLON) {
-		p.setError(fmt.Errorf("expected ':' following keyField %s, got: %s", out.KeyField, p.peekToken.String()))
+		p.setError(fmt.Errorf("%w: expected ':' following keyField %s, got: %s", ErrUnexpectedToken, out.KeyField, p.peekToken.String()))
 		return nil
 	}
 
@@ -138,12 +144,12 @@ func (p *parser) parseList() Node {
 		val := p.curToken.Literal
 		out.KeyValue = &val
 	default:
-		p.setError(fmt.Errorf("expected key value or glob in listSpec, got: %s", p.peekToken.String()))
+		p.setError(fmt.Errorf("%w: expected key value or glob in listSpec, got: %s", ErrUnexpectedToken, p.peekToken.String()))
 		return nil
 	}
 
 	if !p.expect(token.RBRACKET) {
-		p.setError(fmt.Errorf("expected ']' following listSpec, got: %s", p.peekToken.String()))
+		p.setError(fmt.Errorf("%w: expected ']' following listSpec, got: %s", ErrUnexpectedToken, p.peekToken.String()))
 		return nil
 	}
 	return out
