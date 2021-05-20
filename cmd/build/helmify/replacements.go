@@ -37,6 +37,8 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
 
+	"HELMSUBST_RESOURCEQUOTA_POD_LIMIT": `{{ .Values.podCountLimit }}`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES": `
     - CREATE
     - UPDATE
