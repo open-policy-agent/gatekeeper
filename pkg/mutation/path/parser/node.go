@@ -15,6 +15,11 @@ limitations under the License.
 
 package parser
 
+import (
+	"fmt"
+	"strings"
+)
+
 type NodeType string
 
 const (
@@ -29,6 +34,10 @@ const (
 type Node interface {
 	Type() NodeType
 	DeepCopyNode() Node
+	// String converts the Node into an equivalent String representation.
+	// Calling Parse on the result yields an equivalent Node, but may differ in
+	// structure if the Node is a Path containing Path Nodes.
+	String() string
 }
 
 // Path represents an entire parsed path specification
@@ -57,6 +66,19 @@ func (r Path) DeepCopy() Path {
 	return out
 }
 
+func (r Path) String() string {
+	result := strings.Builder{}
+	for i, n := range r.Nodes {
+		nStr := n.String()
+		if _, isObject := n.(*Object); i > 0 && isObject {
+			// No leading separator, and no separators before List Nodes.
+			result.WriteString(".")
+		}
+		result.WriteString(nStr)
+	}
+	return result.String()
+}
+
 type Object struct {
 	Reference string
 }
@@ -68,14 +90,18 @@ func (o Object) Type() NodeType {
 }
 
 func (o Object) DeepCopyNode() Node {
-	oout := o.DeepCopy()
-	return &oout
+	oOut := o.DeepCopy()
+	return &oOut
 }
 
 func (o Object) DeepCopy() Object {
 	return Object{
 		Reference: o.Reference,
 	}
+}
+
+func (o Object) String() string {
+	return quote(o.Reference)
 }
 
 type List struct {
@@ -111,4 +137,26 @@ func (l List) Value() (string, bool) {
 		return "", false
 	}
 	return *l.KeyValue, true
+}
+
+func (l List) String() string {
+	key := quote(l.KeyField)
+	if l.Glob {
+		return fmt.Sprintf("[%s: *]", key)
+	}
+	if l.KeyValue != nil {
+		value := quote(*l.KeyValue)
+		return fmt.Sprintf("[%s: %s]", key, value)
+	}
+	// Represents an improperly specified List node.
+	return fmt.Sprintf("[%s: ]", key)
+}
+
+// quote adds double quotes around the passed string.
+func quote(s string) string {
+	// Using fmt.Sprintf with %q converts whitespace to escape sequences, and we
+	// don't want that.
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
 }
