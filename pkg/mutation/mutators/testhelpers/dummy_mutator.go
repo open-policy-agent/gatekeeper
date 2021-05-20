@@ -10,7 +10,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ types.Mutator = &DummyMutator{}
@@ -43,7 +43,7 @@ func (d *DummyMutator) Path() parser.Path {
 	return d.path
 }
 
-func (d *DummyMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+func (d *DummyMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	matches, err := match.Matches(&d.match, obj, ns)
 	if err != nil {
 		return false

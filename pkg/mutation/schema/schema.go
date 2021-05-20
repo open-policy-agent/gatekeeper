@@ -2,377 +2,180 @@ package schema
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// Binding represent the specific GVKs that a
-// mutation's implicit schema applies to
-type Binding struct {
-	Groups   []string
-	Kinds    []string
-	Versions []string
-}
-
 // MutatorWithSchema is a mutator exposing the implied
 // schema of the target object.
 type MutatorWithSchema interface {
 	types.Mutator
-	SchemaBindings() []Binding
+
+	// SchemaBindings returns the set of GVKs this Mutator applies to.
+	SchemaBindings() []schema.GroupVersionKind
 }
 
 var (
 	log = logf.Log.WithName("mutation_schema")
 )
 
-func getSortedGVKs(bindings []Binding) []schema.GroupVersionKind {
-	// deduplicate GVKs
-	gvksMap := map[schema.GroupVersionKind]struct{}{}
-	for _, binding := range bindings {
-		for _, group := range binding.Groups {
-			for _, version := range binding.Versions {
-				for _, kind := range binding.Kinds {
-					gvk := schema.GroupVersionKind{
-						Group:   group,
-						Version: version,
-						Kind:    kind,
-					}
-					gvksMap[gvk] = struct{}{}
-				}
-			}
-		}
-	}
-
-	gvks := []schema.GroupVersionKind{}
-	for gvk := range gvksMap {
-		gvks = append(gvks, gvk)
-	}
-
-	// we iterate over the map in a stable order so that
-	// unit tests wont be flaky
-	sort.Slice(gvks, func(i, j int) bool { return gvks[i].String() < gvks[j].String() })
-
-	return gvks
-}
-
 // New returns a new schema database
 func New() *DB {
 	return &DB{
-		mutators: map[types.ID]MutatorWithSchema{},
-		schemas:  map[schema.GroupVersionKind]*scheme{},
+		cachedMutators: make(map[types.ID]MutatorWithSchema),
+		schemas:        make(map[schema.GroupVersionKind]*node),
+		conflicts:      make(map[types.ID]bool),
 	}
 }
 
 // DB is a database that caches all the implied schemas.
-// Will return an error when adding a mutator conflicting with the existing ones.
+// Returns an error when upserting a mutator which conflicts with the existing ones.
+//
+// Mutators implicitly define a part of the schema of the object they intend
+// to mutate. For example, modifying `spec.containers[name: foo].image` implies
+// that:
+// - spec is an object
+// - containers is a list
+// - image exists, but no type information
+//
+// If another mutator on the same GVK declares that it modifies
+// `spec.containers.image`, then we know we have a contradiction as that path
+// implies containers is an object.
+//
+// Conflicting schemas are stored within DB. HasConflicts returns true for
+// the IDs of Mutators with conflicting schemas until Remove() is called on
+// the Mutators which conflict with the ID.
 type DB struct {
-	mutex    sync.Mutex
-	mutators map[types.ID]MutatorWithSchema
-	schemas  map[schema.GroupVersionKind]*scheme
+	mutex sync.RWMutex
+
+	// cachedMutators is a cache of all seen Mutators.
+	cachedMutators map[types.ID]MutatorWithSchema
+
+	// schemas are the per-GVK implicit schemas.
+	schemas map[schema.GroupVersionKind]*node
+
+	conflicts map[types.ID]bool
 }
 
-// Upsert tries to insert or update the given mutator.
-// If a conflict is detected, Upsert will return an error
+// Upsert inserts or updates the given mutator.
+// Returns an error if the implicit schema in mutator conflicts with any
+// mutators previously added.
+//
+// Schema conflicts are only detected using mutator.Path() - DB does not check
+// that assigned types are compatible. For example, one Mutator might assign
+// a string to a path and another might assign a list.
 func (db *DB) Upsert(mutator MutatorWithSchema) error {
+	if mutator == nil {
+		return ErrNilMutator
+	}
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
-	return db.upsert(mutator, true)
+	return db.upsert(mutator)
 }
 
-func (db *DB) upsert(mutator MutatorWithSchema, unwind bool) error {
-	oldMutator, ok := db.mutators[mutator.ID()]
-	// unwind will be set to false if we are actually unwinding a bad commit
-	if ok && !oldMutator.HasDiff(mutator) && unwind {
-		return nil
-	}
-	if ok && unwind {
-		db.remove(oldMutator.ID())
+func (db *DB) upsert(mutator MutatorWithSchema) error {
+	id := mutator.ID()
+	if oldMutator, ok := db.cachedMutators[id]; ok {
+		if !mutator.HasDiff(oldMutator) {
+			// We've already added a Mutator which has the same path and bindings, so
+			// there's nothing to do.
+			return nil
+		}
+		db.remove(id)
 	}
 
-	modified := []*scheme{}
-	for _, gvk := range getSortedGVKs(mutator.SchemaBindings()) {
+	path := mutator.Path()
+	bindings := mutator.SchemaBindings()
+	db.cachedMutators[id] = mutator.DeepCopy().(MutatorWithSchema)
+
+	var conflicts idSet
+	for _, gvk := range bindings {
 		s, ok := db.schemas[gvk]
 		if !ok {
-			s = &scheme{gvk: gvk}
+			s = &node{}
 			db.schemas[gvk] = s
 		}
-		if err := s.add(mutator.Path().Nodes); err != nil {
-			// avoid infinite recursion
-			if unwind {
-				db.unwind(mutator, oldMutator, modified)
-			}
-			return err
-		}
-		modified = append(modified, s)
+		newConflicts := s.Add(id, path.Nodes)
+		conflicts = merge(conflicts, newConflicts)
 	}
-	m := mutator.DeepCopy()
-	db.mutators[mutator.ID()] = m.(MutatorWithSchema)
+
+	for c := range conflicts {
+		db.conflicts[c] = true
+	}
+	if len(conflicts) > 0 {
+		// Adding this mutator had schema conflicts with another, so return an error.
+		return fmt.Errorf("%w: the following Mutators have conflicting schemas: %s",
+			ErrConflictingSchema, conflicts.String())
+	}
 	return nil
 }
 
-// unwind a bad commit
-func (db *DB) unwind(new, old MutatorWithSchema, schemes []*scheme) {
-	for _, s := range schemes {
-		s.remove(new.Path().Nodes)
-		if s.root == nil {
-			delete(db.schemas, s.gvk)
-		}
-	}
-	if old == nil {
-		return
-	}
-	if err := db.upsert(old, false); err != nil {
-		// We removed all changes made by the previous mutator and
-		// are re-adding a mutator that was already present. Because
-		// this mutator was already present and we have a lock on the
-		// db, this should never fail. If it does we are in an unknown
-		// state and should panic so we can recover by bootstrapping
-		// and raise the visibility of the issue.
-		log.Error(err, "could not upsert previously existing mutator into schema, this is not recoverable")
-		panic(err)
-	}
-}
-
-// Remove removes the mutator with the given id from the
-// db.
+// Remove removes the mutator with the given id from the db.
 func (db *DB) Remove(id types.ID) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	db.remove(id)
-	delete(db.mutators, id)
 }
 
 func (db *DB) remove(id types.ID) {
-	mutator, ok := db.mutators[id]
-	if !ok {
-		// no mutator found, nothing to do
+	cachedMutator, found := db.cachedMutators[id]
+	if !found {
 		return
 	}
 
-	for _, gvk := range getSortedGVKs(mutator.SchemaBindings()) {
+	for _, gvk := range cachedMutator.SchemaBindings() {
 		s, ok := db.schemas[gvk]
 		if !ok {
+			// This means there's a bug in the schema code. This means a mutator
+			// is bound to this gvk with a previous call to upsert, but for some
+			// reason there is no corresponding schema.
 			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", gvk)
 			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, gvk))
 		}
-		s.remove(mutator.Path().Nodes)
-		if s.root == nil {
+		s.Remove(id, cachedMutator.Path().Nodes)
+		db.schemas[gvk] = s
+
+		if len(s.ReferencedBy) == 0 {
+			// The root node is no longer referenced by any mutators.
 			delete(db.schemas, gvk)
 		}
 	}
-}
 
-type scheme struct {
-	gvk  schema.GroupVersionKind
-	root *node
-}
+	// Remove the mutator from the cache.
+	delete(db.cachedMutators, id)
 
-func (s *scheme) add(ref []parser.Node) error {
-	if s.root == nil {
-		s.root = &node{}
-	}
-	return s.root.add(ref)
-}
+	// This ID's conflicts are resolved since the ID no longer exists.
+	delete(db.conflicts, id)
 
-func (s *scheme) remove(ref []parser.Node) {
-	if s.root == nil {
-		return
-	}
-	s.root.remove(ref)
-	if s.root.referenceCount == 0 {
-		s.root = nil
-	}
-}
-
-type node struct {
-	referenceCount uint
-	nodeType       parser.NodeType
-
-	// list-type nodes have a key field and only one child
-	keyField *string
-	child    *node
-
-	// object-type nodes only have children
-	children map[string]*node
-}
-
-// backup creates a shallow copy of the node we can restore in case of error
-func (n *node) backup() *node {
-	return &node{
-		referenceCount: n.referenceCount,
-		nodeType:       n.nodeType,
-		keyField:       n.keyField,
-	}
-}
-
-func (n *node) restore(backup *node) {
-	n.referenceCount = backup.referenceCount
-	n.nodeType = backup.nodeType
-	n.keyField = backup.keyField
-}
-
-func (n *node) add(ref []parser.Node) error {
-	backup := n.backup()
-	n.referenceCount++
-
-	// we should stop recursing when len(ref) == 1, but
-	// this guards against infinite recursion in the case
-	// where there is a bug in the switch code below
-	if len(ref) == 0 {
-		return nil
-	}
-
-	err := func() error {
-		current := ref[0]
-		switch t := current.Type(); t {
-		case parser.ObjectNode:
-			if n.nodeType != "" && n.nodeType != parser.ObjectNode {
-				return fmt.Errorf("node type conflict: %v vs %v", n.nodeType, parser.ObjectNode)
+	// Check existing conflicts.
+	// TODO: Determine if there's a way of narrowing the list of potential conflicts.
+	for conflictID := range db.conflicts {
+		// Check all current conflicts to see if they have been resolved.
+		// This optimizes for calls to HasConflicts()
+		mutator := db.cachedMutators[conflictID]
+		hasConflict := false
+		for _, gvk := range mutator.SchemaBindings() {
+			if isConflict, _ := db.schemas[gvk].HasConflicts(mutator.Path().Nodes); isConflict {
+				hasConflict = true
+				break
 			}
-			n.nodeType = parser.ObjectNode
-			obj := current.(*parser.Object)
-			if n.children == nil {
-				n.children = make(map[string]*node)
-			}
-			// we stop recursing down the path right before the last element
-			// because the last element has no more type information to add
-			if len(ref) == 1 {
-				return nil
-			}
-			child, ok := n.children[obj.Reference]
-			if !ok {
-				child = &node{}
-			}
-			if err := child.add(ref[1:]); err != nil {
-				return wrapObjErr(obj, err)
-			}
-			n.children[obj.Reference] = child
-		case parser.ListNode:
-			if n.nodeType != "" && n.nodeType != parser.ListNode {
-				return fmt.Errorf("node type conflict: %v vs %v", n.nodeType, parser.ListNode)
-			}
-			n.nodeType = parser.ListNode
-			list := current.(*parser.List)
-			if n.keyField != nil && *n.keyField != list.KeyField {
-				return fmt.Errorf("key field conflict: %s vs %s", *n.keyField, list.KeyField)
-			}
-			if n.keyField == nil {
-				n.keyField = &list.KeyField
-			}
-			// we stop recursing down the path right before the last element
-			// because the last element has no more type information to add
-			if len(ref) == 1 {
-				return nil
-			}
-			child := n.child
-			if child == nil {
-				child = &node{}
-			}
-			if err := child.add(ref[1:]); err != nil {
-				return wrapListErr(list, err)
-			}
-			n.child = child
-		default:
-			return fmt.Errorf("unknown node type: %v", t)
 		}
-		return nil
-	}()
-
-	if err != nil {
-		n.restore(backup)
-	}
-
-	return err
-}
-
-func (n *node) remove(ref []parser.Node) {
-	n.referenceCount--
-	// we don't add any schema nodes when the length
-	// of `ref` == 1, so we shouldn't remove any
-	// either
-	if len(ref) == 1 {
-		return
-	}
-	current := ref[0]
-	switch t := current.Type(); t {
-	case parser.ObjectNode:
-		obj := current.(*parser.Object)
-		if n.children == nil {
-			// no children means nothing to clean
-			return
+		// Only remove the conflict if all types now report there is no conflict
+		// at the path.
+		if !hasConflict {
+			delete(db.conflicts, conflictID)
 		}
-		child, ok := n.children[obj.Reference]
-		if !ok {
-			// child is missing, nothing to clean
-			return
-		}
-		// decrementing the reference count would remove the
-		// object, we can stop traversing the tree
-		if child.referenceCount <= 1 {
-			delete(n.children, obj.Reference)
-			return
-		}
-		child.remove(ref[1:])
-		return
-	case parser.ListNode:
-		if n.child == nil {
-			// no child, nothing to clean
-			return
-		}
-		// decrementing the reference count would remove the
-		// object, we can stop traversing the tree
-		if n.child.referenceCount <= 1 {
-			n.child = nil
-			return
-		}
-		n.child.remove(ref[1:])
-		return
-	default:
-		log.Error(fmt.Errorf("unknown node type"), "unknown node type", "node_type", t)
-		panic(fmt.Sprintf("unknown node type, schema db in unknown state: %s", t))
 	}
 }
 
-var _ error = &Error{}
-
-// Error holds errors processing the schema
-type Error struct {
-	nodeName   string
-	childError error
-}
-
-func (e *Error) Error() string {
-	builder := &strings.Builder{}
-	current := e
-	for {
-		builder.WriteString(current.nodeName)
-		child, ok := current.childError.(*Error)
-		if !ok {
-			break
-		}
-		current = child
-	}
-	builder.WriteString(": ")
-	builder.WriteString(current.childError.Error())
-	return strings.TrimPrefix(builder.String(), ".")
-}
-
-func wrapObjErr(obj *parser.Object, err error) *Error {
-	return &Error{
-		childError: err,
-		nodeName:   fmt.Sprintf(".%s", obj.Reference),
-	}
-}
-
-func wrapListErr(list *parser.List, err error) *Error {
-	return &Error{
-		childError: err,
-		nodeName:   list.String(),
-	}
+// HasConflicts returns true if the Mutator of the passed ID has been upserted
+// in DB and has conflicts with another Mutator. Returns false if the Mutator
+// does not exist.
+func (db *DB) HasConflicts(id types.ID) bool {
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+	return db.conflicts[id]
 }
