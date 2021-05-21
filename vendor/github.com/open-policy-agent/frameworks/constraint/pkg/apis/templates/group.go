@@ -13,28 +13,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package token
-
-import "fmt"
-
-// The set of Token types.
-const (
-	ERROR     = "ERROR"
-	EOF       = "EOF"
-	IDENT     = "IDENT"
-	LBRACKET  = "LBRACKET"
-	RBRACKET  = "RBRACKET"
-	SEPARATOR = "SEPARATOR"
-	GLOB      = "GLOB"
-	COLON     = "COLON"
-)
-
-type Type string
-type Token struct {
-	Type    Type
-	Literal string
-}
-
-func (t Token) String() string {
-	return fmt.Sprintf("%s: %q", t.Type, t.Literal)
-}
+// Package templates contains templates API versions
+package templates

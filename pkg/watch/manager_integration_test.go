@@ -508,7 +508,7 @@ func expectedSet(objs []*unstructured.Unstructured) map[string]bool {
 
 // waitForExpected waits for reconcile requests for the specified resources to be received in a particular namespace.
 // Returns nil if expectations are satisfied.
-// Returns error if the context is cancelled before expectations are satisfied.
+// Returns error if the context is canceled before expectations are satisfied.
 func waitForExpected(ctx context.Context, objs []*unstructured.Unstructured, c <-chan reconcile.Request, namespace string) error {
 	expected := expectedSet(objs)
 	for len(expected) > 0 {

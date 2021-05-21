@@ -103,8 +103,8 @@ func Test_ObjectTracker_Terminated_Expect(t *testing.T) {
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
 }
 
-// Verify that that expectations can be cancelled.
-func Test_ObjectTracker_Cancelled_Expectations(t *testing.T) {
+// Verify that that expectations can be canceled.
+func Test_ObjectTracker_Canceled_Expectations(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 
@@ -212,7 +212,7 @@ func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
 	// Peek at internals - we should not be accruing memory from the post-circuit-breaker operations
 	ot.mu.RLock()
 	defer ot.mu.RUnlock()
-	g.Expect(ot.cancelled).To(gomega.BeEmpty())
+	g.Expect(ot.canceled).To(gomega.BeEmpty())
 	g.Expect(ot.expect).To(gomega.BeEmpty())
 	g.Expect(ot.seen).To(gomega.BeEmpty())
 	g.Expect(ot.satisfied).To(gomega.BeEmpty())
@@ -274,7 +274,7 @@ func Test_ObjectTracker_TryCancelExpect_Default(t *testing.T) {
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
 }
 
-// Verify that TryCancelExpect must be called multiple times before an expectation is cancelled
+// Verify that TryCancelExpect must be called multiple times before an expectation is canceled
 func Test_ObjectTracker_TryCancelExpect_WithRetries(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, func() objData {

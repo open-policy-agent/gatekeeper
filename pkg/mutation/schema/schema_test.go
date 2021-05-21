@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -1235,7 +1234,7 @@ func TestErrors(t *testing.T) {
 				t.Fatal("unexpected nil error")
 			}
 			if err.Error() != test.expectedErr {
-				t.Error(fmt.Sprintf("got %v, wanted %v", err.Error(), test.expectedErr))
+				t.Errorf("got %v, wanted %v", err.Error(), test.expectedErr)
 			}
 		})
 	}

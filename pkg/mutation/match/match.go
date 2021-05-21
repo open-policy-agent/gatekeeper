@@ -21,6 +21,7 @@ type ApplyTo struct {
 	Versions []string `json:"versions,omitempty"`
 }
 
+// Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
 	Kinds              []Kinds                            `json:"kinds,omitempty"`

@@ -1,5 +1,6 @@
 package v1beta1
 
+// Label keys used for internal gatekeeper operations.
 const (
 	ConstraintNameLabel         = "internal.gatekeeper.sh/constraint-name"
 	ConstraintKindLabel         = "internal.gatekeeper.sh/constraint-kind"

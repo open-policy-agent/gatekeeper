@@ -11,43 +11,43 @@ patchesStrategicMerge:
 patchesJson6902:
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: constrainttemplates.templates.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: constraintpodstatuses.status.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: constrainttemplatepodstatuses.status.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: mutatorpodstatuses.status.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: configs.config.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: assignmetadata.mutations.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
-      version: v1beta1
+      version: v1
       kind: CustomResourceDefinition
       name: assign.mutations.gatekeeper.sh
     path: labels_patch.yaml

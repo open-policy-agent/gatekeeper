@@ -47,7 +47,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE/bin v${GOLANGCILINT_VERSION}
         env:
-          GOLANGCILINT_VERSION: 1.37.1
+          GOLANGCILINT_VERSION: 1.40.1
 
       - name: Make lint
         run: |

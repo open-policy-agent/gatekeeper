@@ -219,7 +219,7 @@ func (t *Tracker) Satisfied(ctx context.Context) bool {
 }
 
 // Run runs the tracker and blocks until it completes.
-// The provided context can be cancelled to signal a shutdown request.
+// The provided context can be canceled to signal a shutdown request.
 func (t *Tracker) Run(ctx context.Context) error {
 	// Any failure in the errgroup will cancel goroutines in the group using gctx.
 	// The odd one out is the statsPrinter which is meant to outlive the tracking
@@ -638,7 +638,7 @@ func (t *Tracker) DisableStats(ctx context.Context) {
 }
 
 // statsPrinter handles verbose logging of the readiness tracker outstanding expectations on a regular cadence.
-// Runs until the provided context is cancelled.
+// Runs until the provided context is canceled.
 func (t *Tracker) statsPrinter(ctx context.Context) {
 	for {
 		select {

@@ -18,8 +18,11 @@ package parser
 type NodeType string
 
 const (
-	PathNode   NodeType = "Path"
-	ListNode   NodeType = "List"
+	// PathNode is a string segment of a path.
+	PathNode NodeType = "Path"
+	// ListNode is an array element of a path.
+	ListNode NodeType = "List"
+	// ObjectNode is the final Node in a path, what is being referenced.
 	ObjectNode NodeType = "Object"
 )
 

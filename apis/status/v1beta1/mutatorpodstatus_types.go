@@ -28,9 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const (
-	MutationsGroup = "mutations.gatekeeper.sh"
-)
+// MutationsGroup is the API Group for Gatekeeper Mutators.
+const MutationsGroup = "mutations.gatekeeper.sh"
 
 // MutatorPodStatusStatus defines the observed state of MutatorPodStatus
 type MutatorPodStatusStatus struct {
@@ -103,7 +102,7 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 	return obj, nil
 }
 
-// KeyForMutator returns a unique status object name given the Pod ID and
+// KeyForMutatorID returns a unique status object name given the Pod ID and
 // a mutator object
 func KeyForMutatorID(id string, mID mtypes.ID) (string, error) {
 	// This adds a requirement that the lowercase of all mutator kinds must be unique.
