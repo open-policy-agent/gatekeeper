@@ -35,6 +35,7 @@ func newConstraintTemplate(name, rego string, libs ...string) *templates.Constra
 					},
 					Validation: &templates.Validation{
 						OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+							Type: "object",
 							Properties: map[string]apiextensions.JSONSchemaProps{
 								"expected": {Type: "string"},
 							},

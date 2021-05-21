@@ -41,7 +41,7 @@ import (
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,10 +122,10 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Uncommenting the below enables logging of K8s internals like watch.
-	//fs := flag.NewFlagSet("", flag.PanicOnError)
-	//klog.InitFlags(fs)
-	//fs.Parse([]string{"--alsologtostderr", "-v=10"})
-	//klog.SetOutput(os.Stderr)
+	// fs := flag.NewFlagSet("", flag.PanicOnError)
+	// klog.InitFlags(fs)
+	// fs.Parse([]string{"--alsologtostderr", "-v=10"})
+	// klog.SetOutput(os.Stderr)
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -174,7 +174,7 @@ violation[{"msg": "denied!"}] {
 	defer testMgrStopped()
 	// Clean up to remove the crd, constraint and constraint template
 	defer func() {
-		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+		crd := &apiextensionsv1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deleteObject(ctx, c, cstr, timeout)).To(gomega.BeNil())
@@ -189,7 +189,7 @@ violation[{"msg": "denied!"}] {
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
 		g.Eventually(func() error {
-			crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+			crd := &apiextensionsv1.CustomResourceDefinition{}
 			if err := c.Get(ctx, crdKey, crd); err != nil {
 				return err
 			}
@@ -241,14 +241,14 @@ violation[{"msg": "denied!"}] {
 
 	log.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
-		crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+		crd := &apiextensionsv1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
 		origUID := crd.GetUID()
-		crd.Spec = apiextensionsv1beta1.CustomResourceDefinitionSpec{}
+		crd.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
 		g.Expect(c.Delete(ctx, crd)).NotTo(gomega.HaveOccurred())
 
 		g.Eventually(func() error {
-			crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+			crd := &apiextensionsv1.CustomResourceDefinition{}
 			if err := c.Get(ctx, crdKey, crd); err != nil {
 				return err
 			}
@@ -259,7 +259,7 @@ violation[{"msg": "denied!"}] {
 				return errors.New("Not yet deleted")
 			}
 			for _, cond := range crd.Status.Conditions {
-				if cond.Type == apiextensionsv1beta1.Established && cond.Status == apiextensionsv1beta1.ConditionTrue {
+				if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
 					return nil
 				}
 			}
@@ -429,6 +429,7 @@ violation[{"msg": "denied!"}] {
 			},
 		},
 	}
+
 	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -577,26 +578,36 @@ func getCByPodStatus(obj *unstructured.Unstructured) (*statusv1beta1.ConstraintP
 }
 
 // makeCRD generates a CRD specified by GVK and plural for testing.
-func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1beta1.CustomResourceDefinition {
-	return &apiextensionsv1beta1.CustomResourceDefinition{
+func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1.CustomResourceDefinition {
+	trueBool := true
+	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s.%s", plural, gvk.Group),
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomResourceDefinition",
-			APIVersion: "apiextensions/v1beta1",
+			APIVersion: "apiextensions/v1",
 		},
-		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 			Group: gvk.Group,
-			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
 				Plural:   plural,
 				Singular: strings.ToLower(gvk.Kind),
 				Kind:     gvk.Kind,
 			},
-			Versions: []apiextensionsv1beta1.CustomResourceDefinitionVersion{
-				{Name: gvk.Version, Served: true, Storage: true},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name:    gvk.Version,
+					Served:  true,
+					Storage: true,
+					Schema: &apiextensionsv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+							XPreserveUnknownFields: &trueBool,
+						},
+					},
+				},
 			},
-			Scope: apiextensionsv1beta1.ClusterScoped,
+			Scope: apiextensionsv1.ClusterScoped,
 		},
 	}
 }
