@@ -10,8 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// Process indicates the Gatekeeper component from which the resource will be excluded.
 type Process string
 
+// The set of defined Gatekeeper processes.
 const (
 	Audit    = Process("audit")
 	Sync     = Process("sync")

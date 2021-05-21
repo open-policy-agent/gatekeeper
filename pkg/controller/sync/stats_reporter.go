@@ -62,7 +62,7 @@ type Reporter struct {
 	now func() float64
 }
 
-// newStatsReporter creates a reporter for sync metrics
+// NewStatsReporter creates a reporter for sync metrics
 func NewStatsReporter() (*Reporter, error) {
 	ctx, err := tag.New(
 		context.TODO(),

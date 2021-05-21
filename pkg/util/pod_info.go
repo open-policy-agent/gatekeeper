@@ -2,7 +2,7 @@ package util
 
 import "os"
 
-// PodName returns the name of the Gatekeeper pod
+// GetPodName returns the name of the Gatekeeper pod
 func GetPodName() string {
 	return os.Getenv("POD_NAME")
 }

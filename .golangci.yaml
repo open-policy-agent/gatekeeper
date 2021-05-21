@@ -1,9 +1,15 @@
-linter-settings:
+linters-settings:
+  gosec:
+    excludes:
+    - G108
   lll:
     line-length: 200
 
   misspell:
     locale: US
+  staticcheck:
+    # Select the Go version to target. The default is '1.13'.
+    go: "1.16"
 
 linters:
   disable-all: true
@@ -11,7 +17,7 @@ linters:
     - errcheck
     - govet
     - ineffassign
-    - golint
+    - revive # replacement for golint
     - goconst
     - gofmt
     - goimports

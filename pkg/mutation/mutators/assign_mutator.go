@@ -156,7 +156,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	}
 
 	if hasMetadataRoot(path) {
-		return nil, errors.New(fmt.Sprintf("assign %s can't change metadata", assign.GetName()))
+		return nil, fmt.Errorf("assign %s can't change metadata", assign.GetName())
 	}
 
 	err = checkKeyNotChanged(path, assign.GetName())
@@ -172,7 +172,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 
 	value, ok := toAssign["value"]
 	if !ok {
-		return nil, errors.New(fmt.Sprintf("spec.parameters.assign for Assign %s must have a value field", assign.GetName()))
+		return nil, fmt.Errorf("spec.parameters.assign for Assign %s must have a value field", assign.GetName())
 	}
 
 	err = validateObjectAssignedToList(path, value, assign.GetName())
@@ -292,7 +292,7 @@ func checkKeyNotChanged(p *parser.Path, assignName string) error {
 		return nil
 	}
 	if lastNode.Type() != parser.ObjectNode {
-		return errors.New(fmt.Sprintf("invalid path format in Assign %s: child of a list can't be a list", assignName))
+		return fmt.Errorf("invalid path format in Assign %s: child of a list can't be a list", assignName)
 	}
 	addedObject, ok := lastNode.(*parser.Object)
 	if !ok {
@@ -304,7 +304,7 @@ func checkKeyNotChanged(p *parser.Path, assignName string) error {
 	}
 
 	if addedObject.Reference == listNode.KeyField {
-		return errors.New(fmt.Sprintf("invalid path format in Assign %s: changing the item key is not allowed", assignName))
+		return fmt.Errorf("invalid path format in Assign %s: changing the item key is not allowed", assignName)
 	}
 	return nil
 }

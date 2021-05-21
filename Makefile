@@ -190,7 +190,7 @@ manifests: __controller-gen
 	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 lint:
-	golangci-lint -v run --exclude G108 ./... --timeout 5m
+	golangci-lint -v run ./... --timeout 5m
 
 # Generate code
 generate: __controller-gen target-template-source

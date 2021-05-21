@@ -35,6 +35,7 @@ spec:
               location:
                 type: string
               match:
+                description: Match selects objects to apply mutations to.
                 properties:
                   excludedNamespaces:
                     items:

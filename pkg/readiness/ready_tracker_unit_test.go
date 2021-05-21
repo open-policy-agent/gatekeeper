@@ -97,7 +97,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	g.Expect(rt.Satisfied(ctx)).To(gomega.BeTrue(), "tracker with 0 retries and cancellation should be satisfied")
 }
 
-// Verify that TryCancelTemplate must be called enough times to remove all retries before cancelling a template
+// Verify that TryCancelTemplate must be called enough times to remove all retries before canceling a template
 func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 

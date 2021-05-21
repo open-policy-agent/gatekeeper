@@ -383,7 +383,7 @@ violation[{"msg": "denied!"}] {
 	})
 }
 
-// Tests that expectations for constraints are cancelled if the corresponding constraint is deleted.
+// Tests that expectations for constraints are canceled if the corresponding constraint is deleted.
 func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when constraint gets deleted")
 

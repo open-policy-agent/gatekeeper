@@ -37,7 +37,9 @@ const (
 var log = logf.Log.WithName("webhook")
 
 var (
+	// VwhName is the metadata.name of the Gatekeeper ValidatingWebhookConfiguration.
 	VwhName = "gatekeeper-validating-webhook-configuration"
+	// MwhName is the metadata.name of the Gatekeeper MutatingWebhookConfiguration.
 	MwhName = "gatekeeper-mutating-webhook-configuration"
 )
 

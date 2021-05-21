@@ -24,7 +24,7 @@ import (
 
 // SingleRunner wraps an errgroup to run keyed goroutines as singletons.
 // Keys are single-use and subsequent usage to schedule will be silently ignored.
-// Goroutines can be individually cancelled provided they respect the context passed to them.
+// Goroutines can be individually canceled provided they respect the context passed to them.
 type SingleRunner struct {
 	m   map[string]context.CancelFunc
 	mu  sync.Mutex

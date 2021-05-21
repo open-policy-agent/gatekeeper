@@ -15,7 +15,7 @@ import (
 
 var _ types.Mutator = &DummyMutator{}
 
-// dummyMutator is a blank mutator that makes it easier to test the core mutation function
+// DummyMutator is a blank mutator that makes it easier to test the core mutation function
 type DummyMutator struct {
 	name  string
 	value interface{}

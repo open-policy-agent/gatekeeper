@@ -55,7 +55,7 @@ func Test_SingleRunner(t *testing.T) {
 
 	select {
 	case <-syncTwo:
-		t.Fatalf("two should not have been cancelled yet")
+		t.Fatalf("two should not have been canceled yet")
 	case <-time.After(10 * time.Millisecond):
 	}
 
@@ -65,7 +65,7 @@ func Test_SingleRunner(t *testing.T) {
 
 	select {
 	case <-syncOne:
-		t.Fatalf("one should not have been cancelled yet")
+		t.Fatalf("one should not have been canceled yet")
 	case <-time.After(10 * time.Millisecond):
 	}
 
