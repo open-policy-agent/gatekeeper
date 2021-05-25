@@ -6,7 +6,7 @@ import (
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -143,7 +143,7 @@ func TestMatch(t *testing.T) {
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
 				Namespaces: []string{"nonmatching", "namespace"},
-				Scope:      apiextensionsv1beta1.ClusterScoped,
+				Scope:      apiextensionsv1.ClusterScoped,
 			},
 			namespace:   &corev1.Namespace{},
 			shouldMatch: false,
@@ -174,7 +174,7 @@ func TestMatch(t *testing.T) {
 						APIGroups: []string{"group"},
 					},
 				},
-				Scope: apiextensionsv1beta1.NamespaceScoped,
+				Scope: apiextensionsv1.NamespaceScoped,
 			},
 			namespace:   nil,
 			shouldMatch: false,
