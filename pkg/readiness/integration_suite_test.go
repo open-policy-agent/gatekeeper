@@ -26,7 +26,6 @@ import (
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	v1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -50,9 +49,6 @@ func TestMain(m *testing.M) {
 		ErrorIfCRDPathMissing: true,
 	}
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		stdlog.Fatal(err)
-	}
-	if err := apiextensionsv1beta1.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 
