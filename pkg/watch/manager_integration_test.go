@@ -31,7 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -384,26 +384,36 @@ func Test_Registrar_Replay(t *testing.T) {
 }
 
 // makeCRD generates a CRD specified by GVK and plural for testing.
-func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1beta1.CustomResourceDefinition {
-	return &apiextensionsv1beta1.CustomResourceDefinition{
+func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1.CustomResourceDefinition {
+	trueBool := true
+	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s.%s", plural, gvk.Group),
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomResourceDefinition",
-			APIVersion: "apiextensions/v1beta1",
+			APIVersion: "apiextensions/v1",
 		},
-		Spec: apiextensionsv1beta1.CustomResourceDefinitionSpec{
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 			Group: gvk.Group,
-			Names: apiextensionsv1beta1.CustomResourceDefinitionNames{
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
 				Plural:   plural,
 				Singular: strings.ToLower(gvk.Kind),
 				Kind:     gvk.Kind,
 			},
-			Versions: []apiextensionsv1beta1.CustomResourceDefinitionVersion{
-				{Name: gvk.Version, Served: true, Storage: true},
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name:    gvk.Version,
+					Served:  true,
+					Storage: true,
+					Schema: &apiextensionsv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+							XPreserveUnknownFields: &trueBool,
+						},
+					},
+				},
 			},
-			Scope: apiextensionsv1beta1.ClusterScoped,
+			Scope: apiextensionsv1.ClusterScoped,
 		},
 	}
 }
