@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -64,7 +64,7 @@ func (um *Manager) Start(ctx context.Context) error {
 }
 
 func (um *Manager) ensureCRDExists(ctx context.Context) error {
-	crd := &apiextensionsv1beta1.CustomResourceDefinition{}
+	crd := &apiextensionsv1.CustomResourceDefinition{}
 	return um.client.Get(ctx, types.NamespacedName{Name: crdName}, crd)
 }
 
