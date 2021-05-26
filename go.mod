@@ -19,7 +19,6 @@ require (
 	github.com/open-policy-agent/opa v0.24.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
-	github.com/stretchr/testify v1.7.0 // indirect
 	go.opencensus.io v0.22.3
 	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20210224082022-3d97a244fca7
