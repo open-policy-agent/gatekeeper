@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -24,12 +24,12 @@ type ApplyTo struct {
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
-	Kinds              []Kinds                            `json:"kinds,omitempty"`
-	Scope              apiextensionsv1beta1.ResourceScope `json:"scope,omitempty"`
-	Namespaces         []string                           `json:"namespaces,omitempty"`
-	ExcludedNamespaces []string                           `json:"excludedNamespaces,omitempty"`
-	LabelSelector      *metav1.LabelSelector              `json:"labelSelector,omitempty"`
-	NamespaceSelector  *metav1.LabelSelector              `json:"namespaceSelector,omitempty"`
+	Kinds              []Kinds                       `json:"kinds,omitempty"`
+	Scope              apiextensionsv1.ResourceScope `json:"scope,omitempty"`
+	Namespaces         []string                      `json:"namespaces,omitempty"`
+	ExcludedNamespaces []string                      `json:"excludedNamespaces,omitempty"`
+	LabelSelector      *metav1.LabelSelector         `json:"labelSelector,omitempty"`
+	NamespaceSelector  *metav1.LabelSelector         `json:"namespaceSelector,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields
@@ -97,12 +97,12 @@ func Matches(match Match, obj runtime.Object, ns *corev1.Namespace) (bool, error
 
 	clusterScoped := ns == nil || isNamespace(obj)
 
-	if match.Scope == apiextensionsv1beta1.ClusterScoped &&
+	if match.Scope == apiextensionsv1.ClusterScoped &&
 		!clusterScoped {
 		return false, nil
 	}
 
-	if match.Scope == apiextensionsv1beta1.NamespaceScoped &&
+	if match.Scope == apiextensionsv1.NamespaceScoped &&
 		clusterScoped {
 		return false, nil
 	}

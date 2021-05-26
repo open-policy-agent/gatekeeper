@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/apis"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -32,9 +31,6 @@ var cfg *rest.Config
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{}
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		stdlog.Fatal(err)
-	}
-	if err := apiextensionsv1beta1.AddToScheme(scheme.Scheme); err != nil {
 		stdlog.Fatal(err)
 	}
 
