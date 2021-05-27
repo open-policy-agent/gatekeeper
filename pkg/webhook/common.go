@@ -93,7 +93,7 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 }
 
 // isGatekeeperResource returns true if the request relates to a gatekeeper resource
-func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req admission.Request) bool {
+func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req *admission.Request) bool {
 	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == mutationsGroup ||
@@ -105,7 +105,7 @@ func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req admission
 	return false
 }
 
-func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request) (bool, bool) {
+func (h *webhookHandler) tracingLevel(ctx context.Context, req *admission.Request) (bool, bool) {
 	cfg, _ := h.getConfig(ctx)
 	traceEnabled := false
 	dump := false
@@ -128,7 +128,7 @@ func (h *webhookHandler) tracingLevel(ctx context.Context, req admission.Request
 	return traceEnabled, dump
 }
 
-func (h *webhookHandler) skipExcludedNamespace(req admissionv1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
+func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest, excludedProcess process.Process) (bool, error) {
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
 		return false, err

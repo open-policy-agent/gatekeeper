@@ -140,7 +140,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
-	if userErr, err := h.validateGatekeeperResources(ctx, req); err != nil {
+	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
 		vResp := admission.ValidationResponse(false, err.Error())
 		if vResp.Result == nil {
 			vResp.Result = &metav1.Status{}
@@ -163,7 +163,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}()
 
 	// namespace is excluded from webhook using config
-	isExcludedNamespace, err := h.skipExcludedNamespace(req.AdmissionRequest, process.Webhook)
+	isExcludedNamespace, err := h.skipExcludedNamespace(&req.AdmissionRequest, process.Webhook)
 	if err != nil {
 		log.Error(err, "error while excluding namespace")
 	}
@@ -173,7 +173,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
 
-	resp, err := h.reviewRequest(ctx, req)
+	resp, err := h.reviewRequest(ctx, &req)
 	if err != nil {
 		log.Error(err, "error executing query")
 		vResp := admission.ValidationResponse(false, err.Error())
@@ -186,7 +186,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	res := resp.Results()
-	denyMsgs, warnMsgs := h.getValidationMessages(res, req)
+	denyMsgs, warnMsgs := h.getValidationMessages(res, &req)
 
 	if len(denyMsgs) > 0 {
 		vResp := admission.ValidationResponse(false, strings.Join(denyMsgs, "\n"))
@@ -213,7 +213,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	return vResp
 }
 
-func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req admission.Request) ([]string, []string) {
+func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
 	var denyMsgs, warnMsgs []string
 	var resourceName string
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
@@ -309,7 +309,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req admi
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources
-func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req admission.Request) (bool, error) {
+func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
@@ -330,7 +330,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 	return false, nil
 }
 
-func (h *validationHandler) validateTemplate(ctx context.Context, req admission.Request) (bool, error) {
+func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
@@ -345,7 +345,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req admission.
 	return false, nil
 }
 
-func (h *validationHandler) validateConstraint(ctx context.Context, req admission.Request) (bool, error) {
+func (h *validationHandler) validateConstraint(ctx context.Context, req *admission.Request) (bool, error) {
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err != nil {
 		return false, err
@@ -372,14 +372,14 @@ func (h *validationHandler) validateConstraint(ctx context.Context, req admissio
 	return false, nil
 }
 
-func (h *validationHandler) validateConfigResource(ctx context.Context, req admission.Request) error {
+func (h *validationHandler) validateConfigResource(ctx context.Context, req *admission.Request) error {
 	if req.Name != keys.Config.Name {
 		return fmt.Errorf("config resource must have name 'config'")
 	}
 	return nil
 }
 
-func (h *validationHandler) validateAssignMetadata(ctx context.Context, req admission.Request) (bool, error) {
+func (h *validationHandler) validateAssignMetadata(ctx context.Context, req *admission.Request) (bool, error) {
 	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.AssignMetadata{})
 	if err != nil {
 		return false, err
@@ -396,7 +396,7 @@ func (h *validationHandler) validateAssignMetadata(ctx context.Context, req admi
 	return false, nil
 }
 
-func (h *validationHandler) validateAssign(ctx context.Context, req admission.Request) (bool, error) {
+func (h *validationHandler) validateAssign(ctx context.Context, req *admission.Request) (bool, error) {
 	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.Assign{})
 	if err != nil {
 		return false, err
@@ -415,7 +415,7 @@ func (h *validationHandler) validateAssign(ctx context.Context, req admission.Re
 }
 
 // traceSwitch returns true if a request should be traced
-func (h *validationHandler) reviewRequest(ctx context.Context, req admission.Request) (*rtypes.Responses, error) {
+func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Request) (*rtypes.Responses, error) {
 	// if we have a maximum number of concurrent serving goroutines, try to acquire
 	// a lock and block until we succeed
 	if h.semaphore != nil {
