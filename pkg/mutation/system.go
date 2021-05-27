@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -82,10 +83,16 @@ func (s *System) Upsert(m types.Mutator) error {
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
+	mutationUUID := uuid.New()
 	original := obj.DeepCopy()
 	maxIterations := len(s.orderedMutators) + 1
 
-	allAppliedMutations := [][]types.Mutator{}
+	var allAppliedMutations [][]types.Mutator
+	if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
+		if allAppliedMutations == nil {
+			allAppliedMutations = [][]types.Mutator{}
+		}
+	}
 
 	for i := 0; i < maxIterations; i++ {
 		appliedMutations := []types.Mutator{}
@@ -93,11 +100,11 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		for _, m := range s.orderedMutators {
 			if m.Matches(obj, ns) {
 				mutated, err := m.Mutate(obj)
-				if mutated && *MutationLoggingEnabled {
+				if mutated && (*MutationLoggingEnabled || *MutationAnnotationsEnabled) {
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return false, errors.Wrapf(err, "mutation %v failed for %s %s %s %s", m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s", mutationUUID, m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 				}
 			}
 		}
@@ -107,26 +114,58 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 			}
 			if cmp.Equal(original, obj) {
 				if *MutationLoggingEnabled {
-					logAppliedMutations("Oscillating mutation.", original, allAppliedMutations)
+					logAppliedMutations("Oscillating mutation.", mutationUUID, original, allAppliedMutations)
 				}
 				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 			}
 			if *MutationLoggingEnabled {
-				logAppliedMutations("Mutation applied", original, allAppliedMutations)
+				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
+			}
+
+			if *MutationAnnotationsEnabled {
+				err := mutationAnnotations(obj, allAppliedMutations, mutationUUID)
+				if err != nil {
+					log.Error(err, "Error applying mutation annotations", "mutation id", mutationUUID)
+				}
 			}
 			return true, nil
 		}
-		if *MutationLoggingEnabled {
+		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
 			allAppliedMutations = append(allAppliedMutations, appliedMutations)
 		}
 	}
 	if *MutationLoggingEnabled {
-		logAppliedMutations("Mutation not converging", original, allAppliedMutations)
+		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
 	}
-	return false, fmt.Errorf("mutation not converging for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s", mutationUUID, obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
 }
 
-func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
+func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, mutationUUID uuid.UUID) error {
+	mutatorStringSet := make(map[string]struct{})
+	for _, mutationsForIteration := range allAppliedMutations {
+		for _, mutator := range mutationsForIteration {
+			mutatorStringSet[mutator.String()] = struct{}{}
+		}
+	}
+	mutatorStrings := []string{}
+	for mutatorString := range mutatorStringSet {
+		mutatorStrings = append(mutatorStrings, mutatorString)
+	}
+
+	metadata, ok := obj.Object["metadata"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("Incorrect metadata type")
+	}
+	annotations, ok := metadata["annotations"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("Incorrect metadata type")
+	}
+	annotations["gatekeeper.sh/mutations"] = strings.Join(mutatorStrings, ", ")
+	annotations["gatekeeper.sh/mutation-id"] = mutationUUID
+	return nil
+}
+
+func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
 	iterations := []interface{}{}
 	for i, appliedMutations := range allAppliedMutations {
 		if len(appliedMutations) == 0 {
@@ -140,6 +179,7 @@ func logAppliedMutations(message string, obj *unstructured.Unstructured, allAppl
 	}
 	if len(iterations) > 0 {
 		logDetails := []interface{}{}
+		logDetails = append(logDetails, "Mutation Id", mutationUUID)
 		logDetails = append(logDetails, logging.EventType, logging.MutationApplied)
 		logDetails = append(logDetails, logging.ResourceGroup, obj.GroupVersionKind().Group)
 		logDetails = append(logDetails, logging.ResourceKind, obj.GroupVersionKind().Kind)
