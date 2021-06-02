@@ -16,7 +16,7 @@ type (
 	// Policy represents a planned policy query.
 	Policy struct {
 		Static *Static
-		Plan   *Plan
+		Plans  *Plans
 		Funcs  *Funcs
 	}
 
@@ -24,12 +24,18 @@ type (
 	Static struct {
 		Strings      []*StringConst
 		BuiltinFuncs []*BuiltinFunc
+		Files        []*StringConst
 	}
 
 	// BuiltinFunc represents a built-in function that may be required by the
 	// policy.
 	BuiltinFunc struct {
 		Name string
+	}
+
+	// Plans represents a collection of named query plans to expose in the policy.
+	Plans struct {
+		Plans []*Plan
 	}
 
 	// Funcs represents a collection of planned functions to include in the
@@ -47,11 +53,13 @@ type (
 		Params []Local
 		Return Local
 		Blocks []*Block // TODO(tsandall): should this be a plan?
+		Path   []string // optional: if non-nil, include in data function tree
 	}
 
 	// Plan represents an ordered series of blocks to execute. Plan execution
 	// stops when a return statement is reached. Blocks are executed in-order.
 	Plan struct {
+		Name   string
 		Blocks []*Block
 	}
 
@@ -65,6 +73,12 @@ type (
 
 	// Stmt represents an operation (e.g., comparison, loop, dot, etc.) to execute.
 	Stmt interface {
+		locationStmt
+	}
+
+	locationStmt interface {
+		SetLocation(index, row, col int, file, text string)
+		GetLocation() *Location
 	}
 
 	// Local represents a plan-scoped variable.
@@ -117,7 +131,7 @@ func (a *Policy) String() string {
 }
 
 func (a *Static) String() string {
-	return fmt.Sprintf("Static (%d strings)", len(a.Strings))
+	return fmt.Sprintf("Static (%d strings, %d files)", len(a.Strings), len(a.Files))
 }
 
 func (a *Funcs) String() string {
@@ -125,44 +139,88 @@ func (a *Funcs) String() string {
 }
 
 func (a *Func) String() string {
-	return fmt.Sprintf("%v (%d params: %v, %d blocks)", a.Name, len(a.Params), a.Params, len(a.Blocks))
+	return fmt.Sprintf("%v (%d params: %v, %d blocks, path: %v)", a.Name, len(a.Params), a.Params, len(a.Blocks), a.Path)
 }
 
 func (a *Plan) String() string {
-	return fmt.Sprintf("Plan (%d blocks)", len(a.Blocks))
+	return fmt.Sprintf("Plan %v (%d blocks)", a.Name, len(a.Blocks))
 }
 
 func (a *Block) String() string {
 	return fmt.Sprintf("Block (%d statements)", len(a.Stmts))
 }
 
-func (a *BooleanConst) typeMarker() {}
-func (a *NullConst) typeMarker()    {}
-func (a *IntConst) typeMarker()     {}
-func (a *FloatConst) typeMarker()   {}
-func (a *StringConst) typeMarker()  {}
+func (*BooleanConst) typeMarker() {}
+func (*NullConst) typeMarker()    {}
+func (*IntConst) typeMarker()     {}
+func (*FloatConst) typeMarker()   {}
+func (*StringConst) typeMarker()  {}
 
 // ReturnLocalStmt represents a return statement that yields a local value.
 type ReturnLocalStmt struct {
 	Source Local
+
+	Location
 }
 
 // CallStmt represents a named function call. The result should be stored in the
 // result local.
 type CallStmt struct {
 	Func   string
+	Args   []LocalOrConst
+	Result Local
+
+	Location
+}
+
+// CallDynamicStmt represents an indirect (data) function call. The result should
+// be stored in the result local.
+type CallDynamicStmt struct {
 	Args   []Local
 	Result Local
+	Path   []LocalOrConst
+
+	Location
+}
+
+// LocalOrConst is a tagged union of the two types, Local and StringIndex.
+type LocalOrConst interface {
+	fmt.Stringer
+	localOrConst()
+}
+
+func (Local) localOrConst() {}
+func (l Local) String() string {
+	return fmt.Sprintf("Local<%d>", int(l))
+}
+
+// StringIndex represents the index into the plan's list of constant strings
+// of a constant string.
+type StringIndex int
+
+func (StringIndex) localOrConst() {}
+func (s StringIndex) String() string {
+	return fmt.Sprintf("String<%d>", int(s))
+}
+
+// Bool represents a constant boolean.
+type Bool bool
+
+func (Bool) localOrConst() {}
+func (b Bool) String() string {
+	return fmt.Sprintf("Bool<%v>", bool(b))
 }
 
 // BlockStmt represents a nested block. Nested blocks and break statements can
 // be used to short-circuit execution.
 type BlockStmt struct {
 	Blocks []*Block
+
+	Location
 }
 
 func (a *BlockStmt) String() string {
-	return fmt.Sprintf("BlockStmt (%d blocks)", len(a.Blocks))
+	return fmt.Sprintf("BlockStmt (%d blocks) %v", len(a.Blocks), a.GetLocation())
 }
 
 // BreakStmt represents a jump out of the current block. The index specifies how
@@ -170,22 +228,28 @@ func (a *BlockStmt) String() string {
 // continue from the end of the block that is jumped to.
 type BreakStmt struct {
 	Index uint32
+
+	Location
 }
 
 // DotStmt represents a lookup operation on a value (e.g., array, object, etc.)
 // The source of a DotStmt may be a scalar value in which case the statement
 // will be undefined.
 type DotStmt struct {
-	Source Local
-	Key    Local
+	Source LocalOrConst
+	Key    LocalOrConst
 	Target Local
+
+	Location
 }
 
 // LenStmt represents a length() operation on a local variable. The
 // result is stored in the target local variable.
 type LenStmt struct {
-	Source Local
+	Source LocalOrConst
 	Target Local
+
+	Location
 }
 
 // ScanStmt represents a linear scan over a composite value. The
@@ -195,17 +259,15 @@ type ScanStmt struct {
 	Key    Local
 	Value  Local
 	Block  *Block
+
+	Location
 }
 
 // NotStmt represents a negated statement.
 type NotStmt struct {
 	Block *Block
-}
 
-// AssignBooleanStmt represents an assignment of a boolean value to a local variable.
-type AssignBooleanStmt struct {
-	Value  bool
-	Target Local
+	Location
 }
 
 // AssignIntStmt represents an assignment of an integer value to a
@@ -213,12 +275,16 @@ type AssignBooleanStmt struct {
 type AssignIntStmt struct {
 	Value  int64
 	Target Local
+
+	Location
 }
 
 // AssignVarStmt represents an assignment of one local variable to another.
 type AssignVarStmt struct {
-	Source Local
+	Source LocalOrConst
 	Target Local
+
+	Location
 }
 
 // AssignVarOnceStmt represents an assignment of one local variable to another.
@@ -227,24 +293,23 @@ type AssignVarStmt struct {
 // TODO(tsandall): is there a better name for this?
 type AssignVarOnceStmt struct {
 	Target Local
-	Source Local
+	Source LocalOrConst
+
+	Location
 }
 
-// MakeStringStmt constructs a local variable that refers to a string constant.
-type MakeStringStmt struct {
-	Index  int
+// ResetLocalStmt resets a local variable to 0.
+type ResetLocalStmt struct {
 	Target Local
+
+	Location
 }
 
 // MakeNullStmt constructs a local variable that refers to a null value.
 type MakeNullStmt struct {
 	Target Local
-}
 
-// MakeBooleanStmt constructs a local variable that refers to a boolean value.
-type MakeBooleanStmt struct {
-	Value  bool
-	Target Local
+	Location
 }
 
 // MakeNumberFloatStmt constructs a local variable that refers to a
@@ -252,114 +317,120 @@ type MakeBooleanStmt struct {
 type MakeNumberFloatStmt struct {
 	Value  float64
 	Target Local
+
+	Location
 }
 
 // MakeNumberIntStmt constructs a local variable that refers to an integer value.
 type MakeNumberIntStmt struct {
 	Value  int64
 	Target Local
+
+	Location
 }
 
 // MakeNumberRefStmt constructs a local variable that refers to a number stored as a string.
 type MakeNumberRefStmt struct {
 	Index  int
 	Target Local
+
+	Location
 }
 
 // MakeArrayStmt constructs a local variable that refers to an array value.
 type MakeArrayStmt struct {
 	Capacity int32
 	Target   Local
+
+	Location
 }
 
 // MakeObjectStmt constructs a local variable that refers to an object value.
 type MakeObjectStmt struct {
 	Target Local
+
+	Location
 }
 
 // MakeSetStmt constructs a local variable that refers to a set value.
 type MakeSetStmt struct {
 	Target Local
+
+	Location
 }
 
 // EqualStmt represents an value-equality check of two local variables.
 type EqualStmt struct {
-	A Local
-	B Local
-}
+	A LocalOrConst
+	B LocalOrConst
 
-// LessThanStmt represents a < check of two local variables.
-type LessThanStmt struct {
-	A Local
-	B Local
-}
-
-// LessThanEqualStmt represents a <= check of two local variables.
-type LessThanEqualStmt struct {
-	A Local
-	B Local
-}
-
-// GreaterThanStmt represents a > check of two local variables.
-type GreaterThanStmt struct {
-	A Local
-	B Local
-}
-
-// GreaterThanEqualStmt represents a >= check of two local variables.
-type GreaterThanEqualStmt struct {
-	A Local
-	B Local
+	Location
 }
 
 // NotEqualStmt represents a != check of two local variables.
 type NotEqualStmt struct {
-	A Local
-	B Local
+	A LocalOrConst
+	B LocalOrConst
+
+	Location
 }
 
 // IsArrayStmt represents a dynamic type check on a local variable.
 type IsArrayStmt struct {
-	Source Local
+	Source LocalOrConst
+
+	Location
 }
 
 // IsObjectStmt represents a dynamic type check on a local variable.
 type IsObjectStmt struct {
-	Source Local
+	Source LocalOrConst
+
+	Location
 }
 
 // IsDefinedStmt represents a check of whether a local variable is defined.
 type IsDefinedStmt struct {
 	Source Local
+
+	Location
 }
 
 // IsUndefinedStmt represents a check of whether local variable is undefined.
 type IsUndefinedStmt struct {
 	Source Local
+
+	Location
 }
 
 // ArrayAppendStmt represents a dynamic append operation of a value
 // onto an array.
 type ArrayAppendStmt struct {
-	Value Local
+	Value LocalOrConst
 	Array Local
+
+	Location
 }
 
 // ObjectInsertStmt represents a dynamic insert operation of a
 // key/value pair into an object.
 type ObjectInsertStmt struct {
-	Key    Local
-	Value  Local
+	Key    LocalOrConst
+	Value  LocalOrConst
 	Object Local
+
+	Location
 }
 
 // ObjectInsertOnceStmt represents a dynamic insert operation of a key/value
 // pair into an object. If the key already exists and the value differs,
 // execution aborts with a conflict error.
 type ObjectInsertOnceStmt struct {
-	Key    Local
-	Value  Local
+	Key    LocalOrConst
+	Value  LocalOrConst
 	Object Local
+
+	Location
 }
 
 // ObjectMergeStmt performs a recursive merge of two object values. If either of
@@ -369,12 +440,16 @@ type ObjectMergeStmt struct {
 	A      Local
 	B      Local
 	Target Local
+
+	Location
 }
 
 // SetAddStmt represents a dynamic add operation of an element into a set.
 type SetAddStmt struct {
-	Value Local
+	Value LocalOrConst
 	Set   Local
+
+	Location
 }
 
 // WithStmt replaces the Local or a portion of the document referred to by the
@@ -385,11 +460,44 @@ type SetAddStmt struct {
 type WithStmt struct {
 	Local Local
 	Path  []int
-	Value Local
+	Value LocalOrConst
 	Block *Block
+
+	Location
+}
+
+// NopStmt adds a nop instruction. Useful during development and debugging only.
+type NopStmt struct {
+	Location
 }
 
 // ResultSetAdd adds a value into the result set returned by the query plan.
 type ResultSetAdd struct {
 	Value Local
+
+	Location
+}
+
+// Location records the filen index, and the row and column inside that file
+// that a statement can be connected to.
+type Location struct {
+	Index      int // filename string constant index
+	Col, Row   int
+	file, text string // only used for debugging
+}
+
+// SetLocation sets the Location for a given Stmt.
+func (l *Location) SetLocation(index, row, col int, file, text string) {
+	*l = Location{
+		Index: index,
+		Row:   row,
+		Col:   col,
+		file:  file,
+		text:  text,
+	}
+}
+
+// GetLocation returns a Stmt's Location.
+func (l *Location) GetLocation() *Location {
+	return l
 }
