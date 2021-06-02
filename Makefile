@@ -19,6 +19,13 @@ HELM_VERSION ?= 3.4.2
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
+# When updating this, make sure to update the corresponding action in
+# workflow.yaml
+GOLANGCI_LINT_VERSION := v1.40.1
+
+# Detects the location of the user golangci-lint cache.
+GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
+
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
 BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
@@ -189,8 +196,14 @@ manifests: __controller-gen
 	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
+# lint runs a dockerized golangci-lint, and should give consistent results
+# across systems.
+# Source: https://golangci-lint.run/usage/install/#docker
 lint:
-	golangci-lint -v run ./... --timeout 5m
+	docker run --rm -v $(shell pwd):/app \
+	 -v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
+	 -w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
+	 golangci-lint run -v
 
 # Generate code
 generate: __controller-gen target-template-source

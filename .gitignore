@@ -1,5 +1,6 @@
-# Staging dirs
+# Staging and temporary dirs
 .staging/
+/.tmp
 
 # Binaries for programs and plugins
 *.exe
