@@ -49,6 +49,10 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-mutation={{ .Values.experimentalEnableMutation}}
+        
+        {{- range .Values.disabledBuiltins}}
+        - --disable-opa-builtin={{ . }}
+        {{- end }}
         command:
         - /manager
         env:
@@ -102,6 +106,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
+      priorityClassName: {{ .Values.controllerManager.priorityClassName }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:

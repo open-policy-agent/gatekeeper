@@ -1,5 +1,6 @@
 replicas: 3
 auditInterval: 60
+auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
@@ -21,12 +22,13 @@ postInstall:
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.4.0
+  release: v3.5.0-rc.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
 podLabels: {}
+podCountLimit: 100
 secretAnnotations: {}
 controllerManager:
   hostNetwork: false
@@ -68,3 +70,5 @@ audit:
 pdb:
   controllerManager:
     minAvailable: 1
+service: {}
+disabledBuiltins:
