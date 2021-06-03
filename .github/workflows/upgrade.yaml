@@ -9,7 +9,8 @@ on:
       - "manifest_staging/charts/**"
 
 env:
-  BASE_RELEASE: 3.2.3
+  BASE_RELEASE: 3.4.0
+  BASE_BRANCH: release-3.4
 
 jobs:
   helm_upgrade:
@@ -36,8 +37,8 @@ jobs:
       - name: Run e2e after install
         run: |
           # running tests matching the base release
-          git clone https://github.com/open-policy-agent/gatekeeper.git -b v${{ env.BASE_RELEASE }} --sparse --depth 1 /tmp/gatekeeper-tests-v${{ env.BASE_RELEASE }}
-          cd /tmp/gatekeeper-tests-v${{ env.BASE_RELEASE }}
+          git clone https://github.com/open-policy-agent/gatekeeper.git -b ${{ env.BASE_BRANCH }} --sparse --depth 1 /tmp/gatekeeper-tests-v${{ env.BASE_BRANCH }}
+          cd /tmp/gatekeeper-tests-v${{ env.BASE_BRANCH }}
           git sparse-checkout set test/bats
           bats -t test/bats/test.bats
 
