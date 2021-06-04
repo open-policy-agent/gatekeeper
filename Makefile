@@ -129,28 +129,36 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install
-	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper -n ${GATEKEEPER_NAMESPACE} --create-namespace --debug \
-	--set image.repository=${HELM_REPO} \
-	--set image.release=${HELM_RELEASE} \
-	--set emitAdmissionEvents=true \
-	--set emitAuditEvents=true \
-	--set postInstall.labelNamespace.enabled=true \
-	--set disabledBuiltins={http.send};\
-
-e2e-helm-upgrade-init: e2e-helm-install
-		./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
-		./.staging/helm/linux-amd64/helm install gatekeeper gatekeeper/gatekeeper --version ${BASE_RELEASE} --debug --wait \
-		 --set emitAdmissionEvents=true \
-		 --set emitAuditEvents=true \
-		 --set customResourceDefinitions.create=false;\
-
-e2e-helm-upgrade:
-	./helm_migrate.sh
-	./.staging/helm/linux-amd64/helm install -n ${GATEKEEPER_NAMESPACE} gatekeeper manifest_staging/charts/gatekeeper --create-namespace --debug --wait \
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
+		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
+		--debug --wait \
 		--set image.repository=${HELM_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set postInstall.labelNamespace.enabled=true \
+		--set disabledBuiltins={http.send};\
+
+e2e-helm-upgrade-init: e2e-helm-install
+	./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
+	./.staging/helm/linux-amd64/helm install gatekeeper gatekeeper/gatekeeper --version ${BASE_RELEASE} \
+		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
+		--debug --wait \
+		--set emitAdmissionEvents=true \
+		--set emitAuditEvents=true \
+		--set postInstall.labelNamespace.enabled=true \
+		--set disabledBuiltins={http.send};\
+
+e2e-helm-upgrade:
+	./helm_migrate.sh
+	./.staging/helm/linux-amd64/helm upgrade gatekeeper manifest_staging/charts/gatekeeper \
+		--namespace ${GATEKEEPER_NAMESPACE} \
+		--debug --wait \
+		--set image.repository=${HELM_REPO} \
+		--set image.release=${HELM_RELEASE} \
+		--set emitAdmissionEvents=true \
+		--set emitAuditEvents=true \
+		--set postInstall.labelNamespace.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 # Build manager binary
@@ -159,7 +167,7 @@ manager: generate
 
 # Build manager binary
 manager-osx: generate
-	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin  -ldflags $(LDFLAGS) main.go
+	GO111MODULE=on go build -mod vendor -o bin/manager GOOS=darwin -ldflags $(LDFLAGS) main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate manifests
