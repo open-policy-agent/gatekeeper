@@ -10,6 +10,12 @@ metadata:
   name: gatekeeper-webhook-service
   namespace: '{{ .Release.Namespace }}'
 spec:
+  {{- if .Values.service }}
+  type: {{  .Values.service.type | default "ClusterIP" }}
+    {{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+    {{- end }}
+  {{- end }}
   ports:
   - port: 443
     targetPort: 8443

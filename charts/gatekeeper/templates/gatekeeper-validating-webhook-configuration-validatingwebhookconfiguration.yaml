@@ -1,5 +1,5 @@
 {{- if not .Values.disableValidatingWebhook }}
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   labels:
@@ -10,13 +10,16 @@ metadata:
     release: '{{ .Release.Name }}'
   name: gatekeeper-validating-webhook-configuration
 webhooks:
-- clientConfig:
-    caBundle: Cg==
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /v1/admit
   failurePolicy: Ignore
+  matchPolicy: Exact
   name: validation.gatekeeper.sh
   namespaceSelector:
     matchExpressions:
@@ -37,13 +40,16 @@ webhooks:
     - '*'
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
-- clientConfig:
-    caBundle: Cg==
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
     service:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /v1/admitlabel
   failurePolicy: Fail
+  matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
   rules:
   - apiGroups:

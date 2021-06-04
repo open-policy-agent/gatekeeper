@@ -46,6 +46,7 @@ spec:
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --audit-chunk-size={{ .Values.auditChunkSize }}
+        - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
         - --emit-audit-events={{ .Values.emitAuditEvents }}
         - --operation=audit
         - --operation=status
@@ -96,6 +97,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
+      priorityClassName: {{ .Values.audit.priorityClassName }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
