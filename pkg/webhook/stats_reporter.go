@@ -83,7 +83,6 @@ func (r *reporter) ReportMutationRequest(response requestResponse, d time.Durati
 
 // Captures req count metric, recording the count and the duration
 func (r *reporter) reportRequest(response requestResponse, statusKey tag.Key, m stats.Measurement) error {
-	//mutationResponseTimeInSecM.M(d.Seconds())
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(statusKey, string(response)),

@@ -44,7 +44,7 @@ func (d *DummyMutator) Path() *parser.Path {
 }
 
 func (d *DummyMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(d.match, obj, ns)
+	matches, err := match.Matches(&d.match, obj, ns)
 	if err != nil {
 		return false
 	}

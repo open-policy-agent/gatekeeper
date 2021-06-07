@@ -274,10 +274,10 @@ func Test_Tracker(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
 	}
 	// TODO: Verify data if we add the corresponding API to opa.Client.
-	//for _, d := range testData {
-	//	_, err := opaClient.GetData(ctx, c)
-	//	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
-	//}
+	// for _, d := range testData {
+	// 	_, err := opaClient.GetData(ctx, c)
+	// 	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
+	// }
 
 	// Add additional templates/constraints and verify that we remain satisfied
 	err = applyFixtures("testdata/post")

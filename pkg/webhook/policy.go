@@ -114,6 +114,7 @@ type validationHandler struct {
 }
 
 // Handle the validation request
+// nolint: gocritic // Must accept admission.Request as a struct to satisfy Handler interface.
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
 
