@@ -7,6 +7,7 @@ Generally, design docs are on Google docs:
 ## In Development
 
 ## Proposed
+* [Template e2e Testing Design](https://docs.google.com/document/d/15nWc9TH97LF9o58CTVxYxFM9tYk8-seB5erIa2gouPo/edit)
 * [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit?usp=sharing)
 * [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
 * [Mutation Design - 4th Edition (current approach)](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#
