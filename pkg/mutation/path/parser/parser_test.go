@@ -287,7 +287,7 @@ func TestParser(t *testing.T) {
 				t.Fatalf("for input: %s\ngot error: %v, want: %v", tc.input, err, tc.wantErr)
 			}
 			var nodes []Node
-			if root != nil {
+			if len(root.Nodes) != 0 {
 				nodes = root.Nodes
 			}
 			diff := cmp.Diff(tc.expected, nodes)
@@ -297,7 +297,7 @@ func TestParser(t *testing.T) {
 
 			// Ensure that converting a parsed Path into a String and back again
 			// produces an identical Path.
-			if root != nil && tc.wantErr == nil {
+			if len(root.Nodes) != 0 && tc.wantErr == nil {
 				asString := root.String()
 
 				reparsedRoot, err := Parse(asString)
