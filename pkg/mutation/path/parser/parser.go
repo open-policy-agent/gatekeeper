@@ -37,7 +37,7 @@ type parser struct {
 }
 
 // Parse parses the provided input and returns an abstract representation if successful.
-func Parse(input string) (*Path, error) {
+func Parse(input string) (Path, error) {
 	p := newParser(input)
 	return p.Parse()
 }
@@ -76,8 +76,8 @@ func (p *parser) expectPeek(t token.Type) bool {
 	return p.peekToken.Type == t
 }
 
-func (p *parser) Parse() (*Path, error) {
-	root := &Path{}
+func (p *parser) Parse() (Path, error) {
+	root := Path{}
 	for p.curToken.Type == token.IDENT && p.err == nil {
 		if node := p.parseObject(); node != nil {
 			root.Nodes = append(root.Nodes, node)
@@ -97,7 +97,7 @@ func (p *parser) Parse() (*Path, error) {
 			if p.expectPeek(token.EOF) {
 				// block trailing separators
 				p.setError(ErrTrailingSeparator)
-				return nil, p.err
+				return Path{}, p.err
 			}
 			// Skip past the separator
 			p.next()
@@ -105,7 +105,7 @@ func (p *parser) Parse() (*Path, error) {
 			// Allowed. Loop will exit.
 		default:
 			p.setError(fmt.Errorf("%w: expected '.' or eof, got: %s", ErrUnexpectedToken, p.peekToken.String()))
-			return nil, p.err
+			return Path{}, p.err
 		}
 	}
 
@@ -113,7 +113,7 @@ func (p *parser) Parse() (*Path, error) {
 		p.setError(fmt.Errorf("%w: expected field name or eof, got: %s", ErrUnexpectedToken, p.curToken.String()))
 	}
 	if p.err != nil {
-		return nil, p.err
+		return Path{}, p.err
 	}
 
 	return root, nil

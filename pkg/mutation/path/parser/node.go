@@ -70,7 +70,7 @@ func (r Path) String() string {
 	result := strings.Builder{}
 	for i, n := range r.Nodes {
 		nStr := n.String()
-		if _, isObject := n.(*Object); i > 0 && isObject {
+		if n.Type() == ObjectNode && i > 0 {
 			// No leading separator, and no separators before List Nodes.
 			result.WriteString(".")
 		}

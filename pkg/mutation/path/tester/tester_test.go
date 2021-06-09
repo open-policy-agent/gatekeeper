@@ -79,15 +79,15 @@ func TestPrefix(t *testing.T) {
 			if !test.prefix {
 				wantErr = ErrPrefix
 			}
-			err = ValidatePathTests(l, pts)
+			err = validatePathTests(l, pts)
 			if !errors.Is(err, wantErr) {
-				t.Errorf(`got ValidatePathTests() error = '%v', want '%v'`, err, wantErr)
+				t.Errorf(`got validatePathTests() error = '%v', want '%v'`, err, wantErr)
 			}
 		})
 	}
 }
 
-func mustParse(p string) *parser.Path {
+func mustParse(p string) parser.Path {
 	pth, err := parser.Parse(p)
 	if err != nil {
 		panic(err)
@@ -97,12 +97,14 @@ func mustParse(p string) *parser.Path {
 
 func TestConflictingEntries(t *testing.T) {
 	tests := []struct {
-		name    string
-		ts      []Test
-		wantErr error
+		name     string
+		location string
+		ts       []Test
+		wantErr  error
 	}{
 		{
-			name: "contradicting Conditions on same path",
+			name:     "contradicting Conditions on same path",
+			location: "spec.some.thing",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some.thing"),
@@ -116,7 +118,8 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: ErrConflict,
 		},
 		{
-			name: "same path MustExist twice",
+			name:     "same path MustExist twice",
+			location: "spec.some.thing",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some.thing"),
@@ -130,7 +133,8 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "same path MustNotExist twice",
+			name:     "same path MustNotExist twice",
+			location: "spec.some.thing",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some.thing"),
@@ -144,7 +148,8 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "parent required but child forbidden",
+			name:     "parent required but child forbidden",
+			location: "spec.some.thing",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some"),
@@ -158,7 +163,8 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "parent forbidden but child required",
+			name:     "parent forbidden but child required",
+			location: "spec.some.thing",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some"),
@@ -172,7 +178,8 @@ func TestConflictingEntries(t *testing.T) {
 			wantErr: ErrConflict,
 		},
 		{
-			name: "grandparent forbidden but grandchild required",
+			name:     "grandparent forbidden but grandchild required",
+			location: "spec.some.thing.more",
 			ts: []Test{
 				{
 					SubPath:   mustParse("spec.some"),
@@ -188,7 +195,12 @@ func TestConflictingEntries(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New(test.ts)
+			location, err := parser.Parse(test.location)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = New(location, test.ts)
 			if !errors.Is(err, test.wantErr) {
 				t.Errorf(`got New() error = '%v', want '%v'`, err, test.wantErr)
 			}
@@ -197,7 +209,7 @@ func TestConflictingEntries(t *testing.T) {
 }
 
 func TestExistsOkay(t *testing.T) {
-	tester, err := New(
+	tester, err := New(mustParse("spec.location.thing.and.another"),
 		[]Test{
 			{
 				SubPath:   mustParse("spec.location.thing"),
@@ -225,7 +237,7 @@ func TestExistsOkay(t *testing.T) {
 }
 
 func TestMissingOkay(t *testing.T) {
-	tester, err := New(
+	tester, err := New(mustParse("spec.location.thing.and.another"),
 		[]Test{
 			{
 				SubPath:   mustParse("spec.location.thing"),

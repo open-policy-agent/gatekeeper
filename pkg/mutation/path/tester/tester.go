@@ -45,11 +45,11 @@ func StringToCondition(s string) (Condition, error) {
 
 // Test describes a condition that the object must satisfy
 type Test struct {
-	SubPath   *parser.Path
+	SubPath   parser.Path
 	Condition Condition
 }
 
-func isPrefix(short, long *parser.Path) bool {
+func isPrefix(short, long parser.Path) bool {
 	if len(short.Nodes) > len(long.Nodes) {
 		return false
 	}
@@ -63,21 +63,23 @@ func isPrefix(short, long *parser.Path) bool {
 	return true
 }
 
-// ValidatePathTests returns whether a set of path tests are valid against the provided location
-func ValidatePathTests(location *parser.Path, pathTests []Test) error {
+// validatePathTests returns whether a set of path tests are valid against the provided location
+func validatePathTests(location parser.Path, pathTests []Test) error {
 	for _, pathTest := range pathTests {
 		if !isPrefix(pathTest.SubPath, location) {
 			return fmt.Errorf("%w: subpath %q is not a prefix of location %q", ErrPrefix, pathTest.SubPath, location)
 		}
 	}
-	if _, err := New(pathTests); err != nil {
-		return err
-	}
 	return nil
 }
 
 // New creates a new Tester object
-func New(tests []Test) (*Tester, error) {
+func New(location parser.Path, tests []Test) (*Tester, error) {
+	err := validatePathTests(location, tests)
+	if err != nil {
+		return nil, err
+	}
+
 	paths := make(map[int]*parser.Path)
 	idx := &Tester{
 		tests: make(map[int]Condition),
@@ -89,7 +91,7 @@ func New(tests []Test) (*Tester, error) {
 	for _, test := range tests {
 		i := len(test.SubPath.Nodes) - 1
 		idx.tests[i] = test.Condition
-		paths[i] = test.SubPath
+		paths[i] = &test.SubPath
 
 		if test.Condition == MustNotExist && i < idxLowestMustNot {
 			idxLowestMustNot = i
