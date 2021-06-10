@@ -33,7 +33,6 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: config.gatekeeper.sh
   names:
     kind: Config
@@ -144,7 +143,6 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintPodStatus
@@ -219,7 +217,6 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintTemplatePodStatus
@@ -293,7 +290,6 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: templates.gatekeeper.sh
   names:
     kind: ConstraintTemplate

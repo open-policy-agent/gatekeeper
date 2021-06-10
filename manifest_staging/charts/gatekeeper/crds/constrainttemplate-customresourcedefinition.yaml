@@ -7,7 +7,6 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: templates.gatekeeper.sh
   names:
     kind: ConstraintTemplate
