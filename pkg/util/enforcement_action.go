@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -22,19 +23,27 @@ var supportedEnforcementActions = []EnforcementAction{Deny, Dryrun, Warn}
 // KnownEnforcementActions are all defined EnforcementActions.
 var KnownEnforcementActions = []EnforcementAction{Deny, Dryrun, Warn, Unrecognized}
 
+// ErrEnforcementAction indicates the passed EnforcementAction is not valid.
+var ErrEnforcementAction = errors.New("unrecognized enforcementAction")
+
+// ErrInvalidSpecEnforcementAction indicates that we were unable to parse the
+// spec.enforcementAction field as it was not a string.
+var ErrInvalidSpecEnforcementAction = errors.New("spec.enforcementAction must be a string")
+
 func ValidateEnforcementAction(input EnforcementAction) error {
 	for _, n := range supportedEnforcementActions {
 		if input == n {
 			return nil
 		}
 	}
-	return fmt.Errorf("could not find the provided enforcementAction value %s within the supported list %v", input, supportedEnforcementActions)
+	return fmt.Errorf("%w: %q is not within the supported list %v",
+		ErrEnforcementAction, input, supportedEnforcementActions)
 }
 
 func GetEnforcementAction(item map[string]interface{}) (EnforcementAction, error) {
 	enforcementActionSpec, _, err := unstructured.NestedString(item, "spec", "enforcementAction")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %v", ErrInvalidSpecEnforcementAction, err)
 	}
 	enforcementAction := EnforcementAction(enforcementActionSpec)
 	// default enforcementAction is deny
