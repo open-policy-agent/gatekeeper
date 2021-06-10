@@ -46,6 +46,8 @@ var DefaultBuiltins = [...]*Builtin{
 	Minus,
 	Multiply,
 	Divide,
+	Ceil,
+	Floor,
 	Round,
 	Abs,
 	Rem,
@@ -128,10 +130,12 @@ var DefaultBuiltins = [...]*Builtin{
 	// Encoding
 	JSONMarshal,
 	JSONUnmarshal,
+	JSONIsValid,
 	Base64Encode,
 	Base64Decode,
 	Base64IsValid,
 	Base64UrlEncode,
+	Base64UrlEncodeNoPad,
 	Base64UrlDecode,
 	URLQueryDecode,
 	URLQueryEncode,
@@ -139,6 +143,9 @@ var DefaultBuiltins = [...]*Builtin{
 	URLQueryDecodeObject,
 	YAMLMarshal,
 	YAMLUnmarshal,
+	YAMLIsValid,
+	HexEncode,
+	HexDecode,
 
 	// Object Manipulation
 	ObjectUnion,
@@ -149,6 +156,7 @@ var DefaultBuiltins = [...]*Builtin{
 	// JSON Object Manipulation
 	JSONFilter,
 	JSONRemove,
+	JSONPatch,
 
 	// Tokens
 	JWTDecode,
@@ -177,6 +185,7 @@ var DefaultBuiltins = [...]*Builtin{
 	Clock,
 	Weekday,
 	AddDate,
+	Diff,
 
 	// Crypto
 	CryptoX509ParseCertificates,
@@ -390,9 +399,27 @@ var Divide = &Builtin{
 	),
 }
 
-// Round rounds the number up to the nearest integer.
+// Round rounds the number to the nearest integer.
 var Round = &Builtin{
 	Name: "round",
+	Decl: types.NewFunction(
+		types.Args(types.N),
+		types.N,
+	),
+}
+
+// Ceil rounds the number up to the nearest integer.
+var Ceil = &Builtin{
+	Name: "ceil",
+	Decl: types.NewFunction(
+		types.Args(types.N),
+		types.N,
+	),
+}
+
+// Floor rounds the number down to the nearest integer.
+var Floor = &Builtin{
+	Name: "floor",
 	Decl: types.NewFunction(
 		types.Args(types.N),
 		types.N,
@@ -1075,6 +1102,15 @@ var JSONUnmarshal = &Builtin{
 	),
 }
 
+// JSONIsValid verifies the input string is a valid JSON document.
+var JSONIsValid = &Builtin{
+	Name: "json.is_valid",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.B,
+	),
+}
+
 // JSONFilter filters the JSON object
 var JSONFilter = &Builtin{
 	Name: "json.filter",
@@ -1138,6 +1174,27 @@ var JSONRemove = &Builtin{
 							types.A,
 						),
 					),
+				),
+			),
+		),
+		types.A,
+	),
+}
+
+// JSONPatch patches a JSON object according to RFC6902
+var JSONPatch = &Builtin{
+	Name: "json.patch",
+	Decl: types.NewFunction(
+		types.Args(
+			types.A,
+			types.NewArray(
+				nil,
+				types.NewObject(
+					[]*types.StaticProperty{
+						{Key: "op", Value: types.S},
+						{Key: "path", Value: types.A},
+					},
+					types.NewDynamicProperty(types.A, types.A),
 				),
 			),
 		),
@@ -1251,6 +1308,15 @@ var Base64UrlEncode = &Builtin{
 	),
 }
 
+// Base64UrlEncodeNoPad serializes the input string into base64url encoding without padding.
+var Base64UrlEncodeNoPad = &Builtin{
+	Name: "base64url.encode_no_pad",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
+	),
+}
+
 // Base64UrlDecode deserializes the base64url encoded input string.
 var Base64UrlDecode = &Builtin{
 	Name: "base64url.decode",
@@ -1321,6 +1387,33 @@ var YAMLUnmarshal = &Builtin{
 	Decl: types.NewFunction(
 		types.Args(types.S),
 		types.A,
+	),
+}
+
+// YAMLIsValid verifies the input string is a valid YAML document.
+var YAMLIsValid = &Builtin{
+	Name: "yaml.is_valid",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.B,
+	),
+}
+
+// HexEncode serializes the input string into hex encoding.
+var HexEncode = &Builtin{
+	Name: "hex.encode",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
+	),
+}
+
+// HexDecode deserializes the hex encoded input string.
+var HexDecode = &Builtin{
+	Name: "hex.decode",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.S,
 	),
 }
 
@@ -1626,6 +1719,24 @@ var AddDate = &Builtin{
 			types.N,
 		),
 		types.N,
+	),
+}
+
+// Diff returns the difference [years, months, days, hours, minutes, seconds] between two unix timestamps in nanoseconds
+var Diff = &Builtin{
+	Name: "time.diff",
+	Decl: types.NewFunction(
+		types.Args(
+			types.NewAny(
+				types.N,
+				types.NewArray([]types.Type{types.N, types.S}, nil),
+			),
+			types.NewAny(
+				types.N,
+				types.NewArray([]types.Type{types.N, types.S}, nil),
+			),
+		),
+		types.NewArray([]types.Type{types.N, types.N, types.N, types.N, types.N, types.N}, nil),
 	),
 }
 

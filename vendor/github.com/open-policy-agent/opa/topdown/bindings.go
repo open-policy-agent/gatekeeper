@@ -12,9 +12,8 @@ import (
 )
 
 type undo struct {
-	k    *ast.Term
-	u    *bindings
-	next *undo
+	k *ast.Term
+	u *bindings
 }
 
 func (u *undo) Undo() {
@@ -27,7 +26,6 @@ func (u *undo) Undo() {
 		return
 	}
 	u.u.delete(u.k)
-	u.next.Undo()
 }
 
 type bindings struct {
@@ -123,19 +121,20 @@ func (u *bindings) plugNamespaced(a *ast.Term, caller *bindings) *ast.Term {
 	return a
 }
 
-func (u *bindings) bind(a *ast.Term, b *ast.Term, other *bindings) *undo {
+func (u *bindings) bind(a *ast.Term, b *ast.Term, other *bindings, und *undo) {
 	u.values.Put(a, value{
 		u: other,
 		v: b,
 	})
-	return &undo{a, u, nil}
+	und.k = a
+	und.u = u
 }
 
 func (u *bindings) apply(a *ast.Term) (*ast.Term, *bindings) {
 	// Early exit for non-var terms. Only vars are bound in the binding list,
 	// so the lookup below will always fail for non-var terms. In some cases,
 	// the lookup may be expensive as it has to hash the term (which for large
-	// inputs can be costly.)
+	// inputs can be costly).
 	_, ok := a.Value.(ast.Var)
 	if !ok {
 		return a, u
@@ -279,7 +278,9 @@ func (vis namespacingVisitor) namespaceTerm(a *ast.Term) *ast.Term {
 
 const maxLinearScan = 16
 
-// bindingsArrayHashMap uses an array with linear scan instead of a hash map for smaller # of entries. Hash maps start to show off their performance advantage only after 16 keys.
+// bindingsArrayHashMap uses an array with linear scan instead
+// of a hash map for smaller # of entries. Hash maps start to
+// show off their performance advantage only after 16 keys.
 type bindingsArrayHashmap struct {
 	n int // Entries in the array.
 	a *[maxLinearScan]bindingArrayKeyValue
