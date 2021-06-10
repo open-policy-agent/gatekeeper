@@ -2,6 +2,9 @@ run:
   timeout: 5m
 
 linters-settings:
+  gocritic:
+    enabled-tags:
+    - performance
   gosec:
     excludes:
     - G108
@@ -17,19 +20,20 @@ linters-settings:
 linters:
   disable-all: true
   enable:
+    - deadcode
     - errcheck
-    - govet
     - ineffassign
-    - revive # replacement for golint
+    - gocritic
     - goconst
     - gofmt
     - goimports
+    - gosec
+    - gosimple
+    - govet
+    - misspell
+    - revive # replacement for golint
+    - staticcheck
+    - structcheck
+    - typecheck
     - unused
     - varcheck
-    - deadcode
-    - misspell
-    - typecheck
-    - structcheck
-    - staticcheck
-    - gosimple
-    - gosec

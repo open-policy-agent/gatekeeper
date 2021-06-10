@@ -55,8 +55,7 @@ var testConstraintTemplate = templates.ConstraintTemplate{
 }
 
 func (dl dummyLister) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	switch l := list.(type) {
-	case *v1beta1.ConstraintTemplateList:
+	if l, ok := list.(*v1beta1.ConstraintTemplateList); ok {
 		i := v1beta1.ConstraintTemplate{}
 		if err := scheme.Convert(&testConstraintTemplate, &i, nil); err != nil {
 			// These failures will be swallowed by readiness.retryAll
