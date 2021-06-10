@@ -7,6 +7,7 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
 spec:
+  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintPodStatus

@@ -29,11 +29,11 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.5.0
-  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
+  PreserveUnknownFields: false
   group: config.gatekeeper.sh
   names:
     kind: Config
@@ -139,11 +139,11 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.5.0
-  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
 spec:
+  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintPodStatus
@@ -213,11 +213,11 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.5.0
-  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
 spec:
+  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintTemplatePodStatus
@@ -286,11 +286,11 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.5.0
-  creationTimestamp: null
   labels:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
+  PreserveUnknownFields: false
   group: templates.gatekeeper.sh
   names:
     kind: ConstraintTemplate
