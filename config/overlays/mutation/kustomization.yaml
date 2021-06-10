@@ -16,6 +16,13 @@ resources:
 - ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - ../../crd/bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 
+patches:
+- target:
+    group: apiextensions.k8s.io
+    version: v1
+    kind: CustomResourceDefinition
+  path: ../../crd/patches/preserve_unknown_fields_false.yaml
+
 patchesJson6902:
 - target:
     group: apiextensions.k8s.io
