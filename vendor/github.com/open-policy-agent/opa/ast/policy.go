@@ -20,7 +20,6 @@ import (
 // subsequent lookups. If the hash seeds are out of sync, lookups will fail.
 var hashSeed = rand.New(rand.NewSource(time.Now().UnixNano()))
 var hashSeed0 = (uint64(hashSeed.Uint32()) << 32) | uint64(hashSeed.Uint32())
-var hashSeed1 = (uint64(hashSeed.Uint32()) << 32) | uint64(hashSeed.Uint32())
 
 // DefaultRootDocument is the default root document.
 //
@@ -31,8 +30,14 @@ var DefaultRootDocument = VarTerm("data")
 // InputRootDocument names the document containing query arguments.
 var InputRootDocument = VarTerm("input")
 
+// SchemaRootDocument names the document containing external data schemas.
+var SchemaRootDocument = VarTerm("schema")
+
 // RootDocumentNames contains the names of top-level documents that can be
 // referred to in modules and queries.
+//
+// Note, the schema document is not currently implemented in the evaluator so it
+// is not registered as a root document name (yet).
 var RootDocumentNames = NewSet(
 	DefaultRootDocument,
 	InputRootDocument,
@@ -47,6 +52,13 @@ var DefaultRootRef = Ref{DefaultRootDocument}
 //
 // All refs to query arguments are prefixed with this ref.
 var InputRootRef = Ref{InputRootDocument}
+
+// SchemaRootRef is a reference to the root of the schema document.
+//
+// All refs to schema documents are prefixed with this ref. Note, the schema
+// document is not currently implemented in the evaluator so it is not
+// registered as a root document ref (yet).
+var SchemaRootRef = Ref{SchemaRootDocument}
 
 // RootDocumentRefs contains the prefixes of top-level documents that all
 // non-local references start with.
@@ -118,16 +130,32 @@ type (
 	// within a namespace (defined by the package) and optional
 	// dependencies on external documents (defined by imports).
 	Module struct {
-		Package  *Package   `json:"package"`
-		Imports  []*Import  `json:"imports,omitempty"`
-		Rules    []*Rule    `json:"rules,omitempty"`
-		Comments []*Comment `json:"comments,omitempty"`
+		Package     *Package       `json:"package"`
+		Imports     []*Import      `json:"imports,omitempty"`
+		Annotations []*Annotations `json:"annotations,omitempty"`
+		Rules       []*Rule        `json:"rules,omitempty"`
+		Comments    []*Comment     `json:"comments,omitempty"`
 	}
 
 	// Comment contains the raw text from the comment in the definition.
 	Comment struct {
 		Text     []byte
 		Location *Location
+	}
+
+	// Annotations represents metadata attached to other AST nodes such as rules.
+	Annotations struct {
+		Location *Location           `json:"-"`
+		Scope    string              `json:"scope"`
+		Schemas  []*SchemaAnnotation `json:"schemas,omitempty"`
+		node     Node
+	}
+
+	// SchemaAnnotation contains a schema declaration for the document identified by the path.
+	SchemaAnnotation struct {
+		Path       Ref          `json:"path"`
+		Schema     Ref          `json:"schema,omitempty"`
+		Definition *interface{} `json:"definition,omitempty"`
 	}
 
 	// Package represents the namespace of the documents produced
@@ -180,12 +208,12 @@ type (
 
 	// Expr represents a single expression contained inside the body of a rule.
 	Expr struct {
-		Location  *Location   `json:"-"`
-		Generated bool        `json:"generated,omitempty"`
-		Index     int         `json:"index"`
-		Negated   bool        `json:"negated,omitempty"`
-		Terms     interface{} `json:"terms"`
 		With      []*With     `json:"with,omitempty"`
+		Terms     interface{} `json:"terms"`
+		Location  *Location   `json:"-"`
+		Index     int         `json:"index"`
+		Generated bool        `json:"generated,omitempty"`
+		Negated   bool        `json:"negated,omitempty"`
 	}
 
 	// SomeDecl represents a variable declaration statement. The symbols are variables.
@@ -201,6 +229,122 @@ type (
 		Value    *Term     `json:"value"`
 	}
 )
+
+func (s *Annotations) String() string {
+	bs, _ := json.Marshal(s)
+	return string(bs)
+}
+
+// Loc returns the location of this annotation.
+func (s *Annotations) Loc() *Location {
+	return s.Location
+}
+
+// SetLoc updates the location of this annotation.
+func (s *Annotations) SetLoc(l *Location) {
+	s.Location = l
+}
+
+// Compare returns an integer indicating if s is less than, equal to, or greater
+// than other.
+func (s *Annotations) Compare(other *Annotations) int {
+
+	if cmp := scopeCompare(s.Scope, other.Scope); cmp != 0 {
+		return cmp
+	}
+
+	max := len(s.Schemas)
+	if len(other.Schemas) < max {
+		max = len(other.Schemas)
+	}
+
+	for i := 0; i < max; i++ {
+		if cmp := s.Schemas[i].Compare(other.Schemas[i]); cmp != 0 {
+			return cmp
+		}
+	}
+
+	if len(s.Schemas) > len(other.Schemas) {
+		return 1
+	} else if len(s.Schemas) < len(other.Schemas) {
+		return -1
+	}
+
+	return 0
+}
+
+// Copy returns a deep copy of s.
+func (s *Annotations) Copy(node Node) *Annotations {
+	cpy := *s
+	cpy.Schemas = make([]*SchemaAnnotation, len(s.Schemas))
+	for i := range cpy.Schemas {
+		cpy.Schemas[i] = s.Schemas[i].Copy()
+	}
+	cpy.node = node
+	return &cpy
+}
+
+// Copy returns a deep copy of s.
+func (s *SchemaAnnotation) Copy() *SchemaAnnotation {
+	cpy := *s
+	return &cpy
+}
+
+// Compare returns an integer indicating if s is less than, equal to, or greater
+// than other.
+func (s *SchemaAnnotation) Compare(other *SchemaAnnotation) int {
+
+	if cmp := s.Path.Compare(other.Path); cmp != 0 {
+		return cmp
+	}
+
+	if cmp := s.Schema.Compare(other.Schema); cmp != 0 {
+		return cmp
+	}
+
+	if s.Definition != nil && other.Definition == nil {
+		return -1
+	} else if s.Definition == nil && other.Definition != nil {
+		return 1
+	} else if s.Definition != nil && other.Definition != nil {
+		return util.Compare(*s.Definition, *other.Definition)
+	}
+
+	return 0
+}
+
+func (s *SchemaAnnotation) String() string {
+	bs, _ := json.Marshal(s)
+	return string(bs)
+}
+
+func scopeCompare(s1, s2 string) int {
+
+	o1 := scopeOrder(s1)
+	o2 := scopeOrder(s2)
+
+	if o2 < o1 {
+		return 1
+	} else if o2 > o1 {
+		return -1
+	}
+
+	if s1 < s2 {
+		return -1
+	} else if s2 < s1 {
+		return 1
+	}
+
+	return 0
+}
+
+func scopeOrder(s string) int {
+	switch s {
+	case annotationScopeRule:
+		return 1
+	}
+	return 0
+}
 
 // Compare returns an integer indicating whether mod is less than, equal to,
 // or greater than other.
@@ -219,6 +363,9 @@ func (mod *Module) Compare(other *Module) int {
 	if cmp := importsCompare(mod.Imports, other.Imports); cmp != 0 {
 		return cmp
 	}
+	if cmp := annotationsCompare(mod.Annotations, other.Annotations); cmp != 0 {
+		return cmp
+	}
 	return rulesCompare(mod.Rules, other.Rules)
 }
 
@@ -226,14 +373,39 @@ func (mod *Module) Compare(other *Module) int {
 func (mod *Module) Copy() *Module {
 	cpy := *mod
 	cpy.Rules = make([]*Rule, len(mod.Rules))
+
+	var nodes map[Node]Node
+
+	if len(mod.Annotations) > 0 {
+		nodes = make(map[Node]Node)
+	}
+
 	for i := range mod.Rules {
 		cpy.Rules[i] = mod.Rules[i].Copy()
+		cpy.Rules[i].Module = &cpy
+		if nodes != nil {
+			nodes[mod.Rules[i]] = cpy.Rules[i]
+		}
 	}
+
 	cpy.Imports = make([]*Import, len(mod.Imports))
 	for i := range mod.Imports {
 		cpy.Imports[i] = mod.Imports[i].Copy()
+		if nodes != nil {
+			nodes[mod.Imports[i]] = cpy.Imports[i]
+		}
 	}
+
 	cpy.Package = mod.Package.Copy()
+	if nodes != nil {
+		nodes[mod.Package] = cpy.Package
+	}
+
+	cpy.Annotations = make([]*Annotations, len(mod.Annotations))
+	for i := range mod.Annotations {
+		cpy.Annotations[i] = mod.Annotations[i].Copy(nodes[mod.Annotations[i].node])
+	}
+
 	return &cpy
 }
 
@@ -243,17 +415,36 @@ func (mod *Module) Equal(other *Module) bool {
 }
 
 func (mod *Module) String() string {
+	byNode := map[Node][]*Annotations{}
+	for _, a := range mod.Annotations {
+		byNode[a.node] = append(byNode[a.node], a)
+	}
+
+	appendAnnotationStrings := func(buf []string, node Node) []string {
+		if as, ok := byNode[node]; ok {
+			for i := range as {
+				buf = append(buf, "# METADATA")
+				buf = append(buf, "# "+as[i].String())
+			}
+		}
+		return buf
+	}
+
 	buf := []string{}
+	buf = appendAnnotationStrings(buf, mod.Package)
 	buf = append(buf, mod.Package.String())
+
 	if len(mod.Imports) > 0 {
 		buf = append(buf, "")
 		for _, imp := range mod.Imports {
+			buf = appendAnnotationStrings(buf, imp)
 			buf = append(buf, imp.String())
 		}
 	}
 	if len(mod.Rules) > 0 {
 		buf = append(buf, "")
 		for _, rule := range mod.Rules {
+			buf = appendAnnotationStrings(buf, rule)
 			buf = append(buf, rule.String())
 		}
 	}
@@ -1373,12 +1564,6 @@ func (rs RuleSet) String() string {
 	}
 	return "{" + strings.Join(buf, ", ") + "}"
 }
-
-type ruleSlice []*Rule
-
-func (s ruleSlice) Less(i, j int) bool { return Compare(s[i], s[j]) < 0 }
-func (s ruleSlice) Swap(i, j int)      { x := s[i]; s[i] = s[j]; s[j] = x }
-func (s ruleSlice) Len() int           { return len(s) }
 
 // Returns true if the equality or assignment expression referred to by expr
 // has a valid number of arguments.
