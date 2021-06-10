@@ -30,7 +30,7 @@ var (
 type AssignMutator struct {
 	id        types.ID
 	assign    *mutationsv1alpha1.Assign
-	path      *parser.Path
+	path      parser.Path
 	bindings  []schema.Binding
 	tester    *patht.Tester
 	valueTest *mutationsv1alpha1.AssignIf
@@ -123,7 +123,7 @@ func (m *AssignMutator) HasDiff(mutator types.Mutator) bool {
 	return false
 }
 
-func (m *AssignMutator) Path() *parser.Path {
+func (m *AssignMutator) Path() parser.Path {
 	return m.path
 }
 
@@ -131,7 +131,7 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	res := &AssignMutator{
 		id:     m.id,
 		assign: m.assign.DeepCopy(),
-		path: &parser.Path{
+		path: parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
 		bindings: make([]schema.Binding, len(m.bindings)),
@@ -165,7 +165,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	}
 
 	toAssign := make(map[string]interface{})
-	err = json.Unmarshal([]byte(assign.Spec.Parameters.Assign.Raw), &toAssign)
+	err = json.Unmarshal(assign.Spec.Parameters.Assign.Raw, &toAssign)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid format for parameters.assign %s for Assign %s", assign.Spec.Parameters.Assign.Raw, assign.GetName())
 	}
@@ -180,20 +180,13 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 		return nil, err
 	}
 
-	id, err := types.MakeID(assign)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve id for assign type")
-	}
+	id := types.MakeID(assign)
 
 	pathTests, err := gatherPathTests(assign)
 	if err != nil {
 		return nil, err
 	}
-	err = patht.ValidatePathTests(path, pathTests)
-	if err != nil {
-		return nil, err
-	}
-	tester, err := patht.New(pathTests)
+	tester, err := patht.New(path, pathTests)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +258,7 @@ func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	return nil
 }
 
-func hasMetadataRoot(path *parser.Path) bool {
+func hasMetadataRoot(path parser.Path) bool {
 	if len(path.Nodes) == 0 {
 		return false
 	}
@@ -278,8 +271,8 @@ func hasMetadataRoot(path *parser.Path) bool {
 
 // checkKeyNotChanged does not allow to change the key field of
 // a list element. A path like foo[name: bar].name is rejected
-func checkKeyNotChanged(p *parser.Path, assignName string) error {
-	if len(p.Nodes) == 0 || p.Nodes == nil {
+func checkKeyNotChanged(p parser.Path, assignName string) error {
+	if len(p.Nodes) == 0 {
 		return errors.New("empty path")
 	}
 	if len(p.Nodes) < 2 {
@@ -309,8 +302,8 @@ func checkKeyNotChanged(p *parser.Path, assignName string) error {
 	return nil
 }
 
-func validateObjectAssignedToList(p *parser.Path, value interface{}, assignName string) error {
-	if len(p.Nodes) == 0 || p.Nodes == nil {
+func validateObjectAssignedToList(p parser.Path, value interface{}, assignName string) error {
+	if len(p.Nodes) == 0 {
 		return errors.New("empty path")
 	}
 	if p.Nodes[len(p.Nodes)-1].Type() != parser.ListNode {

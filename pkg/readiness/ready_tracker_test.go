@@ -167,8 +167,7 @@ func Test_AssignMetadata(t *testing.T) {
 
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
-		id, err := mutationtypes.MakeID(am)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create AssignMetadata id")
+		id := mutationtypes.MakeID(am)
 		exptectedMutator := mutationCache.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
@@ -215,8 +214,7 @@ func Test_Assign(t *testing.T) {
 
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
-		id, err := mutationtypes.MakeID(am)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create Assign id")
+		id := mutationtypes.MakeID(am)
 		exptectedMutator := mutationCache.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
