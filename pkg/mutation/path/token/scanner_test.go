@@ -16,6 +16,7 @@ limitations under the License.
 package token
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -26,6 +27,7 @@ func TestScanner(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected []Token
+		wantErr  error
 	}{
 		{
 			input: `foo.bar.baz`,
@@ -195,12 +197,14 @@ func TestScanner(t *testing.T) {
 			expected: []Token{
 				{Type: ERROR, Literal: `unterminated string '`},
 			},
+			wantErr: ErrUnterminatedString,
 		},
 		{
 			input: `"also unterminated\"`,
 			expected: []Token{
 				{Type: ERROR, Literal: `also unterminated"`},
 			},
+			wantErr: ErrUnterminatedString,
 		},
 		{
 			input: `"🤔☕️❗️"`,
@@ -222,6 +226,14 @@ func TestScanner(t *testing.T) {
 				{Type: IDENT, Literal: `Moo`},
 				{Type: ERROR, Literal: `🐙`},
 			},
+			wantErr: ErrInvalidCharacter,
+		},
+		{
+			input: "\"quoted\nnewline\"",
+			expected: []Token{
+				{Type: IDENT, Literal: "quoted\nnewline"},
+				{Type: EOF, Literal: ""},
+			},
 		},
 	}
 
@@ -240,6 +252,10 @@ func TestScanner(t *testing.T) {
 			diff := cmp.Diff(tc.expected, tokens)
 			if diff != "" {
 				t.Errorf("for input: %s\nunexpected tokens: %s", tc.input, diff)
+			}
+
+			if !errors.Is(s.err, tc.wantErr) {
+				t.Errorf("for input: %s\ngot scanner error %v, want %v", tc.input, s.err, tc.wantErr)
 			}
 		})
 	}
