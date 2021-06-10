@@ -7,13 +7,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: config.gatekeeper.sh
   names:
     kind: Config
     listKind: ConfigList
     plural: configs
     singular: config
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1alpha1

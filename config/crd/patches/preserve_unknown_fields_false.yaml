@@ -3,4 +3,4 @@ kind: CustomResourceDefinition
 metadata:
   name: foobar
 spec:
-  PreserveUnknownFields: false
+  preserveUnknownFields: false

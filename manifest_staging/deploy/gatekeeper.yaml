@@ -33,13 +33,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: configs.config.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: config.gatekeeper.sh
   names:
     kind: Config
     listKind: ConfigList
     plural: configs
     singular: config
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1alpha1
@@ -143,13 +143,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constraintpodstatuses.status.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintPodStatus
     listKind: ConstraintPodStatusList
     plural: constraintpodstatuses
     singular: constraintpodstatus
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1
@@ -217,13 +217,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constrainttemplatepodstatuses.status.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: status.gatekeeper.sh
   names:
     kind: ConstraintTemplatePodStatus
     listKind: ConstraintTemplatePodStatusList
     plural: constrainttemplatepodstatuses
     singular: constrainttemplatepodstatus
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1beta1
@@ -290,13 +290,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
-  PreserveUnknownFields: false
   group: templates.gatekeeper.sh
   names:
     kind: ConstraintTemplate
     listKind: ConstraintTemplateList
     plural: constrainttemplates
     singular: constrainttemplate
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1alpha1
