@@ -43,7 +43,7 @@ func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
 		return false
 	}
-	matches, err := match.Matches(m.assign.Spec.Match, obj, ns)
+	matches, err := match.Matches(&m.assign.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)
 		return false

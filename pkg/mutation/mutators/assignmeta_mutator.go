@@ -38,7 +38,7 @@ var (
 	}
 )
 
-//AssignMetadataMutator is a mutator built out of an
+// AssignMetadataMutator is a mutator built out of an
 // AssignMeta instance.
 type AssignMetadataMutator struct {
 	id             types.ID
@@ -50,7 +50,7 @@ type AssignMetadataMutator struct {
 var _ types.Mutator = &AssignMetadataMutator{}
 
 func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(m.assignMetadata.Spec.Match, obj, ns)
+	matches, err := match.Matches(&m.assignMetadata.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
 		return false
