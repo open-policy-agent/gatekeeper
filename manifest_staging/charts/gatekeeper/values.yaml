@@ -5,8 +5,10 @@ constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
+validatingWebhookAnnotations: {}
 enableDeleteOperations: false
 experimentalEnableMutation: false
+mutatingWebhookAnnotations: {}
 auditChunkSize: 0
 logLevel: INFO
 logDenies: false
@@ -30,8 +32,9 @@ podAnnotations:
 podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
-mutatingWebhookAnnotations: {}
-validatingWebhookAnnotations: {}
+certificates:
+  generate: true
+  secretName: gatekeeper-webhook-server-cert
 controllerManager:
   hostNetwork: false
   priorityClassName: system-cluster-critical
@@ -56,8 +59,6 @@ controllerManager:
     requests:
       cpu: 100m
       memory: 256Mi
-  certificateSecretName: gatekeeper-webhook-server-cert
-  generateCertificate: true
 audit:
   hostNetwork: false
   priorityClassName: system-cluster-critical

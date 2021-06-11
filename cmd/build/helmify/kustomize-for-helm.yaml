@@ -65,6 +65,7 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-mutation={{ .Values.experimentalEnableMutation}}
+            - --disableCertRotation={{ not .Values.certificates.generate }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
@@ -83,7 +84,7 @@ spec:
       volumes:
         - name: cert
           secret:
-            secretName: "{{ .Values.controllerManager.certificateSecretName }}"
+            secretName: "{{ .Values.certificates.secretName }}"
 ---
 apiVersion: apps/v1
 kind: Deployment

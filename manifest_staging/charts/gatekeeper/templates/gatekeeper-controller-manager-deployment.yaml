@@ -49,6 +49,7 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-mutation={{ .Values.experimentalEnableMutation}}
+        - --disableCertRotation={{ not .Values.certificates.generate }}
         
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
@@ -115,4 +116,4 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: '{{ .Values.controllerManager.certificateSecretName }}'
+          secretName: '{{ .Values.certificates.secretName }}'
