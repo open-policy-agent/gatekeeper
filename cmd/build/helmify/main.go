@@ -102,7 +102,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-webhook-server-cert" && kind == "Secret" {
-				obj = "{{- if ! .Values.controllerManager.generateCertificate }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if .Values.controllerManager.generateCertificate }}\n" + obj + "{{- end }}\n"
 			}
 
 			if kind == "Deployment" {
