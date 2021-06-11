@@ -101,6 +101,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if .Values.experimentalEnableMutation }}\n" + obj + "{{- end }}\n"
 			}
 
+			if name == "gatekeeper-webhook-server-cert" && kind == "Secret" {
+				obj = "{{- if ! .Values.controllerManager.generateCertificate }}\n" + obj + "{{- end }}\n"
+			}
+
 			if kind == "Deployment" {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}

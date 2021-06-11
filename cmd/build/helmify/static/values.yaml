@@ -57,6 +57,7 @@ controllerManager:
       cpu: 100m
       memory: 256Mi
   certificateSecretName: gatekeeper-webhook-server-cert
+  generateCertificate: true
 audit:
   hostNetwork: false
   priorityClassName: system-cluster-critical
