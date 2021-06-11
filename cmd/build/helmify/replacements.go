@@ -35,7 +35,13 @@ var replacements = map[string]string{
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
+	"HELMSUBST_SECRET_NAME": `{{- .Values.controllerManager.certificateSecretName }}`,
+
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
+
+	`HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
+
+	`HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""`: `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"HELMSUBST_RESOURCEQUOTA_POD_LIMIT": `{{ .Values.podCountLimit }}`,
 

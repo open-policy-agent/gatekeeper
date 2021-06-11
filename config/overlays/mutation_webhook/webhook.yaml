@@ -7,26 +7,28 @@ kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: gatekeeper-mutating-webhook-configuration
+  annotations:
+    HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS: ""
 webhooks:
-- admissionReviewVersions:
-  - v1
-  - v1beta1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /v1/mutate
-  failurePolicy: Ignore
-  name: mutation.gatekeeper.sh
-  matchPolicy: Exact
-  rules:
-  - apiGroups:
-    - '*'
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - '*'
-  sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: webhook-service
+        namespace: system
+        path: /v1/mutate
+    failurePolicy: Ignore
+    name: mutation.gatekeeper.sh
+    matchPolicy: Exact
+    rules:
+      - apiGroups:
+          - "*"
+        apiVersions:
+          - "*"
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - "*"
+    sideEffects: None
