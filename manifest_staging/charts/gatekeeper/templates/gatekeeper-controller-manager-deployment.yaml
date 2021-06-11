@@ -115,4 +115,4 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: gatekeeper-webhook-server-cert
+          secretName: '{{ .Values.controllerManager.certificateSecretName }}'
