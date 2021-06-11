@@ -167,8 +167,7 @@ func Test_AssignMetadata(t *testing.T) {
 
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
-		id, err := mutationtypes.MakeID(am)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create AssignMetadata id")
+		id := mutationtypes.MakeID(am)
 		exptectedMutator := mutationCache.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
@@ -215,8 +214,7 @@ func Test_Assign(t *testing.T) {
 
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
-		id, err := mutationtypes.MakeID(am)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "can not create Assign id")
+		id := mutationtypes.MakeID(am)
 		exptectedMutator := mutationCache.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
@@ -274,10 +272,10 @@ func Test_Tracker(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
 	}
 	// TODO: Verify data if we add the corresponding API to opa.Client.
-	//for _, d := range testData {
-	//	_, err := opaClient.GetData(ctx, c)
-	//	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
-	//}
+	// for _, d := range testData {
+	// 	_, err := opaClient.GetData(ctx, c)
+	// 	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
+	// }
 
 	// Add additional templates/constraints and verify that we remain satisfied
 	err = applyFixtures("testdata/post")

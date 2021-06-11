@@ -309,10 +309,8 @@ func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
 		t,
 	); err == nil {
 		t.Errorf("Expected error not raised. Conflicting name must not be applied.")
-	} else {
-		if err.Error() != "key value of replaced object must not change" {
-			t.Errorf("Incorrect error message: %s", err.Error())
-		}
+	} else if err.Error() != "key value of replaced object must not change" {
+		t.Errorf("Incorrect error message: %s", err.Error())
 	}
 }
 

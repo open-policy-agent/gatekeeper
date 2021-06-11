@@ -172,10 +172,10 @@ func addConstraints(opa *opa.Client, list []unstructured.Unstructured) error {
 	return nil
 }
 
-// generateConstraints generates M constraints based on representative constraint in crList
-func generateConstraints(M int, crList []unstructured.Unstructured) []unstructured.Unstructured {
-	result := make([]unstructured.Unstructured, M)
-	for i := 0; i < M; i++ {
+// generateConstraints generates m constraints based on representative constraint in crList
+func generateConstraints(m int, crList []unstructured.Unstructured) []unstructured.Unstructured {
+	result := make([]unstructured.Unstructured, m)
+	for i := 0; i < m; i++ {
 		r := crList[i%len(crList)]
 		result[i] = *(r.DeepCopy())
 		r.SetName(genRandString(10))

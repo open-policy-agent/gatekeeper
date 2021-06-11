@@ -419,7 +419,7 @@ func TestConstraintEnforcement(t *testing.T) {
 				t.Errorf("allowed = %v, expected %v:\n%s\n\n%s", !tc.allowed, tc.allowed, res.TraceDump(), dump)
 			}
 
-			//also test oldObject
+			// also test oldObject
 			req2 := &admissionv1.AdmissionRequest{
 				Kind: metav1.GroupVersionKind{
 					Group:   tc.obj.GroupVersionKind().Group,

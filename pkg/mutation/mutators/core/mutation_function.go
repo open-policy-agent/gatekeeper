@@ -110,20 +110,18 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 				}
 				mutated = mutated || m
 				elementFound = true
-			} else {
-				if listElementAsObject, ok := listElement.(map[string]interface{}); ok {
-					if elementValue, ok := listElementAsObject[key]; ok {
-						if *castPathEntry.KeyValue == elementValue {
-							if !s.tester.ExistsOkay(depth) {
-								return false, nil, nil
-							}
-							m, _, err := s.mutateInternal(listElement, depth+1)
-							if err != nil {
-								return false, nil, err
-							}
-							mutated = mutated || m
-							elementFound = true
+			} else if listElementAsObject, ok := listElement.(map[string]interface{}); ok {
+				if elementValue, ok := listElementAsObject[key]; ok {
+					if *castPathEntry.KeyValue == elementValue {
+						if !s.tester.ExistsOkay(depth) {
+							return false, nil, nil
 						}
+						m, _, err := s.mutateInternal(listElement, depth+1)
+						if err != nil {
+							return false, nil, err
+						}
+						mutated = mutated || m
+						elementFound = true
 					}
 				}
 			}

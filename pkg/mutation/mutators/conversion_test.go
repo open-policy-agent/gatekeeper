@@ -84,7 +84,7 @@ func TestAssignMetadataToMutator(t *testing.T) {
 		t.Fatalf("MutatorForAssignMetadata for failed, %v", err)
 	}
 	path := mutator.Path()
-	if path == nil {
+	if len(path.Nodes) == 0 {
 		t.Fatalf("Got empty path")
 	}
 }

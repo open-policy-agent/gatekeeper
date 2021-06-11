@@ -94,10 +94,10 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Uncommenting the below enables logging of K8s internals like watch.
-	//fs := flag.NewFlagSet("", flag.PanicOnError)
-	//klog.InitFlags(fs)
-	//fs.Parse([]string{"--alsologtostderr", "-v=10"})
-	//klog.SetOutput(os.Stderr)
+	// fs := flag.NewFlagSet("", flag.PanicOnError)
+	// klog.InitFlags(fs)
+	// fs.Parse([]string{"--alsologtostderr", "-v=10"})
+	// klog.SetOutput(os.Stderr)
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
