@@ -65,7 +65,7 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-mutation={{ .Values.experimentalEnableMutation}}
-            - --disableCertRotation={{ not .Values.certificates.generate }}
+            - --disable-cert-rotation={{ not .Values.certificates.generate }}
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"

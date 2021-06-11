@@ -49,7 +49,7 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-mutation={{ .Values.experimentalEnableMutation}}
-        - --disableCertRotation={{ not .Values.certificates.generate }}
+        - --disable-cert-rotation={{ not .Values.certificates.generate }}
         
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
