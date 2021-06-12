@@ -830,6 +830,12 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  sideEffects: None
+  timeoutSeconds: 3
+  namespaceSelector:
+    matchExpressions:
+      - key: admission.gatekeeper.sh/ignore
+        operator: DoesNotExist
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -30,3 +30,8 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
+  timeoutSeconds: 3
+  namespaceSelector:
+    matchExpressions:
+      - key: admission.gatekeeper.sh/ignore
+        operator: DoesNotExist
