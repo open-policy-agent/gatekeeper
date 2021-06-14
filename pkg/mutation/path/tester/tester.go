@@ -86,7 +86,7 @@ func New(location parser.Path, tests []Test) (*Tester, error) {
 	}
 
 	// Read in all tests before checking for conflicts.
-	idxLowestMustNot := math.MaxInt64
+	idxLowestMustNot := math.MaxInt32
 	idxHighestMust := 0
 	for _, test := range tests {
 		i := len(test.SubPath.Nodes) - 1
