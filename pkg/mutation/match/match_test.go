@@ -354,7 +354,7 @@ func TestMatch(t *testing.T) {
 			}
 			// namespace is not populated in the object metadata for mutation requests
 			tc.toMatch.SetNamespace("")
-			matches, err := Matches(tc.match, tc.toMatch, ns)
+			matches, err := Matches(&tc.match, tc.toMatch, ns)
 			if err != nil {
 				t.Error("Match failed for ", tc.tname)
 			}

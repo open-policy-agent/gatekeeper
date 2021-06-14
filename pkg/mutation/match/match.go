@@ -47,7 +47,7 @@ type Kinds struct {
 
 // Matches verifies if the given object belonging to the given namespace
 // matches the current mutator.
-func Matches(match Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
+func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
 		return false, fmt.Errorf("accessor failed for %s", obj.GetObjectKind().GroupVersionKind().Kind)
