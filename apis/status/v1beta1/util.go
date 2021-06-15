@@ -78,7 +78,7 @@ func dashPacker(vals ...string) (string, error) {
 		if i != 0 {
 			b.WriteString("-")
 		}
-		b.WriteString(strings.Replace(val, "-", "--", -1))
+		b.WriteString(strings.ReplaceAll(val, "-", "--"))
 	}
 	return b.String(), nil
 }

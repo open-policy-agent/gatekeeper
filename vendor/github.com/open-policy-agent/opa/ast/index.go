@@ -6,7 +6,6 @@ package ast
 
 import (
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 
@@ -17,18 +16,18 @@ import (
 type RuleIndex interface {
 
 	// Build tries to construct an index for the given rules. If the index was
-	// constructed, ok is true, otherwise false.
-	Build(rules []*Rule) (ok bool)
+	// constructed, it returns true, otherwise false.
+	Build(rules []*Rule) bool
 
 	// Lookup searches the index for rules that will match the provided
 	// resolver. If the resolver returns an error, it is returned via err.
-	Lookup(resolver ValueResolver) (result *IndexResult, err error)
+	Lookup(resolver ValueResolver) (*IndexResult, error)
 
 	// AllRules traverses the index and returns all rules that will match
 	// the provided resolver without any optimizations (effectively with
 	// indexing disabled). If the resolver returns an error, it is returned
 	// via err.
-	AllRules(resolver ValueResolver) (result *IndexResult, err error)
+	AllRules(resolver ValueResolver) (*IndexResult, error)
 }
 
 // IndexResult contains the result of an index lookup.
@@ -421,7 +420,7 @@ func (node *trieNode) String() string {
 		flags = append(flags, fmt.Sprintf("array:%p", node.array))
 	}
 	if len(node.scalars) > 0 {
-		buf := []string{}
+		buf := make([]string, 0, len(node.scalars))
 		for k, v := range node.scalars {
 			buf = append(buf, fmt.Sprintf("scalar(%v):%p", k, v))
 		}
@@ -432,7 +431,7 @@ func (node *trieNode) String() string {
 		flags = append(flags, fmt.Sprintf("%d rule(s)", len(node.rules)))
 	}
 	if len(node.mappers) > 0 {
-		flags = append(flags, "mapper(s)")
+		flags = append(flags, fmt.Sprintf("%d mapper(s)", len(node.mappers)))
 	}
 	return strings.Join(flags, " ")
 }
@@ -575,7 +574,10 @@ func (node *trieNode) traverse(resolver ValueResolver, tr *trieTraversalResult) 
 	}
 
 	if node.undefined != nil {
-		node.undefined.Traverse(resolver, tr)
+		err = node.undefined.Traverse(resolver, tr)
+		if err != nil {
+			return err
+		}
 	}
 
 	if v == nil {
@@ -583,11 +585,14 @@ func (node *trieNode) traverse(resolver ValueResolver, tr *trieTraversalResult) 
 	}
 
 	if node.any != nil {
-		node.any.Traverse(resolver, tr)
+		err = node.any.Traverse(resolver, tr)
+		if err != nil {
+			return err
+		}
 	}
 
-	if len(node.mappers) == 0 {
-		return node.traverseValue(resolver, tr, v)
+	if err := node.traverseValue(resolver, tr, v); err != nil {
+		return err
 	}
 
 	for i := range node.mappers {
@@ -632,7 +637,10 @@ func (node *trieNode) traverseArray(resolver ValueResolver, tr *trieTraversalRes
 	}
 
 	if node.any != nil {
-		node.any.traverseArray(resolver, tr, arr.Slice(1, -1))
+		err := node.any.traverseArray(resolver, tr, arr.Slice(1, -1))
+		if err != nil {
+			return err
+		}
 	}
 
 	child, ok := node.scalars[head]
@@ -672,18 +680,6 @@ func (node *trieNode) traverseUnknown(resolver ValueResolver, tr *trieTraversalR
 	}
 
 	return nil
-}
-
-type triePrinter struct {
-	depth int
-	w     io.Writer
-}
-
-func (p triePrinter) Do(x interface{}) trieWalker {
-	padding := strings.Repeat(" ", p.depth)
-	fmt.Fprintf(p.w, "%v%v\n", padding, x)
-	p.depth++
-	return p
 }
 
 func eqOperandsToRefAndValue(isVirtual func(Ref) bool, a, b *Term) (Ref, Value, bool) {

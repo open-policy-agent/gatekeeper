@@ -101,6 +101,7 @@ type mutationHandler struct {
 }
 
 // Handle the mutation request
+// nolint: gocritic // Must accept admission.Request to satisfy interface.
 func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "mutation")
 	var timeStart = time.Now()
@@ -153,7 +154,8 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	ns := &corev1.Namespace{}
 
 	// if the object being mutated is a namespace itself, we use it as namespace
-	if req.Kind.Kind == namespaceKind && req.Kind.Group == "" {
+	switch {
+	case req.Kind.Kind == namespaceKind && req.Kind.Group == "":
 		req.Namespace = ""
 		obj, _, err := deserializer.Decode(req.Object.Raw, nil, &corev1.Namespace{})
 		if err != nil {
@@ -164,7 +166,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		if !ok {
 			return admission.Errored(int32(http.StatusInternalServerError), errors.New("failed to cast namespace object")), nil
 		}
-	} else if req.AdmissionRequest.Namespace != "" {
+	case req.AdmissionRequest.Namespace != "":
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				log.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
@@ -177,7 +179,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 				return admission.Errored(int32(http.StatusInternalServerError), err), nil
 			}
 		}
-	} else {
+	default:
 		ns = nil
 	}
 	obj := unstructured.Unstructured{}

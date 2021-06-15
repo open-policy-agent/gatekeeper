@@ -171,12 +171,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	deleted = deleted || !assignMetadata.GetDeletionTimestamp().IsZero()
 	tracker := r.tracker.For(gvkAssignMetadata)
 
-	mID, err := types.MakeID(assignMetadata)
-	if err != nil {
-		tracker.TryCancelExpect(assignMetadata)
-		log.Error(err, "Failed to get id out of assign")
-		return reconcile.Result{}, err
-	}
+	mID := types.MakeID(assignMetadata)
 
 	if deleted {
 		tracker.CancelExpect(assignMetadata)

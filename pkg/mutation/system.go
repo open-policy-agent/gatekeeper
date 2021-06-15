@@ -178,14 +178,15 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 		iterations = append(iterations, fmt.Sprintf("iteration_%d", i), strings.Join(appliedMutationsText, ", "))
 	}
 	if len(iterations) > 0 {
-		logDetails := []interface{}{}
-		logDetails = append(logDetails, "Mutation Id", mutationUUID)
-		logDetails = append(logDetails, logging.EventType, logging.MutationApplied)
-		logDetails = append(logDetails, logging.ResourceGroup, obj.GroupVersionKind().Group)
-		logDetails = append(logDetails, logging.ResourceKind, obj.GroupVersionKind().Kind)
-		logDetails = append(logDetails, logging.ResourceAPIVersion, obj.GroupVersionKind().Version)
-		logDetails = append(logDetails, logging.ResourceNamespace, obj.GetNamespace())
-		logDetails = append(logDetails, logging.ResourceName, obj.GetName())
+		logDetails := []interface{}{
+			"Mutation Id", mutationUUID,
+			logging.EventType, logging.MutationApplied,
+			logging.ResourceGroup, obj.GroupVersionKind().Group,
+			logging.ResourceKind, obj.GroupVersionKind().Kind,
+			logging.ResourceAPIVersion, obj.GroupVersionKind().Version,
+			logging.ResourceNamespace, obj.GetNamespace(),
+			logging.ResourceName, obj.GetName(),
+		}
 		logDetails = append(logDetails, iterations...)
 		log.Info(message, logDetails...)
 	}

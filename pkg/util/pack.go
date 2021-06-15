@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,17 +13,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// ErrInvalidPackedName indicates that the packed name of the request to be
+// unpacked was invalid.
+var ErrInvalidPackedName = errors.New("invalid packed name, want request.Name to match 'gvk:[Kind].[Version].[Group]:[Name]'")
+
 // UnpackRequest unpacks the GVK from a reconcile.Request and returns the separated components.
 // GVK is encoded as "Kind.Version.Group".
 // Requests are expected to be in the format: {Name: "gvk:EncodedGVK:Name", Namespace: Namespace}
 func UnpackRequest(r reconcile.Request) (schema.GroupVersionKind, reconcile.Request, error) {
 	fields := strings.SplitN(r.Name, ":", 3)
 	if len(fields) != 3 || fields[0] != "gvk" {
-		return schema.GroupVersionKind{}, reconcile.Request{}, fmt.Errorf("invalid packed name: %s", r.Name)
+		return schema.GroupVersionKind{}, reconcile.Request{},
+			fmt.Errorf("%w: %q", ErrInvalidPackedName, r.Name)
 	}
 	gvk, _ := schema.ParseKindArg(fields[1])
 	if gvk == nil {
-		return schema.GroupVersionKind{}, reconcile.Request{}, fmt.Errorf("unable to parse gvk: %s", fields[1])
+		return schema.GroupVersionKind{}, reconcile.Request{},
+			fmt.Errorf("%w: unable to parse [Kind].[Version].[Group]: %q", ErrInvalidPackedName, fields[1])
 	}
 
 	return *gvk, reconcile.Request{NamespacedName: types.NamespacedName{

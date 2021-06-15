@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/open-policy-agent/opa/resolver"
 	"github.com/open-policy-agent/opa/topdown/cache"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -34,6 +35,7 @@ type Query struct {
 	store                  storage.Store
 	txn                    storage.Transaction
 	input                  *ast.Term
+	external               *resolverTrie
 	tracers                []QueryTracer
 	plugTraceVars          bool
 	unknowns               []*ast.Term
@@ -48,6 +50,7 @@ type Query struct {
 	builtins               map[string]*Builtin
 	indexing               bool
 	interQueryBuiltinCache cache.InterQueryCache
+	strictBuiltinErrors    bool
 }
 
 // Builtin represents a built-in function that queries can call.
@@ -62,6 +65,7 @@ func NewQuery(query ast.Body) *Query {
 		query:        query,
 		genvarprefix: ast.WildcardPrefix,
 		indexing:     true,
+		external:     newResolverTrie(),
 	}
 }
 
@@ -163,7 +167,7 @@ func (q *Query) WithPartialNamespace(ns string) *Query {
 }
 
 // WithSkipPartialNamespace disables namespacing of saved support rules that are generated
-// from the original policy (rules which are completely syntethic are still namespaced.)
+// from the original policy (rules which are completely synthetic are still namespaced.)
 func (q *Query) WithSkipPartialNamespace(yes bool) *Query {
 	q.skipSaveNamespace = yes
 	return q
@@ -226,6 +230,18 @@ func (q *Query) WithInterQueryBuiltinCache(c cache.InterQueryCache) *Query {
 	return q
 }
 
+// WithStrictBuiltinErrors tells the evaluator to treat all built-in function errors as fatal errors.
+func (q *Query) WithStrictBuiltinErrors(yes bool) *Query {
+	q.strictBuiltinErrors = yes
+	return q
+}
+
+// WithResolver configures an external resolver to use for the given ref.
+func (q *Query) WithResolver(ref ast.Ref, r resolver.Resolver) *Query {
+	q.external.Put(ref, r)
+	return q
+}
+
 // PartialRun executes partial evaluation on the query with respect to unknown
 // values. Partial evaluation attempts to evaluate as much of the query as
 // possible without requiring values for the unknowns set on the query. The
@@ -265,6 +281,7 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		targetStack:            newRefStack(),
 		txn:                    q.txn,
 		input:                  q.input,
+		external:               q.external,
 		tracers:                q.tracers,
 		traceEnabled:           len(q.tracers) > 0,
 		plugTraceVars:          q.plugTraceVars,
@@ -282,9 +299,10 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		inliningControl: &inliningControl{
 			shallow: q.shallowInlining,
 		},
-		genvarprefix: q.genvarprefix,
-		runtime:      q.runtime,
-		indexing:     q.indexing,
+		genvarprefix:  q.genvarprefix,
+		runtime:       q.runtime,
+		indexing:      q.indexing,
+		builtinErrors: &builtinErrors{},
 	}
 
 	if len(q.disableInlining) > 0 {
@@ -318,10 +336,10 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		// Include bindings as exprs so that when caller evals the result, they
 		// can obtain values for the vars in their query.
 		bindingExprs := []*ast.Expr{}
-		e.bindings.Iter(e.bindings, func(a, b *ast.Term) error {
+		_ = e.bindings.Iter(e.bindings, func(a, b *ast.Term) error {
 			bindingExprs = append(bindingExprs, ast.Equality.Expr(a, b))
 			return nil
-		})
+		}) // cannot return error
 
 		// Sort binding expressions so that results are deterministic.
 		sort.Slice(bindingExprs, func(i, j int) bool {
@@ -330,6 +348,12 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 
 		for i := range bindingExprs {
 			body.Append(bindingExprs[i])
+		}
+
+		// Skip this rule body if it fails to type-check.
+		// Type-checking failure means the rule body will never succeed.
+		if !e.compiler.PassesTypeCheck(body) {
+			return nil
 		}
 
 		if !q.shallowInlining {
@@ -341,6 +365,16 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 	})
 
 	support = e.saveSupport.List()
+
+	if q.strictBuiltinErrors && len(e.builtinErrors.errs) > 0 {
+		err = e.builtinErrors.errs[0]
+	}
+
+	for i := range support {
+		sort.Slice(support[i].Rules, func(j, k int) bool {
+			return support[i].Rules[j].Compare(support[i].Rules[k]) < 0
+		})
+	}
 
 	return partials, support, err
 }
@@ -385,6 +419,7 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 		targetStack:            newRefStack(),
 		txn:                    q.txn,
 		input:                  q.input,
+		external:               q.external,
 		tracers:                q.tracers,
 		traceEnabled:           len(q.tracers) > 0,
 		plugTraceVars:          q.plugTraceVars,
@@ -397,17 +432,23 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 		genvarprefix:           q.genvarprefix,
 		runtime:                q.runtime,
 		indexing:               q.indexing,
+		builtinErrors:          &builtinErrors{},
 	}
 	e.caller = e
 	q.metrics.Timer(metrics.RegoQueryEval).Start()
 	err := e.Run(func(e *eval) error {
 		qr := QueryResult{}
-		e.bindings.Iter(nil, func(k, v *ast.Term) error {
+		_ = e.bindings.Iter(nil, func(k, v *ast.Term) error {
 			qr[k.Value.(ast.Var)] = v
 			return nil
-		})
+		}) // cannot return error
 		return iter(qr)
 	})
+
+	if q.strictBuiltinErrors && err == nil && len(e.builtinErrors.errs) > 0 {
+		err = e.builtinErrors.errs[0]
+	}
+
 	q.metrics.Timer(metrics.RegoQueryEval).Stop()
 	return err
 }

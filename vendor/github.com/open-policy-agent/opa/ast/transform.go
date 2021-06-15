@@ -59,6 +59,15 @@ func Transform(t Transformer, x interface{}) (interface{}, error) {
 				return nil, fmt.Errorf("illegal transform: %T != %T", y.Rules[i], rule)
 			}
 		}
+		for i := range y.Annotations {
+			a, err := Transform(t, y.Annotations[i])
+			if err != nil {
+				return nil, err
+			}
+			if y.Annotations[i], ok = a.(*Annotations); !ok {
+				return nil, fmt.Errorf("illegal transform: %T != %T", y.Annotations[i], a)
+			}
+		}
 		for i := range y.Comments {
 			comment, err := Transform(t, y.Comments[i])
 			if err != nil {
@@ -346,18 +355,6 @@ func transformBody(t Transformer, body Body) (Body, error) {
 		return nil, fmt.Errorf("illegal transform: %T != %T", body, y)
 	}
 	return r, nil
-}
-
-func transformExpr(t Transformer, expr *Expr) (*Expr, error) {
-	y, err := Transform(t, expr)
-	if err != nil {
-		return nil, err
-	}
-	h, ok := y.(*Expr)
-	if !ok {
-		return nil, fmt.Errorf("illegal transform: %T != %T", expr, y)
-	}
-	return h, nil
 }
 
 func transformTerm(t Transformer, term *Term) (*Term, error) {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by an Apache2
 // license that can be found in the LICENSE file.
 
+// nolint: deadcode // Public API.
 package ast
 
 import (
@@ -159,6 +160,10 @@ func (illegalResolver) Resolve(ref Ref) (interface{}, error) {
 // value should not contain any values that require evaluation (e.g., vars,
 // comprehensions, etc.)
 func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
+	return valueToInterface(v, resolver, JSONOpt{})
+}
+
+func valueToInterface(v Value, resolver Resolver, opt JSONOpt) (interface{}, error) {
 	switch v := v.(type) {
 	case Null:
 		return nil, nil
@@ -171,7 +176,7 @@ func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
 	case *Array:
 		buf := []interface{}{}
 		for i := 0; i < v.Len(); i++ {
-			x1, err := ValueToInterface(v.Elem(i).Value, resolver)
+			x1, err := valueToInterface(v.Elem(i).Value, resolver, opt)
 			if err != nil {
 				return nil, err
 			}
@@ -181,7 +186,7 @@ func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
 	case *object:
 		buf := make(map[string]interface{}, v.Len())
 		err := v.Iter(func(k, v *Term) error {
-			ki, err := ValueToInterface(k.Value, resolver)
+			ki, err := valueToInterface(k.Value, resolver, opt)
 			if err != nil {
 				return err
 			}
@@ -194,7 +199,7 @@ func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
 				}
 				str = strings.TrimSpace(buf.String())
 			}
-			vi, err := ValueToInterface(v.Value, resolver)
+			vi, err := valueToInterface(v.Value, resolver, opt)
 			if err != nil {
 				return err
 			}
@@ -207,14 +212,20 @@ func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
 		return buf, nil
 	case Set:
 		buf := []interface{}{}
-		err := v.Iter(func(x *Term) error {
-			x1, err := ValueToInterface(x.Value, resolver)
+		iter := func(x *Term) error {
+			x1, err := valueToInterface(x.Value, resolver, opt)
 			if err != nil {
 				return err
 			}
 			buf = append(buf, x1)
 			return nil
-		})
+		}
+		var err error
+		if opt.SortSets {
+			err = v.Sorted().Iter(iter)
+		} else {
+			err = v.Iter(iter)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +240,30 @@ func ValueToInterface(v Value, resolver Resolver) (interface{}, error) {
 // JSON returns the JSON representation of v. The value must not contain any
 // refs or terms that require evaluation (e.g., vars, comprehensions, etc.)
 func JSON(v Value) (interface{}, error) {
-	return ValueToInterface(v, illegalResolver{})
+	return JSONWithOpt(v, JSONOpt{})
+}
+
+// JSONOpt defines parameters for AST to JSON conversion.
+type JSONOpt struct {
+	SortSets bool // sort sets before serializing (this makes conversion more expensive)
+}
+
+// JSONWithOpt returns the JSON representation of v. The value must not contain any
+// refs or terms that require evaluation (e.g., vars, comprehensions, etc.)
+func JSONWithOpt(v Value, opt JSONOpt) (interface{}, error) {
+	return valueToInterface(v, illegalResolver{}, opt)
+}
+
+// MustJSON returns the JSON representation of v. The value must not contain any
+// refs or terms that require evaluation (e.g., vars, comprehensions, etc.) If
+// the conversion fails, this function will panic. This function is mostly for
+// test purposes.
+func MustJSON(v Value) interface{} {
+	r, err := JSON(v)
+	if err != nil {
+		panic(err)
+	}
+	return r
 }
 
 // MustInterfaceToValue converts a native Go value x to a Value. If the
@@ -855,9 +889,8 @@ func (ref Ref) Insert(x *Term, pos int) Ref {
 // other will be converted to a string.
 func (ref Ref) Extend(other Ref) Ref {
 	dst := make(Ref, len(ref)+len(other))
-	for i := range ref {
-		dst[i] = ref[i]
-	}
+	copy(dst, ref)
+
 	head := other[0].Copy()
 	head.Value = String(head.Value.(Var))
 	offset := len(ref)
@@ -874,9 +907,8 @@ func (ref Ref) Concat(terms []*Term) Ref {
 		return ref
 	}
 	cpy := make(Ref, len(ref)+len(terms))
-	for i := range ref {
-		cpy[i] = ref[i]
-	}
+	copy(cpy, ref)
+
 	for i := range terms {
 		cpy[len(ref)+i] = terms[i]
 	}
@@ -1200,10 +1232,10 @@ func (arr *Array) Until(f func(*Term) bool) bool {
 
 // Foreach calls f on each element in arr.
 func (arr *Array) Foreach(f func(*Term)) {
-	arr.Iter(func(t *Term) error {
+	_ = arr.Iter(func(t *Term) error {
 		f(t)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Append appends a term to arr, returning the appended array.
@@ -1248,9 +1280,10 @@ func newset(n int) *set {
 		keys = make([]*Term, 0, n)
 	}
 	return &set{
-		elems: make(map[int]*Term, n),
-		keys:  keys,
-		hash:  0,
+		elems:  make(map[int]*Term, n),
+		keys:   keys,
+		hash:   0,
+		ground: true,
 	}
 }
 
@@ -1263,9 +1296,10 @@ func SetTerm(t ...*Term) *Term {
 }
 
 type set struct {
-	elems map[int]*Term
-	keys  []*Term
-	hash  int
+	elems  map[int]*Term
+	keys   []*Term
+	hash   int
+	ground bool
 }
 
 // Copy returns a deep copy of s.
@@ -1275,14 +1309,13 @@ func (s *set) Copy() Set {
 		cpy.Add(x.Copy())
 	})
 	cpy.hash = s.hash
+	cpy.ground = s.ground
 	return cpy
 }
 
 // IsGround returns true if all terms in s are ground.
 func (s *set) IsGround() bool {
-	return !s.Until(func(x *Term) bool {
-		return !x.IsGround()
-	})
+	return s.ground
 }
 
 // Hash returns a hash code for s.
@@ -1409,10 +1442,10 @@ func (s *set) Until(f func(*Term) bool) bool {
 
 // Foreach calls f on each element in s.
 func (s *set) Foreach(f func(*Term)) {
-	s.Iter(func(t *Term) error {
+	_ = s.Iter(func(t *Term) error {
 		f(t)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Map returns a new Set obtained by applying f to each value in s.
@@ -1482,6 +1515,10 @@ func (s *set) Slice() []*Term {
 
 func (s *set) insert(x *Term) {
 	hash := x.Hash()
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := x.Value.(type) {
@@ -1501,16 +1538,49 @@ func (s *set) insert(x *Term) {
 			break
 		}
 
-		a, ok := new(big.Float).SetString(string(x))
+		// We use big.Rat for comparing big numbers.
+		// It replaces big.Float due to following reason:
+		// big.Float comes with a default precision of 64, and setting a
+		// larger precision results in more memory being allocated
+		// (regardless of the actual number we are parsing with SetString).
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Float).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
@@ -1534,10 +1604,15 @@ func (s *set) insert(x *Term) {
 	s.elems[hash] = x
 	s.keys = append(s.keys, x)
 	s.hash = 0
+	s.ground = s.ground && x.IsGround()
 }
 
 func (s *set) get(x *Term) *Term {
 	hash := x.Hash()
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := x.Value.(type) {
@@ -1557,23 +1632,57 @@ func (s *set) get(x *Term) *Term {
 			break
 		}
 
-		a, ok := new(big.Float).SetString(string(x))
+		// We use big.Rat for comparing big numbers.
+		// It replaces big.Float due to following reason:
+		// big.Float comes with a default precision of 64, and setting a
+		// larger precision results in more memory being allocated
+		// (regardless of the actual number we are parsing with SetString).
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Float).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
 			}
-
 			return false
+
 		}
+
 	default:
 		equal = func(y Value) bool { return Compare(x, y) == 0 }
 	}
@@ -1792,8 +1901,9 @@ func (obj *object) Iter(f func(*Term, *Term) error) error {
 	return nil
 }
 
-// Until calls f for each key-value pair in the object. If f returns true,
-// iteration stops.
+// Until calls f for each key-value pair in the object. If f returns
+// true, iteration stops and Until returns true. Otherwise, return
+// false.
 func (obj *object) Until(f func(*Term, *Term) bool) bool {
 	err := obj.Iter(func(k, v *Term) error {
 		if f(k, v) {
@@ -1806,10 +1916,10 @@ func (obj *object) Until(f func(*Term, *Term) bool) bool {
 
 // Foreach calls f for each key-value pair in the object.
 func (obj *object) Foreach(f func(*Term, *Term)) {
-	obj.Iter(func(k, v *Term) error {
+	_ = obj.Iter(func(k, v *Term) error {
 		f(k, v)
 		return nil
-	})
+	}) // ignore error
 }
 
 // Map returns a new Object constructed by mapping each element in the object
@@ -1937,6 +2047,10 @@ func (obj object) String() string {
 func (obj *object) get(k *Term) *objectElem {
 	hash := k.Hash()
 
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := k.Value.(type) {
@@ -1956,16 +2070,49 @@ func (obj *object) get(k *Term) *objectElem {
 			break
 		}
 
-		a, ok := new(big.Float).SetString(string(x))
+		// We use big.Rat for comparing big numbers.
+		// It replaces big.Float due to following reason:
+		// big.Float comes with a default precision of 64, and setting a
+		// larger precision results in more memory being allocated
+		// (regardless of the actual number we are parsing with SetString).
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Float).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
@@ -1988,6 +2135,10 @@ func (obj *object) get(k *Term) *objectElem {
 func (obj *object) insert(k, v *Term) {
 	hash := k.Hash()
 	head := obj.elems[hash]
+	// This `equal` utility is duplicated and manually inlined a number of
+	// time in this file.  Inlining it avoids heap allocations, so it makes
+	// a big performance difference: some operations like lookup become twice
+	// as slow without it.
 	var equal func(v Value) bool
 
 	switch x := k.Value.(type) {
@@ -2007,16 +2158,49 @@ func (obj *object) insert(k, v *Term) {
 			break
 		}
 
-		a, ok := new(big.Float).SetString(string(x))
+		// We use big.Rat for comparing big numbers.
+		// It replaces big.Float due to following reason:
+		// big.Float comes with a default precision of 64, and setting a
+		// larger precision results in more memory being allocated
+		// (regardless of the actual number we are parsing with SetString).
+		//
+		// Note: If we're so close to zero that big.Float says we are zero, do
+		// *not* big.Rat).SetString on the original string it'll potentially
+		// take very long.
+		var a *big.Rat
+		fa, ok := new(big.Float).SetString(string(x))
 		if !ok {
 			panic("illegal value")
 		}
+		if fa.IsInt() {
+			if i, _ := fa.Int64(); i == 0 {
+				a = new(big.Rat).SetInt64(0)
+			}
+		}
+		if a == nil {
+			a, ok = new(big.Rat).SetString(string(x))
+			if !ok {
+				panic("illegal value")
+			}
+		}
 
 		equal = func(b Value) bool {
-			if b, ok := b.(Number); ok {
-				b, ok := new(big.Float).SetString(string(b))
+			if bNum, ok := b.(Number); ok {
+				var b *big.Rat
+				fb, ok := new(big.Float).SetString(string(bNum))
 				if !ok {
 					panic("illegal value")
+				}
+				if fb.IsInt() {
+					if i, _ := fb.Int64(); i == 0 {
+						b = new(big.Rat).SetInt64(0)
+					}
+				}
+				if b == nil {
+					b, ok = new(big.Rat).SetString(string(bNum))
+					if !ok {
+						panic("illegal value")
+					}
 				}
 
 				return a.Cmp(b) == 0
