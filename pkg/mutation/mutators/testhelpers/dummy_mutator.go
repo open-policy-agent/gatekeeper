@@ -19,7 +19,7 @@ var _ types.Mutator = &DummyMutator{}
 type DummyMutator struct {
 	name  string
 	value interface{}
-	path  *parser.Path
+	path  parser.Path
 	match match.Match
 }
 
@@ -39,12 +39,12 @@ func (d *DummyMutator) Value() (interface{}, error) {
 	return d.value, nil
 }
 
-func (d *DummyMutator) Path() *parser.Path {
+func (d *DummyMutator) Path() parser.Path {
 	return d.path
 }
 
 func (d *DummyMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(d.match, obj, ns)
+	matches, err := match.Matches(&d.match, obj, ns)
 	if err != nil {
 		return false
 	}
@@ -52,7 +52,7 @@ func (d *DummyMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
 }
 
 func (d *DummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	t, _ := path.New(nil)
+	t, _ := path.New(parser.Path{}, nil)
 	return core.Mutate(d, t, func(_ interface{}, _ bool) bool { return true }, obj)
 }
 

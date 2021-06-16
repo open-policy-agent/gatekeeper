@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 
 	"github.com/pkg/errors"
 
@@ -142,8 +143,26 @@ func readSections(r io.Reader, m *module.Module) error {
 		bufr := bytes.NewReader(buf)
 
 		switch id {
-		case constant.CustomSectionID, constant.StartSectionID, constant.MemorySectionID:
-			continue
+		case constant.MemorySectionID:
+			continue // ignore
+		case constant.StartSectionID:
+			if err := readStartSection(bufr, &m.Start); err != nil {
+				return errors.Wrap(err, "start section")
+			}
+		case constant.CustomSectionID:
+			var name string
+			if err := readByteVectorString(bufr, &name); err != nil {
+				return errors.Wrap(err, "read custom section type")
+			}
+			if name == "name" {
+				if err := readCustomNameSections(bufr, &m.Names); err != nil {
+					return errors.Wrap(err, "custom 'name' section")
+				}
+			} else {
+				if err := readCustomSection(bufr, name, &m.Customs); err != nil {
+					return errors.Wrap(err, "custom section")
+				}
+			}
 		case constant.TypeSectionID:
 			if err := readTypeSection(bufr, &m.Type); err != nil {
 				return errors.Wrap(err, "type section")
@@ -184,6 +203,121 @@ func readSections(r io.Reader, m *module.Module) error {
 			return fmt.Errorf("illegal section id")
 		}
 	}
+}
+
+func readCustomSection(r io.Reader, name string, s *[]module.CustomSection) error {
+	buf, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	*s = append(*s, module.CustomSection{
+		Name: name,
+		Data: buf,
+	})
+	return nil
+}
+
+func readCustomNameSections(r io.Reader, s *module.NameSection) error {
+	for {
+		id, err := readByte(r)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		n, err := leb128.ReadVarUint32(r)
+		if err != nil {
+			return err
+		}
+		buf := make([]byte, n)
+		if _, err := io.ReadFull(r, buf); err != nil {
+			return err
+		}
+		bufr := bytes.NewReader(buf)
+		switch id {
+		case constant.NameSectionModuleType:
+			err = readNameSectionModule(bufr, s)
+		case constant.NameSectionFunctionsType:
+			err = readNameSectionFunctions(bufr, s)
+		case constant.NameSectionLocalsType:
+			err = readNameSectionLocals(bufr, s)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readNameSectionModule(r io.Reader, s *module.NameSection) error {
+	return readByteVectorString(r, &s.Module)
+}
+
+func readNameSectionFunctions(r io.Reader, s *module.NameSection) error {
+	nm, err := readNameMap(r)
+	if err != nil {
+		return err
+	}
+	s.Functions = nm
+	return nil
+}
+
+func readNameMap(r io.Reader) ([]module.NameMap, error) {
+	n, err := leb128.ReadVarUint32(r)
+	if err != nil {
+		return nil, err
+	}
+	nm := make([]module.NameMap, n)
+	for i := uint32(0); i < n; i++ {
+		var name string
+		id, err := leb128.ReadVarUint32(r)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := readByteVectorString(r, &name); err != nil {
+			return nil, err
+		}
+		nm[i] = module.NameMap{Index: id, Name: name}
+	}
+	return nm, nil
+}
+
+func readNameSectionLocals(r io.Reader, s *module.NameSection) error {
+	n, err := leb128.ReadVarUint32(r) // length of vec(indirectnameassoc)
+	if err != nil {
+		return err
+	}
+	for i := uint32(0); i < n; i++ {
+		id, err := leb128.ReadVarUint32(r) // func index
+		if err != nil {
+			return err
+		}
+		nm, err := readNameMap(r)
+		if err != nil {
+			return err
+		}
+		for _, m := range nm {
+			s.Locals = append(s.Locals, module.LocalNameMap{
+				FuncIndex: id,
+				NameMap: module.NameMap{
+					Index: m.Index,
+					Name:  m.Name,
+				}})
+		}
+	}
+	return nil
+}
+
+func readStartSection(r io.Reader, s *module.StartSection) error {
+	idx, err := leb128.ReadVarUint32(r)
+	if err != nil {
+		return err
+	}
+	s.FuncIndex = &idx
+	return nil
 }
 
 func readTypeSection(r io.Reader, s *module.TypeSection) error {
@@ -396,11 +530,7 @@ func readGlobal(r io.Reader, global *module.Global) error {
 		return fmt.Errorf("illegal mutability flag")
 	}
 
-	if err := readConstantExpr(r, &global.Init); err != nil {
-		return err
-	}
-
-	return nil
+	return readConstantExpr(r, &global.Init)
 }
 
 func readImport(r io.Reader, imp *module.Import) error {
@@ -517,11 +647,7 @@ func readElementSegment(r io.Reader, seg *module.ElementSegment) error {
 		return err
 	}
 
-	if err := readVarUint32Vector(r, &seg.Indices); err != nil {
-		return err
-	}
-
-	return nil
+	return readVarUint32Vector(r, &seg.Indices)
 }
 
 func readDataSegment(r io.Reader, seg *module.DataSegment) error {
@@ -534,11 +660,7 @@ func readDataSegment(r io.Reader, seg *module.DataSegment) error {
 		return err
 	}
 
-	if err := readByteVector(r, &seg.Init); err != nil {
-		return err
-	}
-
-	return nil
+	return readByteVector(r, &seg.Init)
 }
 
 func readRawCodeSegment(r io.Reader, seg *module.RawCodeSegment) error {
@@ -616,6 +738,11 @@ func readInstructions(r io.Reader, instrs *[]instruction.Instruction) error {
 			ret = append(ret, instruction.SetLocal{Index: leb128.MustReadVarUint32(r)})
 		case opcode.Call:
 			ret = append(ret, instruction.Call{Index: leb128.MustReadVarUint32(r)})
+		case opcode.CallIndirect:
+			ret = append(ret, instruction.CallIndirect{
+				Index:    leb128.MustReadVarUint32(r),
+				Reserved: mustReadByte(r),
+			})
 		case opcode.BrIf:
 			ret = append(ret, instruction.BrIf{Index: leb128.MustReadVarUint32(r)})
 		case opcode.Return:
@@ -645,6 +772,14 @@ func readInstructions(r io.Reader, instrs *[]instruction.Instruction) error {
 			return fmt.Errorf("illegal opcode 0x%x", b)
 		}
 	}
+}
+
+func mustReadByte(r io.Reader) byte {
+	b, err := readByte(r)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func readLimits(r io.Reader, l *module.Limit) error {
@@ -804,6 +939,6 @@ func readBlockValueType(r io.Reader, v *types.ValueType) error {
 
 func readByte(r io.Reader) (byte, error) {
 	buf := make([]byte, 1)
-	_, err := r.Read(buf)
+	_, err := io.ReadFull(r, buf)
 	return buf[0], err
 }

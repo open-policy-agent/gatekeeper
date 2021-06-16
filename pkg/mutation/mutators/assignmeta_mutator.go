@@ -38,19 +38,19 @@ var (
 	}
 )
 
-//AssignMetadataMutator is a mutator built out of an
+// AssignMetadataMutator is a mutator built out of an
 // AssignMeta instance.
 type AssignMetadataMutator struct {
 	id             types.ID
 	assignMetadata *mutationsv1alpha1.AssignMetadata
-	path           *parser.Path
+	path           parser.Path
 }
 
 // assignMetadataMutator implements mutator
 var _ types.Mutator = &AssignMetadataMutator{}
 
 func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(m.assignMetadata.Spec.Match, obj, ns)
+	matches, err := match.Matches(&m.assignMetadata.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
 		return false
@@ -59,7 +59,7 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 }
 
 func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	t, err := tester.New([]tester.Test{
+	t, err := tester.New(m.Path(), []tester.Test{
 		{SubPath: m.Path(), Condition: tester.MustNotExist},
 	})
 	if err != nil {
@@ -71,7 +71,7 @@ func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id
 }
 
-func (m *AssignMetadataMutator) Path() *parser.Path {
+func (m *AssignMetadataMutator) Path() parser.Path {
 	return m.path
 }
 
@@ -93,11 +93,10 @@ func (m *AssignMetadataMutator) HasDiff(mutator types.Mutator) bool {
 }
 
 func (m *AssignMetadataMutator) DeepCopy() types.Mutator {
-	p := m.path.DeepCopy()
 	res := &AssignMetadataMutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
-		path:           &p,
+		path:           m.path.DeepCopy(),
 	}
 	return res
 }
@@ -141,20 +140,16 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 	if _, ok := value.(string); !ok {
 		return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
 	}
-	id, err := types.MakeID(assignMeta)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to retrieve id for assignMetadata type")
-	}
 
 	return &AssignMetadataMutator{
-		id:             id,
+		id:             types.MakeID(assignMeta),
 		assignMetadata: assignMeta.DeepCopy(),
 		path:           path,
 	}, nil
 }
 
 // Verifies that the given path is valid for metadata
-func isValidMetadataPath(path *parser.Path) bool {
+func isValidMetadataPath(path parser.Path) bool {
 	// Path must be metadata.annotations.something or metadata.labels.something
 	if len(path.Nodes) != 3 ||
 		path.Nodes[0].Type() != parser.ObjectNode ||

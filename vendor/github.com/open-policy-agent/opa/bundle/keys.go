@@ -6,14 +6,13 @@
 package bundle
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"reflect"
 
 	"github.com/open-policy-agent/opa/internal/jwx/jwa"
 	"github.com/open-policy-agent/opa/internal/jwx/jws/sign"
+	"github.com/open-policy-agent/opa/keys"
 
 	"github.com/open-policy-agent/opa/util"
 )
@@ -21,6 +20,10 @@ import (
 const (
 	defaultTokenSigningAlg = "RS256"
 )
+
+// KeyConfig holds the keys used to sign or verify bundles and tokens
+// Moved to own package, alias kept for backwards compatibility
+type KeyConfig = keys.Config
 
 // VerificationConfig represents the key configuration used to verify a signed bundle
 type VerificationConfig struct {
@@ -71,65 +74,9 @@ func (vc *VerificationConfig) GetPublicKey(id string) (*KeyConfig, error) {
 	return kc, nil
 }
 
-// KeyConfig holds the actual public keys used to verify a signed bundle
-type KeyConfig struct {
-	Key       string `json:"key"`
-	Algorithm string `json:"algorithm"`
-	Scope     string `json:"scope"`
-}
-
-// NewKeyConfig return a new KeyConfig
-func NewKeyConfig(key, alg, scope string) *KeyConfig {
-	return &KeyConfig{
-		Key:       key,
-		Algorithm: alg,
-		Scope:     scope,
-	}
-}
-
-// ParseKeysConfig returns a map containing the public key and the signing algorithm
-func ParseKeysConfig(raw json.RawMessage) (map[string]*KeyConfig, error) {
-	keys := map[string]*KeyConfig{}
-	var obj map[string]json.RawMessage
-
-	if err := util.Unmarshal(raw, &obj); err == nil {
-		for k := range obj {
-			var keyConfig KeyConfig
-			if err = util.Unmarshal(obj[k], &keyConfig); err != nil {
-				return nil, err
-			}
-
-			if err = keyConfig.validateAndInjectDefaults(k); err != nil {
-				return nil, err
-			}
-
-			keys[k] = &keyConfig
-		}
-	} else {
-		return nil, err
-	}
-	return keys, nil
-}
-
-func (k *KeyConfig) validateAndInjectDefaults(id string) error {
-	if k.Key == "" {
-		return fmt.Errorf("invalid keys configuration: verification key empty for key ID %v", id)
-	}
-
-	if k.Algorithm == "" {
-		k.Algorithm = defaultTokenSigningAlg
-	}
-
-	return nil
-}
-
-// Equal returns true if this key config is equal to the other.
-func (k *KeyConfig) Equal(other *KeyConfig) bool {
-	return reflect.DeepEqual(k, other)
-}
-
 // SigningConfig represents the key configuration used to generate a signed bundle
 type SigningConfig struct {
+	Plugin     string
 	Key        string
 	Algorithm  string
 	ClaimsPath string
@@ -142,10 +89,19 @@ func NewSigningConfig(key, alg, claimsPath string) *SigningConfig {
 	}
 
 	return &SigningConfig{
+		Plugin:     defaultSignerID,
 		Key:        key,
 		Algorithm:  alg,
 		ClaimsPath: claimsPath,
 	}
+}
+
+// WithPlugin sets the signing plugin in the signing config
+func (s *SigningConfig) WithPlugin(plugin string) *SigningConfig {
+	if plugin != "" {
+		s.Plugin = plugin
+	}
+	return s
 }
 
 // GetPrivateKey returns the private key or secret from the signing config

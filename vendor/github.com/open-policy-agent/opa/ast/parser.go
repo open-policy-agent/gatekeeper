@@ -5,10 +5,17 @@
 package ast
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 
 	"github.com/open-policy-agent/opa/ast/internal/scanner"
 	"github.com/open-policy-agent/opa/ast/internal/tokens"
@@ -52,13 +59,20 @@ func (s *state) Text(offset, end int) []byte {
 
 // Parser is used to parse Rego statements.
 type Parser struct {
-	r io.Reader
-	s *state
+	r  io.Reader
+	s  *state
+	po ParserOptions
+}
+
+// ParserOptions defines the options for parsing Rego statements.
+type ParserOptions struct {
+	ProcessAnnotation bool
 }
 
 // NewParser creates and initializes a Parser.
 func NewParser() *Parser {
-	p := &Parser{s: &state{}}
+	p := &Parser{s: &state{},
+		po: ParserOptions{}}
 	return p
 }
 
@@ -75,6 +89,21 @@ func (p *Parser) WithReader(r io.Reader) *Parser {
 	p.r = r
 	return p
 }
+
+// WithProcessAnnotation enables or disables the processing of
+// annotations by the Parser
+func (p *Parser) WithProcessAnnotation(processAnnotation bool) *Parser {
+	p.po.ProcessAnnotation = processAnnotation
+	return p
+}
+
+const (
+	annotationScopePackage     = "package"
+	annotationScopeImport      = "import"
+	annotationScopeRule        = "rule"
+	annotationScopeDocument    = "document"
+	annotationScopeSubpackages = "subpackages"
+)
 
 // Parse will read the Rego source and parse statements and
 // comments as they are found. Any errors encountered while
@@ -138,7 +167,7 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		}
 
 		p.restore(s)
-		s = p.save()
+		p.save() // no need to save return value to s
 
 		if body := p.parseQuery(true, tokens.EOF); body != nil {
 			stmts = append(stmts, body)
@@ -148,7 +177,43 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		break
 	}
 
+	if p.po.ProcessAnnotation {
+		stmts = p.parseAnnotations(stmts)
+	}
+
 	return stmts, p.s.comments, p.s.errors
+}
+
+func (p *Parser) parseAnnotations(stmts []Statement) []Statement {
+
+	var hint = []byte("METADATA")
+	var curr *metadataParser
+	var blocks []*metadataParser
+
+	for i := 0; i < len(p.s.comments); i++ {
+		if curr != nil {
+			if p.s.comments[i].Location.Row == p.s.comments[i-1].Location.Row+1 && p.s.comments[i].Location.Col == 1 {
+				curr.Append(p.s.comments[i])
+				continue
+			}
+			curr = nil
+		}
+		if bytes.HasPrefix(bytes.TrimSpace(p.s.comments[i].Text), hint) {
+			curr = newMetadataParser(p.s.comments[i].Location)
+			blocks = append(blocks, curr)
+		}
+	}
+
+	for _, b := range blocks {
+		a, err := b.Parse()
+		if err != nil {
+			p.error(b.loc, err.Error())
+		} else {
+			stmts = append(stmts, a)
+		}
+	}
+
+	return stmts
 }
 
 func (p *Parser) parsePackage() *Package {
@@ -867,11 +932,19 @@ func (p *Parser) parseNumber() *Term {
 		}
 	}
 
+	// Check for multiple leading 0's, parsed by math/big.Float.Parse as decimal 0:
+	// https://golang.org/pkg/math/big/#Float.Parse
+	if ((len(prefix) != 0 && prefix[0] == '-') || len(prefix) == 0) &&
+		len(p.s.lit) > 1 && p.s.lit[0] == '0' && p.s.lit[1] == '0' {
+		p.illegal("expected number")
+		return nil
+	}
+
 	// Ensure that the number is valid
 	s := prefix + p.s.lit
 	f, ok := new(big.Float).SetString(s)
 	if !ok {
-		p.illegal("expected number")
+		p.illegal("invalid float")
 		return nil
 	}
 
@@ -883,7 +956,7 @@ func (p *Parser) parseNumber() *Term {
 	//
 	// The limit is arbitrary.
 	exp := f.MantExp(nil)
-	if exp > 1e5 || exp < -1e5 {
+	if exp > 1e5 || exp < -1e5 || f.IsInf() { // +/- inf, exp is 0
 		p.error(p.s.Loc(), "number too big")
 		return nil
 	}
@@ -1468,7 +1541,7 @@ func (p *Parser) setLoc(term *Term, loc *location.Location, offset, end int) *Te
 
 func (p *Parser) validateDefaultRuleValue(rule *Rule) bool {
 	if rule.Head.Value == nil {
-		p.error(rule.Loc(), fmt.Sprintf("illegal default rule (must have a value)"))
+		p.error(rule.Loc(), "illegal default rule (must have a value)")
 		return false
 	}
 
@@ -1487,4 +1560,146 @@ func (p *Parser) validateDefaultRuleValue(rule *Rule) bool {
 
 	vis.Walk(rule.Head.Value.Value)
 	return valid
+}
+
+type rawAnnotation struct {
+	Scope   string                `json:"scope"`
+	Schemas []rawSchemaAnnotation `json:"schemas"`
+}
+
+type rawSchemaAnnotation map[string]interface{}
+
+type metadataParser struct {
+	buf      *bytes.Buffer
+	comments []*Comment
+	loc      *location.Location
+}
+
+func newMetadataParser(loc *Location) *metadataParser {
+	return &metadataParser{loc: loc, buf: bytes.NewBuffer(nil)}
+}
+
+func (b *metadataParser) Append(c *Comment) {
+	b.buf.Write(bytes.TrimPrefix(c.Text, []byte(" ")))
+	b.buf.WriteByte('\n')
+	b.comments = append(b.comments, c)
+}
+
+var yamlLineErrRegex = regexp.MustCompile(`^yaml: line ([[:digit:]]+):`)
+
+func (b *metadataParser) Parse() (*Annotations, error) {
+
+	var raw rawAnnotation
+
+	if len(bytes.TrimSpace(b.buf.Bytes())) == 0 {
+		return nil, fmt.Errorf("expected METADATA block, found whitespace")
+	}
+
+	if err := yaml.Unmarshal(b.buf.Bytes(), &raw); err != nil {
+		match := yamlLineErrRegex.FindStringSubmatch(err.Error())
+		if len(match) == 2 {
+			n, err2 := strconv.Atoi(match[1])
+			if err2 == nil {
+				index := n - 1 // line numbering is 1-based so subtract one from row
+				if index >= len(b.comments) {
+					b.loc = b.comments[len(b.comments)-1].Location
+				} else {
+					b.loc = b.comments[index].Location
+				}
+			}
+		}
+		return nil, err
+	}
+
+	var result Annotations
+	result.Scope = raw.Scope
+
+	for _, pair := range raw.Schemas {
+		var k string
+		var v interface{}
+		for k, v = range pair {
+		}
+
+		var a SchemaAnnotation
+		var err error
+
+		a.Path, err = ParseRef(k)
+		if err != nil {
+			return nil, fmt.Errorf("invalid document reference")
+		}
+
+		switch v := v.(type) {
+		case string:
+			a.Schema, err = parseSchemaRef(v)
+			if err != nil {
+				return nil, err
+			}
+		case map[interface{}]interface{}:
+			w, err := convertYAMLMapKeyTypes(v, nil)
+			if err != nil {
+				return nil, errors.Wrap(err, "invalid schema definition")
+			}
+			a.Definition = &w
+		default:
+			return nil, fmt.Errorf("invalid schema declaration for path %q", k)
+		}
+
+		result.Schemas = append(result.Schemas, &a)
+	}
+
+	result.Location = b.loc
+	return &result, nil
+}
+
+var errInvalidSchemaRef = fmt.Errorf("invalid schema reference")
+
+// NOTE(tsandall): 'schema' is not registered as a root because it's not
+// supported by the compiler or evaluator today. Once we fix that, we can remove
+// this function.
+func parseSchemaRef(s string) (Ref, error) {
+
+	term, err := ParseTerm(s)
+	if err == nil {
+		switch v := term.Value.(type) {
+		case Var:
+			if term.Equal(SchemaRootDocument) {
+				return SchemaRootRef.Copy(), nil
+			}
+		case Ref:
+			if v.HasPrefix(SchemaRootRef) {
+				return v, nil
+			}
+		}
+	}
+
+	return nil, errInvalidSchemaRef
+}
+
+func convertYAMLMapKeyTypes(x interface{}, path []string) (interface{}, error) {
+	var err error
+	switch x := x.(type) {
+	case map[interface{}]interface{}:
+		result := make(map[string]interface{}, len(x))
+		for k, v := range x {
+			str, ok := k.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid map key type(s): %v", strings.Join(path, "/"))
+			}
+			result[str], err = convertYAMLMapKeyTypes(v, append(path, str))
+			if err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	case []interface{}:
+		for i := range x {
+			x[i], err = convertYAMLMapKeyTypes(x[i], append(path, fmt.Sprintf("%d", i)))
+			if err != nil {
+				return nil, err
+			}
+		}
+		return x, nil
+	default:
+		return x, nil
+	}
 }

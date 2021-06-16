@@ -16,6 +16,7 @@ type (
 	// Module represents a WASM module.
 	Module struct {
 		Version  uint32
+		Start    StartSection
 		Type     TypeSection
 		Import   ImportSection
 		Function FunctionSection
@@ -25,6 +26,13 @@ type (
 		Export   ExportSection
 		Code     RawCodeSection
 		Data     DataSection
+		Customs  []CustomSection
+		Names    NameSection
+	}
+
+	// StartSection represents a WASM start section.
+	StartSection struct {
+		FuncIndex *uint32
 	}
 
 	// TypeSection represents a WASM type section.
@@ -63,7 +71,7 @@ type (
 	}
 
 	// RawCodeSection represents a WASM code section. The code section is left as a
-	// raw byte sequence. See CodeSection for the decoded version.
+	// raw byte sequence.
 	RawCodeSection struct {
 		Segments []RawCodeSegment
 	}
@@ -71,6 +79,32 @@ type (
 	// DataSection represents a WASM data section.
 	DataSection struct {
 		Segments []DataSegment
+	}
+
+	// CustomSection represents a WASM custom section.
+	CustomSection struct {
+		Name string
+		Data []byte
+	}
+
+	// NameSection represents the WASM custom section "name".
+	NameSection struct {
+		Module    string
+		Functions []NameMap
+		Locals    []LocalNameMap
+	}
+
+	// NameMap maps function or local arg indices to their names.
+	NameMap struct {
+		Index uint32
+		Name  string
+	}
+
+	// LocalNameMap maps function indices, and argument indices for the args
+	// of the indexed function to their names.
+	LocalNameMap struct {
+		FuncIndex uint32
+		NameMap
 	}
 
 	// FunctionType represents a WASM function type definition.

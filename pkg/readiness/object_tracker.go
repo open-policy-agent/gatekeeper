@@ -118,6 +118,7 @@ func (t *objectTracker) Expect(o runtime.Object) {
 	t.expect[k] = struct{}{}
 }
 
+// nolint: gocritic // Using a pointer here is less efficient and results in more copying.
 func (t *objectTracker) cancelExpectNoLock(k objKey) {
 	delete(t.expect, k)
 	delete(t.seen, k)

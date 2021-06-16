@@ -27,7 +27,7 @@ type objKey struct {
 	namespacedName types.NamespacedName
 }
 
-func (k objKey) String() string {
+func (k *objKey) String() string {
 	return fmt.Sprintf("%s [%s]", k.namespacedName.String(), k.gvk.String())
 }
 
