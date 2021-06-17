@@ -20,6 +20,7 @@ require (
 	github.com/open-policy-agent/opa v0.29.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
+	github.com/spf13/cobra v1.1.3
 	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
