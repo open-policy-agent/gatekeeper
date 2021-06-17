@@ -59,8 +59,8 @@ func (m *MockMutator) ID() types.ID {
 	return m.Mocked
 }
 
-func (m *MockMutator) Path() *parser.Path {
-	return nil
+func (m *MockMutator) Path() parser.Path {
+	return parser.Path{}
 }
 
 func (m *MockMutator) Value() (interface{}, error) {
