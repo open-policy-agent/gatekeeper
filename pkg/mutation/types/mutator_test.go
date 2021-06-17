@@ -27,11 +27,7 @@ func TestMakeID(t *testing.T) {
 	}
 	config.APIVersion, config.Kind = gvk.ToAPIVersionAndKind()
 
-	ID, err := types.MakeID(config)
-
-	if err != nil {
-		t.Errorf("MakeID failed %v", err)
-	}
+	ID := types.MakeID(config)
 
 	expectedID := types.ID{
 		Group:     "groupname",
