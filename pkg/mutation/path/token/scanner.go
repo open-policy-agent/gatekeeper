@@ -24,6 +24,12 @@ import (
 
 const eof = rune(-1)
 
+// Base errors for scanning strings.
+var (
+	ErrUnterminatedString = errors.New("unterminated string")
+	ErrInvalidCharacter   = errors.New("invalid character")
+)
+
 type Scanner struct {
 	input   string
 	pos     int // Current position
@@ -74,7 +80,7 @@ func (s *Scanner) Next() Token {
 		}
 
 		// default: current character is invalid at this location
-		s.setError(errors.New("invalid character"))
+		s.setError(ErrInvalidCharacter)
 		tok = Token{Type: ERROR, Literal: string(s.ch)}
 	}
 
@@ -116,7 +122,7 @@ func (s *Scanner) readString() (string, error) {
 			out.WriteRune(s.ch)
 		case s.ch == eof:
 			// Unterminated string
-			s.setError(errors.New("unterminated string"))
+			s.setError(ErrUnterminatedString)
 			return out.String(), s.err
 
 		default:
@@ -140,6 +146,7 @@ func (s *Scanner) setError(err error) {
 	}
 }
 
+// isSpace returns true if the passed rune is a supported whitespace character.
 func isSpace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\r' || r == '\n'
 }
@@ -177,4 +184,9 @@ func (e ScanError) Error() string {
 
 	}
 	return fmt.Sprintf("error at position %d: %s", e.Position, innerMsg)
+}
+
+// Unwrap allows errors.Is() to inspect the underlying error.
+func (e ScanError) Unwrap() error {
+	return e.Inner
 }

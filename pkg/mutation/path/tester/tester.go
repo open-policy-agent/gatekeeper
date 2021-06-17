@@ -3,6 +3,7 @@ package tester
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -26,6 +27,12 @@ var (
 	}
 )
 
+// Base errors for validating path tests.
+var (
+	ErrPrefix   = errors.New("all subpaths must be a prefix of the `location` value of the mutation")
+	ErrConflict = errors.New("conflicting path test conditions")
+)
+
 // StringToCondition translates a user-provided string into a Test Condition
 func StringToCondition(s string) (Condition, error) {
 	cond, ok := conditions[s]
@@ -38,11 +45,11 @@ func StringToCondition(s string) (Condition, error) {
 
 // Test describes a condition that the object must satisfy
 type Test struct {
-	SubPath   *parser.Path
+	SubPath   parser.Path
 	Condition Condition
 }
 
-func isPrefix(short, long *parser.Path) bool {
+func isPrefix(short, long parser.Path) bool {
 	if len(short.Nodes) > len(long.Nodes) {
 		return false
 	}
@@ -56,31 +63,57 @@ func isPrefix(short, long *parser.Path) bool {
 	return true
 }
 
-// ValidatePathTests returns whether a set of path tests are valid against the provided location
-func ValidatePathTests(location *parser.Path, pathTests []Test) error {
+// validatePathTests returns whether a set of path tests are valid against the provided location
+func validatePathTests(location parser.Path, pathTests []Test) error {
 	for _, pathTest := range pathTests {
 		if !isPrefix(pathTest.SubPath, location) {
-			return errors.New("all subpaths must be a prefix of the `location` value of the mutation")
+			return fmt.Errorf("%w: subpath %q is not a prefix of location %q", ErrPrefix, pathTest.SubPath, location)
 		}
-	}
-	if _, err := New(pathTests); err != nil {
-		return err
 	}
 	return nil
 }
 
 // New creates a new Tester object
-func New(tests []Test) (*Tester, error) {
+func New(location parser.Path, tests []Test) (*Tester, error) {
+	err := validatePathTests(location, tests)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make(map[int]*parser.Path)
 	idx := &Tester{
 		tests: make(map[int]Condition),
 	}
+
+	// Read in all tests before checking for conflicts.
+	idxLowestMustNot := math.MaxInt32
+	idxHighestMust := 0
 	for _, test := range tests {
 		i := len(test.SubPath.Nodes) - 1
+		idx.tests[i] = test.Condition
+		paths[i] = &test.SubPath
+
+		if test.Condition == MustNotExist && i < idxLowestMustNot {
+			idxLowestMustNot = i
+		} else if test.Condition == MustExist && i > idxHighestMust {
+			idxHighestMust = i
+		}
+	}
+
+	// Check for conflicts.
+	for _, test := range tests {
+		i := len(test.SubPath.Nodes) - 1
+		// Check that a single node must not be marked both MustExist and MustNotExist.
 		v, ok := idx.tests[i]
 		if ok && v != test.Condition {
-			return nil, errors.New("conflicting path test conditions")
+			return nil, fmt.Errorf("%w: path %q is marked both MustExist and MustNotExist", ErrConflict, test.SubPath)
 		}
-		idx.tests[i] = test.Condition
+	}
+
+	// Check that child nodes are not required if they have a forbidden parent.
+	if idxHighestMust > idxLowestMustNot {
+		return nil, fmt.Errorf("%w: path %q is marked MustExist but parent %q MustNotExist",
+			ErrConflict, paths[idxHighestMust], paths[idxLowestMustNot])
 	}
 	return idx, nil
 }
