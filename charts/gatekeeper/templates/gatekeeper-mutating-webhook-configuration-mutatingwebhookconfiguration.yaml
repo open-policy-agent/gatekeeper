@@ -21,6 +21,10 @@ webhooks:
   failurePolicy: Ignore
   matchPolicy: Exact
   name: mutation.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
   rules:
   - apiGroups:
     - '*'
@@ -32,4 +36,5 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
+  timeoutSeconds: 3
 {{- end }}
