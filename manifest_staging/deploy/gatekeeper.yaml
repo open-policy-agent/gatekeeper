@@ -675,7 +675,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.4.0
+        image: openpolicyagent/gatekeeper:v3.4.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -770,7 +770,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.4.0
+        image: openpolicyagent/gatekeeper:v3.4.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
