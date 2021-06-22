@@ -179,7 +179,7 @@ install: manifests
 
 deploy-mutation: patch-image
 	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./config/overlays/dev_mutation/manager_image_patch.yaml
-	kustomize build config/overlays/dev_mutation | kubectl apply -f -
+	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/dev_mutation | kubectl apply -f -
 	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
