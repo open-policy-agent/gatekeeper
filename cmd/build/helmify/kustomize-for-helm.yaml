@@ -33,6 +33,12 @@ status: null
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: mutatorpodstatuses.status.gatekeeper.sh
+status: null
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
   name: assignmetadata.mutations.gatekeeper.sh
 status: null
 ---
