@@ -188,6 +188,22 @@ func TestScanner(t *testing.T) {
 				{Type: EOF, Literal: ""},
 			},
 		},
+		// Digits can be part of an unquoted identifier, just not at the start.
+		{
+			input: `Nexus6`,
+			expected: []Token{
+				{Type: IDENT, Literal: "Nexus6"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
+			input: `ItWasTheSummerOf69'🎸'`,
+			expected: []Token{
+				{Type: IDENT, Literal: "ItWasTheSummerOf69"},
+				{Type: IDENT, Literal: "🎸"},
+				{Type: EOF, Literal: ""},
+			},
+		},
 		{
 			input: `-valid-identifier-`,
 			expected: []Token{
