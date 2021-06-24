@@ -13,29 +13,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package token
+package parser
 
-import "fmt"
-
-// The set of Token types.
-const (
-	ERROR     = "ERROR"
-	EOF       = "EOF"
-	IDENT     = "IDENT"
-	INT       = "INT"
-	LBRACKET  = "LBRACKET"
-	RBRACKET  = "RBRACKET"
-	SEPARATOR = "SEPARATOR"
-	GLOB      = "GLOB"
-	COLON     = "COLON"
+import (
+	"errors"
+	"fmt"
 )
 
-type Type string
-type Token struct {
-	Type    Type
-	Literal string
+var (
+	ErrTrailingSeparator = errors.New("trailing separators are forbidden")
+	ErrUnexpectedToken   = errors.New("unexpected token")
+	ErrInvalidInteger    = invalidIntegerError{}
+)
+
+type invalidIntegerError struct {
+	s string
 }
 
-func (t Token) String() string {
-	return fmt.Sprintf("%s: %q", t.Type, t.Literal)
+func (e invalidIntegerError) Error() string {
+	return fmt.Sprintf("invalid integer: %s", e.s)
+}
+func (e invalidIntegerError) Is(target error) bool {
+	_, ok := target.(invalidIntegerError)
+	return ok
 }

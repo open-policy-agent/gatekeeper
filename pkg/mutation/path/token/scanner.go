@@ -45,46 +45,50 @@ func NewScanner(input string) *Scanner {
 }
 
 func (s *Scanner) Next() Token {
-	var tok Token
+	var err error
+	var tok = Token{Type: ERROR}
 	s.skipWhitespace()
 
-	switch s.ch {
-	case eof:
-		tok = Token{Type: EOF, Literal: ""}
-	case '.':
-		tok = Token{Type: SEPARATOR, Literal: string(s.ch)}
-	case '[':
-		tok = Token{Type: LBRACKET, Literal: string(s.ch)}
-	case ']':
-		tok = Token{Type: RBRACKET, Literal: string(s.ch)}
-	case '*':
-		tok = Token{Type: GLOB, Literal: string(s.ch)}
-	case ':':
-		tok = Token{Type: COLON, Literal: string(s.ch)}
-	case '"', '\'':
-		tok.Type = IDENT
-		str, err := s.readString()
-		if err != nil {
-			tok.Type = ERROR
+	switch {
+	// A match on these first set of cases leaves s.ch positioned at the next character to process.
+	case isDigit(s.ch):
+		if tok.Literal, err = s.readInt(); err == nil {
+			tok.Type = INT
 		}
-		tok.Literal = str
-	default:
-		if isAlphaNum(s.ch) {
+	case isAlphaNum(s.ch):
+		if tok.Literal, err = s.readIdent(); err == nil {
 			tok.Type = IDENT
-			str, err := s.readIdent()
-			if err != nil {
-				tok.Type = ERROR
-			}
-			tok.Literal = str
-			return tok // Return early to avoid consuming the separator we may be positioned on below.
 		}
 
-		// default: current character is invalid at this location
-		s.setError(ErrInvalidCharacter)
-		tok = Token{Type: ERROR, Literal: string(s.ch)}
+	default:
+		// Any of these cases require a subsequent call to s.read() (below) to position the next character.
+		switch s.ch {
+		case eof:
+			tok = Token{Type: EOF, Literal: ""}
+		case '.':
+			tok = Token{Type: SEPARATOR, Literal: string(s.ch)}
+		case '[':
+			tok = Token{Type: LBRACKET, Literal: string(s.ch)}
+		case ']':
+			tok = Token{Type: RBRACKET, Literal: string(s.ch)}
+		case '*':
+			tok = Token{Type: GLOB, Literal: string(s.ch)}
+		case ':':
+			tok = Token{Type: COLON, Literal: string(s.ch)}
+		case '"', '\'':
+			if tok.Literal, err = s.readString(); err == nil {
+				tok.Type = IDENT
+			}
+		default:
+			// default: current character is invalid at this location
+			s.setError(ErrInvalidCharacter)
+			tok = Token{Type: ERROR, Literal: string(s.ch)}
+		}
+
+		// Make progress
+		s.read()
 	}
 
-	s.read()
 	return tok
 }
 
@@ -139,6 +143,15 @@ func (s *Scanner) readIdent() (string, error) {
 	return s.input[start:s.pos], s.err
 }
 
+// readInt scans a (positive) integer. Signs are not supported.
+func (s *Scanner) readInt() (string, error) {
+	start := s.pos
+	for isDigit(s.ch) {
+		s.read()
+	}
+	return s.input[start:s.pos], s.err
+}
+
 func (s *Scanner) setError(err error) {
 	s.err = ScanError{
 		Inner:    err,
@@ -164,6 +177,10 @@ func isAlphaNum(r rune) bool {
 
 	}
 	return true
+}
+
+func isDigit(r rune) bool {
+	return '0' <= r && r <= '9'
 }
 
 func (s *Scanner) skipWhitespace() {

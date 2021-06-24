@@ -11,6 +11,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -67,9 +68,9 @@ func newObj(value interface{}, path ...string) map[string]interface{} {
 	root := map[string]interface{}{}
 	current := root
 	for _, node := range path {
-		new := map[string]interface{}{}
-		current[node] = new
-		current = new
+		m := map[string]interface{}{}
+		current[node] = m
+		current = m
 	}
 	if err := unstructured.SetNestedField(root, value, path...); err != nil {
 		panic(err)
@@ -89,6 +90,14 @@ func newFoo(spec map[string]interface{}) *unstructured.Unstructured {
 		data["spec"] = spec
 	}
 	return &unstructured.Unstructured{Object: data}
+}
+
+func newPod(pod *v1.Pod) *unstructured.Unstructured {
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+	if err != nil {
+		panic(fmt.Sprintf("converting pod to unstructured: %v", err))
+	}
+	return &unstructured.Unstructured{Object: u}
 }
 
 func ensureObj(u *unstructured.Unstructured, expected interface{}, path ...string) error {
@@ -1495,6 +1504,95 @@ func TestApplyTo(t *testing.T) {
 			matches := mutator.Matches(obj, nil)
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
+			}
+		})
+	}
+}
+
+func TestAssign(t *testing.T) {
+	tests := []struct {
+		name string
+		obj  *unstructured.Unstructured
+		cfg  *assignTestCfg
+		fn   func(*unstructured.Unstructured) error
+	}{
+		{
+			name: "integer key value",
+			cfg: &assignTestCfg{
+				applyTo: []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Pod"}}},
+				path:    `spec.containers[name: opa].ports[containerPort: 8888].name`,
+				value:   makeValue("modified"),
+			},
+			obj: newPod(&v1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "v1",
+					Kind:       "Pod",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "opa",
+					Namespace: "production",
+					Labels:    map[string]string{"owner": "me.agilebank.demo"},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "opa",
+							Image: "openpolicyagent/opa:0.9.2",
+							Args: []string{
+								"run",
+								"--server",
+								"--addr=localhost:8080",
+							},
+							Ports: []v1.ContainerPort{
+								{
+									ContainerPort: 8080,
+									Name:          "out-of-scope",
+								},
+								{
+									ContainerPort: 8888,
+									Name:          "unchanged",
+								},
+							},
+						},
+					},
+				},
+			}),
+			fn: func(u *unstructured.Unstructured) error {
+				var pod v1.Pod
+				err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &pod)
+				if err != nil {
+					return err
+				}
+
+				if len(pod.Spec.Containers) != 1 {
+					return fmt.Errorf("incorrect number of containers: %d", len(pod.Spec.Containers))
+				}
+				c := pod.Spec.Containers[0]
+				if len(c.Ports) != 2 {
+					return fmt.Errorf("incorrect number of ports: %d", len(c.Ports))
+				}
+				p := c.Ports[1]
+				if p.ContainerPort != int32(8888) {
+					return fmt.Errorf("incorrect containerPort: %d", p.ContainerPort)
+				}
+				if p.Name != "modified" {
+					return fmt.Errorf("incorrect port name: %s", p.Name)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mutator := newAssignMutator(test.cfg)
+			obj := test.obj.DeepCopy()
+			_, err := mutator.Mutate(obj)
+			if err != nil {
+				t.Fatalf("failed mutation: %s", err)
+			}
+			if err := test.fn(obj); err != nil {
+				t.Errorf("failed test: %v", err)
 			}
 		})
 	}
