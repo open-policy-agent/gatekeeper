@@ -155,6 +155,7 @@ func (l List) String() string {
 //  * Strings containing whitespace, quotes, or other characters that need escaping.
 //  * Strings starting with "ambiguous" characters that will be tokenized as non-strings,
 //    including digits, *, [, ], . etc.
+//  * Empty strings
 func quote(s string) string {
 	if len(s) == 0 {
 		return `""`
@@ -169,22 +170,6 @@ func quote(s string) string {
 		s = strings.ReplaceAll(s, `"`, `\"`)
 		return `"` + s + `"`
 	}
-	//if strings.ContainsAny(s, "'\"\t\n \\") || startsWithDigit(s) {
-	//	// Using fmt.Sprintf with %q converts whitespace to escape sequences, and we
-	//	// don't want that.
-	//	s = strings.ReplaceAll(s, `\`, `\\`)
-	//	s = strings.ReplaceAll(s, `"`, `\"`)
-	//	return `"` + s + `"`
-	//}
 
 	return s
-}
-
-func startsWithDigit(s string) bool {
-	return len(s) > 0 && isDigit(s[0])
-
-}
-
-func isDigit(r uint8) bool {
-	return '0' <= r && r <= '9'
 }

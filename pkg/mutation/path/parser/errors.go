@@ -21,9 +21,12 @@ import (
 )
 
 var (
+	// ErrTrailingSeparator indicates a parsing error due to an illegal trailing separator.
 	ErrTrailingSeparator = errors.New("trailing separators are forbidden")
-	ErrUnexpectedToken   = errors.New("unexpected token")
-	ErrInvalidInteger    = invalidIntegerError{}
+	// ErrUnexpectedToken indicates a parsing error due to an unexpected token.
+	ErrUnexpectedToken = errors.New("unexpected token")
+	// ErrInvalidInteger indicates a parsing error due to an invalid integer, such as integer overflow.
+	ErrInvalidInteger = invalidIntegerError{}
 )
 
 type invalidIntegerError struct {
