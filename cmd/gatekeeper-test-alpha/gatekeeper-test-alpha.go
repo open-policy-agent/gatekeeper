@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
 	"github.com/spf13/cobra"
@@ -39,7 +41,23 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := args[0]
 
-		testFiles, err := gktest.ToTestFiles(path)
+		// Convert path to be absolute. Allowing for relative and absolute paths
+		// everywhere in the code leads to unnecessary complexity, so the first
+		// thing we do on encountering a path is to convert it to an absolute path.
+		var err error
+		if !filepath.IsAbs(path) {
+			path, err = filepath.Abs(path)
+			if err != nil {
+				return fmt.Errorf("getting absolute path: %w", err)
+			}
+		}
+
+		// Create the base file system. We use fs.FS rather than direct calls to
+		// os.ReadFile or filepath.WalkDir to make testing easier and keep logic
+		// os-independent.
+		fileSystem := getFS(path)
+
+		suites, err := gktest.ReadSuites(fileSystem, path)
 		if err != nil {
 			return fmt.Errorf("listing test files: %w", err)
 		}
@@ -49,19 +67,25 @@ var rootCmd = &cobra.Command{
 		}
 
 		isFailure := false
-		for _, f := range testFiles {
-			result := gktest.Run(f, filter)
-			// If Result contains an error status, it is safe to execute tests in other
-			// files so we can continue execution.
-			isFailure = isFailure || result.IsFailure()
-			fmt.Println(result.String())
+		for _, s := range suites {
+			if !filter.MatchesSuite(s) {
+				continue
+			}
+
+			results := s.Run(fileSystem, filter)
+			for _, result := range results {
+				if result.IsFailure() {
+					isFailure = true
+				}
+				fmt.Println(result.String())
+			}
 		}
+
 		if isFailure {
 			// At least one test failed or there was a problem executing tests in at
 			// least one file.
 			return errors.New("FAIL")
 		}
-
 		return nil
 	},
 }
@@ -72,4 +96,17 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func getFS(path string) fs.FS {
+	// TODO(#1397): Check that this produces the correct file system string on
+	//  Windows. We may need to add a trailing `/` for fs.FS to function properly.
+	root := filepath.VolumeName(path)
+	if root == "" {
+		// We are running on a unix-like filesystem without volume names, so the
+		// file system root is `/`.
+		root = "/"
+	}
+
+	return os.DirFS(root)
 }
