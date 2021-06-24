@@ -152,18 +152,17 @@ func (l List) String() string {
 
 // quote optionally adds double quotes around the passed string if needed.
 // Quotes are needed for:
-//  * Strings containing whitespace, quotes, or other characters that need escaping.
-//  * Strings starting with "ambiguous" characters that will be tokenized as non-strings,
-//    including digits, *, [, ], . etc.
+//  * Strings containing whitespace, quotes, or other "ambiguous" characters that will
+//    be tokenized as non-strings and need escaping.
+//  * Strings starting digits, that would otherwise be tokenized as an integer
 //  * Empty strings
 func quote(s string) string {
 	if len(s) == 0 {
 		return `""`
 	}
 	switch {
-	case strings.ContainsAny(s, "'\"\t\n \\"),
-		strings.ContainsAny(s[0:1], "0123456789"),
-		strings.ContainsAny(s[0:1], "*[]:."):
+	case strings.ContainsAny(s, "'\"\t\n \\*[]:."),
+		strings.ContainsAny(s[0:1], "0123456789"):
 		// Using fmt.Sprintf with %q converts whitespace to escape sequences, and we
 		// don't want that.
 		s = strings.ReplaceAll(s, `\`, `\\`)

@@ -360,6 +360,31 @@ func TestParser(t *testing.T) {
 				&Object{Reference: `token-with-\embedded-backslash`},
 			},
 		},
+		// Verify round-tripping on strings-that-look-like-other-tokens
+		{
+			input: `'foo[bar: baz]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar: baz]`},
+			},
+		},
+		{
+			input: `'foo[bar:baz]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar:baz]`},
+			},
+		},
+		{
+			input: `'foo[bar:*]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar:*]`},
+			},
+		},
+		{
+			input: `'dot..dot'`,
+			expected: []Node{
+				&Object{Reference: `dot..dot`},
+			},
+		},
 	}
 
 	for i, tc := range tests {
