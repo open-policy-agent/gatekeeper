@@ -22,7 +22,7 @@ postInstall:
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.6.0-beta.1
+  release: v3.6.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:

@@ -11,6 +11,7 @@ resources:
   - webhook.yaml
   - mutations.gatekeeper.sh_assign.yaml
   - mutations.gatekeeper.sh_assignmetadata.yaml
+  - status.gatekeeper.sh_mutatorpodstatuses.yaml
 
 patches:
 - target:

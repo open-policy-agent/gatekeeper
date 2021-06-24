@@ -6,7 +6,7 @@ IMG := $(REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.6.0-beta.1
+VERSION := v3.6.0-beta.2
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -137,6 +137,7 @@ e2e-helm-deploy: e2e-helm-install
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
+		--set experimentalEnableMutation=true \
 		--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade-init: e2e-helm-install
@@ -198,7 +199,7 @@ manifests: __controller-gen
 	# As mutation CRDs are not ready to be included in our final gatekeeper.yaml, we leave them out of config/crd/kustomization.yaml.
 	# This makes these files unavailable to the helmify step below.  The solve for this was to copy the mutation CRDs into
 	# config/overlays/mutation_webhook/.  To maintain the generation pipeline, we do that copy step here.
-	cp config/crd/bases/mutations* config/overlays/mutation_webhook/
+	cp config/crd/bases/*mutat* config/overlays/mutation_webhook/
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper

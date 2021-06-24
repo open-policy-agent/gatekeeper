@@ -182,53 +182,12 @@ jobs:
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
-          make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+          make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} ENABLE_MUTATION_TESTS=1
 
       - name: Save logs
         run: |
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: |
-            logs-*.json
-
-  build_mutation_test:
-    name: "Build and Test Mutation"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      matrix:
-        KUBERNETES_VERSION: ["1.19.11", "1.20.7", "1.21.1"]
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-
-      - name: Set up Go 1.16
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-
-      - name: Bootstrap e2e
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
-
-      - name: Run e2e mutation
-        run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e:latest
-          make deploy-mutation IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-          make test-e2e ENABLE_MUTATION_TESTS=1
-
-      - name: Save logs
-        run: |
-          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller-mutation.json
-          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit-mutation.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
