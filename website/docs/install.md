@@ -37,7 +37,7 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 
 ### Deploying a Release using development image
 
-If you want to deploy latest development version of Gatekeeper, you can use `openpolicyagent/gatekeeper:dev` tag or `openpolicyagent/gateekeper:<SHA>`.
+If you want to deploy latest development version of Gatekeeper, you can use `openpolicyagent/gatekeeper:dev` tag or `openpolicyagent/gatekeeper:<SHA>`.
 
 Images are hosted in [OPA Docker Hub repository](https://hub.docker.com/r/openpolicyagent/gatekeeper/tags).
 
