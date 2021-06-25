@@ -303,8 +303,12 @@ get_ns_name[out] {
   out := input.review.namespace
 }
 
+# JULIAN - This doesn't use the parameter...  
+# JULIAN - This just matches on all non-namespace objects that don't have a namespace specified.  I feel like it should be called "is_cluster_scoped"
 always_match_ns_selectors(match) {
+  # JULIAN - it's not a namespace
   not is_ns(input.review.kind)
+  # JULIAN - this will be true if namespace was blank or if it was not specified
   get_default(input.review, "namespace", "") == ""
 }
 
@@ -320,10 +324,35 @@ matches_namespaces(match) {
 
 matches_namespaces(match) {
   has_field(match, "namespaces")
+  # JULIAN - I can't figure out why we care about namespace selectors here.  Is that because nobody uses namespaceSelectors alongside namespaces?
   not always_match_ns_selectors(match)
   get_ns_name[ns]
   nss := {n | n = match.namespaces[_]}
-  count({ns} - nss) == 0
+  # count({ns} - nss) == 0
+  # JULIAN - this makes way more sense to me
+  nss[ns]
+}
+
+# Prefix-based matching
+matches_namespaces(match) {
+  has_field(match, "namespaces")
+  not always_match_ns_selectors(match)
+  get_ns_name[ns]
+  wild_nss := wildcard_namespaces(match.namespaces)
+  prefix_glob_match(wild_nss, ns)
+}
+
+wildcard_namespaces(ns_array) = out {
+  out := [ nss | endswith(ns_array[i], "*")
+                         nss := ns_array[i]]
+}
+
+prefix_glob_match(match_nss, object_ns) = true {
+  # A "super glob" requires two or more asterisks.  As we will only require one for our wildcard,
+  # we need to add on a second one.  Additional ones have no effect (as in, "kube-***" is valid)
+  # See: https://www.openpolicyagent.org/docs/latest/policy-reference/#glob
+  super_glob := concat("", [match_nss[_], "*"])
+  glob.match(super_glob, [], object_ns)
 }
 
 does_not_match_excludednamespaces(match) {
@@ -341,7 +370,13 @@ does_not_match_excludednamespaces(match) {
   not always_match_ns_selectors(match)
   get_ns_name[ns]
   nss := {n | n = match.excludedNamespaces[_]}
-  count({ns} - nss) != 0
+  # count({ns} - nss) != 0
+  # JULIAN - this makes way more sense to me
+  not nss[ns]
+
+  # Check for prefix matches
+  wild_ex_nss := wildcard_namespaces(match.excludedNamespaces)
+  not prefix_glob_match(wild_ex_nss, ns)
 }
 
 matches_nsselector(match) {
