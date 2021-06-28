@@ -84,13 +84,13 @@ add_field(object, key, value) = ret {
 }
 
 # has_field returns whether an object has a field
-has_field(object, field) = true {
+has_field(object, field) {
   object[field]
 }
 
 # False is a tricky special case, as false responses would create an undefined document unless
 # they are explicitly tested for
-has_field(object, field) = true {
+has_field(object, field) {
   object[field] == false
 }
 
@@ -177,11 +177,11 @@ matches_scope(match) {
 ########################
 
 # match_expression_violated checks to see if a match expression is violated.
-match_expression_violated("In", labels, key, values) = true {
+match_expression_violated("In", labels, key, values) {
   has_field(labels, key) == false
 }
 
-match_expression_violated("In", labels, key, values) = true {
+match_expression_violated("In", labels, key, values) {
   # values array must be non-empty for rule to be valid
   count(values) > 0
   valueSet := {v | v = values[_]}
@@ -189,18 +189,18 @@ match_expression_violated("In", labels, key, values) = true {
 }
 
 # No need to check if labels has the key, because a missing key is automatic non-violation
-match_expression_violated("NotIn", labels, key, values) = true {
+match_expression_violated("NotIn", labels, key, values) {
   # values array must be non-empty for rule to be valid
   count(values) > 0
   valueSet := {v | v = values[_]}
   count({labels[key]} - valueSet) == 0
 }
 
-match_expression_violated("Exists", labels, key, values) = true {
+match_expression_violated("Exists", labels, key, values) {
   has_field(labels, key) == false
 }
 
-match_expression_violated("DoesNotExist", labels, key, values) = true {
+match_expression_violated("DoesNotExist", labels, key, values) {
   has_field(labels, key) == true
 }
 
@@ -345,7 +345,7 @@ wildcard_namespaces(ns_array) = out {
                          nss := ns_array[i]]
 }
 
-prefix_glob_match(match_nss, object_ns) = true {
+prefix_glob_match(match_nss, object_ns) {
   glob.match(match_nss[_], [], object_ns)
 }
 
