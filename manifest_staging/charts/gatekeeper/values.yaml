@@ -31,6 +31,7 @@ podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
 controllerManager:
+  exemptNamespaces: []
   hostNetwork: false
   priorityClassName: system-cluster-critical
   affinity:
