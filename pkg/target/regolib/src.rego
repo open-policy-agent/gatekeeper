@@ -346,11 +346,7 @@ wildcard_namespaces(ns_array) = out {
 }
 
 prefix_glob_match(match_nss, object_ns) = true {
-  # A "super glob" requires two or more asterisks.  As we will only require one for our wildcard,
-  # we need to add on a second one.  Additional ones have no effect (as in, "kube-***" is valid)
-  # See: https://www.openpolicyagent.org/docs/latest/policy-reference/#glob
-  super_glob := concat("", [match_nss[_], "*"])
-  glob.match(super_glob, [], object_ns)
+  glob.match(match_nss[_], [], object_ns)
 }
 
 does_not_match_excludednamespaces(match) {
