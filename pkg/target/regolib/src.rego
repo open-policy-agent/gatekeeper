@@ -303,9 +303,10 @@ get_ns_name[out] {
   out := input.review.namespace
 }
 
-# JULIAN - This doesn't use the parameter...  
-# JULIAN - This just matches on all non-namespace objects that don't have a namespace specified.  I feel like it should be called "is_cluster_scoped"
-always_match_ns_selectors(match) {
+# Checks that:
+#   1. The input item is not of kind namespace
+#   2. The input item has no namespace, and is thus cluster-scoped
+always_match_ns_selectors {
   # JULIAN - it's not a namespace
   not is_ns(input.review.kind)
   # JULIAN - this will be true if namespace was blank or if it was not specified
@@ -319,13 +320,13 @@ matches_namespaces(match) {
 # Always match cluster scoped resources, unless resource is namespace
 matches_namespaces(match) {
   has_field(match, "namespaces")
-  always_match_ns_selectors(match)
+  always_match_ns_selectors
 }
 
 matches_namespaces(match) {
   has_field(match, "namespaces")
   # JULIAN - I can't figure out why we care about namespace selectors here.  Is that because nobody uses namespaceSelectors alongside namespaces?
-  not always_match_ns_selectors(match)
+  not always_match_ns_selectors
   get_ns_name[ns]
   nss := {n | n = match.namespaces[_]}
   # count({ns} - nss) == 0
@@ -336,7 +337,7 @@ matches_namespaces(match) {
 # Prefix-based matching
 matches_namespaces(match) {
   has_field(match, "namespaces")
-  not always_match_ns_selectors(match)
+  not always_match_ns_selectors
   get_ns_name[ns]
   wild_nss := wildcard_namespaces(match.namespaces)
   prefix_glob_match(wild_nss, ns)
@@ -362,12 +363,12 @@ does_not_match_excludednamespaces(match) {
 # Always match cluster scoped resources, unless resource is namespace
 does_not_match_excludednamespaces(match) {
   has_field(match, "excludedNamespaces")
-  always_match_ns_selectors(match)
+  always_match_ns_selectors
 }
 
 does_not_match_excludednamespaces(match) {
   has_field(match, "excludedNamespaces")
-  not always_match_ns_selectors(match)
+  not always_match_ns_selectors
   get_ns_name[ns]
   nss := {n | n = match.excludedNamespaces[_]}
   # count({ns} - nss) != 0
@@ -386,12 +387,12 @@ matches_nsselector(match) {
 # Always match cluster scoped resources, unless resource is namespace
 matches_nsselector(match) {
   has_field(match, "namespaceSelector")
-  always_match_ns_selectors(match)
+  always_match_ns_selectors
 }
 
 matches_nsselector(match) {
   not is_ns(input.review.kind)
-  not always_match_ns_selectors(match)
+  not always_match_ns_selectors
   has_field(match, "namespaceSelector")
   get_ns[ns]
   matches_namespace_selector(match, ns)
@@ -400,7 +401,7 @@ matches_nsselector(match) {
 # if we are matching against a namespace, match against either the old or new object
 matches_nsselector(match) {
   is_ns(input.review.kind)
-  not always_match_ns_selectors(match)
+  not always_match_ns_selectors
   has_field(match, "namespaceSelector")
   any_labelselector_match(get_default(match, "namespaceSelector", {}))
 }
