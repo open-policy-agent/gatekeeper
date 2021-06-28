@@ -129,7 +129,7 @@ test_exclude_cluster_scoped {
 }
 
 test_exclude_namespaced_no_match {
-  does_not_match_excludednamespaces({"excludedNamespaces": ["foo", "bar"]})
+  does_not_match_excludednamespaces({"excludedNamespaces": ["foo", "bar", "kube-*"]})
     with input.review.kind as pod_kind
     with input.review.namespace as "baz"
 }
