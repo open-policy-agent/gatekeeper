@@ -307,9 +307,7 @@ get_ns_name[out] {
 #   1. The input item is not of kind namespace
 #   2. The input item has no namespace, and is thus cluster-scoped
 always_match_ns_selectors {
-  # JULIAN - it's not a namespace
   not is_ns(input.review.kind)
-  # JULIAN - this will be true if namespace was blank or if it was not specified
   get_default(input.review, "namespace", "") == ""
 }
 
@@ -325,7 +323,6 @@ matches_namespaces(match) {
 
 matches_namespaces(match) {
   has_field(match, "namespaces")
-  # JULIAN - I can't figure out why we care about namespace selectors here.  Is that because nobody uses namespaceSelectors alongside namespaces?
   not always_match_ns_selectors
   get_ns_name[ns]
   nss := {n | n = match.namespaces[_]}
