@@ -343,7 +343,7 @@ matches_namespaces(match) {
 
 wildcard_namespaces(ns_array) = out {
   out := [ nss | endswith(ns_array[i], "*")
-                         nss := ns_array[i]]
+                         nss := ns_array[i] ]
 }
 
 prefix_glob_match(match_nss, object_ns) {
