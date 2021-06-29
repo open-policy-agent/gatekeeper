@@ -39,20 +39,20 @@ func NewFilter(run string) (Filter, error) {
 	return Filter{}, nil
 }
 
-// Suite filters the set of test suites to run by suite name and the tests
+// MatchesSuite filters the set of test suites to run by suite name and the tests
 // contained in the suite. Returns true if the suite should be run.
 //
 // If a suite regex was specified, returns true if the suite regex matches
 // `suite`.
 // If a suite regex was not specified but a test regex was, returns true if at
 // least one test in `tests` matches the test regex.
-func (f Filter) Suite(suite string, tests []string) bool {
+func (f Filter) MatchesSuite(suite Suite) bool {
 	return true
 }
 
-// Test filters the set of tests to run by name.
+// MatchesTest filters the set of tests to run by name.
 //
 // Returns true if the test regex matches test.
-func (f Filter) Test(test string) bool {
+func (f Filter) MatchesTest(testCase TestCase) bool {
 	return true
 }
