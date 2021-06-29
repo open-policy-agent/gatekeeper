@@ -180,7 +180,7 @@ install: manifests
 
 deploy-mutation: patch-image
 	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./config/overlays/dev_mutation/manager_image_patch.yaml
-	kustomize build config/overlays/dev_mutation | kubectl apply -f -
+	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/dev_mutation | kubectl apply -f -
 	kustomize build --load_restrictor LoadRestrictionsNone config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
@@ -204,7 +204,7 @@ manifests: __controller-gen
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
-	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+	docker run --rm -v $(shell pwd):/gatekeeper --entrypoint /usr/local/bin/kustomize line/kubectl-kustomize:${KUBECTL_KUSTOMIZE_VERSION} build --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
