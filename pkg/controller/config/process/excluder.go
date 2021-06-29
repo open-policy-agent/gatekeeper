@@ -2,6 +2,7 @@ package process
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -95,8 +96,27 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
-		return s.excludedNamespaces[process][meta.GetName()], nil
+		return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetName()), nil
 	}
 
-	return s.excludedNamespaces[process][meta.GetNamespace()], nil
+	return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
+}
+
+func exactOrPrefixMatch(boolMap map[string]bool, key string) bool {
+	val, ok := boolMap[key]
+	if ok {
+		return val
+	}
+
+	for k, val := range boolMap {
+		if !strings.HasSuffix(k, "*") {
+			continue
+		}
+
+		if strings.HasPrefix(key, strings.TrimSuffix(k, "*")) {
+			return val
+		}
+	}
+
+	return false
 }

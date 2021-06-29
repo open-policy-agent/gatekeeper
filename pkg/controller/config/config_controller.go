@@ -43,7 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// TODO write a reconciliation process that looks at the state of the cluster to make sure
+// TODO: write a reconciliation process that looks at the state of the cluster to make sure
 // allFinalizers agrees with reality and launches a cleaner if the config is missing.
 
 const (
