@@ -58,4 +58,8 @@ var replacements = map[string]string{
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
         {{- end }}`,
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES": `
+        {{- range .Values.controllerManager.exemptNamespaces}}
+        - --exempt-namespace={{ . }}
+        {{- end }}`,
 }
