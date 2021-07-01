@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -46,7 +47,7 @@ var Cmd = &cobra.Command{
 	RunE:    runE,
 }
 
-func runE(_ *cobra.Command, args []string) error {
+func runE(cmd *cobra.Command, args []string) error {
 	path := args[0]
 
 	// Convert path to be absolute. Allowing for relative and absolute paths
@@ -81,17 +82,23 @@ func runE(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("compiling filter: %w", err)
 	}
 
-	return runSuites(fileSystem, suites, filter)
+	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(fileSystem fs.FS, suites []gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, filter gktest.Filter) error {
 	isFailure := false
-	for _, s := range suites {
+	for i := range suites {
+		s := &suites[i]
 		if !filter.MatchesSuite(s) {
 			continue
 		}
 
-		results := s.Run(fileSystem, filter)
+		c, err := gktest.NewOPAClient()
+		if err != nil {
+			return err
+		}
+
+		results := s.Run(ctx, c, fileSystem, filter)
 		for _, result := range results {
 			if result.IsFailure() {
 				isFailure = true

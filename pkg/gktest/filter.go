@@ -46,7 +46,7 @@ func NewFilter(run string) (Filter, error) {
 // `suite`.
 // If a suite regex was not specified but a test regex was, returns true if at
 // least one test in `tests` matches the test regex.
-func (f Filter) MatchesSuite(suite Suite) bool {
+func (f Filter) MatchesSuite(suite *Suite) bool {
 	return true
 }
 
