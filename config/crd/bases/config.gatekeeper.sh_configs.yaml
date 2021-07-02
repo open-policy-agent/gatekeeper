@@ -38,6 +38,7 @@ spec:
                   properties:
                     excludedNamespaces:
                       items:
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array
                     processes:

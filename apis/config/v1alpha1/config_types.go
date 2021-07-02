@@ -62,9 +62,12 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
-	Processes          []string `json:"processes,omitempty"`
+	ExcludedNamespaces []validWilcardNamespace `json:"excludedNamespaces,omitempty"`
+	Processes          []string                `json:"processes,omitempty"`
 }
+
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+type validWilcardNamespace string
 
 type ReadinessSpec struct {
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
