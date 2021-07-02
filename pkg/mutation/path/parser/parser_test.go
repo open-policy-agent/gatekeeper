@@ -74,7 +74,7 @@ func TestParser(t *testing.T) {
 			expected: []Node{
 				&Object{Reference: "spec"},
 				&Object{Reference: "containers"},
-				&List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
+				&List{KeyField: "name", KeyValue: "*", Glob: false},
 				&Object{Reference: "securityContext"},
 			},
 		},
@@ -83,7 +83,7 @@ func TestParser(t *testing.T) {
 			expected: []Node{
 				&Object{Reference: "spec"},
 				&Object{Reference: "containers"},
-				&List{KeyField: "name", KeyValue: strPtr("foo")},
+				&List{KeyField: "name", KeyValue: "foo"},
 				&Object{Reference: "securityContext"},
 			},
 		},
@@ -92,7 +92,7 @@ func TestParser(t *testing.T) {
 			expected: []Node{
 				&Object{Reference: "spec"},
 				&Object{Reference: "containers"},
-				&List{KeyField: "my key", KeyValue: strPtr("foo bar")},
+				&List{KeyField: "my key", KeyValue: "foo bar"},
 			},
 		},
 		{
@@ -110,7 +110,7 @@ func TestParser(t *testing.T) {
 			expected: []Node{
 				&Object{Reference: "spec"},
 				&Object{Reference: "containers"},
-				&List{KeyField: "name", KeyValue: strPtr("")},
+				&List{KeyField: "name", KeyValue: ""},
 				&Object{Reference: "securityContext"},
 			},
 		},
@@ -119,7 +119,7 @@ func TestParser(t *testing.T) {
 			expected: []Node{
 				&Object{Reference: "spec"},
 				&Object{Reference: "containers"},
-				&List{KeyField: "", KeyValue: strPtr("someValue")},
+				&List{KeyField: "", KeyValue: "someValue"},
 				&Object{Reference: "securityContext"},
 			},
 		},
@@ -200,6 +200,44 @@ func TestParser(t *testing.T) {
 			wantErr: ErrUnexpectedToken,
 		},
 		{
+			// Integer keyValues
+			input: `spec.containers[name: opa].ports[containerPort: 8888].name`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&Object{Reference: "containers"},
+				&List{KeyField: "name", KeyValue: "opa"},
+				&Object{Reference: "ports"},
+				&List{KeyField: "containerPort", KeyValue: int64(8888)},
+				&Object{Reference: "name"},
+			},
+		},
+		{
+			// Integer keyFields not supported
+			input:   `spec.containers[123: opa]`,
+			wantErr: ErrUnexpectedToken,
+		},
+		{
+			// Maximum 64bit integer
+			input: `spec[bignum: 9223372036854775807]`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&List{KeyField: "bignum", KeyValue: int64(9223372036854775807)},
+			},
+		},
+		{
+			// Integer overflow
+			input:   `spec[bignum: 9223372036854775808]`,
+			wantErr: ErrInvalidInteger,
+		},
+		{
+			// Quoted integers are parsed as strings
+			input: `spec[quoted: "123"]`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&List{KeyField: "quoted", KeyValue: "123"},
+			},
+		},
+		{
 			// allow leading dash
 			input: `-123-_456_`,
 			expected: []Node{
@@ -207,10 +245,54 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
-			// allow leading digits
-			input: `012345`,
+			// allow trailing digits
+			input: `area51`,
+			expected: []Node{
+				&Object{Reference: "area51"},
+			},
+		},
+		{
+			// field names cannot be integers
+			input:   `012345`,
+			wantErr: ErrUnexpectedToken,
+		},
+		{
+			input:   `spec.123.bar`,
+			wantErr: ErrUnexpectedToken,
+		},
+		{
+			// ...but they can be quoted strings that look like integers
+			input: `"012345"`,
 			expected: []Node{
 				&Object{Reference: "012345"},
+			},
+		},
+		{
+			input: `spec."123"`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&Object{Reference: "123"},
+			},
+		},
+		{
+			input: `spec.studio54.bar`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&Object{Reference: "studio54"},
+				&Object{Reference: "bar"},
+			},
+		},
+		{
+			// Hexadecimal notation not supported
+			input:   `spec[foo: 0x123]`,
+			wantErr: ErrUnexpectedToken,
+		},
+		{
+			// Octal notation not supported, interpreted as decimal.
+			input: `spec[not_octal: 0123]`,
+			expected: []Node{
+				&Object{Reference: "spec"},
+				&List{KeyField: "not_octal", KeyValue: int64(123)}, // rather than 83
 			},
 		},
 		{
@@ -262,7 +344,7 @@ func TestParser(t *testing.T) {
 				&Object{Reference: "spec"},
 				&Object{Reference: "this object"},
 				&Object{Reference: "is very"},
-				&List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+				&List{KeyField: "much full", KeyValue: "of everyone's"},
 				&Object{Reference: "favorite thing"},
 			},
 		},
@@ -276,6 +358,31 @@ func TestParser(t *testing.T) {
 			input: `"token-with-\\embedded-backslash"`,
 			expected: []Node{
 				&Object{Reference: `token-with-\embedded-backslash`},
+			},
+		},
+		// Verify round-tripping on strings-that-look-like-other-tokens
+		{
+			input: `'foo[bar: baz]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar: baz]`},
+			},
+		},
+		{
+			input: `'foo[bar:baz]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar:baz]`},
+			},
+		},
+		{
+			input: `'foo[bar:*]'`,
+			expected: []Node{
+				&Object{Reference: `foo[bar:*]`},
+			},
+		},
+		{
+			input: `'dot..dot'`,
+			expected: []Node{
+				&Object{Reference: `dot..dot`},
 			},
 		},
 	}
@@ -324,7 +431,7 @@ func TestDeepCopy(t *testing.T) {
 		},
 		{
 			name:  "test list deepcopy",
-			input: &List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
+			input: &List{KeyField: "much full", KeyValue: "of everyone's"},
 		},
 		{
 			name:  "test list deepcopy with nil nexted pointer",
@@ -334,12 +441,12 @@ func TestDeepCopy(t *testing.T) {
 			name: "test path deepcopy",
 			input: &Path{
 				Nodes: []Node{
-					&List{KeyField: "much full", KeyValue: strPtr("of everyone's")},
-					&List{KeyField: "name", KeyValue: strPtr("*"), Glob: false},
+					&List{KeyField: "much full", KeyValue: "of everyone's"},
+					&List{KeyField: "name", KeyValue: "*", Glob: false},
 					&Object{Reference: "foo\nbar"},
 					&Path{
 						Nodes: []Node{
-							&List{KeyField: "innername", KeyValue: strPtr("*"), Glob: false},
+							&List{KeyField: "innername", KeyValue: "*", Glob: false},
 						},
 					},
 				},
@@ -354,8 +461,4 @@ func TestDeepCopy(t *testing.T) {
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
