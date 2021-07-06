@@ -82,9 +82,91 @@ func TestScanner(t *testing.T) {
 			},
 		},
 		{
+			input: `"one"two`,
+			expected: []Token{
+				{Type: IDENT, Literal: "one"},
+				{Type: IDENT, Literal: "two"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Integer token support
+		{
+			input: `0123`,
+			expected: []Token{
+				{Type: INT, Literal: "0123"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
+			input: `9876543210`,
+			expected: []Token{
+				{Type: INT, Literal: "9876543210"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Tokenizer doesn't care about bit length
+		{
+			input: `99918446744073709551615`,
+			expected: []Token{
+				{Type: INT, Literal: "99918446744073709551615"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Hexadecimal not supported
+		{
+			input: `0x1A`,
+			expected: []Token{
+				{Type: INT, Literal: "0"},
+				{Type: IDENT, Literal: "x1A"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Signs not supported
+		{
+			input: `-1024`,
+			expected: []Token{
+				{Type: IDENT, Literal: "-1024"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
+			input: `+1024`,
+			expected: []Token{
+				{Type: ERROR, Literal: "+"},
+			},
+			wantErr: ErrInvalidCharacter,
+		},
+		// Decimals are not supported
+		{
+			input: `3.14`,
+			expected: []Token{
+				{Type: INT, Literal: "3"},
+				{Type: SEPARATOR, Literal: "."},
+				{Type: INT, Literal: "14"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Identifiers can no longer lead with digits
+		{
 			input: `0123_foobar_baz`,
 			expected: []Token{
+				{Type: INT, Literal: "0123"},
+				{Type: IDENT, Literal: "_foobar_baz"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Quoted numbers are identifiers
+		{
+			input: `"0123_foobar_baz"`,
+			expected: []Token{
 				{Type: IDENT, Literal: "0123_foobar_baz"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
+			input: `"299792458"`,
+			expected: []Token{
+				{Type: IDENT, Literal: "299792458"},
 				{Type: EOF, Literal: ""},
 			},
 		},
@@ -92,7 +174,8 @@ func TestScanner(t *testing.T) {
 			input: `  .0123_foobar_baz  .`,
 			expected: []Token{
 				{Type: SEPARATOR, Literal: "."},
-				{Type: IDENT, Literal: "0123_foobar_baz"},
+				{Type: INT, Literal: "0123"},
+				{Type: IDENT, Literal: "_foobar_baz"},
 				{Type: SEPARATOR, Literal: "."},
 				{Type: EOF, Literal: ""},
 			},
@@ -100,7 +183,24 @@ func TestScanner(t *testing.T) {
 		{
 			input: `0123_foobar-baz`,
 			expected: []Token{
-				{Type: IDENT, Literal: "0123_foobar-baz"},
+				{Type: INT, Literal: "0123"},
+				{Type: IDENT, Literal: "_foobar-baz"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		// Digits can be part of an unquoted identifier, just not at the start.
+		{
+			input: `Nexus6`,
+			expected: []Token{
+				{Type: IDENT, Literal: "Nexus6"},
+				{Type: EOF, Literal: ""},
+			},
+		},
+		{
+			input: `ItWasTheSummerOf69'🎸'`,
+			expected: []Token{
+				{Type: IDENT, Literal: "ItWasTheSummerOf69"},
+				{Type: IDENT, Literal: "🎸"},
 				{Type: EOF, Literal: ""},
 			},
 		},

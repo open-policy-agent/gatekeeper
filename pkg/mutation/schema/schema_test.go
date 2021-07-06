@@ -1202,13 +1202,13 @@ func TestErrors(t *testing.T) {
 			name:        "Long path with conflict at end",
 			first:       "spec.intermediate.someValue[hey: \"there\"].buddy.hallo",
 			second:      "spec.intermediate.someValue[hey: again].buddy[key: *]",
-			expectedErr: `spec.intermediate.someValue["hey": "again"].buddy: node type conflict: Object vs List`,
+			expectedErr: `spec.intermediate.someValue[hey: again].buddy: node type conflict: Object vs List`,
 		},
 		{
 			name:        "Long path with conflict at end, globbed",
 			first:       "spec.intermediate.someValue[hey: \"there\"].buddy.hallo",
 			second:      "spec.intermediate.someValue[hey: *].buddy[key: *]",
-			expectedErr: `spec.intermediate.someValue["hey": *].buddy: node type conflict: Object vs List`,
+			expectedErr: `spec.intermediate.someValue[hey: *].buddy: node type conflict: Object vs List`,
 		},
 		{
 			name:        "Long path with conflict at beginning",

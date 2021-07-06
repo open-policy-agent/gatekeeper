@@ -371,14 +371,8 @@ func wrapObjErr(obj *parser.Object, err error) *Error {
 }
 
 func wrapListErr(list *parser.List, err error) *Error {
-	var value string
-	if list.Glob {
-		value = "*"
-	} else {
-		value = fmt.Sprintf("\"%s\"", *list.KeyValue)
-	}
 	return &Error{
 		childError: err,
-		nodeName:   fmt.Sprintf("[\"%s\": %s]", list.KeyField, value),
+		nodeName:   list.String(),
 	}
 }
