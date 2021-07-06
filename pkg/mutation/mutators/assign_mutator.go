@@ -323,8 +323,8 @@ func validateObjectAssignedToList(p parser.Path, value interface{}, assignName s
 	if !ok {
 		return errors.New("only full objects can be appended to lists, Assign: " + assignName)
 	}
-	if *listNode.KeyValue != valueMap[listNode.KeyField] {
-		return fmt.Errorf("adding object to list with different key %s: list key %s, object key %s, assign: %s", listNode.KeyField, *listNode.KeyValue, valueMap[listNode.KeyField], assignName)
+	if listNode.KeyValue != valueMap[listNode.KeyField] {
+		return fmt.Errorf("adding object to list with different key %s: list key %v, object key %v, assign: %s", listNode.KeyField, listNode.KeyValue, valueMap[listNode.KeyField], assignName)
 	}
 
 	return nil

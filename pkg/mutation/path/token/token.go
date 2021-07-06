@@ -22,6 +22,7 @@ const (
 	ERROR     = "ERROR"
 	EOF       = "EOF"
 	IDENT     = "IDENT"
+	INT       = "INT"
 	LBRACKET  = "LBRACKET"
 	RBRACKET  = "RBRACKET"
 	SEPARATOR = "SEPARATOR"

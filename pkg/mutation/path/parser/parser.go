@@ -16,16 +16,9 @@ limitations under the License.
 package parser
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/token"
-)
-
-// Base errors for
-var (
-	ErrTrailingSeparator = errors.New("trailing separators are forbidden")
-	ErrUnexpectedToken   = errors.New("unexpected token")
 )
 
 type parser struct {
@@ -141,8 +134,15 @@ func (p *parser) parseList() Node {
 	case p.expect(token.GLOB):
 		out.Glob = true
 	case p.expect(token.IDENT):
-		val := p.curToken.Literal
-		out.KeyValue = &val
+		out.KeyValue = p.curToken.Literal
+	case p.expect(token.INT):
+		val, err := parseInt64(p.curToken.Literal)
+		if err != nil {
+			p.setError(fmt.Errorf("%w: parsing key value for key: %s", err, out.KeyField))
+			return nil
+
+		}
+		out.KeyValue = val
 	default:
 		p.setError(fmt.Errorf("%w: expected key value or glob in listSpec, got: %s", ErrUnexpectedToken, p.peekToken.String()))
 		return nil
@@ -166,4 +166,21 @@ func (p *parser) setError(err error) {
 		return
 	}
 	p.err = err
+}
+
+// parseInt64 will return the int64 representation of the decimal encoded in the string s.
+// This function was written because strconv.ParseInt() parses octal and hexadecimal representations
+// which we are not supporting in our syntax.
+func parseInt64(s string) (int64, error) {
+	var result int64
+	for _, d := range s {
+		if d < '0' || d > '9' {
+			return 0, invalidIntegerError{s: fmt.Sprintf("unexpected digit: %c", d)}
+		}
+		result = result*10 + int64(d-'0')
+		if result < 0 {
+			return 0, invalidIntegerError{s: fmt.Sprintf("overflow in integer string: %s", s)}
+		}
+	}
+	return result, nil
 }
