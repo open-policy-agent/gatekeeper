@@ -1,3 +1,5 @@
 - op: add
-  path: spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/match/items/properties/excludedNamespaces/items/pattern
-  value: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$"
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/match/items/properties/excludedNamespaces/items
+  value:
+    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+    type: string
