@@ -22,6 +22,7 @@ package dynamiccache_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 
 	"k8s.io/client-go/rest"
 
@@ -30,14 +31,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var _ = Describe("informerCache", func() {
+var _ = Describe("dynamicInformerCache", func() {
 	It("should not require LeaderElection", func() {
 		cfg := &rest.Config{}
 
 		mapper, err := apiutil.NewDynamicRESTMapper(cfg, apiutil.WithLazyDiscovery)
 		Expect(err).ToNot(HaveOccurred())
 
-		c, err := cache.New(cfg, cache.Options{Mapper: mapper})
+		c, err := dynamiccache.New(cfg, cache.Options{Mapper: mapper})
 		Expect(err).ToNot(HaveOccurred())
 
 		leaderElectionRunnable, ok := c.(manager.LeaderElectionRunnable)

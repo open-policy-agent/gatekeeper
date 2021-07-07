@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/internal/objectutil"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,7 +93,7 @@ func (c *multiNamespaceCache) GetInformer(ctx context.Context, obj client.Object
 
 	// If the object is clusterscoped, get the informer from clusterCache,
 	// if not use the namespaced caches.
-	isNamespaced, err := objectutil.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
+	isNamespaced, err := internal.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (c *multiNamespaceCache) GetInformerForKind(ctx context.Context, gvk schema
 
 	// If the object is clusterscoped, get the informer from clusterCache,
 	// if not use the namespaced caches.
-	isNamespaced, err := objectutil.IsAPINamespacedWithGVK(gvk, c.Scheme, c.RESTMapper)
+	isNamespaced, err := internal.IsAPINamespacedWithGVK(gvk, c.Scheme, c.RESTMapper)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (c *multiNamespaceCache) WaitForCacheSync(ctx context.Context) bool {
 }
 
 func (c *multiNamespaceCache) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
-	isNamespaced, err := objectutil.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
+	isNamespaced, err := internal.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
 	if err != nil {
 		return nil //nolint:nilerr
 	}
@@ -205,7 +205,7 @@ func (c *multiNamespaceCache) IndexField(ctx context.Context, obj client.Object,
 }
 
 func (c *multiNamespaceCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
-	isNamespaced, err := objectutil.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
+	isNamespaced, err := internal.IsAPINamespaced(obj, c.Scheme, c.RESTMapper)
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (c *multiNamespaceCache) List(ctx context.Context, list client.ObjectList, 
 	listOpts := client.ListOptions{}
 	listOpts.ApplyOptions(opts)
 
-	isNamespaced, err := objectutil.IsAPINamespaced(list, c.Scheme, c.RESTMapper)
+	isNamespaced, err := internal.IsAPINamespaced(list, c.Scheme, c.RESTMapper)
 	if err != nil {
 		return err
 	}
