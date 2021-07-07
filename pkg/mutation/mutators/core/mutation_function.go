@@ -112,7 +112,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 				elementFound = true
 			} else if listElementAsObject, ok := listElement.(map[string]interface{}); ok {
 				if elementValue, ok := listElementAsObject[key]; ok {
-					if *castPathEntry.KeyValue == elementValue {
+					if castPathEntry.KeyValue == elementValue {
 						if !s.tester.ExistsOkay(depth) {
 							return false, nil, nil
 						}
@@ -166,10 +166,10 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 	if listPathEntry.KeyValue == nil {
 		return false, nil, errors.New("encountered nil key value when setting a new list element")
 	}
-	keyValue := *listPathEntry.KeyValue
+	keyValue := listPathEntry.KeyValue
 
 	for i, listElement := range currentAsList {
-		if elementValue, found, err := nestedString(listElement, key); err != nil {
+		if elementValue, found, err := nestedFieldNoCopy(listElement, key); err != nil {
 			return false, nil, err
 		} else if found && keyValue == elementValue {
 			newKeyValue, ok := newValueAsObject[key]
@@ -211,15 +211,15 @@ func (s *mutatorState) createMissingElement(depth int) (interface{}, error) {
 		if castPathEntry.KeyValue == nil {
 			return nil, fmt.Errorf("list entry has no key value")
 		}
-		nextAsObject[castPathEntry.KeyField] = *castPathEntry.KeyValue
+		nextAsObject[castPathEntry.KeyField] = castPathEntry.KeyValue
 	}
 	return next, nil
 }
 
-func nestedString(current interface{}, key string) (string, bool, error) {
+func nestedFieldNoCopy(current interface{}, key string) (interface{}, bool, error) {
 	currentAsMap, ok := current.(map[string]interface{})
 	if !ok {
 		return "", false, fmt.Errorf("cast error, unable to case %T to map[string]interface{}", current)
 	}
-	return unstructured.NestedString(currentAsMap, key)
+	return unstructured.NestedFieldNoCopy(currentAsMap, key)
 }
