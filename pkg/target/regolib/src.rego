@@ -328,7 +328,7 @@ matches_namespaces(match) {
   not always_match_ns_selectors
   get_ns_name[ns]
   nss := {n | n = match.namespaces[_]}
-  # This is vulnerable to a value of `false`, but as we're dealing with strings it's ok
+  # This is vulnerable to a value of "false", but as we're dealing with strings it's ok
   nss[ns]
 }
 
@@ -365,7 +365,7 @@ does_not_match_excludednamespaces(match) {
   not always_match_ns_selectors
   get_ns_name[ns]
   nss := {n | n = match.excludedNamespaces[_]}
-  # This is vulnerable to a value of `false`, but as we're dealing with strings it's ok
+  # This is vulnerable to a value of "false", but as we're dealing with strings it's ok
   not nss[ns]
 
   # Check for prefix matches

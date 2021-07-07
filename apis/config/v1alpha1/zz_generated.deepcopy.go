@@ -142,7 +142,7 @@ func (in *MatchEntry) DeepCopyInto(out *MatchEntry) {
 	*out = *in
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
-		*out = make([]string, len(*in))
+		*out = make([]validWilcardNamespace, len(*in))
 		copy(*out, *in)
 	}
 	if in.Processes != nil {
