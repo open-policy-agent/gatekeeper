@@ -118,7 +118,7 @@ metadata:
 `
 )
 
-func TestReadSuites(t *testing.T) {
+func TestSuite_Run(t *testing.T) {
 	testCases := []struct {
 		name  string
 		suite Suite

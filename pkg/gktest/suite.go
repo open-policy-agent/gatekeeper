@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io/fs"
 
-	templatesv1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1"
-	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
+	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"gopkg.in/yaml.v3"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -20,14 +20,13 @@ import (
 var scheme = runtime.NewScheme()
 
 func init() {
-	_ = templatesv1alpha1.AddToScheme(scheme)
-	_ = templatesv1beta1.AddToScheme(scheme)
+	_ = apis.AddToScheme(scheme)
 }
 
 // Suite defines a set of TestCases which all use the same ConstraintTemplate
 // and Constraint.
 type Suite struct {
-	v1.ObjectMeta
+	metav1.ObjectMeta
 
 	// Template is the path to the Constraint Template, relative to the file
 	// defining the Suite.
@@ -73,7 +72,7 @@ func readTemplate(f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 	}
 
 	gvk := u.GroupVersionKind()
-	if gvk.Group != templatesv1alpha1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
+	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
 		return nil, fmt.Errorf("%w: %q", ErrNotATemplate, path)
 	}
 
