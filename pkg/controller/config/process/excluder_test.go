@@ -2,20 +2,18 @@ package process
 
 import (
 	"testing"
-
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 )
 
 func TestExactOrPrefixMatch(t *testing.T) {
 	tcs := []struct {
 		name     string
-		nsMap    map[configv1alpha1.ValidWildcardNamespace]bool
+		nsMap    map[string]bool
 		ns       string
 		excluded bool
 	}{
 		{
 			name: "exact text match",
-			nsMap: map[configv1alpha1.ValidWildcardNamespace]bool{
+			nsMap: map[string]bool{
 				"kube-system": true,
 				"foobar":      false,
 			},
@@ -24,7 +22,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 		},
 		{
 			name: "exact text matches false",
-			nsMap: map[configv1alpha1.ValidWildcardNamespace]bool{
+			nsMap: map[string]bool{
 				"kube-system": true,
 				"foobar":      false,
 			},
@@ -33,7 +31,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard prefix match",
-			nsMap: map[configv1alpha1.ValidWildcardNamespace]bool{
+			nsMap: map[string]bool{
 				"kube-*": true,
 				"foobar": false,
 			},
@@ -42,7 +40,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard prefix matches false",
-			nsMap: map[configv1alpha1.ValidWildcardNamespace]bool{
+			nsMap: map[string]bool{
 				"gatekeeper-*": true,
 				"kube-*":       false,
 				"foobar":       false,
@@ -52,7 +50,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard prefix mis-matches false",
-			nsMap: map[configv1alpha1.ValidWildcardNamespace]bool{
+			nsMap: map[string]bool{
 				"gatekeeper-*": true,
 				"foobar":       false,
 			},
