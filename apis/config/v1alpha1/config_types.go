@@ -62,12 +62,15 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	ExcludedNamespaces []validWilcardNamespace `json:"excludedNamespaces,omitempty"`
-	Processes          []string                `json:"processes,omitempty"`
+	ExcludedNamespaces []ValidWildcardNamespace `json:"excludedNamespaces,omitempty"`
+	Processes          []string                 `json:"processes,omitempty"`
 }
 
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
-type validWilcardNamespace string
+
+// ValidWildcardNamespace is a string type.  It has CRD pattern validation enforcing its value
+// as a valid namespace that can end in a glob.
+type ValidWildcardNamespace string
 
 type ReadinessSpec struct {
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
