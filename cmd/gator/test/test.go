@@ -89,21 +89,22 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 	isFailure := false
 	for i := range suites {
 		s := &suites[i]
-		if !filter.MatchesSuite(s) {
-			continue
-		}
 
 		c, err := gktest.NewOPAClient()
 		if err != nil {
 			return err
 		}
 
-		results := s.Run(ctx, c, fileSystem, filter)
-		for _, result := range results {
-			if result.IsFailure() {
+		suiteResult := s.Run(ctx, c, fileSystem, filter)
+		for _, testResult := range suiteResult.TestResults {
+			if testResult.Error != nil {
 				isFailure = true
 			}
-			fmt.Println(result.String())
+			for _, caseResult := range testResult.CaseResults {
+				if caseResult.Error != nil {
+					isFailure = true
+				}
+			}
 		}
 	}
 

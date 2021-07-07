@@ -23,20 +23,41 @@ func init() {
 	_ = apis.AddToScheme(scheme)
 }
 
-// Suite defines a set of TestCases which all use the same ConstraintTemplate
-// and Constraint.
+// Suite defines a set of Constraint tests.
 type Suite struct {
 	metav1.ObjectMeta
 
-	// Template is the path to the Constraint Template, relative to the file
+	// Tests is a list of Template&Constraint pairs, with tests to run on
+	// each.
+	Tests []Test
+}
+
+// Run executes all Tests in the Suite and returns the results.
+func (s *Suite) Run(ctx context.Context, client Client, f fs.FS, filter Filter) SuiteResult {
+	result := SuiteResult{
+		TestResults: make([]TestResult, len(s.Tests)),
+	}
+	for i, c := range s.Tests {
+		if filter.MatchesTest(c) {
+			result.TestResults[i] = c.run(ctx, client, f, filter)
+		}
+	}
+	return result
+}
+
+// Test defines a Template&Constraint pair to instantiate, and Cases to
+// run on the instantiated Constraint.
+type Test struct {
+	// Template is the path to the ConstraintTemplate, relative to the file
 	// defining the Suite.
 	Template string
 
 	// Constraint is the path to the Constraint, relative to the file defining
-	// the Suite.
+	// the Suite. Must be an instance of Template.
 	Constraint string
 
-	TestCases []TestCase
+	// Cases are the test cases to run on the instantiated Constraint.
+	Cases []Case
 }
 
 var (
@@ -112,68 +133,64 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
 	}
 
-	constraint := &unstructured.Unstructured{
+	c := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
 
-	err = yaml.Unmarshal(bytes, constraint.Object)
+	err = yaml.Unmarshal(bytes, c.Object)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing Constraint from %q: %v", ErrAddingConstraint, path, err)
 	}
 
-	gvk := constraint.GroupVersionKind()
+	gvk := c.GroupVersionKind()
 	if gvk.Group != "constraints.gatekeeper.sh" {
 		return nil, ErrNotAConstraint
 	}
 
-	return constraint, nil
+	return c, nil
 }
 
-// Run executes every TestCase in the Suite. Returns the results for every
-// TestCase.
-func (s *Suite) Run(ctx context.Context, c Client, f fs.FS, filter Filter) []Result {
-	if s.Template == "" {
-		return []Result{errorResult(fmt.Errorf("%w: missing template", ErrInvalidSuite))}
+// run executes every Case in the Test. Returns the results for every Case.
+func (t Test) run(ctx context.Context, client Client, f fs.FS, filter Filter) TestResult {
+	if t.Template == "" {
+		return TestResult{Error: fmt.Errorf("%w: missing template", ErrInvalidSuite)}
 	}
-	template, err := readTemplate(f, s.Template)
+	template, err := readTemplate(f, t.Template)
 	if err != nil {
-		return []Result{errorResult(err)}
+		return TestResult{Error: err}
 	}
-	_, err = c.AddTemplate(ctx, template)
+	_, err = client.AddTemplate(ctx, template)
 	if err != nil {
-		return []Result{errorResult(fmt.Errorf("%w: %v", ErrAddingTemplate, err))}
+		return TestResult{Error: fmt.Errorf("%w: %v", ErrAddingTemplate, err)}
 	}
 
-	if s.Constraint == "" {
-		return []Result{errorResult(fmt.Errorf("%w: missing constraint", ErrInvalidSuite))}
+	if t.Constraint == "" {
+		return TestResult{Error: fmt.Errorf("%w: missing constraint", ErrInvalidSuite)}
 	}
-	constraint, err := readConstraint(f, s.Constraint)
+	cObj, err := readConstraint(f, t.Constraint)
 	if err != nil {
-		return []Result{errorResult(err)}
+		return TestResult{Error: err}
 	}
-	_, err = c.AddConstraint(ctx, constraint)
+	_, err = client.AddConstraint(ctx, cObj)
 	if err != nil {
-		return []Result{errorResult(fmt.Errorf("%w: %v", ErrAddingConstraint, err))}
+		return TestResult{Error: fmt.Errorf("%w: %v", ErrAddingConstraint, err)}
 	}
 
-	results := make([]Result, len(s.TestCases))
-	for i, tc := range s.TestCases {
-		if !filter.MatchesTest(tc) {
+	results := make([]CaseResult, len(t.Cases))
+	for i, tc := range t.Cases {
+		if !filter.MatchesCase(tc) {
 			continue
 		}
 
-		results[i] = tc.Run(f, c)
+		results[i] = tc.run(f, client)
 	}
-	return results
+	return TestResult{CaseResults: results}
 }
 
-// TestCase runs Constraint against a YAML object
-type TestCase struct{}
+// Case runs Constraint against a YAML object
+type Case struct{}
 
-// Run executes the TestCase and returns the Result of the run.
-//
-// Run never returns bare errors.  Use errorResult() to wrap errors in a Result
-// if the test cannot be executed as intended.
-func (tc TestCase) Run(f fs.FS, c Client) Result {
-	return nil
+// run executes the Case and returns the Result of the run.
+func (c Case) run(f fs.FS, client Client) CaseResult {
+	return CaseResult{}
 }

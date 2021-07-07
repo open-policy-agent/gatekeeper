@@ -1,62 +1,45 @@
 package gktest
 
-import (
-	"errors"
-)
+// SuiteResult is the Result of running a Suite of tests.
+type SuiteResult struct {
+	// Path is the absolute path to the file which defines Suite.
+	Path string
 
-// Result is the structured form of the results of running a test.
-type Result interface {
-	// String formats the Result for printing.
-	String() string
-	// IsFailure returns true if either a test failed or there was a problem
-	// executing tests.
-	IsFailure() bool
+	// Error is the error which stopped the Suite from executing.
+	// If defined, TestResults is empty.
+	Error error
 
-	Equal(Result) bool
+	// TestResults are the results of running the tests for each defined
+	// Template/Constraint pair.
+	TestResults []TestResult
 }
 
-type Success struct{}
+// TestResult is the results of:
+// 1) Compiling the ConstraintTemplate,
+// 2) Instantiating the Constraint, and
+// 3) Running all Tests defined for the Constraint.
+type TestResult struct {
+	// Name is the name given to the Template/Constraint pair under test.
+	Name string
 
-var _ Result = &Success{}
+	// Error is the error which prevented running tests for this Constraint.
+	// If defined, CaseResults is empty.
+	Error error
 
-func (s *Success) String() string {
-	panic("implement me")
+	// CaseResults are individual results for all tests defined for this Constraint.
+	CaseResults []CaseResult
 }
 
-func (s *Success) IsFailure() bool {
-	panic("implement me")
-}
+// CaseResult is the result of evaluating a Constraint against a kubernetes
+// object, and comparing the result with the expected result.
+type CaseResult struct {
+	// Name is the name given to this test for the Constraint under test.
+	Name string
 
-func (s *Success) Equal(right Result) bool {
-	success, isSuccess := right.(*Success)
-	if !isSuccess {
-		return false
-	}
-	return *s == *success
-}
-
-func errorResult(err error) *ErrorResult {
-	return &ErrorResult{err}
-}
-
-type ErrorResult struct {
-	error
-}
-
-func (r *ErrorResult) Equal(right Result) bool {
-	err, isErr := right.(*ErrorResult)
-	if !isErr {
-		return false
-	}
-
-	// errors.Is is not commutative, but Equal should be.
-	return errors.Is(r.error, err.error) || errors.Is(err.error, r.error)
-}
-
-func (r *ErrorResult) String() string {
-	return ""
-}
-
-func (r *ErrorResult) IsFailure() bool {
-	return true
+	// Error is the either:
+	// 1) why this test failed, or
+	// 2) the error which prevented running this test.
+	// We don't need to distinguish between 1 and 2 - they are both treated as
+	// test failures.
+	Error error
 }
