@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.8.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
 
 package dynamiccache
 
@@ -38,9 +38,9 @@ import (
 )
 
 var (
-	_ cache.Informers = &dynamicInformerCache{}
-	_ client.Reader   = &dynamicInformerCache{}
-	_ cache.Cache     = &dynamicInformerCache{}
+	_ cache.Informers     = &dynamicInformerCache{}
+	_ client.Reader = &dynamicInformerCache{}
+	_ cache.Cache         = &dynamicInformerCache{}
 )
 
 // ErrCacheNotStarted is returned when trying to read from the cache that wasn't started.
@@ -55,7 +55,7 @@ type dynamicInformerCache struct {
 	*internal.InformersMap
 }
 
-// Get implements Reader
+// Get implements Reader.
 func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, out client.Object) error {
 	gvk, err := apiutil.GVKForObject(out, ip.Scheme)
 	if err != nil {
@@ -73,9 +73,8 @@ func (ip *dynamicInformerCache) Get(ctx context.Context, key client.ObjectKey, o
 	return cache.Reader.Get(ctx, key, out)
 }
 
-// List implements Reader
+// List implements Reader.
 func (ip *dynamicInformerCache) List(ctx context.Context, out client.ObjectList, opts ...client.ListOption) error {
-
 	gvk, cacheTypeObj, err := ip.objectTypeForListObject(out)
 	if err != nil {
 		return err
@@ -135,7 +134,7 @@ func (ip *dynamicInformerCache) objectTypeForListObject(list client.ObjectList) 
 	return &gvk, cacheTypeObj, nil
 }
 
-// GetInformerForKind returns the informer for the GroupVersionKind
+// GetInformerForKind returns the informer for the GroupVersionKind.
 func (ip *dynamicInformerCache) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (cache.Informer, error) {
 	// Map the gvk to an object
 	obj, err := ip.Scheme.New(gvk)
@@ -150,7 +149,7 @@ func (ip *dynamicInformerCache) GetInformerForKind(ctx context.Context, gvk sche
 	return i.Informer, err
 }
 
-// GetInformer returns the informer for the obj
+// GetInformer returns the informer for the obj.
 func (ip *dynamicInformerCache) GetInformer(ctx context.Context, obj client.Object) (cache.Informer, error) {
 	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
 	if err != nil {
@@ -183,7 +182,7 @@ func (ip *dynamicInformerCache) GetInformerNonBlocking(obj client.Object) (cache
 }
 
 // NeedLeaderElection implements the LeaderElectionRunnable interface
-// to indicate that this can be started without requiring the leader lock
+// to indicate that this can be started without requiring the leader lock.
 func (ip *dynamicInformerCache) NeedLeaderElection() bool {
 	return false
 }

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Modified from the original source (available at
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
+
 package informertest
 
 import (
@@ -30,7 +33,7 @@ import (
 
 var _ cache.Cache = &FakeInformers{}
 
-// FakeInformers is a fake implementation of Informers
+// FakeInformers is a fake implementation of Informers.
 type FakeInformers struct {
 	InformersByGVK map[schema.GroupVersionKind]toolscache.SharedIndexInformer
 	Scheme         *runtime.Scheme
@@ -38,7 +41,7 @@ type FakeInformers struct {
 	Synced         *bool
 }
 
-// GetInformerForKind implements Informers
+// GetInformerForKind implements Informers.
 func (c *FakeInformers) GetInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (cache.Informer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
@@ -50,7 +53,7 @@ func (c *FakeInformers) GetInformerForKind(ctx context.Context, gvk schema.Group
 	return c.informerFor(gvk, obj)
 }
 
-// FakeInformerForKind implements Informers
+// FakeInformerForKind implements Informers.
 func (c *FakeInformers) FakeInformerForKind(ctx context.Context, gvk schema.GroupVersionKind) (*controllertest.FakeInformer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
@@ -66,7 +69,7 @@ func (c *FakeInformers) FakeInformerForKind(ctx context.Context, gvk schema.Grou
 	return i.(*controllertest.FakeInformer), nil
 }
 
-// GetInformer implements Informers
+// GetInformer implements Informers.
 func (c *FakeInformers) GetInformer(ctx context.Context, obj client.Object) (cache.Informer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
@@ -79,7 +82,7 @@ func (c *FakeInformers) GetInformer(ctx context.Context, obj client.Object) (cac
 	return c.informerFor(gvk, obj)
 }
 
-// WaitForCacheSync implements Informers
+// WaitForCacheSync implements Informers.
 func (c *FakeInformers) WaitForCacheSync(ctx context.Context) bool {
 	if c.Synced == nil {
 		return true
@@ -87,7 +90,7 @@ func (c *FakeInformers) WaitForCacheSync(ctx context.Context) bool {
 	return *c.Synced
 }
 
-// FakeInformerFor implements Informers
+// FakeInformerFor implements Informers.
 func (c *FakeInformers) FakeInformerFor(obj runtime.Object) (*controllertest.FakeInformer, error) {
 	if c.Scheme == nil {
 		c.Scheme = scheme.Scheme
@@ -120,22 +123,22 @@ func (c *FakeInformers) informerFor(gvk schema.GroupVersionKind, _ runtime.Objec
 	return c.InformersByGVK[gvk], nil
 }
 
-// Start implements Informers
+// Start implements Informers.
 func (c *FakeInformers) Start(ctx context.Context) error {
 	return c.Error
 }
 
-// IndexField implements Cache
+// IndexField implements Cache.
 func (c *FakeInformers) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {
 	return nil
 }
 
-// Get implements Cache
+// Get implements Cache.
 func (c *FakeInformers) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	return nil
 }
 
-// List implements Cache
+// List implements Cache.
 func (c *FakeInformers) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return nil
 }

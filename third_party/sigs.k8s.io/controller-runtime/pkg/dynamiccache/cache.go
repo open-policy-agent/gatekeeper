@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.8.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
 
 package dynamiccache
 
@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache/internal"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -41,7 +42,11 @@ func New(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 	if err != nil {
 		return nil, err
 	}
-	im := internal.NewInformersMap(config, opts.Scheme, opts.Mapper, *opts.Resync, opts.Namespace)
+	selectorsByGVK, err := convertToSelectorsByGVK(opts.SelectorsByObject, opts.Scheme)
+	if err != nil {
+		return nil, err
+	}
+	im := internal.NewInformersMap(config, opts.Scheme, opts.Mapper, *opts.Resync, opts.Namespace, selectorsByGVK)
 	return &dynamicInformerCache{InformersMap: im}, nil
 }
 
@@ -54,7 +59,7 @@ func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error)
 	// Construct a new Mapper if unset
 	if opts.Mapper == nil {
 		var err error
-		opts.Mapper, err = apiutil.NewDynamicRESTMapper(config)
+		opts.Mapper, err = apiutil.NewDiscoveryRESTMapper(config)
 		if err != nil {
 			log.WithName("setup").Error(err, "Failed to get API Group-Resources")
 			return opts, fmt.Errorf("could not create RESTMapper from config")
@@ -66,4 +71,16 @@ func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error)
 		opts.Resync = &defaultResyncTime
 	}
 	return opts, nil
+}
+
+func convertToSelectorsByGVK(selectorsByObject cache.SelectorsByObject, scheme *runtime.Scheme) (internal.SelectorsByGVK, error) {
+	selectorsByGVK := internal.SelectorsByGVK{}
+	for object, selector := range selectorsByObject {
+		gvk, err := apiutil.GVKForObject(object, scheme)
+		if err != nil {
+			return nil, err
+		}
+		selectorsByGVK[gvk] = selector
+	}
+	return selectorsByGVK, nil
 }
