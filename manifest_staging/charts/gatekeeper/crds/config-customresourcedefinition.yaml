@@ -38,6 +38,8 @@ spec:
                   properties:
                     excludedNamespaces:
                       items:
+                        description: ValidWildcardNamespace is a string type.  It has CRD pattern validation enforcing its value as a valid namespace that can end in a glob.
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array
                     processes:

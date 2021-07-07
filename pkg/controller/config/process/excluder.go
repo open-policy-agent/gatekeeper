@@ -25,7 +25,7 @@ const (
 
 type Excluder struct {
 	mux                sync.RWMutex
-	excludedNamespaces map[Process]map[string]bool
+	excludedNamespaces map[Process]map[configv1alpha1.ValidWildcardNamespace]bool
 }
 
 var allProcesses = []Process{
@@ -35,7 +35,7 @@ var allProcesses = []Process{
 }
 
 var processExcluder = &Excluder{
-	excludedNamespaces: make(map[Process]map[string]bool),
+	excludedNamespaces: make(map[Process]map[configv1alpha1.ValidWildcardNamespace]bool),
 }
 
 func Get() *Excluder {
@@ -44,7 +44,7 @@ func Get() *Excluder {
 
 func New() *Excluder {
 	return &Excluder{
-		excludedNamespaces: make(map[Process]map[string]bool),
+		excludedNamespaces: make(map[Process]map[configv1alpha1.ValidWildcardNamespace]bool),
 	}
 }
 
@@ -59,13 +59,13 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 				if Process(op) == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
-							s.excludedNamespaces[o] = make(map[string]bool)
+							s.excludedNamespaces[o] = make(map[configv1alpha1.ValidWildcardNamespace]bool)
 						}
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
 					if s.excludedNamespaces[Process(op)] == nil {
-						s.excludedNamespaces[Process(op)] = make(map[string]bool)
+						s.excludedNamespaces[Process(op)] = make(map[configv1alpha1.ValidWildcardNamespace]bool)
 					}
 					s.excludedNamespaces[Process(op)][ns] = true
 				}
@@ -102,8 +102,8 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 	return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
 }
 
-func exactOrPrefixMatch(boolMap map[string]bool, key string) bool {
-	val, ok := boolMap[string(key)]
+func exactOrPrefixMatch(boolMap map[configv1alpha1.ValidWildcardNamespace]bool, key string) bool {
+	val, ok := boolMap[configv1alpha1.ValidWildcardNamespace(key)]
 	if ok {
 		return val
 	}
