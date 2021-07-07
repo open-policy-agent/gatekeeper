@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
 	"github.com/spf13/cobra"
@@ -64,7 +65,14 @@ func runE(_ *cobra.Command, args []string) error {
 	// os-independent.
 	fileSystem := getFS(path)
 
-	suites, err := gktest.ReadSuites(fileSystem, path)
+	recursive := false
+	if strings.HasSuffix(path, "/...") {
+		recursive = true
+		path = strings.TrimSuffix(path, "...")
+	}
+	path = strings.TrimSuffix(path, "/")
+
+	suites, err := gktest.ReadSuites(fileSystem, path, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}
