@@ -63,8 +63,9 @@ spec:
                 items:
                   properties:
                     excludedNamespaces:
+                      description: Test descriiption for override
                       items:
-                        description: ValidWildcardNamespace is a string type.  It has CRD pattern validation enforcing its value as a valid namespace that can end in a glob.
+                        description: PrefixWildcard is a string that supports globbing at its end.
                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array

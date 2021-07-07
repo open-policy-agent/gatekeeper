@@ -2,6 +2,8 @@ package util
 
 import "strings"
 
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+
 // PrefixWildcard is a string that supports globbing at its end.
 type PrefixWildcard string
 

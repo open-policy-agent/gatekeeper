@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -107,11 +108,11 @@ func TestReconcile(t *testing.T) {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []configv1alpha1.ValidWildcardNamespace{"foo"},
+					ExcludedNamespaces: []util.PrefixWildcard{"foo"},
 					Processes:          []string{"*"},
 				},
 				{
-					ExcludedNamespaces: []configv1alpha1.ValidWildcardNamespace{"bar"},
+					ExcludedNamespaces: []util.PrefixWildcard{"bar"},
 					Processes:          []string{"audit", "webhook"},
 				},
 			},
@@ -629,7 +630,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []configv1alpha1.ValidWildcardNamespace{"kube-system"},
+					ExcludedNamespaces: []util.PrefixWildcard{"kube-system"},
 					Processes:          []string{"sync"},
 				},
 			},

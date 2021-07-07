@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -62,15 +63,9 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	ExcludedNamespaces []ValidWildcardNamespace `json:"excludedNamespaces,omitempty"`
-	Processes          []string                 `json:"processes,omitempty"`
+	ExcludedNamespaces []util.PrefixWildcard `json:"excludedNamespaces,omitempty"`
+	Processes          []string              `json:"processes,omitempty"`
 }
-
-// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
-
-// ValidWildcardNamespace is a string type.  It has CRD pattern validation enforcing its value
-// as a valid namespace that can end in a glob.
-type ValidWildcardNamespace string
 
 type ReadinessSpec struct {
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
