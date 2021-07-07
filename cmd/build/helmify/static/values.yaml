@@ -12,6 +12,7 @@ logLevel: INFO
 logDenies: false
 emitAdmissionEvents: false
 emitAuditEvents: false
+resourceQuota: true
 postInstall:
   labelNamespace:
     enabled: true
