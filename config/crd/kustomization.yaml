@@ -23,22 +23,6 @@ patches:
     kind: CustomResourceDefinition
   path: patches/preserve_unknown_fields_false.yaml
 
-patchesJson6902:
-# While it usually makes sense to add this kind of pattern validation via a kubebuilder tag in the
-# CRD golang source, that didn't work well for this use case.  The pattern annotation requires that
-# the field it is applied to be a string.  The excludedNamespaces field is of type []string.  Using
-# the annotation thus required using a custom string type.  The complexity of this rippled out of
-# config_types.go, as other packages built maps from the excludedNamespaces contained in the CRD
-# struct.  This complexity wasn't worth the simplicity of the annotation, and thus kustomize
-# provided a simpler solution.  This solution must be duplicated if a second config CRD version is
-# added, but for now the tradeoff is a good one.
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: configs.config.gatekeeper.sh
-  path: patches/wildcard_namespace_pattern.yaml
-
 patchesStrategicMerge:
 #- patches/max_name_size_for_assign.yaml
 #- patches/max_name_size_for_assignmetadata.yaml
