@@ -34,8 +34,7 @@ type CRD struct {
 }
 
 type CRDSpec struct {
-	Names Names `json:"names,omitempty"`
-	// +kubebuilder:default={legacySchema: true}
+	Names      Names       `json:"names,omitempty"`
 	Validation *Validation `json:"validation,omitempty"`
 }
 
@@ -50,7 +49,7 @@ type Validation struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	OpenAPIV3Schema *apiextensionsv1.JSONSchemaProps `json:"openAPIV3Schema,omitempty"`
 	// +kubebuilder:default=true
-	LegacySchema *bool `json:"legacySchema,omitempty"` // *bool allows for "unset" state which we need to apply appropriate defaults
+	LegacySchema bool `json:"legacySchema,omitempty"`
 }
 
 type Target struct {

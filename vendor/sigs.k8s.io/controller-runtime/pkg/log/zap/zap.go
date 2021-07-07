@@ -43,12 +43,12 @@ func New(opts ...Opts) logr.Logger {
 	return zapr.NewLogger(NewRaw(opts...))
 }
 
-// Opts allows to manipulate Options
+// Opts allows to manipulate Options.
 type Opts func(*Options)
 
 // UseDevMode sets the logger to use (or not use) development mode (more
 // human-readable output, extra stack traces and logging information, etc).
-// See Options.Development
+// See Options.Development.
 func UseDevMode(enabled bool) Opts {
 	return func(o *Options) {
 		o.Development = enabled
@@ -56,7 +56,7 @@ func UseDevMode(enabled bool) Opts {
 }
 
 // WriteTo configures the logger to write to the given io.Writer, instead of standard error.
-// See Options.DestWriter
+// See Options.DestWriter.
 func WriteTo(out io.Writer) Opts {
 	return func(o *Options) {
 		o.DestWriter = out
@@ -64,14 +64,14 @@ func WriteTo(out io.Writer) Opts {
 }
 
 // Encoder configures how the logger will encode the output e.g JSON or console.
-// See Options.Encoder
+// See Options.Encoder.
 func Encoder(encoder zapcore.Encoder) func(o *Options) {
 	return func(o *Options) {
 		o.Encoder = encoder
 	}
 }
 
-// JSONEncoder configures the logger to use a JSON Encoder
+// JSONEncoder configures the logger to use a JSON Encoder.
 func JSONEncoder(opts ...EncoderConfigOption) func(o *Options) {
 	return func(o *Options) {
 		o.Encoder = newJSONEncoder(opts...)
@@ -86,7 +86,7 @@ func newJSONEncoder(opts ...EncoderConfigOption) zapcore.Encoder {
 	return zapcore.NewJSONEncoder(encoderConfig)
 }
 
-// ConsoleEncoder configures the logger to use a Console encoder
+// ConsoleEncoder configures the logger to use a Console encoder.
 func ConsoleEncoder(opts ...EncoderConfigOption) func(o *Options) {
 	return func(o *Options) {
 		o.Encoder = newConsoleEncoder(opts...)
@@ -101,17 +101,19 @@ func newConsoleEncoder(opts ...EncoderConfigOption) zapcore.Encoder {
 	return zapcore.NewConsoleEncoder(encoderConfig)
 }
 
-// Level sets the the minimum enabled logging level e.g Debug, Info
-// See Options.Level
+// Level sets Options.Level, which configures the the minimum enabled logging level e.g Debug, Info.
+// A zap log level should be multiplied by -1 to get the logr verbosity.
+// For example, to get logr verbosity of 3, pass zapcore.Level(-3) to this Opts.
+// See https://pkg.go.dev/github.com/go-logr/zapr for how zap level relates to logr verbosity.
 func Level(level zapcore.LevelEnabler) func(o *Options) {
 	return func(o *Options) {
 		o.Level = level
 	}
 }
 
-// StacktraceLevel configures the logger to record a stack trace for all messages at
-// or above a given level.
-// See Options.StacktraceLevel
+// StacktraceLevel sets Options.StacktraceLevel, which configures the logger to record a stack trace
+// for all messages at or above a given level.
+// See the Level Opts for the relationship of zap log level to logr verbosity.
 func StacktraceLevel(stacktraceLevel zapcore.LevelEnabler) func(o *Options) {
 	return func(o *Options) {
 		o.StacktraceLevel = stacktraceLevel
@@ -119,14 +121,14 @@ func StacktraceLevel(stacktraceLevel zapcore.LevelEnabler) func(o *Options) {
 }
 
 // RawZapOpts allows appending arbitrary zap.Options to configure the underlying zap logger.
-// See Options.ZapOpts
+// See Options.ZapOpts.
 func RawZapOpts(zapOpts ...zap.Option) func(o *Options) {
 	return func(o *Options) {
 		o.ZapOpts = append(o.ZapOpts, zapOpts...)
 	}
 }
 
-// Options contains all possible settings
+// Options contains all possible settings.
 type Options struct {
 	// Development configures the logger to use a Zap development config
 	// (stacktraces on warnings, no sampling), otherwise a Zap production
@@ -151,19 +153,23 @@ type Options struct {
 	//
 	// Deprecated: Use DestWriter instead
 	DestWritter io.Writer
-	// Level configures the verbosity of the logging.  Defaults to Debug when
-	// Development is true and Info otherwise
+	// Level configures the verbosity of the logging.
+	// Defaults to Debug when Development is true and Info otherwise.
+	// A zap log level should be multiplied by -1 to get the logr verbosity.
+	// For example, to get logr verbosity of 3, set this field to zapcore.Level(-3).
+	// See https://pkg.go.dev/github.com/go-logr/zapr for how zap level relates to logr verbosity.
 	Level zapcore.LevelEnabler
 	// StacktraceLevel is the level at and above which stacktraces will
 	// be recorded for all messages. Defaults to Warn when Development
-	// is true and Error otherwise
+	// is true and Error otherwise.
+	// See Level for the relationship of zap log level to logr verbosity.
 	StacktraceLevel zapcore.LevelEnabler
 	// ZapOpts allows passing arbitrary zap.Options to configure on the
 	// underlying Zap logger.
 	ZapOpts []zap.Option
 }
 
-// addDefaults adds defaults to the Options
+// addDefaults adds defaults to the Options.
 func (o *Options) addDefaults() {
 	if o.DestWriter == nil && o.DestWritter == nil {
 		o.DestWriter = os.Stderr
@@ -185,7 +191,6 @@ func (o *Options) addDefaults() {
 			o.StacktraceLevel = &lvl
 		}
 		o.ZapOpts = append(o.ZapOpts, zap.Development())
-
 	} else {
 		if o.NewEncoder == nil {
 			o.NewEncoder = newJSONEncoder
@@ -203,7 +208,7 @@ func (o *Options) addDefaults() {
 		if !o.Level.Enabled(zapcore.Level(-2)) {
 			o.ZapOpts = append(o.ZapOpts,
 				zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-					return zapcore.NewSampler(core, time.Second, 100, 100)
+					return zapcore.NewSamplerWithOptions(core, time.Second, 100, 100)
 				}))
 		}
 	}
@@ -240,7 +245,6 @@ func NewRaw(opts ...Opts) *zap.Logger {
 //			       or any integer value > 0 which corresponds to custom debug levels of increasing verbosity")
 //  zap-stacktrace-level: Zap Level at and above which stacktraces are captured (one of 'info', 'error' or 'panic')
 func (o *Options) BindFlags(fs *flag.FlagSet) {
-
 	// Set Development mode value
 	fs.BoolVar(&o.Development, "zap-devel", o.Development,
 		"Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn). "+
