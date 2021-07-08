@@ -22,7 +22,7 @@ import (
 	unsafe "unsafe"
 
 	templates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	v1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -432,8 +432,8 @@ func Convert_templates_Target_To_v1alpha1_Target(in *templates.Target, out *Targ
 func autoConvert_templates_Validation_To_v1alpha1_Validation(in *templates.Validation, out *Validation, s conversion.Scope) error {
 	if in.OpenAPIV3Schema != nil {
 		in, out := &in.OpenAPIV3Schema, &out.OpenAPIV3Schema
-		*out = new(v1beta1.JSONSchemaProps)
-		if err := v1beta1.Convert_apiextensions_JSONSchemaProps_To_v1beta1_JSONSchemaProps(*in, *out, s); err != nil {
+		*out = new(v1.JSONSchemaProps)
+		if err := v1.Convert_apiextensions_JSONSchemaProps_To_v1_JSONSchemaProps(*in, *out, s); err != nil {
 			return err
 		}
 	} else {
