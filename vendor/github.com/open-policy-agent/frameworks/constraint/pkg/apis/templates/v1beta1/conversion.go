@@ -19,19 +19,22 @@ import (
 	apisTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
 func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
 	if in.OpenAPIV3Schema != nil {
 		inSchemaCopy := in.OpenAPIV3Schema.DeepCopy()
-		if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
-			return err
+
+		if in.LegacySchema {
+			if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
+				return err
+			}
 		}
 
 		out.OpenAPIV3Schema = new(apiextensions.JSONSchemaProps)
-		if err := apiextensionsv1beta1.Convert_v1beta1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(inSchemaCopy, out.OpenAPIV3Schema, s); err != nil {
+		if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(inSchemaCopy, out.OpenAPIV3Schema, s); err != nil {
 			return err
 		}
 	} else {
