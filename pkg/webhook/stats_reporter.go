@@ -11,9 +11,6 @@ import (
 )
 
 const (
-	requestCountMetricName    = "request_count"
-	requestDurationMetricName = "request_duration_seconds"
-
 	validationRequestCountMetricName    = "validation_request_count"
 	validationRequestDurationMetricName = "validation_request_duration_seconds"
 
@@ -22,11 +19,6 @@ const (
 )
 
 var (
-	responseTimeInSecM = stats.Float64(
-		requestDurationMetricName,
-		"The response time in seconds",
-		stats.UnitSeconds)
-
 	validationResponseTimeInSecM = stats.Float64(
 		validationRequestDurationMetricName,
 		"The response time in seconds",
@@ -71,9 +63,6 @@ func newStatsReporter() (StatsReporter, error) {
 }
 
 func (r *reporter) ReportValidationRequest(response requestResponse, d time.Duration) error {
-	if err := r.reportRequest(response, admissionStatusKey, responseTimeInSecM.M(d.Seconds())); err != nil {
-		return err
-	}
 	return r.reportRequest(response, admissionStatusKey, validationResponseTimeInSecM.M(d.Seconds()))
 }
 
@@ -100,20 +89,6 @@ func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 
 func register() error {
 	views := []*view.View{
-		{
-			Name:        requestCountMetricName,
-			Description: "The number of requests that are routed to validation webhook",
-			Measure:     responseTimeInSecM,
-			Aggregation: view.Count(),
-			TagKeys:     []tag.Key{admissionStatusKey},
-		},
-		{
-			Name:        requestDurationMetricName,
-			Description: responseTimeInSecM.Description(),
-			Measure:     responseTimeInSecM,
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
-			TagKeys:     []tag.Key{admissionStatusKey},
-		},
 		{
 			Name:        validationRequestCountMetricName,
 			Description: "The number of requests that are routed to validation webhook",

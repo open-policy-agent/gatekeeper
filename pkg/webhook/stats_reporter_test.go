@@ -31,7 +31,6 @@ func TestValidationReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	check(t, expectedTags, requestCountMetricName, requestDurationMetricName)
 	check(t, expectedTags, validationRequestCountMetricName, validationRequestDurationMetricName)
 }
 
