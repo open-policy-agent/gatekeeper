@@ -92,9 +92,11 @@ func newCRDHelper() (*crdHelper, error) {
 func (h *crdHelper) createCRD(
 	templ *templates.ConstraintTemplate,
 	schema *apiextensions.JSONSchemaProps) (*apiextensions.CustomResourceDefinition, error) {
+	falseBool := false
 	crd := &apiextensions.CustomResourceDefinition{
 		Spec: apiextensions.CustomResourceDefinitionSpec{
-			Group: constraintGroup,
+			PreserveUnknownFields: &falseBool,
+			Group:                 constraintGroup,
 			Names: apiextensions.CustomResourceDefinitionNames{
 				Kind:       templ.Spec.CRD.Spec.Names.Kind,
 				ListKind:   templ.Spec.CRD.Spec.Names.Kind + "List",
