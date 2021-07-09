@@ -103,9 +103,9 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 }
 
 func exactOrPrefixMatch(boolMap map[util.PrefixWildcard]bool, ns string) bool {
-	for k, val := range boolMap {
+	for k := range boolMap {
 		if k.Matches(ns) {
-			return val
+			return true
 		}
 	}
 
