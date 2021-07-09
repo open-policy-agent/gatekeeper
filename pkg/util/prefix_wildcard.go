@@ -14,5 +14,11 @@ type PrefixWildcard string
 // or if the PrefixWildcard is a valid glob-match for the candidate.  The PrefixWildcard must
 // end in a "*" to be considered a glob.
 func (pw PrefixWildcard) Matches(candidate string) bool {
-	return strings.HasPrefix(candidate, strings.TrimSuffix(string(pw), "*"))
+	strPW := string(pw)
+
+	if strings.HasSuffix(strPW, "*") {
+		return strings.HasPrefix(candidate, strings.TrimSuffix(strPW, "*"))
+	}
+
+	return strPW == candidate
 }

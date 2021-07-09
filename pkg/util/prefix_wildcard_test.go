@@ -33,12 +33,22 @@ func TestMatches(t *testing.T) {
 			candidate: "gatekeeper-system",
 			matches:   false,
 		},
+		{
+			name:      "missing asterisk yields no wildcard support",
+			pw:        PrefixWildcard("kube-"),
+			candidate: "kube-system",
+			matches:   false,
+		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.pw.Matches(tc.candidate) != tc.matches {
-				t.Errorf("Expected candidate '%v' to match wildcard '%v'", tc.candidate, tc.pw)
+				if tc.matches {
+					t.Errorf("Expected candidate '%v' to match wildcard '%v'", tc.candidate, tc.pw)
+				} else {
+					t.Errorf("Candidate '%v' unexpectedly matched wildcard '%v'", tc.candidate, tc.pw)
+				}
 			}
 		})
 	}
