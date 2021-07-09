@@ -38,7 +38,7 @@ spec:
                   properties:
                     excludedNamespaces:
                       items:
-                        description: PrefixWildcard is a string that supports globbing at its end.
+                        description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching; "kube-" will not match "kube-public".  Typical exact matches ("kube-system" to "kube-system") are supported as well.'
                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array
