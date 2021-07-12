@@ -17,7 +17,7 @@ const (
 	expectedCount            int64   = 2
 )
 
-func TestReportMutatorIngestion(t *testing.T) {
+func TestReportMutatorIngestionRequest(t *testing.T) {
 	expectedTags := map[string]string{
 		"status": "active",
 	}
