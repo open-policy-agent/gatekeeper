@@ -6,8 +6,7 @@ import "strings"
 
 //nolint:revive
 // A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or
-// "kube-public".  The asterisk is required for wildcard matching; "kube-" will not match
-// "kube-public".  Typical exact matches ("kube-system" to "kube-system") are supported as well.
+// "kube-public".  The asterisk is required for wildcard matching.
 type PrefixWildcard string
 
 // Matches returns true if the candidate parameter is either an exact match of the PrefixWildcard,
