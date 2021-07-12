@@ -26,11 +26,11 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportMutatorIngestion(MutatorStatusActive, expectedDurationValueMin, expectedMutators)
+	err = r.reportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.reportMutatorIngestion(MutatorStatusActive, expectedDurationValueMax, expectedMutators)
+	err = r.reportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
@@ -45,8 +45,9 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		t.Error("ReportRequest should have aggregation Count()")
 	}
 	for _, tag := range row.Tags {
-		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
+		expected := expectedTags[tag.Key.Name()]
+		if tag.Value != expected {
+			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), expected, tag.Value)
 		}
 	}
 	if count.Value != expectedCount {
@@ -60,8 +61,9 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		t.Error("ReportRequest should have aggregation Distribution()")
 	}
 	for _, tag := range row.Tags {
-		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
+		expected := expectedTags[tag.Key.Name()]
+		if tag.Value != expected {
+			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), expected, tag.Value)
 		}
 	}
 	if durationValue.Min != expectedDurationMin {
@@ -78,7 +80,7 @@ func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
 		t.Errorf("Error when retrieving data: %v from %v", err, name)
 	}
 	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
+		t.Errorf("Expected '%v' row to have length %v, got %v", name, expectedRowLength, len(row))
 	}
 	if row[0].Data == nil {
 		t.Errorf("Expected row data not to be nil")

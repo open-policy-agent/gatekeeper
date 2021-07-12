@@ -34,7 +34,7 @@ var (
 		stats.UnitDimensionless)
 
 	// JULIAN - This may need to just be "status"
-	mutatorStatusKey = tag.MustNewKey("mutator_status")
+	mutatorStatusKey = tag.MustNewKey("status")
 )
 
 func init() {
@@ -47,8 +47,16 @@ type reporter struct {
 	ctx context.Context
 }
 
-func (r *reporter) reportMutatorIngestion(ms MutatorStatus, d time.Duration, mutators int) error {
-	return nil
+func (r *reporter) reportMutatorIngestionRequest(ms MutatorStatus, d time.Duration) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(mutatorStatusKey, string(ms)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
