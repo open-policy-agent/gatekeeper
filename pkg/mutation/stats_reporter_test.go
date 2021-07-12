@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 const (
@@ -14,7 +15,6 @@ const (
 	expectedDurationMax      float64 = 5
 	expectedMutators                 = 3
 	expectedRowLength                = 1
-	expectedCount            int64   = 2
 )
 
 func TestReportMutatorIngestionRequest(t *testing.T) {
@@ -26,6 +26,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
+
 	err = r.reportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
@@ -37,22 +38,17 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 
 	// from the "check" function
 
-	// count test
+	// Count test
 	row := checkData(t, mutatorIngestionCountMetricName, expectedRowLength)
-
 	count, ok := row.Data.(*view.CountData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Count()")
 	}
-	for _, tag := range row.Tags {
-		expected := expectedTags[tag.Key.Name()]
-		if tag.Value != expected {
-			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), expected, tag.Value)
-		}
+	if count.Value != 2 {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionCountMetricName, 2, count.Value)
 	}
-	if count.Value != expectedCount {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionCountMetricName, expectedCount, count.Value)
-	}
+
+	verifyTags(t, expectedTags, row.Tags)
 
 	// Duration test
 	row = checkData(t, mutatorIngestionDurationMetricName, expectedRowLength)
@@ -60,18 +56,14 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	if !ok {
 		t.Error("ReportRequest should have aggregation Distribution()")
 	}
-	for _, tag := range row.Tags {
-		expected := expectedTags[tag.Key.Name()]
-		if tag.Value != expected {
-			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), expected, tag.Value)
-		}
-	}
 	if durationValue.Min != expectedDurationMin {
 		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionDurationMetricName, expectedDurationMin, durationValue.Min)
 	}
 	if durationValue.Max != expectedDurationMax {
 		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionDurationMetricName, expectedDurationMax, durationValue.Max)
 	}
+
+	verifyTags(t, expectedTags, row.Tags)
 }
 
 func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
@@ -86,4 +78,13 @@ func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
 		t.Errorf("Expected row data not to be nil")
 	}
 	return row[0]
+}
+
+func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
+	for _, tag := range actual {
+		ex := expected[tag.Key.Name()]
+		if tag.Value != ex {
+			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), ex, tag.Value)
+		}
+	}
 }

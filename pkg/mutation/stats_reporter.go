@@ -89,6 +89,7 @@ func register() error {
 			// JULIAN - not sure if I should do this or just inline
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
+			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{mutatorStatusKey},
 		},
