@@ -3,6 +3,7 @@ package match
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -110,7 +111,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 	if ns != nil {
 		found := false
 		for _, n := range match.Namespaces {
-			if ns.Name == n {
+			if ns.Name == n || prefixMatch(n, ns.Name) {
 				found = true
 				break
 			}
@@ -120,7 +121,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 		}
 
 		for _, n := range match.ExcludedNamespaces {
-			if ns.Name == n {
+			if ns.Name == n || prefixMatch(n, ns.Name) {
 				return false, nil
 			}
 		}
@@ -154,6 +155,17 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 	}
 
 	return true, nil
+}
+
+// prefixMatch matches checks if the candidate contains the prefix defined in the source.
+// The source is expected to end with a "*", which acts as a glob.  It is removed when
+// performing the prefix-based match
+func prefixMatch(source, candidate string) bool {
+	if !strings.HasSuffix(source, "*") {
+		return false
+	}
+
+	return strings.HasPrefix(candidate, strings.TrimSuffix(source, "*"))
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object
