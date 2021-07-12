@@ -20,6 +20,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -142,7 +143,7 @@ func (in *MatchEntry) DeepCopyInto(out *MatchEntry) {
 	*out = *in
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
-		*out = make([]string, len(*in))
+		*out = make([]util.PrefixWildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.Processes != nil {
