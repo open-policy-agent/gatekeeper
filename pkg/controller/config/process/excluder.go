@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +25,7 @@ const (
 
 type Excluder struct {
 	mux                sync.RWMutex
-	excludedNamespaces map[Process]map[string]bool
+	excludedNamespaces map[Process]map[util.PrefixWildcard]bool
 }
 
 var allProcesses = []Process{
@@ -34,7 +35,7 @@ var allProcesses = []Process{
 }
 
 var processExcluder = &Excluder{
-	excludedNamespaces: make(map[Process]map[string]bool),
+	excludedNamespaces: make(map[Process]map[util.PrefixWildcard]bool),
 }
 
 func Get() *Excluder {
@@ -43,7 +44,7 @@ func Get() *Excluder {
 
 func New() *Excluder {
 	return &Excluder{
-		excludedNamespaces: make(map[Process]map[string]bool),
+		excludedNamespaces: make(map[Process]map[util.PrefixWildcard]bool),
 	}
 }
 
@@ -58,13 +59,13 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 				if Process(op) == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
-							s.excludedNamespaces[o] = make(map[string]bool)
+							s.excludedNamespaces[o] = make(map[util.PrefixWildcard]bool)
 						}
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
 					if s.excludedNamespaces[Process(op)] == nil {
-						s.excludedNamespaces[Process(op)] = make(map[string]bool)
+						s.excludedNamespaces[Process(op)] = make(map[util.PrefixWildcard]bool)
 					}
 					s.excludedNamespaces[Process(op)][ns] = true
 				}
@@ -95,8 +96,18 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
-		return s.excludedNamespaces[process][meta.GetName()], nil
+		return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetName()), nil
 	}
 
-	return s.excludedNamespaces[process][meta.GetNamespace()], nil
+	return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
+}
+
+func exactOrPrefixMatch(boolMap map[util.PrefixWildcard]bool, ns string) bool {
+	for k := range boolMap {
+		if k.Matches(ns) {
+			return true
+		}
+	}
+
+	return false
 }
