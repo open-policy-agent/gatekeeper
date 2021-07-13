@@ -23,8 +23,6 @@ import (
 type NodeType string
 
 const (
-	// PathNode is a string segment of a path.
-	PathNode NodeType = "Path"
 	// ListNode is an array element of a path.
 	ListNode NodeType = "List"
 	// ObjectNode is the final Node in a path, what is being referenced.
@@ -43,17 +41,6 @@ type Node interface {
 // Path represents an entire parsed path specification
 type Path struct {
 	Nodes []Node
-}
-
-var _ Node = Path{}
-
-func (r Path) Type() NodeType {
-	return PathNode
-}
-
-func (r Path) DeepCopyNode() Node {
-	rout := r.DeepCopy()
-	return &rout
 }
 
 func (r Path) DeepCopy() Path {

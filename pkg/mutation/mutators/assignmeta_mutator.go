@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -49,7 +49,7 @@ type AssignMetadataMutator struct {
 // assignMetadataMutator implements mutator
 var _ types.Mutator = &AssignMetadataMutator{}
 
-func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+func (m *AssignMetadataMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	matches, err := match.Matches(&m.assignMetadata.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
