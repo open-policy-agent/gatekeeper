@@ -7,7 +7,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	mschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -46,21 +45,23 @@ func TestAssignToMutator(t *testing.T) {
 	}
 
 	bindings := mutatorWithSchema.SchemaBindings()
-	expectedBindings := []mschema.Binding{
-		{
-			Groups:   []string{"group1", "group2"},
-			Kinds:    []string{"kind1", "kind2", "kind3"},
-			Versions: []string{"version1"},
-		},
-		{
-			Groups:   []string{"group3", "group4"},
-			Kinds:    []string{"kind4", "kind2", "kind3"},
-			Versions: []string{"version1"},
-		},
+	expectedBindings := []schema.GroupVersionKind{
+		{Group: "group1", Version: "version1", Kind: "kind1"},
+		{Group: "group1", Version: "version1", Kind: "kind2"},
+		{Group: "group1", Version: "version1", Kind: "kind3"},
+		{Group: "group2", Version: "version1", Kind: "kind1"},
+		{Group: "group2", Version: "version1", Kind: "kind2"},
+		{Group: "group2", Version: "version1", Kind: "kind3"},
+		{Group: "group3", Version: "version1", Kind: "kind2"},
+		{Group: "group3", Version: "version1", Kind: "kind3"},
+		{Group: "group3", Version: "version1", Kind: "kind4"},
+		{Group: "group4", Version: "version1", Kind: "kind2"},
+		{Group: "group4", Version: "version1", Kind: "kind3"},
+		{Group: "group4", Version: "version1", Kind: "kind4"},
 	}
 
-	if !cmp.Equal(bindings, expectedBindings) {
-		t.Errorf("Bindings are not as expected: %s", cmp.Diff(bindings, expectedBindings))
+	if diff := cmp.Diff(expectedBindings, bindings); diff != "" {
+		t.Errorf("Bindings are not as expected: %s", diff)
 	}
 }
 

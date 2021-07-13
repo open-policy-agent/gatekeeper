@@ -53,9 +53,9 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Webhook
 
-- Name: `request_count`
+- Name: `validation_request_count`
 
-    Description: `The number of requests that are routed to webhook`
+    Description: `The number of requests that are routed to validation webhook`
 
     Tags:
 
@@ -63,9 +63,29 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-- Name: `request_duration_seconds`
+- Name: `validation_request_duration_seconds`
 
-    Description: `The response time in seconds`
+    Description: `The validation webhook response time in seconds`
+
+    Tags:
+
+    - `admission_status`: [`allow`, `deny`]
+
+    Aggregation: `Distribution`
+
+- Name: `mutation_request_count`
+
+    Description: `The number of requests that are routed to mutation webhook`
+
+    Tags:
+
+    - `admission_status`: [`allow`, `deny`]
+
+    Aggregation: `Count`
+
+- Name: `mutation_request_duration_seconds`
+
+    Description: `The mutation webhook response time in seconds`
 
     Tags:
 
