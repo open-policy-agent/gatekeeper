@@ -38,7 +38,7 @@ type Node interface {
 	String() string
 }
 
-// Path represents an entire parsed path specification
+// Path represents an entire parsed path specification.
 type Path struct {
 	Nodes []Node
 }

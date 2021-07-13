@@ -192,7 +192,7 @@ func (t *objectTracker) ExpectationsDone() {
 	t.populated = true
 }
 
-// Unsatisfied returns all unsatisfied expectations
+// Unsatisfied returns all unsatisfied expectations.
 func (t *objectTracker) unsatisfied() []objKey {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

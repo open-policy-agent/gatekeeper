@@ -18,11 +18,9 @@ type MutatorWithSchema interface {
 	SchemaBindings() []schema.GroupVersionKind
 }
 
-var (
-	log = logf.Log.WithName("mutation_schema")
-)
+var log = logf.Log.WithName("mutation_schema")
 
-// New returns a new schema database
+// New returns a new schema database.
 func New() *DB {
 	return &DB{
 		cachedMutators: make(map[types.ID]MutatorWithSchema),

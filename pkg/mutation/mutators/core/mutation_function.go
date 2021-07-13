@@ -12,9 +12,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
-)
+var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
 func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
 	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
@@ -37,7 +35,7 @@ type mutatorState struct {
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
-// to any downstream objects in the tree, indicating that the mutation should not be persisted
+// to any downstream objects in the tree, indicating that the mutation should not be persisted.
 func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, interface{}, error) {
 	pathEntry := s.mutator.Path().Nodes[depth]
 	switch castPathEntry := pathEntry.(type) {

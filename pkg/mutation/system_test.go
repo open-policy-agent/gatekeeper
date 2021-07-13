@@ -163,14 +163,18 @@ func TestSorting(t *testing.T) {
 				&fakeMutator{MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 				&fakeMutator{MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"}},
 				&fakeMutator{MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"}},
-				&fakeMutator{MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-					MPath: mustParse("relevantvalue"), GVKs: []schema.GroupVersionKind{{Kind: "foo"}}},
+				&fakeMutator{
+					MID:   types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
+					MPath: mustParse("relevantvalue"), GVKs: []schema.GroupVersionKind{{Kind: "foo"}},
+				},
 				&fakeMutator{MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"}},
 				&fakeMutator{MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"}},
 			},
 			action: func(s *System) error {
-				return s.Upsert(&fakeMutator{MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-					MPath: mustParse("relevantvalue"), GVKs: []schema.GroupVersionKind{{Kind: "foo"}}})
+				return s.Upsert(&fakeMutator{
+					MID:   types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
+					MPath: mustParse("relevantvalue"), GVKs: []schema.GroupVersionKind{{Kind: "foo"}},
+				})
 			},
 		},
 	}

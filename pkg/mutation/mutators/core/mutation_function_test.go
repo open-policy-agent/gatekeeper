@@ -16,8 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const TestValue = "testValue"
-const ParameterTestValue = "\"testValue\""
+const (
+	TestValue          = "testValue"
+	ParameterTestValue = "\"testValue\""
+)
 
 func prepareTestPod(t *testing.T) *unstructured.Unstructured {
 	pod := &corev1.Pod{
@@ -320,7 +322,6 @@ func testDummyMutation(
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
-
 	mutator := testhelpers.NewDummyMutator("dummy", location, value)
 	return testMutation(mutator, unstructured, testFunc, t)
 }
@@ -332,7 +333,6 @@ func testAssignMutation(
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
-
 	assign := mutationsv1alpha1.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsv1alpha1.AssignSpec{
@@ -358,7 +358,6 @@ func testAssignMetadataMutation(
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
-
 	assignMetadata := mutationsv1alpha1.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsv1alpha1.AssignMetadataSpec{

@@ -38,7 +38,7 @@ func new(mgr manager.Manager) (*runner, error) {
 	return mr, nil
 }
 
-// Start implements the Runnable interface
+// Start implements the Runnable interface.
 func (r *runner) Start(ctx context.Context) error {
 	log.Info("Starting metrics runner")
 	defer log.Info("Stopping metrics runner workers")

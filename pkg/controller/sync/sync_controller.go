@@ -66,7 +66,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r, a.Events)
 }
 
-// newReconciler returns a new reconcile.Reconciler
+// newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
 	opa OpaDataClient,
@@ -74,7 +74,6 @@ func newReconciler(
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
 	processExcluder *process.Excluder) (reconcile.Reconciler, error) {
-
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),
@@ -87,7 +86,7 @@ func newReconciler(
 	}, nil
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
 	c, err := controller.New("sync-controller", mgr, controller.Options{Reconciler: r})
@@ -118,7 +117,7 @@ type Tags struct {
 	Status metrics.Status
 }
 
-// ReconcileSync reconciles an arbitrary object described by Kind
+// ReconcileSync reconciles an arbitrary object described by Kind.
 type ReconcileSync struct {
 	reader client.Reader
 
@@ -134,7 +133,7 @@ type ReconcileSync struct {
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for an object and makes changes based on the state read
-// and what is in the constraint.Spec
+// and what is in the constraint.Spec.
 func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	timeStart := time.Now()
 
@@ -267,7 +266,7 @@ func (c *MetricsCache) GetSyncKey(namespace string, name string) string {
 
 // need to know encountered kinds to reset metrics for that kind
 // this is a known memory leak
-// footprint should naturally reset on Pod upgrade b/c the container restarts
+// footprint should naturally reset on Pod upgrade b/c the container restarts.
 func (c *MetricsCache) addKind(key string) {
 	c.mux.Lock()
 	defer c.mux.Unlock()

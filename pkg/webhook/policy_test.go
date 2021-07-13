@@ -321,7 +321,6 @@ func TestReviewRequest(t *testing.T) {
 		maxThreads = 1
 		t.Run(tt.Name+" with max threads", testFn)
 	}
-
 }
 
 func TestConstraintValidation(t *testing.T) {

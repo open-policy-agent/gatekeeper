@@ -363,7 +363,7 @@ func TestRegistrar_Replay(t *testing.T) {
 	}
 }
 
-// Verify that event replay can retry upon error
+// Verify that event replay can retry upon error.
 func TestRegistrar_Replay_Retry(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
+// ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
 type ConstraintTemplatePodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	ID                 string                             `json:"id,omitempty"`
@@ -39,7 +39,7 @@ type ConstraintTemplatePodStatusStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API
+// ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
 type ConstraintTemplatePodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -49,7 +49,7 @@ type ConstraintTemplatePodStatus struct {
 
 // +kubebuilder:object:root=true
 
-// ConstraintTemplatePodStatusList contains a list of ConstraintTemplatePodStatus
+// ConstraintTemplatePodStatusList contains a list of ConstraintTemplatePodStatus.
 type ConstraintTemplatePodStatusList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -62,7 +62,7 @@ func init() {
 
 // NewConstraintTemplateStatusForPod returns a constraint template status object
 // that has been initialized with the bare minimum of fields to make it functional
-// with the constraint template status controller
+// with the constraint template status controller.
 func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, scheme *runtime.Scheme) (*ConstraintTemplatePodStatus, error) {
 	obj := &ConstraintTemplatePodStatus{}
 	name, err := KeyForConstraintTemplate(pod.Name, templateName)
@@ -86,7 +86,7 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 }
 
 // KeyForConstraintTemplate returns a unique status object name given the Pod ID and
-// a template object
+// a template object.
 func KeyForConstraintTemplate(id string, templateName string) (string, error) {
 	return dashPacker(id, templateName)
 }

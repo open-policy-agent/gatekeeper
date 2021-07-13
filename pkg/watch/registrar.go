@@ -48,7 +48,7 @@ func (w *vitals) merge(wv vitals) vitals {
 }
 
 // recordKeeper holds the source of truth for the intended state of the manager
-// This is essentially a read/write lock on the wrapped map (the `intent` variable)
+// This is essentially a read/write lock on the wrapped map (the `intent` variable).
 type recordKeeper struct {
 	// map[registrarName][kind]
 	intent     map[string]vitalsByGVK
@@ -120,7 +120,6 @@ func (r *recordKeeper) ReplaceRegistrarRoster(reg *Registrar, roster map[schema.
 		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
-
 	}()
 
 	r.intent[reg.parentName] = roster
@@ -164,7 +163,7 @@ func (r *recordKeeper) Get() vitalsByGVK {
 	return managedKinds
 }
 
-// count returns total gvk count across all registrars
+// count returns total gvk count across all registrars.
 func (r *recordKeeper) count() int {
 	managedKinds := make(map[schema.GroupVersionKind]bool)
 	for _, registrar := range r.intent {
@@ -198,7 +197,7 @@ func newRecordKeeper() (*recordKeeper, error) {
 	}, nil
 }
 
-// A Registrar allows a parent to add/remove child watches
+// A Registrar allows a parent to add/remove child watches.
 type Registrar struct {
 	parentName   string
 	mgr          *Manager

@@ -34,7 +34,7 @@ type Filter struct{}
 // following:
 // - Test: "forbid-foo-label", Case: "empty-object"
 // - Test: "forbid-foo-label", Case: "another-empty-object"
-// - Test: "require-bar-annotation", Case: "empty-object"
+// - Test: "require-bar-annotation", Case: "empty-object".
 func NewFilter(run string) (Filter, error) {
 	return Filter{}, nil
 }

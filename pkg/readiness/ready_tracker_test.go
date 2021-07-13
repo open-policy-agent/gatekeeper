@@ -427,7 +427,7 @@ func Test_CollectDeleted(t *testing.T) {
 	}
 }
 
-// probeIsReady checks whether expectations have been satisfied (via the readiness probe)
+// probeIsReady checks whether expectations have been satisfied (via the readiness probe).
 func probeIsReady(ctx context.Context) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:29090/readyz", http.NoBody)
 	if err != nil {

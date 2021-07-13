@@ -33,7 +33,7 @@ import (
 
 var log = logf.Log.WithName("watch-manager")
 
-// Manager allows us to dynamically configure what kinds are watched
+// Manager allows us to dynamically configure what kinds are watched.
 type Manager struct {
 	cache      RemovableCache
 	startedMux sync.Mutex
