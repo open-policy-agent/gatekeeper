@@ -7,13 +7,8 @@ title: Installation
 
 ### Minimum Kubernetes Version
 
-**To use Gatekeeper, you should have a minimum Kubernetes version of 1.14, which adds
-webhook timeouts.**
-
-You can install Gatekeeper in earlier versions of Kubernetes either by
-removing incompatible fields from the manifest or by setting `--validate=false`
-when applying the manifest. Be warned that, without timeouts on the webhook, your
-API Server could timeout when Gatekeeper is down. Kubernetes 1.14 fixes this issue.
+**To use Gatekeeper, you should have a minimum Kubernetes version of 1.16, which adds
+v1 CRDs.**
 
 ### RBAC Permissions
 
