@@ -46,7 +46,7 @@ func NewScanner(input string) *Scanner {
 
 func (s *Scanner) Next() Token {
 	var err error
-	var tok = Token{Type: ERROR}
+	tok := Token{Type: ERROR}
 	s.skipWhitespace()
 
 	switch {
@@ -174,7 +174,6 @@ func isAlphaNum(r rune) bool {
 
 	default:
 		return false
-
 	}
 	return true
 }
@@ -198,7 +197,6 @@ func (e ScanError) Error() string {
 	var innerMsg string
 	if e.Inner != nil {
 		innerMsg = e.Inner.Error()
-
 	}
 	return fmt.Sprintf("error at position %d: %s", e.Position, innerMsg)
 }

@@ -199,7 +199,7 @@ func getString(m map[string]interface{}, k string) (string, error) {
 }
 
 // nestedMap augments unstructured.NestedMap to interpret a nil-valued field
-// as missing
+// as missing.
 func nestedMap(rmap map[string]interface{}, field string) (map[string]interface{}, bool, error) {
 	objMap, found, err := unstructured.NestedMap(rmap, field)
 	if err != nil || !found {

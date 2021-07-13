@@ -28,14 +28,14 @@ const (
 	crdName = "constrainttemplates.templates.gatekeeper.sh"
 )
 
-// Manager allows us to upgrade resources on startup
+// Manager allows us to upgrade resources on startup.
 type Manager struct {
 	client client.Client
 	mgr    manager.Manager
 	ctx    context.Context
 }
 
-// New creates a new manager for audit
+// New creates a new manager for audit.
 func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
 	am := &Manager{
 		mgr: mgr,
@@ -44,7 +44,7 @@ func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
 	return am, nil
 }
 
-// Start implements the Runnable interface
+// Start implements the Runnable interface.
 func (um *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Upgrade Manager")
 	defer log.Info("Stopping upgrade manager workers")
@@ -89,7 +89,7 @@ func (um *Manager) upgrade(ctx context.Context) error {
 	return nil
 }
 
-// upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version
+// upgradeGroupVersion touches each resource in a given groupVersion, incrementing its storage version.
 func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string) error {
 	// new client to get updated restmapper
 	c, err := client.New(um.mgr.GetConfig(), client.Options{Scheme: um.mgr.GetScheme(), Mapper: nil})

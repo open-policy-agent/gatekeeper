@@ -23,9 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
-)
+var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
 // AssignMutator is a mutator object built out of a
 // Assign instance.
@@ -40,7 +38,7 @@ type AssignMutator struct {
 	valueTest *mutationsv1alpha1.AssignIf
 }
 
-// AssignMutator implements mutatorWithSchema
+// AssignMutator implements mutatorWithSchema.
 var _ schema.MutatorWithSchema = &AssignMutator{}
 
 func (m *AssignMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
@@ -59,7 +57,7 @@ func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return core.Mutate(m, m.tester, m.testValue, obj)
 }
 
-// valueTest returns true if it is okay for the mutation func to override the value
+// valueTest returns true if it is okay for the mutation func to override the value.
 func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
 	if len(m.valueTest.In) != 0 {
 		ifInMatched := false
@@ -234,7 +232,7 @@ func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
 }
 
 // IsValidAssign returns an error if the given assign object is not
-// semantically valid
+// semantically valid.
 func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	if _, err := MutatorForAssign(assign); err != nil {
 		return err
@@ -254,7 +252,7 @@ func hasMetadataRoot(path parser.Path) bool {
 }
 
 // checkKeyNotChanged does not allow to change the key field of
-// a list element. A path like foo[name: bar].name is rejected
+// a list element. A path like foo[name: bar].name is rejected.
 func checkKeyNotChanged(p parser.Path, assignName string) error {
 	if len(p.Nodes) == 0 {
 		return errors.New("empty path")

@@ -140,7 +140,6 @@ func (p *parser) parseList() Node {
 		if err != nil {
 			p.setError(fmt.Errorf("%w: parsing key value for key: %s", err, out.KeyField))
 			return nil
-
 		}
 		out.KeyValue = val
 	default:

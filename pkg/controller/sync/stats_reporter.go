@@ -62,7 +62,7 @@ type Reporter struct {
 	now func() float64
 }
 
-// NewStatsReporter creates a reporter for sync metrics
+// NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
 	ctx, err := tag.New(
 		context.TODO(),
@@ -104,7 +104,7 @@ func (r *Reporter) reportSync(t Tags, v int64) error {
 	return r.report(ctx, syncM.M(v))
 }
 
-// now returns the timestamp as a second-denominated float
+// now returns the timestamp as a second-denominated float.
 func now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }

@@ -14,13 +14,11 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-var (
-	outputDir = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
-)
+var outputDir = flag.String("output-dir", "manifest_staging/charts/gatekeeper", "The root directory in which to write the Helm chart")
 
 var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 
-// use exactly two spaces to be sure we are capturing metadata.name
+// use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
 func extractKind(s string) (string, error) {

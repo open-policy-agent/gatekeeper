@@ -24,7 +24,7 @@ var (
 	ErrInvalidYAML = errors.New("invalid yaml")
 	// ErrNotADirectory indicates that a user is mistakenly attempting to
 	// perform a directory-only action on a file (for example, recursively
-	// traversing it)
+	// traversing it).
 	ErrNotADirectory = errors.New("not a directory")
 )
 
@@ -45,7 +45,7 @@ const (
 //
 // Returns an error if:
 // - path is a file that does not define a Suite
-// - any matched files containing Suites are not parseable
+// - any matched files containing Suites are not parseable.
 func ReadSuites(f fs.FS, target string, recursive bool) ([]Suite, error) {
 	if f == nil {
 		return nil, ErrNoFileSystem

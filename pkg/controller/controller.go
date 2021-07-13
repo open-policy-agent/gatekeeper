@@ -37,9 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var (
-	debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
-)
+var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
 
 type Injector interface {
 	InjectOpa(*opa.Client)
@@ -59,10 +57,10 @@ type GetProcessExcluderInjector interface {
 }
 
 // Injectors is a list of adder structs that need injection. We can convert this
-// to an interface once we create controllers for things like data sync
+// to an interface once we create controllers for things like data sync.
 var Injectors []Injector
 
-// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
+// AddToManagerFuncs is a list of functions to add all Controllers to the Manager.
 var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
@@ -120,7 +118,7 @@ func (g *defaultPodGetter) GetPod() (*corev1.Pod, error) {
 	return pod.DeepCopy(), nil
 }
 
-// AddToManager adds all Controllers to the Manager
+// AddToManager adds all Controllers to the Manager.
 func AddToManager(m manager.Manager, deps Dependencies) error {
 	// Reset cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
 	if err := deps.Opa.Reset(context.Background()); err != nil {

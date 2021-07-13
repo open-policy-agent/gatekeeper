@@ -46,7 +46,7 @@ type AssignMetadataMutator struct {
 	path           parser.Path
 }
 
-// assignMetadataMutator implements mutator
+// assignMetadataMutator implements mutator.
 var _ types.Mutator = &AssignMetadataMutator{}
 
 func (m *AssignMetadataMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
@@ -67,6 +67,7 @@ func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, er
 	}
 	return core.Mutate(m, t, nil, obj)
 }
+
 func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id
 }
@@ -148,14 +149,13 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 	}, nil
 }
 
-// Verifies that the given path is valid for metadata
+// Verifies that the given path is valid for metadata.
 func isValidMetadataPath(path parser.Path) bool {
 	// Path must be metadata.annotations.something or metadata.labels.something
 	if len(path.Nodes) != 3 ||
 		path.Nodes[0].Type() != parser.ObjectNode ||
 		path.Nodes[1].Type() != parser.ObjectNode ||
 		path.Nodes[2].Type() != parser.ObjectNode {
-
 		return false
 	}
 
@@ -169,7 +169,7 @@ func isValidMetadataPath(path parser.Path) bool {
 }
 
 // IsValidAssignMetadata returns an error if the given assignmetadata object is not
-// semantically valid
+// semantically valid.
 func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
 	if _, err := MutatorForAssignMetadata(assignMeta); err != nil {
 		return err

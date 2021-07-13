@@ -1455,7 +1455,7 @@ func TestValueTests(t *testing.T) {
 }
 
 // TestApplyTo merely tests that ApplyTo is called, its internal
-// logic is tested elsewhere
+// logic is tested elsewhere.
 func TestApplyTo(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -39,18 +39,18 @@ func init() {
 	}
 }
 
-// StatsReporter reports webhook metrics
+// StatsReporter reports webhook metrics.
 type StatsReporter interface {
 	ReportValidationRequest(response requestResponse, d time.Duration) error
 	ReportMutationRequest(response requestResponse, d time.Duration) error
 }
 
-// reporter implements StatsReporter interface
+// reporter implements StatsReporter interface.
 type reporter struct {
 	ctx context.Context
 }
 
-// newStatsReporter creaters a reporter for webhook metrics
+// newStatsReporter creaters a reporter for webhook metrics.
 func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),
@@ -70,7 +70,7 @@ func (r *reporter) ReportMutationRequest(response requestResponse, d time.Durati
 	return r.reportRequest(response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
 }
 
-// Captures req count metric, recording the count and the duration
+// Captures req count metric, recording the count and the duration.
 func (r *reporter) reportRequest(response requestResponse, statusKey tag.Key, m stats.Measurement) error {
 	ctx, err := tag.New(
 		r.ctx,

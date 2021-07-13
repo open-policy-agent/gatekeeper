@@ -48,7 +48,6 @@ func retryLister(r Lister, predicate retryPredicate) Lister {
 		backoff.Cap = 5 * time.Second
 		err := syncutil.BackoffWithContext(ctx, backoff, func() (bool, error) {
 			err := r.List(ctx, out, opts...)
-
 			if err != nil {
 				if ctx.Err() != nil {
 					// Give up when our parent context is canceled
@@ -65,7 +64,6 @@ func retryLister(r Lister, predicate retryPredicate) Lister {
 			// Success
 			return true, nil
 		})
-
 		if err != nil {
 			log.Error(err, "listing", "gvk", gvk, "err", err)
 			return err

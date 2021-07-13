@@ -50,7 +50,7 @@ func init() {
 // TODO enable this once mutation is beta +kubebuilder:webhook:verbs=create;update,path=/v1/mutate,mutating=true,failurePolicy=ignore,groups=*,resources=*,versions=*,name=mutation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // TODO enable this once mutation is beta +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update
 
-// AddMutatingWebhook registers the mutating webhook server with the manager
+// AddMutatingWebhook registers the mutating webhook server with the manager.
 func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !*mutation.MutationEnabled {
 		return nil
@@ -104,7 +104,7 @@ type mutationHandler struct {
 // nolint: gocritic // Must accept admission.Request to satisfy interface.
 func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "mutation")
-	var timeStart = time.Now()
+	timeStart := time.Now()
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
@@ -140,7 +140,6 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	}
 
 	resp, err := h.mutateRequest(ctx, &req)
-
 	if err != nil {
 		requestResponse = errorResponse
 		return admission.Errored(int32(http.StatusInternalServerError), err)
@@ -150,7 +149,6 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 }
 
 func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Request) (admission.Response, error) {
-
 	ns := &corev1.Namespace{}
 
 	// if the object being mutated is a namespace itself, we use it as namespace

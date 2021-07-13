@@ -41,9 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_template_status_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_template_status_controller")
 
 type Adder struct {
 	Opa              *opa.Client
@@ -58,7 +56,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-// newReconciler returns a new reconcile.Reconciler
+// newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
 	cs *watch.ControllerSwitch) reconcile.Reconciler {
@@ -75,7 +73,7 @@ func newReconciler(
 }
 
 // PodStatusToConstraintTemplateMapper correlates a ConstraintTemplatePodStatus with its corresponding constraint template
-// `selfOnly` tells the mapper to only map statuses corresponding to the current pod
+// `selfOnly` tells the mapper to only map statuses corresponding to the current pod.
 func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
@@ -98,7 +96,7 @@ func PodStatusToConstraintTemplateMapper(selfOnly bool) handler.MapFunc {
 	}
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("constraint-template-status-controller", mgr, controller.Options{Reconciler: r})
@@ -126,7 +124,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileConstraintStatus{}
 
-// ReconcileConstraintStatus reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraintStatus reconciles an arbitrary constraint object described by Kind.
 type ReconcileConstraintStatus struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -141,7 +139,7 @@ type ReconcileConstraintStatus struct {
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
-// and what is in the constraint.Spec
+// and what is in the constraint.Spec.
 func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {
