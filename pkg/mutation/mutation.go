@@ -19,7 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// MutationEnabled indicates if the mutation feature is enabled
+// MutationEnabled indicates if the mutation feature is enabled.
 var (
 	MutationEnabled            *bool
 	MutationLoggingEnabled     *bool

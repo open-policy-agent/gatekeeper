@@ -52,7 +52,7 @@ func (r *reporter) reportGvkIntentCount(count int64) error {
 	return metrics.Record(r.ctx, gvkIntentCountM.M(count))
 }
 
-// newStatsReporter creates a reporter for watch metrics
+// newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
 	ctx, err := tag.New(
 		context.TODO(),

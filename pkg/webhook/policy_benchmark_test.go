@@ -63,7 +63,7 @@ func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj client
 }
 
 // getFiles reads a directory and returns a list of files ending with .yaml/.yml
-// returns an error if directory does not exist
+// returns an error if directory does not exist.
 func getFiles(dir string) ([]string, error) {
 	var filePaths []string
 	var err error
@@ -89,7 +89,7 @@ func getFiles(dir string) ([]string, error) {
 // all files ending with .yaml are loaded. One resource per .yaml file
 // does not support recursive directory search
 // fails if directory is not a valid path
-// fails if any of the files is not a valid constraint template
+// fails if any of the files is not a valid constraint template.
 func readTemplates(dir string) ([]templates.ConstraintTemplate, error) {
 	fileList, err := getFiles(dir)
 	if err != nil {
@@ -117,7 +117,7 @@ func readTemplates(dir string) ([]templates.ConstraintTemplate, error) {
 // readConstraints reads constraints from a directory
 // all files ending with .yaml are loaded. One resource per .yaml file
 // does not support recursive directory search
-// fails if directory is not a valid path
+// fails if directory is not a valid path.
 func readConstraints(dir string) ([]unstructured.Unstructured, error) {
 	return readDirHelper(dir)
 }
@@ -126,12 +126,12 @@ func readConstraints(dir string) ([]unstructured.Unstructured, error) {
 // these resources would be transformed into admission requests ex: Pods, Deployments
 // all files ending with .yaml are loaded. One resource per .yaml file
 // does not support recursive directory search
-// fails if directory is not a valid path
+// fails if directory is not a valid path.
 func readResources(dir string) ([]unstructured.Unstructured, error) {
 	return readDirHelper(dir)
 }
 
-// readDirHelper is a helper method to read YAML files and unmarshal them into unstructured
+// readDirHelper is a helper method to read YAML files and unmarshal them into unstructured.
 func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	fileList, err := getFiles(dir)
 	if err != nil {
@@ -172,7 +172,7 @@ func addConstraints(opa *opa.Client, list []unstructured.Unstructured) error {
 	return nil
 }
 
-// generateConstraints generates m constraints based on representative constraint in crList
+// generateConstraints generates m constraints based on representative constraint in crList.
 func generateConstraints(m int, crList []unstructured.Unstructured) []unstructured.Unstructured {
 	result := make([]unstructured.Unstructured, m)
 	for i := 0; i < m; i++ {
@@ -219,7 +219,8 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 				Username: "res-creator",
 				UID:      "uid",
 				Groups:   []string{"res-creator-group"},
-				Extra:    map[string]authenticationv1.ExtraValue{"extraKey": {"value1", "value2"}}},
+				Extra:    map[string]authenticationv1.ExtraValue{"extraKey": {"value1", "value2"}},
+			},
 			Object:    runtime.RawExtension{Object: &resList[n%len(resList)]},
 			OldObject: runtime.RawExtension{Object: oldRes},
 			DryRun:    &dryRun,

@@ -44,7 +44,7 @@ type Mutator interface {
 	String() string
 }
 
-// MakeID builds an ID object for the given object
+// MakeID builds an ID object for the given object.
 func MakeID(obj client.Object) ID {
 	return ID{
 		Group:     obj.GetObjectKind().GroupVersionKind().Group,
@@ -54,7 +54,7 @@ func MakeID(obj client.Object) ID {
 	}
 }
 
-// UnmarshalValue unmarshals the value a mutation is meant to assign
+// UnmarshalValue unmarshals the value a mutation is meant to assign.
 func UnmarshalValue(data []byte) (interface{}, error) {
 	value := make(map[string]interface{})
 	err := json.Unmarshal(data, &value)

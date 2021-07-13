@@ -48,9 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_controller")
 
 const (
 	finalizerName = "finalizers.gatekeeper.sh/constraint"
@@ -111,7 +109,7 @@ type tags struct {
 	status            metrics.Status
 }
 
-// newReconciler returns a new reconcile.Reconciler
+// newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
 	opa *opa.Client,
@@ -137,7 +135,7 @@ func newReconciler(
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.GenericEvent) error {
 	// Create a new controller
 	c, err := controller.New("constraint-controller", mgr, controller.Options{Reconciler: r})
@@ -170,7 +168,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, events <-chan event.Generi
 
 var _ reconcile.Reconciler = &ReconcileConstraint{}
 
-// ReconcileConstraint reconciles an arbitrary constraint object described by Kind
+// ReconcileConstraint reconciles an arbitrary constraint object described by Kind.
 type ReconcileConstraint struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -189,7 +187,7 @@ type ReconcileConstraint struct {
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a constraint object and makes changes based on the state read
-// and what is in the constraint.Spec
+// and what is in the constraint.Spec.
 func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {

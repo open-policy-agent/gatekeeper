@@ -88,7 +88,7 @@ func (r *reporter) reportIngestDuration(status metrics.Status, d time.Duration) 
 	return metrics.Record(ctx, ingestDurationM.M(d.Seconds()))
 }
 
-// newStatsReporter creates a reporter for watch metrics
+// newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
 	ctx, err := tag.New(
 		context.TODO(),

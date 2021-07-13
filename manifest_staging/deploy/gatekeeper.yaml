@@ -45,7 +45,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Config is the Schema for the configs API
+        description: Config is the Schema for the configs API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -56,7 +56,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConfigSpec defines the desired state of Config
+            description: ConfigSpec defines the desired state of Config.
             properties:
               match:
                 description: Configuration for namespace exclusion
@@ -124,7 +124,7 @@ spec:
                 type: object
             type: object
           status:
-            description: ConfigStatus defines the observed state of Config
+            description: ConfigStatus defines the observed state of Config.
             type: object
         type: object
     served: true
@@ -157,7 +157,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintPodStatus is the Schema for the constraintpodstatuses API
+        description: ConstraintPodStatus is the Schema for the constraintpodstatuses API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -168,7 +168,7 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus
+            description: ConstraintPodStatusStatus defines the observed state of ConstraintPodStatus.
             properties:
               constraintUID:
                 description: Storing the constraint UID allows us to detect drift, such as when a constraint has been recreated after its CRD was deleted out from under it, interrupting the watch
@@ -177,7 +177,7 @@ spec:
                 type: boolean
               errors:
                 items:
-                  description: Error represents a single error caught while adding a constraint to OPA
+                  description: Error represents a single error caught while adding a constraint to OPA.
                   properties:
                     code:
                       type: string
@@ -231,7 +231,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API
+        description: ConstraintTemplatePodStatus is the Schema for the constrainttemplatepodstatuses API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -242,7 +242,7 @@ spec:
           metadata:
             type: object
           status:
-            description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus
+            description: ConstraintTemplatePodStatusStatus defines the observed state of ConstraintTemplatePodStatus.
             properties:
               errors:
                 items:

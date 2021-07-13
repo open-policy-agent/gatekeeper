@@ -88,7 +88,8 @@ package foo
 violation[{"msg": "denied!"}] {
 	1 == 1
 }
-`},
+`,
+				},
 			},
 		},
 	}
@@ -113,7 +114,6 @@ violation[{"msg": "denied!"}] {
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
-
 	}
 	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {

@@ -187,7 +187,7 @@ func (t Test) run(ctx context.Context, client Client, f fs.FS, filter Filter) Te
 	return TestResult{CaseResults: results}
 }
 
-// Case runs Constraint against a YAML object
+// Case runs Constraint against a YAML object.
 type Case struct{}
 
 // run executes the Case and returns the Result of the run.

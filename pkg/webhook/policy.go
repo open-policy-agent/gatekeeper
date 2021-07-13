@@ -54,9 +54,7 @@ import (
 // https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
 const httpStatusWarning = 299
 
-var (
-	maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
-)
+var maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
@@ -69,7 +67,7 @@ func init() {
 // +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
-// AddPolicyWebhook registers the policy webhook server with the manager
+// AddPolicyWebhook registers the policy webhook server with the manager.
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationCache *mutation.System) error {
 	reporter, err := newStatsReporter()
 	if err != nil {
@@ -118,7 +116,7 @@ type validationHandler struct {
 func (h *validationHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := log.WithValues("hookType", "validation")
 
-	var timeStart = time.Now()
+	timeStart := time.Now()
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
 		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
@@ -309,7 +307,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 }
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
-// validating internal resources
+// validating internal resources.
 func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
 	gvk := req.AdmissionRequest.Kind
 
@@ -415,7 +413,7 @@ func (h *validationHandler) validateAssign(ctx context.Context, req *admission.R
 	return false, nil
 }
 
-// traceSwitch returns true if a request should be traced
+// traceSwitch returns true if a request should be traced.
 func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Request) (*rtypes.Responses, error) {
 	// if we have a maximum number of concurrent serving goroutines, try to acquire
 	// a lock and block until we succeed

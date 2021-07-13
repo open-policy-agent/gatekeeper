@@ -56,6 +56,7 @@ func (f *fakeOpa) keyFor(obj interface{}) (opaKey, error) {
 		key: k,
 	}, nil
 }
+
 func (f *fakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -36,6 +36,7 @@ type invalidIntegerError struct {
 func (e invalidIntegerError) Error() string {
 	return fmt.Sprintf("invalid integer: %s", e.s)
 }
+
 func (e invalidIntegerError) Is(target error) bool {
 	_, ok := target.(invalidIntegerError)
 	return ok

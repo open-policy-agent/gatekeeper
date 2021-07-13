@@ -25,7 +25,7 @@ type System struct {
 	mux             sync.RWMutex
 }
 
-// NewSystem initializes an empty mutation system
+// NewSystem initializes an empty mutation system.
 func NewSystem() *System {
 	return &System{
 		schemaDB:        *schema.New(),
@@ -35,7 +35,7 @@ func NewSystem() *System {
 }
 
 // Upsert updates or insert the given object, and returns
-// an error in case of conflicts
+// an error in case of conflicts.
 func (s *System) Upsert(m types.Mutator) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -197,7 +197,7 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 	}
 }
 
-// Remove removes the mutator from the mutation system
+// Remove removes the mutator from the mutation system.
 func (s *System) Remove(id types.ID) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -231,7 +231,7 @@ func (s *System) Remove(id types.ID) error {
 	return nil
 }
 
-// Get mutator for given id
+// Get mutator for given id.
 func (s *System) Get(id types.ID) types.Mutator {
 	mutator, found := s.mutatorsMap[id]
 	if !found {

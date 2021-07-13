@@ -180,7 +180,6 @@ func TestReconcile(t *testing.T) {
 			}
 			return nil
 		}, timeout).Should(gomega.Succeed())
-
 	})
 
 	testMgrStopped()

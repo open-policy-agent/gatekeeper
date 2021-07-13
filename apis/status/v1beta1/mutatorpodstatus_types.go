@@ -31,7 +31,7 @@ import (
 // MutationsGroup is the API Group for Gatekeeper Mutators.
 const MutationsGroup = "mutations.gatekeeper.sh"
 
-// MutatorPodStatusStatus defines the observed state of MutatorPodStatus
+// MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
 type MutatorPodStatusStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -46,7 +46,7 @@ type MutatorPodStatusStatus struct {
 	ObservedGeneration int64          `json:"observedGeneration,omitempty"`
 }
 
-// MutatorError represents a single error caught while adding a mutator to a system
+// MutatorError represents a single error caught while adding a mutator to a system.
 type MutatorError struct {
 	Message string `json:"message"`
 }
@@ -54,7 +54,7 @@ type MutatorError struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// MutatorPodStatus is the Schema for the mutationpodstatuses API
+// MutatorPodStatus is the Schema for the mutationpodstatuses API.
 type MutatorPodStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -64,7 +64,7 @@ type MutatorPodStatus struct {
 
 // +kubebuilder:object:root=true
 
-// MutatorPodStatusList contains a list of MutatorPodStatus
+// MutatorPodStatusList contains a list of MutatorPodStatus.
 type MutatorPodStatusList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -77,7 +77,7 @@ func init() {
 
 // NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
-// with the mutator status controller
+// with the mutator status controller.
 func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
 	obj := &MutatorPodStatus{}
 	name, err := KeyForMutatorID(pod.Name, mutatorID)
@@ -103,7 +103,7 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 }
 
 // KeyForMutatorID returns a unique status object name given the Pod ID and
-// a mutator object
+// a mutator object.
 func KeyForMutatorID(id string, mID mtypes.ID) (string, error) {
 	// This adds a requirement that the lowercase of all mutator kinds must be unique.
 	// Though this should already be the case because resource ~= lower(kind) (usually).

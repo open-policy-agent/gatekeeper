@@ -173,7 +173,7 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 
 // prefixMatch matches checks if the candidate contains the prefix defined in the source.
 // The source is expected to end with a "*", which acts as a glob.  It is removed when
-// performing the prefix-based match
+// performing the prefix-based match.
 func prefixMatch(source, candidate string) bool {
 	if !strings.HasSuffix(source, "*") {
 		return false
@@ -182,7 +182,7 @@ func prefixMatch(source, candidate string) bool {
 	return strings.HasPrefix(candidate, strings.TrimSuffix(source, "*"))
 }
 
-// AppliesTo checks if any item the given slice of ApplyTo applies to the given object
+// AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
 func AppliesTo(applyTo []ApplyTo, obj runtime.Object) bool {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	for _, apply := range applyTo {

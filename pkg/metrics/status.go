@@ -11,7 +11,5 @@ const (
 	ErrorStatus Status = "error"
 )
 
-var (
-	// AllStatuses is the set of all allowed values of Status.
-	AllStatuses = []Status{ActiveStatus, ErrorStatus}
-)
+// AllStatuses is the set of all allowed values of Status.
+var AllStatuses = []Status{ActiveStatus, ErrorStatus}
