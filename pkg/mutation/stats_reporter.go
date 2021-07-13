@@ -59,6 +59,18 @@ func (r *reporter) reportMutatorIngestionRequest(ms MutatorStatus, d time.Durati
 	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
+func (r *reporter) reportMutatorsStatus(ms MutatorStatus, n int) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(mutatorStatusKey, string(ms)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, mutatorsM.M(int64(n)))
+}
+
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
