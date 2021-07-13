@@ -64,6 +64,29 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 }
 
+func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
+	row, err := view.RetrieveData(name)
+	if err != nil {
+		t.Errorf("Error when retrieving data: %v from %v", err, name)
+	}
+	if len(row) != expectedRowLength {
+		t.Errorf("Expected '%v' row to have length %v, got %v", name, expectedRowLength, len(row))
+	}
+	if row[0].Data == nil {
+		t.Errorf("Expected row data not to be nil")
+	}
+	return row[0]
+}
+
+func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
+	for _, tag := range actual {
+		ex := expected[tag.Key.Name()]
+		if tag.Value != ex {
+			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), ex, tag.Value)
+		}
+	}
+}
+
 func TestReportMutatorsStatus(t *testing.T) {
 	r, err := newStatsReporter()
 	if err != nil {
@@ -102,34 +125,11 @@ func TestReportMutatorsStatus(t *testing.T) {
 		t.Errorf("Expected '%v' view to have length %v, got %v", mutatorsMetricName, 2, l)
 	}
 
-	verifyRow(t, data, MutatorStatusActive, 5)
-	verifyRow(t, data, MutatorStatusError, 3)
+	verifyLastValueRow(t, data, MutatorStatusActive, 5)
+	verifyLastValueRow(t, data, MutatorStatusError, 3)
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
-	row, err := view.RetrieveData(name)
-	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
-	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected '%v' row to have length %v, got %v", name, expectedRowLength, len(row))
-	}
-	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
-	}
-	return row[0]
-}
-
-func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
-	for _, tag := range actual {
-		ex := expected[tag.Key.Name()]
-		if tag.Value != ex {
-			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), ex, tag.Value)
-		}
-	}
-}
-
-func verifyRow(t *testing.T, rows []*view.Row, tag MutatorStatus, expectedValue int) {
+func verifyLastValueRow(t *testing.T, rows []*view.Row, tag MutatorStatus, expectedValue int) {
 	for _, r := range rows {
 		if !hasTag(r, mutatorStatusKey.Name(), string(tag)) {
 			continue
@@ -142,6 +142,72 @@ func verifyRow(t *testing.T, rows []*view.Row, tag MutatorStatus, expectedValue 
 
 		if int(lastValueData.Value) != expectedValue {
 			t.Errorf("Expected value '%v' for tag '%v' but received '%v'", expectedValue, tag, lastValueData.Value)
+		}
+
+		return
+	}
+
+	t.Errorf("Expected to find row with tag '%v' but none were found", tag)
+}
+
+func TestReportIterationConvergence(t *testing.T) {
+	r, err := newStatsReporter()
+	if err != nil {
+		t.Errorf("newStatsReporter() error %v", err)
+	}
+
+	successMax := 5
+	successMin := 3
+	failureMax := 8
+	failureMin := failureMax
+
+	err = r.reportIterationConvergence(SystemConverganceTrue, successMax)
+	if err != nil {
+		t.Errorf("reportIterationConvergence error: %v", err)
+	}
+	err = r.reportIterationConvergence(SystemConverganceFalse, failureMax)
+	if err != nil {
+		t.Errorf("reportIterationConvergence error: %v", err)
+	}
+	err = r.reportIterationConvergence(SystemConverganceTrue, successMin)
+	if err != nil {
+		t.Errorf("reportIterationConvergence error: %v", err)
+	}
+
+	rows, err := view.RetrieveData(mutationSystemIterationsMetricName)
+	if err != nil {
+		t.Errorf("Error when retrieving data: %v from %v", err, mutationSystemIterationsMetricName)
+	}
+
+	validConvergenceStatuses := 2
+	l := len(rows)
+	if l != validConvergenceStatuses {
+		t.Errorf("Expected '%v' view to have length %v, got %v", mutatorsMetricName, validConvergenceStatuses, l)
+	}
+
+	verifyDistributionRow(t, rows, SystemConverganceTrue, 2, successMin, successMax)
+	verifyDistributionRow(t, rows, SystemConverganceFalse, 1, failureMin, failureMax)
+}
+
+func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) {
+	for _, r := range rows {
+		if !hasTag(r, systemConvergenceKey.Name(), string(tag)) {
+			continue
+		}
+
+		distData, ok := r.Data.(*view.DistributionData)
+		if !ok {
+			t.Errorf("Data is not of type *view.DistributionData")
+		}
+
+		if int(distData.Count) != count {
+			t.Errorf("Expected count '%v' for tag '%v' but received '%v'", count, tag, distData.Count)
+		}
+		if int(distData.Min) != min {
+			t.Errorf("Expected count '%v' for tag '%v' but received '%v'", min, tag, distData.Min)
+		}
+		if int(distData.Max) != max {
+			t.Errorf("Expected max '%v' for tag '%v' but received '%v'", max, tag, distData.Max)
 		}
 
 		return

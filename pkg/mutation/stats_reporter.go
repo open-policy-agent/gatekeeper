@@ -18,10 +18,16 @@ const (
 )
 
 type MutatorStatus string
+type SystemConvergenceStatus string
 
 var (
+	mutatorStatusKey                  = tag.MustNewKey("status")
 	MutatorStatusActive MutatorStatus = "active"
 	MutatorStatusError  MutatorStatus = "error"
+
+	systemConvergenceKey                           = tag.MustNewKey("success")
+	SystemConverganceTrue  SystemConvergenceStatus = "true"
+	SystemConverganceFalse SystemConvergenceStatus = "false"
 
 	responseTimeInSecM = stats.Float64(
 		mutatorIngestionDurationMetricName,
@@ -33,8 +39,10 @@ var (
 		"The current number of Mutator objects",
 		stats.UnitDimensionless)
 
-	// JULIAN - This may need to just be "status"
-	mutatorStatusKey = tag.MustNewKey("status")
+	systemIterationsM = stats.Int64(
+		mutationSystemIterationsMetricName,
+		"The distribution of Mutator ingestion durations",
+		stats.UnitDimensionless)
 )
 
 func init() {
@@ -69,6 +77,18 @@ func (r *reporter) reportMutatorsStatus(ms MutatorStatus, n int) error {
 	}
 
 	return r.report(ctx, mutatorsM.M(int64(n)))
+}
+
+func (r *reporter) reportIterationConvergence(scs SystemConvergenceStatus, iterations int) error {
+	ctx, err := tag.New(
+		r.ctx,
+		tag.Insert(systemConvergenceKey, string(scs)),
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.report(ctx, systemIterationsM.M(int64(iterations)))
 }
 
 func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
@@ -109,7 +129,6 @@ func register() error {
 		// counters.  It's a fundamentally different idea.  It's more of an "audit" of the current
 		// state, as opposed to the monitoring of a single request.  That said, it will still end
 		// up happening in the same place that the other one is called.
-		// NEED A TEST FOR THIS
 		{
 			Name:        mutatorsMetricName,
 			Description: "The current number of Mutator objects",
@@ -117,8 +136,15 @@ func register() error {
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{mutatorStatusKey},
 		},
-
-		// Still missing: gatekeeper_mutation_system_iterations
+		{
+			Name: mutationSystemIterationsMetricName,
+			// JULIAN - not sure if I should do this or just inline
+			Description: systemIterationsM.Description(),
+			Measure:     systemIterationsM,
+			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
+			Aggregation: view.Distribution(2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192),
+			TagKeys:     []tag.Key{systemConvergenceKey},
+		},
 	}
 	return view.Register(views...)
 }
