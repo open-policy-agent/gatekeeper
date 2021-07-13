@@ -23,6 +23,48 @@ func TestMatch(t *testing.T) {
 		shouldMatch bool
 	}{
 		{
+			tname:   "match empty group kinds",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "match empty kinds",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{"*"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "don't match empty kinds in other group",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{"rbac"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
+		{
 			tname:   "match kind with *",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{

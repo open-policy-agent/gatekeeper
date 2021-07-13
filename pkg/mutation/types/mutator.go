@@ -2,12 +2,13 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,10 +20,16 @@ type ID struct {
 	Name      string
 }
 
+func (id ID) String() string {
+	return fmt.Sprintf("%v %v",
+		schema.GroupKind{Group: id.Group, Kind: id.Kind},
+		client.ObjectKey{Namespace: id.Namespace, Name: id.Name})
+}
+
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
-	Matches(obj runtime.Object, ns *corev1.Namespace) bool
+	Matches(obj client.Object, ns *corev1.Namespace) bool
 	// Mutate applies the mutation to the given object
 	Mutate(obj *unstructured.Unstructured) (bool, error)
 	// ID returns the id of the current mutator.
