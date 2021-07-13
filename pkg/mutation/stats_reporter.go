@@ -17,17 +17,27 @@ const (
 	mutationSystemIterationsMetricName = "mutation_system_iterations"
 )
 
-type MutatorStatus string
+// MutatorIngestionStatus defines the outcomes of an attempt to add a Mutator to the mutation System.
+type MutatorIngestionStatus string
+
+// SystemConvergenceStatus defines the outcomes of the attempted mutation of an object by the
+// mutation System.  The System is meant to converge on a fully mutated object.
 type SystemConvergenceStatus string
 
 var (
-	mutatorStatusKey                  = tag.MustNewKey("status")
-	MutatorStatusActive MutatorStatus = "active"
-	MutatorStatusError  MutatorStatus = "error"
+	mutatorStatusKey = tag.MustNewKey("status")
 
-	systemConvergenceKey                           = tag.MustNewKey("success")
-	SystemConverganceTrue  SystemConvergenceStatus = "true"
-	SystemConverganceFalse SystemConvergenceStatus = "false"
+	// MutatorStatusActive denotes a successfully ingested mutator, ready to mutate objects.
+	MutatorStatusActive MutatorIngestionStatus = "active"
+	// MutatorStatusError denotes a mutator that failed to ingest.
+	MutatorStatusError MutatorIngestionStatus = "error"
+
+	systemConvergenceKey = tag.MustNewKey("success")
+
+	// SystemConvergenceTrue denotes a successfully converged mutation system request.
+	SystemConvergenceTrue SystemConvergenceStatus = "true"
+	// SystemConvergenceFalse denotes an unsuccessfully converged mutation system request.
+	SystemConvergenceFalse SystemConvergenceStatus = "false"
 
 	responseTimeInSecM = stats.Float64(
 		mutatorIngestionDurationMetricName,
@@ -55,7 +65,7 @@ type reporter struct {
 	ctx context.Context
 }
 
-func (r *reporter) reportMutatorIngestionRequest(ms MutatorStatus, d time.Duration) error {
+func (r *reporter) reportMutatorIngestionRequest(ms MutatorIngestionStatus, d time.Duration) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(mutatorStatusKey, string(ms)),
@@ -67,7 +77,7 @@ func (r *reporter) reportMutatorIngestionRequest(ms MutatorStatus, d time.Durati
 	return r.report(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
-func (r *reporter) reportMutatorsStatus(ms MutatorStatus, n int) error {
+func (r *reporter) reportMutatorsStatus(ms MutatorIngestionStatus, n int) error {
 	ctx, err := tag.New(
 		r.ctx,
 		tag.Insert(mutatorStatusKey, string(ms)),
@@ -117,18 +127,13 @@ func register() error {
 			TagKeys:     []tag.Key{mutatorStatusKey},
 		},
 		{
-			Name: mutatorIngestionDurationMetricName,
-			// JULIAN - not sure if I should do this or just inline
+			Name:        mutatorIngestionDurationMetricName,
 			Description: responseTimeInSecM.Description(),
 			Measure:     responseTimeInSecM,
 			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
 			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
 			TagKeys:     []tag.Key{mutatorStatusKey},
 		},
-		// JULIAN - We'll probably want to do this in its own call, separate from the request
-		// counters.  It's a fundamentally different idea.  It's more of an "audit" of the current
-		// state, as opposed to the monitoring of a single request.  That said, it will still end
-		// up happening in the same place that the other one is called.
 		{
 			Name:        mutatorsMetricName,
 			Description: "The current number of Mutator objects",
@@ -137,12 +142,11 @@ func register() error {
 			TagKeys:     []tag.Key{mutatorStatusKey},
 		},
 		{
-			Name: mutationSystemIterationsMetricName,
-			// JULIAN - not sure if I should do this or just inline
+			Name:        mutationSystemIterationsMetricName,
 			Description: systemIterationsM.Description(),
 			Measure:     systemIterationsM,
 			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
-			Aggregation: view.Distribution(2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192),
+			Aggregation: view.Distribution(2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233),
 			TagKeys:     []tag.Key{systemConvergenceKey},
 		},
 	}

@@ -8,19 +8,18 @@ import (
 	"go.opencensus.io/tag"
 )
 
-const (
-	expectedDurationValueMin         = time.Duration(1 * time.Second)
-	expectedDurationValueMax         = time.Duration(5 * time.Second)
-	expectedDurationMin      float64 = 1
-	expectedDurationMax      float64 = 5
-	expectedMutators                 = 3
-	expectedRowLength                = 1
-)
-
 func TestReportMutatorIngestionRequest(t *testing.T) {
 	expectedTags := map[string]string{
 		"status": "active",
 	}
+
+	const (
+		expectedDurationValueMin         = time.Duration(1 * time.Second)
+		expectedDurationValueMax         = time.Duration(5 * time.Second)
+		expectedDurationMin      float64 = 1
+		expectedDurationMax      float64 = 5
+		expectedRowLength                = 1
+	)
 
 	r, err := newStatsReporter()
 	if err != nil {
@@ -64,13 +63,13 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
+func checkData(t *testing.T, name string, rowLength int) *view.Row {
 	row, err := view.RetrieveData(name)
 	if err != nil {
 		t.Errorf("Error when retrieving data: %v from %v", err, name)
 	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected '%v' row to have length %v, got %v", name, expectedRowLength, len(row))
+	if len(row) != rowLength {
+		t.Errorf("Expected '%v' row to have length %v, got %v", name, rowLength, len(row))
 	}
 	if row[0].Data == nil {
 		t.Errorf("Expected row data not to be nil")
@@ -129,7 +128,7 @@ func TestReportMutatorsStatus(t *testing.T) {
 	verifyLastValueRow(t, data, MutatorStatusError, 3)
 }
 
-func verifyLastValueRow(t *testing.T, rows []*view.Row, tag MutatorStatus, expectedValue int) {
+func verifyLastValueRow(t *testing.T, rows []*view.Row, tag MutatorIngestionStatus, expectedValue int) {
 	for _, r := range rows {
 		if !hasTag(r, mutatorStatusKey.Name(), string(tag)) {
 			continue
@@ -156,20 +155,22 @@ func TestReportIterationConvergence(t *testing.T) {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
 
-	successMax := 5
-	successMin := 3
-	failureMax := 8
-	failureMin := failureMax
+	const (
+		successMax = 5
+		successMin = 3
+		failureMax = 8
+		failureMin = failureMax
+	)
 
-	err = r.reportIterationConvergence(SystemConverganceTrue, successMax)
+	err = r.reportIterationConvergence(SystemConvergenceTrue, successMax)
 	if err != nil {
 		t.Errorf("reportIterationConvergence error: %v", err)
 	}
-	err = r.reportIterationConvergence(SystemConverganceFalse, failureMax)
+	err = r.reportIterationConvergence(SystemConvergenceFalse, failureMax)
 	if err != nil {
 		t.Errorf("reportIterationConvergence error: %v", err)
 	}
-	err = r.reportIterationConvergence(SystemConverganceTrue, successMin)
+	err = r.reportIterationConvergence(SystemConvergenceTrue, successMin)
 	if err != nil {
 		t.Errorf("reportIterationConvergence error: %v", err)
 	}
@@ -185,8 +186,8 @@ func TestReportIterationConvergence(t *testing.T) {
 		t.Errorf("Expected '%v' view to have length %v, got %v", mutatorsMetricName, validConvergenceStatuses, l)
 	}
 
-	verifyDistributionRow(t, rows, SystemConverganceTrue, 2, successMin, successMax)
-	verifyDistributionRow(t, rows, SystemConverganceFalse, 1, failureMin, failureMax)
+	verifyDistributionRow(t, rows, SystemConvergenceTrue, 2, successMin, successMax)
+	verifyDistributionRow(t, rows, SystemConvergenceFalse, 1, failureMin, failureMax)
 }
 
 func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) {
