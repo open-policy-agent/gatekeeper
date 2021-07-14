@@ -25,7 +25,7 @@ type System struct {
 	mux             sync.RWMutex
 }
 
-// NewSystem initializes an empty mutation system
+// NewSystem initializes an empty mutation system.
 func NewSystem() *System {
 	return &System{
 		schemaDB:        *schema.New(),
@@ -35,7 +35,7 @@ func NewSystem() *System {
 }
 
 // Upsert updates or insert the given object, and returns
-// an error in case of conflicts
+// an error in case of conflicts.
 func (s *System) Upsert(m types.Mutator) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -48,10 +48,12 @@ func (s *System) Upsert(m types.Mutator) error {
 	toAdd := m.DeepCopy()
 
 	// Checking schema consistency only if the mutator has schema
+	var err error
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
-			return errors.Wrapf(err, "Schema upsert failed for %v", m.ID())
+			s.schemaDB.Remove(withSchema.ID())
+			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
 		}
 	}
 
@@ -63,19 +65,19 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	if i == len(s.orderedMutators) { // Adding to the bottom of the list
 		s.orderedMutators = append(s.orderedMutators, toAdd)
-		return nil
+		return err
 	}
 
 	found := equal(s.orderedMutators[i].ID(), toAdd.ID())
 	if found {
 		s.orderedMutators[i] = toAdd
-		return nil
+		return err
 	}
 
 	s.orderedMutators = append(s.orderedMutators, nil)
 	copy(s.orderedMutators[i+1:], s.orderedMutators[i:])
 	s.orderedMutators[i] = toAdd
-	return nil
+	return err
 }
 
 // Mutate applies the mutation in place to the given object. Returns
@@ -89,15 +91,18 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 
 	var allAppliedMutations [][]types.Mutator
 	if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
-		if allAppliedMutations == nil {
-			allAppliedMutations = [][]types.Mutator{}
-		}
+		allAppliedMutations = [][]types.Mutator{}
 	}
 
 	for i := 0; i < maxIterations; i++ {
-		appliedMutations := []types.Mutator{}
+		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
 		for _, m := range s.orderedMutators {
+			if s.schemaDB.HasConflicts(m.ID()) {
+				// Don't try to apply Mutators which have conflicts.
+				continue
+			}
+
 			if m.Matches(obj, ns) {
 				mutated, err := m.Mutate(obj)
 				if mutated && (*MutationLoggingEnabled || *MutationAnnotationsEnabled) {
@@ -192,7 +197,7 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 	}
 }
 
-// Remove removes the mutator from the mutation system
+// Remove removes the mutator from the mutation system.
 func (s *System) Remove(id types.ID) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -226,9 +231,13 @@ func (s *System) Remove(id types.ID) error {
 	return nil
 }
 
-// Get mutator for given id
+// Get mutator for given id.
 func (s *System) Get(id types.ID) types.Mutator {
-	return s.mutatorsMap[id].DeepCopy()
+	mutator, found := s.mutatorsMap[id]
+	if !found {
+		return nil
+	}
+	return mutator.DeepCopy()
 }
 
 func greaterOrEqual(id1, id2 types.ID) bool {

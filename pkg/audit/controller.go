@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// AddToManager adds audit manager to the Manager
+// AddToManager adds audit manager to the Manager.
 func AddToManager(m manager.Manager, opa *opa.Client, processExcluder *process.Excluder) error {
 	if *auditInterval == 0 {
 		log.Info("auditing is disabled")

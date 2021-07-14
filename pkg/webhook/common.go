@@ -57,7 +57,7 @@ var (
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace for each admission violation")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
-	// webhookName is deprecated, set this on the manifest YAML if needed"
+	// webhookName is deprecated, set this on the manifest YAML if needed".
 )
 
 func init() {
@@ -92,7 +92,7 @@ func (h *webhookHandler) getConfig(ctx context.Context) (*v1alpha1.Config, error
 	return cfg, h.client.Get(ctx, keys.Config, cfg)
 }
 
-// isGatekeeperResource returns true if the request relates to a gatekeeper resource
+// isGatekeeperResource returns true if the request relates to a gatekeeper resource.
 func (h *webhookHandler) isGatekeeperResource(ctx context.Context, req *admission.Request) bool {
 	if req.AdmissionRequest.Kind.Group == "templates.gatekeeper.sh" ||
 		req.AdmissionRequest.Kind.Group == "constraints.gatekeeper.sh" ||

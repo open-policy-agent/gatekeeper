@@ -14,18 +14,16 @@ import (
 type Condition string
 
 const (
-	// MustExist means that an object must exist at the given path entry
+	// MustExist means that an object must exist at the given path entry.
 	MustExist = Condition("MustExist")
-	// MustNotExist means that an object must not exist at the given path entry
+	// MustNotExist means that an object must not exist at the given path entry.
 	MustNotExist = Condition("MustNotExist")
 )
 
-var (
-	conditions = map[string]Condition{
-		"MustExist":    MustExist,
-		"MustNotExist": MustNotExist,
-	}
-)
+var conditions = map[string]Condition{
+	"MustExist":    MustExist,
+	"MustNotExist": MustNotExist,
+}
 
 // Base errors for validating path tests.
 var (
@@ -33,7 +31,7 @@ var (
 	ErrConflict = errors.New("conflicting path test conditions")
 )
 
-// StringToCondition translates a user-provided string into a Test Condition
+// StringToCondition translates a user-provided string into a Test Condition.
 func StringToCondition(s string) (Condition, error) {
 	cond, ok := conditions[s]
 	if !ok {
@@ -43,7 +41,7 @@ func StringToCondition(s string) (Condition, error) {
 	return cond, nil
 }
 
-// Test describes a condition that the object must satisfy
+// Test describes a condition that the object must satisfy.
 type Test struct {
 	SubPath   parser.Path
 	Condition Condition
@@ -63,7 +61,7 @@ func isPrefix(short, long parser.Path) bool {
 	return true
 }
 
-// validatePathTests returns whether a set of path tests are valid against the provided location
+// validatePathTests returns whether a set of path tests are valid against the provided location.
 func validatePathTests(location parser.Path, pathTests []Test) error {
 	for _, pathTest := range pathTests {
 		if !isPrefix(pathTest.SubPath, location) {
@@ -73,7 +71,7 @@ func validatePathTests(location parser.Path, pathTests []Test) error {
 	return nil
 }
 
-// New creates a new Tester object
+// New creates a new Tester object.
 func New(location parser.Path, tests []Test) (*Tester, error) {
 	err := validatePathTests(location, tests)
 	if err != nil {
@@ -88,10 +86,10 @@ func New(location parser.Path, tests []Test) (*Tester, error) {
 	// Read in all tests before checking for conflicts.
 	idxLowestMustNot := math.MaxInt32
 	idxHighestMust := 0
-	for _, test := range tests {
-		i := len(test.SubPath.Nodes) - 1
-		idx.tests[i] = test.Condition
-		paths[i] = &test.SubPath
+	for i, test := range tests {
+		j := len(test.SubPath.Nodes) - 1
+		idx.tests[j] = test.Condition
+		paths[j] = &tests[i].SubPath
 
 		if test.Condition == MustNotExist && i < idxLowestMustNot {
 			idxLowestMustNot = i
@@ -118,12 +116,12 @@ func New(location parser.Path, tests []Test) (*Tester, error) {
 	return idx, nil
 }
 
-// Tester knows whether it's okay that an object exists at a given path depth
+// Tester knows whether it's okay that an object exists at a given path depth.
 type Tester struct {
 	tests map[int]Condition
 }
 
-// ExistsOkay returns true if it's okay that an object exists
+// ExistsOkay returns true if it's okay that an object exists.
 func (pt *Tester) ExistsOkay(depth int) bool {
 	c, ok := pt.tests[depth]
 	if !ok {
@@ -132,7 +130,7 @@ func (pt *Tester) ExistsOkay(depth int) bool {
 	return c == MustExist
 }
 
-// MissingOkay returns true if it's okay that an object is missing
+// MissingOkay returns true if it's okay that an object is missing.
 func (pt *Tester) MissingOkay(depth int) bool {
 	c, ok := pt.tests[depth]
 	if !ok {
@@ -141,7 +139,7 @@ func (pt *Tester) MissingOkay(depth int) bool {
 	return c == MustNotExist
 }
 
-// DeepCopy returns a deep copy of the tester
+// DeepCopy returns a deep copy of the tester.
 func (pt *Tester) DeepCopy() *Tester {
 	if pt == nil {
 		return nil

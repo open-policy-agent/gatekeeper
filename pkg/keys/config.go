@@ -20,5 +20,5 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Config resource singleton reference
+// Config resource singleton reference.
 var Config = types.NamespacedName{Namespace: util.GetNamespace(), Name: "config"}

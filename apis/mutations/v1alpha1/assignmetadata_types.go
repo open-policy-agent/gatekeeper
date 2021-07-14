@@ -25,7 +25,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// AssignMetadataSpec defines the desired state of AssignMetadata
+// AssignMetadataSpec defines the desired state of AssignMetadata.
 type AssignMetadataSpec struct {
 	Match      match.Match        `json:"match,omitempty"`
 	Location   string             `json:"location,omitempty"`
@@ -38,7 +38,7 @@ type MetadataParameters struct {
 	Assign runtime.RawExtension `json:"assign,omitempty"`
 }
 
-// AssignMetadataStatus defines the observed state of AssignMetadata
+// AssignMetadataStatus defines the observed state of AssignMetadata.
 type AssignMetadataStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -49,7 +49,7 @@ type AssignMetadataStatus struct {
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
 
-// AssignMetadata is the Schema for the assignmetadata API
+// AssignMetadata is the Schema for the assignmetadata API.
 type AssignMetadata struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -60,7 +60,7 @@ type AssignMetadata struct {
 
 // +kubebuilder:object:root=true
 
-// AssignMetadataList contains a list of AssignMetadata
+// AssignMetadataList contains a list of AssignMetadata.
 type AssignMetadataList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

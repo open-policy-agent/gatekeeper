@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -17,29 +18,30 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
-)
+var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
 // AssignMutator is a mutator object built out of a
 // Assign instance.
 type AssignMutator struct {
-	id        types.ID
-	assign    *mutationsv1alpha1.Assign
-	path      parser.Path
-	bindings  []schema.Binding
+	id     types.ID
+	assign *mutationsv1alpha1.Assign
+	path   parser.Path
+
+	// bindings are the set of GVKs this Mutator applies to.
+	bindings  []runtimeschema.GroupVersionKind
 	tester    *patht.Tester
 	valueTest *mutationsv1alpha1.AssignIf
 }
 
-// AssignMutator implements mutatorWithSchema
+// AssignMutator implements mutatorWithSchema.
 var _ schema.MutatorWithSchema = &AssignMutator{}
 
-func (m *AssignMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+func (m *AssignMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
 		return false
 	}
@@ -55,7 +57,7 @@ func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return core.Mutate(m, m.tester, m.testValue, obj)
 }
 
-// valueTest returns true if it is okay for the mutation func to override the value
+// valueTest returns true if it is okay for the mutation func to override the value.
 func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
 	if len(m.valueTest.In) != 0 {
 		ifInMatched := false
@@ -91,7 +93,7 @@ func (m *AssignMutator) ID() types.ID {
 	return m.id
 }
 
-func (m *AssignMutator) SchemaBindings() []schema.Binding {
+func (m *AssignMutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
 }
 
@@ -134,10 +136,11 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 		path: parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
-		bindings: make([]schema.Binding, len(m.bindings)),
+		bindings: make([]runtimeschema.GroupVersionKind, len(m.bindings)),
 	}
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
+	fmt.Println(len(res.bindings))
 	res.tester = m.tester.DeepCopy()
 	res.valueTest = m.valueTest.DeepCopy()
 	return res
@@ -194,20 +197,21 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	if err != nil {
 		return nil, err
 	}
-	applyTos := applyToToBindings(assign.Spec.ApplyTo)
-	if len(applyTos) == 0 {
-		return nil, fmt.Errorf("applyTo required for Assign mutator %s", assign.GetName())
-	}
-	for _, applyTo := range applyTos {
+	for _, applyTo := range assign.Spec.ApplyTo {
 		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
 			return nil, fmt.Errorf("invalid applyTo for Assign mutator %s, all of group, version and kind must be specified", assign.GetName())
 		}
 	}
 
+	gvks := getSortedGVKs(assign.Spec.ApplyTo)
+	if len(gvks) == 0 {
+		return nil, fmt.Errorf("applyTo required for Assign mutator %s", assign.GetName())
+	}
+
 	return &AssignMutator{
 		id:        id,
 		assign:    assign.DeepCopy(),
-		bindings:  applyTos,
+		bindings:  gvks,
 		path:      path,
 		tester:    tester,
 		valueTest: &valueTests,
@@ -227,30 +231,8 @@ func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
 	return pathTests, nil
 }
 
-func applyToToBindings(applyTos []match.ApplyTo) []schema.Binding {
-	res := []schema.Binding{}
-	for _, applyTo := range applyTos {
-		binding := schema.Binding{
-			Groups:   make([]string, len(applyTo.Groups)),
-			Kinds:    make([]string, len(applyTo.Kinds)),
-			Versions: make([]string, len(applyTo.Versions)),
-		}
-		for i, g := range applyTo.Groups {
-			binding.Groups[i] = g
-		}
-		for i, k := range applyTo.Kinds {
-			binding.Kinds[i] = k
-		}
-		for i, v := range applyTo.Versions {
-			binding.Versions[i] = v
-		}
-		res = append(res, binding)
-	}
-	return res
-}
-
 // IsValidAssign returns an error if the given assign object is not
-// semantically valid
+// semantically valid.
 func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
 	if _, err := MutatorForAssign(assign); err != nil {
 		return err
@@ -270,7 +252,7 @@ func hasMetadataRoot(path parser.Path) bool {
 }
 
 // checkKeyNotChanged does not allow to change the key field of
-// a list element. A path like foo[name: bar].name is rejected
+// a list element. A path like foo[name: bar].name is rejected.
 func checkKeyNotChanged(p parser.Path, assignName string) error {
 	if len(p.Nodes) == 0 {
 		return errors.New("empty path")
@@ -328,4 +310,25 @@ func validateObjectAssignedToList(p parser.Path, value interface{}, assignName s
 	}
 
 	return nil
+}
+
+func getSortedGVKs(bindings []match.ApplyTo) []runtimeschema.GroupVersionKind {
+	// deduplicate GVKs
+	gvksMap := map[runtimeschema.GroupVersionKind]struct{}{}
+	for _, binding := range bindings {
+		for _, gvk := range binding.Flatten() {
+			gvksMap[gvk] = struct{}{}
+		}
+	}
+
+	var gvks []runtimeschema.GroupVersionKind
+	for gvk := range gvksMap {
+		gvks = append(gvks, gvk)
+	}
+
+	// we iterate over the map in a stable order so that
+	// unit tests won't be flaky.
+	sort.Slice(gvks, func(i, j int) bool { return gvks[i].String() < gvks[j].String() })
+
+	return gvks
 }

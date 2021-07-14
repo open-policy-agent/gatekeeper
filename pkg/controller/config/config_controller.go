@@ -43,9 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// TODO write a reconciliation process that looks at the state of the cluster to make sure
-// allFinalizers agrees with reality and launches a cleaner if the config is missing.
-
 const (
 	ctrlName      = "config-controller"
 	finalizerName = "finalizers.gatekeeper.sh/config"
@@ -100,7 +97,7 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {}
 // newReconciler returns a new reconcile.Reconciler
 // events is the channel from which sync controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
-// events and regEvents point to same event channel except for testing
+// events and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	watchSet := watch.NewSet()
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
@@ -139,7 +136,7 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 	}, nil
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New(ctrlName, mgr, controller.Options{Reconciler: r})
@@ -158,7 +155,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileConfig{}
 
-// ReconcileConfig reconciles a Config object
+// ReconcileConfig reconciles a Config object.
 type ReconcileConfig struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -184,7 +181,7 @@ type ReconcileConfig struct {
 // Reconcile reads that state of the cluster for a Config object and makes changes based on the state read
 // and what is in the Config.Spec
 // Automatically generate RBAC rules to allow the Controller to read all things (for sync)
-// update is needed for finalizers
+// update is needed for finalizers.
 func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {

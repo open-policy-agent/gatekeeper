@@ -146,6 +146,7 @@ webhooks:
       path: /v1/admit
   name: validation.gatekeeper.sh
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+  failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
   rules:
   - apiGroups:
     - "*"
@@ -161,6 +162,7 @@ webhooks:
       path: /v1/admitlabel
   name: check-ignore-label.gatekeeper.sh
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+  failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget

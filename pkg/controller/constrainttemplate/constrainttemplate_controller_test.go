@@ -116,7 +116,8 @@ package foo
 violation[{"msg": "denied!"}] {
 	1 == 1
 }
-`},
+`,
+				},
 			},
 		},
 	}
@@ -305,7 +306,8 @@ violation[{"msg": "denied!"}] {
 
 	anyrule[}}}//invalid//rego
 
-	`},
+	`,
+					},
 				},
 			},
 		}
@@ -425,7 +427,8 @@ package foo
 violation[{"msg": "denied!"}] {
 	1 == 1
 }
-`},
+`,
+				},
 			},
 		},
 	}
@@ -464,7 +467,6 @@ violation[{"msg": "denied!"}] {
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
-
 	}
 	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
@@ -661,7 +663,7 @@ func ignoreNotFound(err error) error {
 	return err
 }
 
-// This interface is getting used by tests to check the private objects of objectTracker
+// This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

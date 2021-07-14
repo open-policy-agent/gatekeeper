@@ -5,6 +5,8 @@ constraintViolationsLimit: 20
 auditFromCache: false
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
+validatingWebhookFailurePolicy: Ignore
+validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 experimentalEnableMutation: false
 auditChunkSize: 0

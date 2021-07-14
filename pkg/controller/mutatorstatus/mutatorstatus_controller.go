@@ -44,9 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "mutator_status_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "mutator_status_controller")
 
 type Adder struct {
 	WatchManager     *watch.Manager
@@ -73,7 +71,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-// newReconciler returns a new reconcile.Reconciler
+// newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
 	cs *watch.ControllerSwitch) reconcile.Reconciler {
@@ -91,7 +89,7 @@ func newReconciler(
 
 type PackerMap func(obj client.Object) []reconcile.Request
 
-// PodStatusToMutatorMapper correlates a MutatorPodStatus with its corresponding mutator
+// PodStatusToMutatorMapper correlates a MutatorPodStatus with its corresponding mutator.
 func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler.MapFunc) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
@@ -125,7 +123,7 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 	}
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("mutator-status-controller", mgr, controller.Options{Reconciler: r})
@@ -158,7 +156,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileMutatorStatus{}
 
-// ReconcileMutatorStatus reconciles an arbitrary mutator object described by Kind
+// ReconcileMutatorStatus reconciles an arbitrary mutator object described by Kind.
 type ReconcileMutatorStatus struct {
 	reader       client.Reader
 	writer       client.Writer
@@ -173,7 +171,7 @@ type ReconcileMutatorStatus struct {
 // +kubebuilder:rbac:groups=status.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a mutator object and makes changes based on the state read
-// and what is in the mutator.Spec
+// and what is in the mutator.Spec.
 func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Short-circuit if shutting down.
 	if r.cs != nil {

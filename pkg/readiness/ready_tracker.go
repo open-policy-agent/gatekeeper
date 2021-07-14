@@ -70,7 +70,7 @@ type Tracker struct {
 	mutationEnabled    bool
 }
 
-// NewTracker creates a new Tracker and initializes the internal trackers
+// NewTracker creates a new Tracker and initializes the internal trackers.
 func NewTracker(lister Lister, mutationEnabled bool) *Tracker {
 	return newTracker(lister, mutationEnabled, nil)
 }
@@ -290,7 +290,7 @@ func (t *Tracker) Populated() bool {
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
-// `es`, which must be an objectTracker, and removes those expectations
+// `es`, which must be an objectTracker, and removes those expectations.
 func (t *Tracker) collectForObjectTracker(ctx context.Context, es Expectations, cleanup func(schema.GroupVersionKind)) error {
 	if es == nil {
 		return fmt.Errorf("nil Expectations provided to collectForObjectTracker")

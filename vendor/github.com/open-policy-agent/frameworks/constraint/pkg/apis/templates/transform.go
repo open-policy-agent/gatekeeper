@@ -18,13 +18,13 @@ package templates
 import (
 	"fmt"
 
-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-// AddPreserveUnknownFields recurses through an *apiextensionsv1beta1.JSONSchemaProps
+// AddPreserveUnknownFields recurses through an *apiextensionsv1.JSONSchemaProps
 // data structure, adding `x-kubernetes-preserve-unknown-fields: true` at every level
 // that type is equal to "object", "array", or is undefined.
-func AddPreserveUnknownFields(sch *apiextensionsv1beta1.JSONSchemaProps) error {
+func AddPreserveUnknownFields(sch *apiextensionsv1.JSONSchemaProps) error {
 	switch sch.Type {
 	// An object can have values not described in the schema.  A blank Type could be anything,
 	// including an object, so we add x-kubernetes-preserve-unknown-fields: true to both.
@@ -37,8 +37,8 @@ func AddPreserveUnknownFields(sch *apiextensionsv1beta1.JSONSchemaProps) error {
 		// this structural item schema requirement.
 		if sch.Items == nil || (sch.Items.Schema == nil && sch.Items.JSONSchemas == nil) {
 			tr := true
-			sch.Items = &apiextensionsv1beta1.JSONSchemaPropsOrArray{
-				Schema: &apiextensionsv1beta1.JSONSchemaProps{
+			sch.Items = &apiextensionsv1.JSONSchemaPropsOrArray{
+				Schema: &apiextensionsv1.JSONSchemaProps{
 					XPreserveUnknownFields: &tr,
 				},
 			}

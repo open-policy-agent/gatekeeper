@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -107,11 +108,11 @@ func TestReconcile(t *testing.T) {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []string{"foo"},
+					ExcludedNamespaces: []util.PrefixWildcard{"foo"},
 					Processes:          []string{"*"},
 				},
 				{
-					ExcludedNamespaces: []string{"bar"},
+					ExcludedNamespaces: []util.PrefixWildcard{"bar"},
 					Processes:          []string{"audit", "webhook"},
 				},
 			},
@@ -128,7 +129,6 @@ func TestReconcile(t *testing.T) {
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
-
 	}
 	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
@@ -227,7 +227,7 @@ func TestReconcile(t *testing.T) {
 	cs.Stop()
 }
 
-// tests that expectations for sync only resource gets canceled when it gets deleted
+// tests that expectations for sync only resource gets canceled when it gets deleted.
 func TestConfig_DeleteSyncResources(t *testing.T) {
 	log.Info("Running test: Cancel the expectations when sync only resource gets deleted")
 
@@ -629,7 +629,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []string{"kube-system"},
+					ExcludedNamespaces: []util.PrefixWildcard{"kube-system"},
 					Processes:          []string{"sync"},
 				},
 			},
@@ -645,7 +645,7 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 	return u
 }
 
-// This interface is getting used by tests to check the private objects of objectTracker
+// This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }

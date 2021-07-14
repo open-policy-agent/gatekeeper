@@ -245,7 +245,7 @@ func Test_ObjectTracker_kinds(t *testing.T) {
 	g.Expect(kindsAfter).Should(gomega.Equal(kindsBefore), "expected kinds to match")
 }
 
-// Verify that TryCancelExpect functions the same as regular CancelExpect if readinessRetries is set to 0
+// Verify that TryCancelExpect functions the same as regular CancelExpect if readinessRetries is set to 0.
 func Test_ObjectTracker_TryCancelExpect_Default(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, func() objData {
@@ -274,7 +274,7 @@ func Test_ObjectTracker_TryCancelExpect_Default(t *testing.T) {
 	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
 }
 
-// Verify that TryCancelExpect must be called multiple times before an expectation is canceled
+// Verify that TryCancelExpect must be called multiple times before an expectation is canceled.
 func Test_ObjectTracker_TryCancelExpect_WithRetries(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, func() objData {

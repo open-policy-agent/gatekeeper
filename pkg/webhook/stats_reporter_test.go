@@ -7,12 +7,14 @@ import (
 	"go.opencensus.io/stats/view"
 )
 
-const expectedDurationValueMin = time.Duration(1 * time.Second)
-const expectedDurationValueMax = time.Duration(5 * time.Second)
-const expectedDurationMin float64 = 1
-const expectedDurationMax float64 = 5
-const expectedCount int64 = 2
-const expectedRowLength = 1
+const (
+	expectedDurationValueMin         = time.Duration(1 * time.Second)
+	expectedDurationValueMax         = time.Duration(5 * time.Second)
+	expectedDurationMin      float64 = 1
+	expectedDurationMax      float64 = 5
+	expectedCount            int64   = 2
+	expectedRowLength                = 1
+)
 
 func TestValidationReportRequest(t *testing.T) {
 	expectedTags := map[string]string{
@@ -31,7 +33,6 @@ func TestValidationReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	check(t, expectedTags, requestCountMetricName, requestDurationMetricName)
 	check(t, expectedTags, validationRequestCountMetricName, validationRequestDurationMetricName)
 }
 
@@ -41,7 +42,6 @@ func TestMutationReportRequest(t *testing.T) {
 	}
 
 	r, err := newStatsReporter()
-
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
@@ -58,7 +58,6 @@ func TestMutationReportRequest(t *testing.T) {
 }
 
 func check(t *testing.T, expectedTags map[string]string, requestCountMetricName string, requestDurationMetricName string) {
-
 	// count test
 	row := checkData(t, requestCountMetricName, expectedRowLength)
 

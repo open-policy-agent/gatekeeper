@@ -12,7 +12,7 @@ var (
 )
 
 // DisablePodOwnership disables setting the owner reference for Status resource.
-// This should only be used for testing, where a Pod resource may not be available
+// This should only be used for testing, where a Pod resource may not be available.
 func DisablePodOwnership() {
 	ownerMutex.Lock()
 	defer ownerMutex.Unlock()
@@ -25,7 +25,7 @@ func PodOwnershipEnabled() bool {
 	return podOwnershipEnabled
 }
 
-// dashExtractor unpacks the status resource name, unescaping `-`
+// dashExtractor unpacks the status resource name, unescaping `-`.
 func dashExtractor(val string) []string {
 	b := strings.Builder{}
 	var tokens []string

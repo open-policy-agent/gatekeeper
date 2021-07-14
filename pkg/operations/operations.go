@@ -80,7 +80,7 @@ func init() {
 	flag.Var(operations, "operation", "The operation to be performed by this instance. e.g. audit, webhook. This flag can be declared more than once. Omitting will default to supporting all operations.")
 }
 
-// AssignedOperations returns a map of operations assigned to the pod
+// AssignedOperations returns a map of operations assigned to the pod.
 func AssignedOperations() map[Operation]bool {
 	ret := make(map[Operation]bool)
 	for k, v := range operations.assignedOperations {
@@ -89,13 +89,13 @@ func AssignedOperations() map[Operation]bool {
 	return ret
 }
 
-// IsAssigned returns true when the provided operation is assigned to the pod
+// IsAssigned returns true when the provided operation is assigned to the pod.
 func IsAssigned(op Operation) bool {
 	return operations.assignedOperations[op]
 }
 
 // AssignedStringList returns a list of all operations assigned to the pod
-// as a sorted list of strings
+// as a sorted list of strings.
 func AssignedStringList() []string {
 	if operations.assignedStringList != nil {
 		return operations.assignedStringList

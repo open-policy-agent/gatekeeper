@@ -46,9 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var (
-	log = logf.Log.WithName("controller").WithValues(logging.Process, "assign_controller")
-)
+var log = logf.Log.WithName("controller").WithValues(logging.Process, "assign_controller")
 
 var gvkAssign = schema.GroupVersionKind{
 	Group:   mutationsv1alpha1.GroupVersion.Group,
@@ -87,7 +85,7 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
 	a.MutationCache = mutationCache
 }
 
-// newReconciler returns a new reconcile.Reconciler
+// newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager, mutationCache *mutation.System, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) *Reconciler {
 	r := &Reconciler{
 		system:  mutationCache,
@@ -102,7 +100,7 @@ func newReconciler(mgr manager.Manager, mutationCache *mutation.System, tracker 
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if !*mutation.MutationEnabled {
 		return nil
@@ -132,7 +130,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// Reconciler reconciles a Assign object
+// Reconciler reconciles a Assign object.
 type Reconciler struct {
 	client.Client
 	system  *mutation.System
@@ -144,7 +142,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
-// and what is in the Assign.Spec
+// and what is in the Assign.Spec.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
 	deleted := false

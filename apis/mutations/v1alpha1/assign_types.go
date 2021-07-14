@@ -28,7 +28,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// AssignSpec defines the desired state of Assign
+// AssignSpec defines the desired state of Assign.
 type AssignSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -59,13 +59,13 @@ type Parameters struct {
 //
 // Available Tests:
 // * MustExist    - the path must exist or do not mutate
-// * MustNotExist - the path must not exist or do not mutate
+// * MustNotExist - the path must not exist or do not mutate.
 type PathTest struct {
 	SubPath   string           `json:"subPath,omitempty"`
 	Condition tester.Condition `json:"condition,omitempty"`
 }
 
-// AssignStatus defines the observed state of Assign
+// AssignStatus defines the observed state of Assign.
 type AssignStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -78,7 +78,7 @@ type AssignStatus struct {
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
 
-// Assign is the Schema for the assign API
+// Assign is the Schema for the assign API.
 type Assign struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -89,7 +89,7 @@ type Assign struct {
 
 // +kubebuilder:object:root=true
 
-// AssignList contains a list of Assign
+// AssignList contains a list of Assign.
 type AssignList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -101,7 +101,7 @@ func init() {
 }
 
 // ValueTests returns tests that the mutator is expected
-// to run against the value
+// to run against the value.
 func (a *Assign) ValueTests() (AssignIf, error) {
 	raw := a.Spec.Parameters.AssignIf
 	out := AssignIf{}
@@ -117,7 +117,7 @@ func (a *Assign) ValueTests() (AssignIf, error) {
 // +kubebuilder:object:generate=false
 
 // AssignIf describes tests against the pre-existing value.
-// The object will be mutated only if assertions pass
+// The object will be mutated only if assertions pass.
 type AssignIf struct {
 	// In Asserts that the value is a member of the provided list before mutating
 	In []interface{} `json:"in,omitempty"`

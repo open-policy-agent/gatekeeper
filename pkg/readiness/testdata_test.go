@@ -22,20 +22,22 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Templates and constraints in testdata/
+// Templates and constraints in testdata/.
 var testTemplates = []*templates.ConstraintTemplate{
 	makeTemplate("k8sallowedrepos"),
 	makeTemplate("k8srequiredlabels"),
 }
+
 var testConstraints = []*unstructured.Unstructured{
 	makeConstraint("ns-must-have-gk", "K8sRequiredLabels"),
 	makeConstraint("prod-repo-is-openpolicyagent", "K8sAllowedRepos"),
 }
 
-// Templates and constraint in testdata/post/
+// Templates and constraint in testdata/post/.
 var postTemplates = []*templates.ConstraintTemplate{
 	makeTemplate("k8shttpsonly"),
 }
+
 var postConstraints = []*unstructured.Unstructured{
 	makeConstraint("ingress-https-only", "K8sHttpsOnly"),
 }

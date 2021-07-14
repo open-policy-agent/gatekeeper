@@ -16,10 +16,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ConfigSpec defines the desired state of Config
+// ConfigSpec defines the desired state of Config.
 type ConfigSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -62,17 +63,16 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
-	Processes          []string `json:"processes,omitempty"`
+	Processes          []string              `json:"processes,omitempty"`
+	ExcludedNamespaces []util.PrefixWildcard `json:"excludedNamespaces,omitempty"`
 }
 
 type ReadinessSpec struct {
 	StatsEnabled bool `json:"statsEnabled,omitempty"`
 }
 
-// ConfigStatus defines the observed state of Config
-type ConfigStatus struct {
-	// Important: Run "make" to regenerate code after modifying this file
+// ConfigStatus defines the observed state of Config.
+type ConfigStatus struct { // Important: Run "make" to regenerate code after modifying this file
 }
 
 type GVK struct {
@@ -84,7 +84,7 @@ type GVK struct {
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:object:root=true
 
-// Config is the Schema for the configs API
+// Config is the Schema for the configs API.
 type Config struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -95,7 +95,7 @@ type Config struct {
 
 // +kubebuilder:object:root=true
 
-// ConfigList contains a list of Config
+// ConfigList contains a list of Config.
 type ConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

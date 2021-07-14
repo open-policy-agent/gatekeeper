@@ -103,7 +103,7 @@ func (t *trackerMap) Satisfied() bool {
 	return true
 }
 
-// Populated returns true if all objectTrackers are populated
+// Populated returns true if all objectTrackers are populated.
 func (t *trackerMap) Populated() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

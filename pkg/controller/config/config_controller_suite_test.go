@@ -76,7 +76,7 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan 
 	return fn, requests
 }
 
-// StartTestManager adds recFn
+// StartTestManager adds recFn.
 func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -87,7 +87,7 @@ func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.Gomega
 	return wg
 }
 
-// Bootstrap the gatekeeper-system namespace for use in tests
+// Bootstrap the gatekeeper-system namespace for use in tests.
 func createGatekeeperNamespace(cfg *rest.Config) error {
 	c, err := client.New(cfg, client.Options{})
 	if err != nil {
