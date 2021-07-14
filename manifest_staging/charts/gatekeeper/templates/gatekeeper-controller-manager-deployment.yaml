@@ -42,7 +42,6 @@ spec:
       containers:
       - args:
         - --port={{ .Values.controllerManager.port }}
-        - --health-addr={{ .Values.controllerManager.healthAddr }}
         - --prometheus-port={{ .Values.controllerManager.prometheusPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
@@ -85,8 +84,8 @@ spec:
         - containerPort: {{ .Values.controllerManager.prometheusPort }}
           name: metrics
           protocol: TCP
-        - containerPort: {{ .Values.controllerManager.healthAddr }}
-          name: healthz
+        - containerPort: 8443
+          name: webhook-server
           protocol: TCP
         readinessProbe:
           httpGet:
