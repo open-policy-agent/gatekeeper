@@ -82,3 +82,5 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/ports/3
       - op: remove
         path: /spec/template/spec/containers/0/ports/3
+      - op: remove
+        path: /spec/template/spec/containers/0/ports/3

@@ -9,6 +9,8 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT": `{{ .Values.controllerManager.port }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT": `{{ .Values.controllerManager.healthPort }}`,
+
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT": `{{ .Values.controllerManager.prometheusPort }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,

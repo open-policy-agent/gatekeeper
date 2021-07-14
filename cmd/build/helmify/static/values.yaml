@@ -38,7 +38,7 @@ controllerManager:
   hostNetwork: false
   port: 8443
   prometheusPort: 8888
-  healthAddr: ":9090"
+  healthPort: 9090
   priorityClassName: system-cluster-critical
   affinity:
     podAntiAffinity:
