@@ -64,6 +64,8 @@ spec:
         - name: manager
           args:
             - --port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
+            - --health-addr=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_ADDR
+            - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
@@ -78,6 +80,12 @@ spec:
           ports:
           - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
             name: webhook-server
+            protocol: TCP
+          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT
+            name: metrics
+            protocol: TCP
+          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_ADDR
+            name: healthz
             protocol: TCP
           resources:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
