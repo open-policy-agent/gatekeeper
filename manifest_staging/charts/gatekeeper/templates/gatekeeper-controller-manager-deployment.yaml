@@ -41,7 +41,7 @@ spec:
       automountServiceAccountToken: true
       containers:
       - args:
-        - --port=8443
+        - --port={{ .Values.controllerManager.port }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
@@ -77,7 +77,7 @@ spec:
             port: 9090
         name: manager
         ports:
-        - containerPort: 8443
+        - containerPort: {{ .Values.controllerManager.port }}
           name: webhook-server
           protocol: TCP
         - containerPort: 8888

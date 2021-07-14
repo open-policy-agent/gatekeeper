@@ -36,6 +36,7 @@ secretAnnotations: {}
 controllerManager:
   exemptNamespaces: []
   hostNetwork: false
+  port: 8443
   priorityClassName: system-cluster-critical
   affinity:
     podAntiAffinity:
