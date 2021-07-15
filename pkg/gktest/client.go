@@ -6,10 +6,13 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type Client interface {
+	CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error)
+
 	// AddTemplate adds a Template to the Client. Templates define the structure
 	// and parameters of potential Constraints.
 	AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error)

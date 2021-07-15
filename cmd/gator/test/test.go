@@ -31,11 +31,16 @@ const (
   gator test tests/... --run '^forbid-labels$'`
 )
 
-var run string
+var (
+	run string
+	verbose bool
+)
 
 func init() {
 	Cmd.Flags().StringVarP(&run, "run", "r", "",
 		`regular expression which filters tests to run by name`)
+	Cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
+		`print extended test output`)
 }
 
 // Cmd is the gator test subcommand.
@@ -48,6 +53,7 @@ var Cmd = &cobra.Command{
 }
 
 func runE(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	path := args[0]
 
 	// Convert path to be absolute. Allowing for relative and absolute paths
@@ -72,6 +78,7 @@ func runE(cmd *cobra.Command, args []string) error {
 		path = strings.TrimSuffix(path, "...")
 	}
 	path = strings.TrimSuffix(path, "/")
+	path = strings.TrimPrefix(path, "/")
 
 	suites, err := gktest.ReadSuites(fileSystem, path, recursive)
 	if err != nil {
@@ -90,9 +97,11 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 
 	runner := gktest.Runner{
 		FS:        fileSystem,
+		SuiteDir: "usr/local/google/home/willbeason/gator-test",
 		NewClient: gktest.NewOPAClient,
 	}
 
+	results := make([]gktest.SuiteResult, len(suites))
 	for i := range suites {
 		s := &suites[i]
 
@@ -106,7 +115,16 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 					isFailure = true
 				}
 			}
+			results[i] = suiteResult
 		}
+
+		w := &strings.Builder{}
+		printer := gktest.PrinterGo{}
+		err := printer.Print(w, results, verbose)
+		if err != nil {
+			return err
+		}
+		fmt.Println(w)
 	}
 
 	if isFailure {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"path/filepath"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -14,6 +16,8 @@ type Runner struct {
 	// FS is the filesystem the Runner interacts with to read Suites and objects.
 	FS fs.FS
 
+	SuiteDir string
+
 	// NewClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
 	NewClient func() (Client, error)
@@ -23,14 +27,20 @@ type Runner struct {
 
 // Run executes all Tests in the Suite and returns the results.
 func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
+	start := time.Now()
 	result := SuiteResult{
 		TestResults: make([]TestResult, len(s.Tests)),
 	}
 	for i, t := range s.Tests {
 		if filter.MatchesTest(t) {
+			start := time.Now()
 			result.TestResults[i] = r.runTest(ctx, filter, t)
+			result.TestResults[i].Name = t.Name
+			result.TestResults[i].Runtime = Duration(time.Since(start))
 		}
 	}
+
+	result.Runtime = Duration(time.Since(start))
 	return result
 }
 
@@ -44,7 +54,7 @@ func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult 
 	if t.Template == "" {
 		return TestResult{Error: fmt.Errorf("%w: missing template", ErrInvalidSuite)}
 	}
-	template, err := readTemplate(r.FS, t.Template)
+	template, err := readTemplate(r.FS, filepath.Join(r.SuiteDir, t.Template))
 	if err != nil {
 		return TestResult{Error: err}
 	}
@@ -56,7 +66,7 @@ func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult 
 	if t.Constraint == "" {
 		return TestResult{Error: fmt.Errorf("%w: missing constraint", ErrInvalidSuite)}
 	}
-	cObj, err := readConstraint(r.FS, t.Constraint)
+	cObj, err := readConstraint(r.FS, filepath.Join(r.SuiteDir, t.Constraint))
 	if err != nil {
 		return TestResult{Error: err}
 	}
@@ -98,7 +108,7 @@ func runAllow(ctx context.Context, client Client, f fs.FS, path string) CaseResu
 
 	results := result.Results()
 	if len(results) > 0 {
-		return CaseResult{Error: fmt.Errorf("%w: %v", ErrUnexpectedDeny, results)}
+		return CaseResult{Error: fmt.Errorf("%w: %v", ErrUnexpectedDeny, results[0].Msg)}
 	}
 	return CaseResult{}
 }
@@ -124,12 +134,19 @@ func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Asser
 
 // RunCase executes a Case and returns the result of the run.
 func (r *Runner) runCase(ctx context.Context, client Client, c Case) CaseResult {
+	start := time.Now()
+
+	var result CaseResult
 	switch {
 	case c.Allow != "" && c.Deny == "":
-		return runAllow(ctx, client, r.FS, c.Allow)
+		result = runAllow(ctx, client, r.FS, filepath.Join(r.SuiteDir, c.Allow))
 	case c.Allow == "" && c.Deny != "":
-		return runDeny(ctx, client, r.FS, c.Deny, c.Assertions)
+		result = runDeny(ctx, client, r.FS, filepath.Join(r.SuiteDir, c.Deny), c.Assertions)
 	default:
-		return CaseResult{Error: fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)}
+		result = CaseResult{Error: fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)}
 	}
+
+	result.Runtime = Duration(time.Since(start))
+	result.Name = c.Name
+	return result
 }

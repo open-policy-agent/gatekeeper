@@ -54,6 +54,12 @@ func (p PrinterGo) PrintSuite(w StringWriter, r *SuiteResult, verbose bool) erro
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrWritingString, err)
 		}
+		if r.Error != nil {
+			_, err = w.WriteString(fmt.Sprintf("  %v\n", r.Error))
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrWritingString, err)
+		}
 	} else {
 		_, err := w.WriteString(fmt.Sprintf("ok\t%s\t%v\n", r.Path, r.Runtime))
 		if err != nil {
@@ -80,6 +86,12 @@ func (p PrinterGo) PrintTest(w StringWriter, r *TestResult, verbose bool) error 
 
 	if r.IsFailure() {
 		_, err := w.WriteString(fmt.Sprintf("--- FAIL: %s\t(%v)\n", r.Name, r.Runtime))
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrWritingString, err)
+		}
+		if r.Error != nil {
+			_, err = w.WriteString(fmt.Sprintf("  %v\n", r.Error))
+		}
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrWritingString, err)
 		}

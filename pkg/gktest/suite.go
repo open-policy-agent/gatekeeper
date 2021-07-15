@@ -16,6 +16,8 @@ type Suite struct {
 // Test defines a Template&Constraint pair to instantiate, and Cases to
 // run on the instantiated Constraint.
 type Test struct {
+	Name string `json:"name"`
+
 	// Template is the path to the ConstraintTemplate, relative to the file
 	// defining the Suite.
 	Template string `json:"template"`
@@ -30,6 +32,7 @@ type Test struct {
 
 // Case runs Constraint against a YAML object.
 type Case struct {
+	Name       string `json:"name"`
 	Allow      string `json:"allow"`
 	Deny       string `json:"deny"`
 	Assertions []Assertion

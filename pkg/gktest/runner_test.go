@@ -26,7 +26,7 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8salwaysvalidate
-        violation {
+        violation[{"msg": msg}] {
           false
         }
 `
