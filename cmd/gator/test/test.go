@@ -91,7 +91,7 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter *gktest.Filter) error {
 	isFailure := false
 
 	runner := gktest.Runner{

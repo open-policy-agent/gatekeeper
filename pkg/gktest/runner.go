@@ -23,7 +23,7 @@ type Runner struct {
 }
 
 // Run executes all Tests in the Suite and returns the results.
-func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
+func (r *Runner) Run(ctx context.Context, filter *Filter, suitePath string, s *Suite) SuiteResult {
 	start := time.Now()
 
 	results, err := r.runTests(ctx, filter, suitePath, s.Tests)
@@ -37,21 +37,28 @@ func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Su
 }
 
 // runTests runs every Test in Suite.
-func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, tests []Test) ([]TestResult, error) {
+func (r *Runner) runTests(ctx context.Context, filter *Filter, suitePath string, tests []Test) ([]TestResult, error) {
 	suiteDir := filepath.Dir(suitePath)
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		if filter.MatchesTest(t) {
-			results[i] = r.runTest(ctx, suiteDir, filter, t)
+		if !filter.MatchesTest(t) {
+			results[i] = r.skipTest(t)
+			continue
 		}
+
+		results[i] = r.runTest(ctx, suiteDir, filter, t)
 	}
 
 	return results, nil
 }
 
+func (r *Runner) skipTest(t Test) TestResult {
+	return TestResult{Name: t.Name, Skipped: true}
+}
+
 // runTest runs an individual Test.
-func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
+func (r *Runner) runTest(ctx context.Context, suiteDir string, filter *Filter, t Test) TestResult {
 	start := time.Now()
 
 	results, err := r.runCases(ctx, suiteDir, filter, t)
@@ -66,15 +73,17 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
-func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t Test) ([]CaseResult, error) {
+func (r *Runner) runCases(ctx context.Context, suiteDir string, filter *Filter, t Test) ([]CaseResult, error) {
 	client, err := r.makeTestClient(ctx, suiteDir, t)
 	if err != nil {
 		return nil, err
 	}
 
 	results := make([]CaseResult, len(t.Cases))
+
 	for i, c := range t.Cases {
-		if !filter.MatchesCase(c) {
+		if !filter.MatchesCase(t.Name, c.Name) {
+			results[i] = r.skipCase(c)
 			continue
 		}
 
@@ -82,6 +91,10 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 	}
 
 	return results, nil
+}
+
+func (r *Runner) skipCase(c Case) CaseResult {
+	return CaseResult{Name: c.Name, Skipped: true}
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
