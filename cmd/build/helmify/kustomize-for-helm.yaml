@@ -64,7 +64,7 @@ spec:
         - name: manager
           args:
             - --port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
-            - --health-addr=":HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT"
+            - --health-addr=:HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}

@@ -42,7 +42,7 @@ spec:
       containers:
       - args:
         - --port={{ .Values.controllerManager.port }}
-        - --health-addr=":{{ .Values.controllerManager.healthPort }}"
+        - --health-addr=:{{ .Values.controllerManager.healthPort }}
         - --prometheus-port={{ .Values.controllerManager.prometheusPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
