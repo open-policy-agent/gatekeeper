@@ -44,8 +44,13 @@ type Injector interface {
 	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
+<<<<<<< HEAD
 	InjectMutationSystem(mutationSystem *mutation.System)
 	Add(mgr manager.Manager) error
+=======
+	InjectMutationCache(mutationCache *mutation.System)
+	Add(ctx context.Context, mgr manager.Manager) error
+>>>>>>> 1d2901e7 (Make Context usage consistent)
 }
 
 type GetPodInjector interface {
@@ -119,9 +124,9 @@ func (g *defaultPodGetter) GetPod() (*corev1.Pod, error) {
 }
 
 // AddToManager adds all Controllers to the Manager.
-func AddToManager(m manager.Manager, deps Dependencies) error {
+func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) error {
 	// Reset cache on start - this is to allow for the future possibility that the OPA cache is stored remotely
-	if err := deps.Opa.Reset(context.Background()); err != nil {
+	if err := deps.Opa.Reset(ctx); err != nil {
 		return err
 	}
 	if deps.GetPod == nil {
@@ -156,7 +161,7 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		if a2, ok := a.(GetProcessExcluderInjector); ok {
 			a2.InjectProcessExcluder(deps.ProcessExcluder)
 		}
-		if err := a.Add(m); err != nil {
+		if err := a.Add(ctx, m); err != nil {
 			return err
 		}
 	}

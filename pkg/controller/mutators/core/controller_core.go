@@ -67,8 +67,13 @@ type Adder struct {
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
+<<<<<<< HEAD:pkg/controller/mutators/core/controller_core.go
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
+=======
+func (a *Adder) Add(_ context.Context, mgr manager.Manager) error {
+	r := newReconciler(mgr, a.MutationCache, a.Tracker, a.GetPod)
+>>>>>>> 1d2901e7 (Make Context usage consistent):pkg/controller/assign/assign_controller.go
 	return add(mgr, r)
 }
 
