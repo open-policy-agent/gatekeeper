@@ -32,14 +32,12 @@ const (
 type Manager struct {
 	client client.Client
 	mgr    manager.Manager
-	ctx    context.Context
 }
 
 // New creates a new manager for audit.
-func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
+func New(mgr manager.Manager) (*Manager, error) {
 	am := &Manager{
 		mgr: mgr,
-		ctx: ctx,
 	}
 	return am, nil
 }

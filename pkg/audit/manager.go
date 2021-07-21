@@ -63,7 +63,6 @@ type Manager struct {
 	stopper         chan struct{}
 	stopped         chan struct{}
 	mgr             manager.Manager
-	ctx             context.Context
 	ucloop          *updateConstraintLoop
 	reporter        *reporter
 	log             logr.Logger
@@ -117,8 +116,8 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
-	reporter, err := newStatsReporter(ctx)
+func New(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
+	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
 		return nil, err
@@ -135,7 +134,6 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExclu
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 		mgr:             mgr,
-		ctx:             ctx,
 		reporter:        reporter,
 		processExcluder: processExcluder,
 		eventRecorder:   recorder,
@@ -154,12 +152,12 @@ func (am *Manager) audit(ctx context.Context) error {
 	defer func() {
 		logFinish(am.log)
 		latency := time.Since(startTime)
-		if err := am.reporter.reportLatency(latency); err != nil {
+		if err := am.reporter.reportLatency(ctx, latency); err != nil {
 			am.log.Error(err, "failed to report latency")
 		}
 	}()
 
-	if err := am.reporter.reportRunStart(startTime); err != nil {
+	if err := am.reporter.reportRunStart(ctx, startTime); err != nil {
 		am.log.Error(err, "failed to report run start time")
 	}
 
@@ -222,7 +220,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
-		if err := am.reporter.reportTotalViolations(k, v); err != nil {
+		if err := am.reporter.reportTotalViolations(ctx, k, v); err != nil {
 			am.log.Error(err, "failed to report total violations")
 		}
 	}

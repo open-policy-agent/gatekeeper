@@ -95,7 +95,7 @@ func setupOpa(t *testing.T) *opa.Client {
 	return client
 }
 
-func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mutationSystem *mutation.System) error {
+func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mutationSystem *mutation.System) error {
 	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
@@ -116,10 +116,11 @@ func setupController(ctx context.Context, mgr manager.Manager, wm *watch.Manager
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
-		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
+		GetPod:           func(ctx context.Context) (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 	}
+	ctx := context.Background()
 	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
@@ -147,16 +148,10 @@ func Test_AssignMetadata(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-<<<<<<< HEAD
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 
 	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
-=======
-	mutationCache := mutation.NewSystem()
-	ctx := context.Background()
-	if err := setupController(ctx, mgr, wm, opaClient, mutationCache); err != nil {
->>>>>>> 1d2901e7 (Make Context usage consistent)
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -202,16 +197,10 @@ func Test_Assign(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-<<<<<<< HEAD
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 
 	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
-=======
-	mutationCache := mutation.NewSystem()
-	ctx := context.Background()
-	if err := setupController(ctx, mgr, wm, opaClient, mutationCache); err != nil {
->>>>>>> 1d2901e7 (Make Context usage consistent)
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -257,8 +246,7 @@ func Test_Tracker(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	ctx := context.Background()
-	if err := setupController(ctx, mgr, wm, opaClient, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -337,8 +325,7 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	ctx := context.Background()
-	if err := setupController(ctx, mgr, wm, opaClient, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 

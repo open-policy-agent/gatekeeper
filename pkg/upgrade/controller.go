@@ -13,14 +13,12 @@ limitations under the License.
 package upgrade
 
 import (
-	"context"
-
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // AddToManager adds upgrade manager to the Manager.
-func AddToManager(ctx context.Context, m manager.Manager) error {
-	am, err := New(ctx, m)
+func AddToManager(m manager.Manager) error {
+	am, err := New(m)
 	if err != nil {
 		return err
 	}

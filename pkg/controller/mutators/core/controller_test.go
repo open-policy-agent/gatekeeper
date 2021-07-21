@@ -114,12 +114,11 @@ func TestReconcile(t *testing.T) {
 		return mutators.MutatorForAssign(assign)
 	}
 
-	rec := newReconciler(mgr, mSys, tracker, func() (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
+	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
 
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}
-	ctx := context.Background()
-	g.Expect(statusAdder.Add(ctx, mgr)).NotTo(gomega.HaveOccurred())
+	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	mgrStopped := StartTestManager(ctx, mgr, g)

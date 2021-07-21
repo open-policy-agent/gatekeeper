@@ -53,7 +53,7 @@ type Adder struct {
 	// Tracker accepts a handle for the readiness tracker
 	Tracker *readiness.Tracker
 	// GetPod returns an instance of the currently running Gatekeeper pod
-	GetPod func() (*corev1.Pod, error)
+	GetPod func(ctx context.Context) (*corev1.Pod, error)
 	// Kind for the mutation object that is being reconciled
 	Kind string
 	// NewMutationObj creates a new instance of a mutation struct that can
@@ -67,13 +67,8 @@ type Adder struct {
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-<<<<<<< HEAD:pkg/controller/mutators/core/controller_core.go
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
-=======
-func (a *Adder) Add(_ context.Context, mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationCache, a.Tracker, a.GetPod)
->>>>>>> 1d2901e7 (Make Context usage consistent):pkg/controller/assign/assign_controller.go
 	return add(mgr, r)
 }
 
@@ -82,7 +77,7 @@ func newReconciler(
 	mgr manager.Manager,
 	mutationSystem *mutation.System,
 	tracker *readiness.Tracker,
-	getPod func() (*corev1.Pod, error),
+	getPod func(ctx context.Context) (*corev1.Pod, error),
 	kind string,
 	newMutationObj func() client.Object,
 	mutatorFor func(client.Object) (types.Mutator, error),
@@ -145,7 +140,7 @@ type Reconciler struct {
 
 	system   *mutation.System
 	tracker  *readiness.Tracker
-	getPod   func() (*corev1.Pod, error)
+	getPod   func(ctx context.Context) (*corev1.Pod, error)
 	scheme   *runtime.Scheme
 	reporter ctrlmutators.StatsReporter
 	cache    *ctrlmutators.Cache
@@ -213,7 +208,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// encasing this call in a function prevents the arguments from being evaluated early
 	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
 
-	status, err := r.getOrCreatePodStatus(mID)
+	status, err := r.getOrCreatePodStatus(ctx, mID)
 	if err != nil {
 		r.log.Info("could not get/create pod status object", "error", err)
 		return reconcile.Result{}, err
@@ -255,7 +250,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func (r *Reconciler) getOrCreatePodStatus(mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
+func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
 	statusObj := &statusv1beta1.MutatorPodStatus{}
 	sName, err := statusv1beta1.KeyForMutatorID(util.GetPodName(), mutatorID)
 	if err != nil {
@@ -269,7 +264,7 @@ func (r *Reconciler) getOrCreatePodStatus(mutatorID types.ID) (*statusv1beta1.Mu
 	} else {
 		return statusObj, nil
 	}
-	pod, err := r.getPod()
+	pod, err := r.getPod(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -283,10 +278,10 @@ func (r *Reconciler) getOrCreatePodStatus(mutatorID types.ID) (*statusv1beta1.Mu
 	return statusObj, nil
 }
 
-func (r *Reconciler) defaultGetPod() (*corev1.Pod, error) {
+func (r *Reconciler) defaultGetPod(ctx context.Context) (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
-	panic("GetPod must be injected")
+	panic("GetPod must be injected to Reconciler")
 }
 
 func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
