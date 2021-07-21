@@ -31,7 +31,7 @@ func (m *cancelMap) Set(r *Registrar, c context.CancelFunc) {
 
 // replayCounter lists the number of replays by GVK and lets users
 // wait until all replays for a GVK have been canceled. A WaitGroup
-// would be risky to use here, as it only allows for one call to Wait()
+// would be risky to use here, as it only allows for one call to Wait().
 type replayTracker struct {
 	mux      sync.Mutex
 	counts   map[schema.GroupVersionKind]int
@@ -50,7 +50,7 @@ func newReplayTracker() *replayTracker {
 // SetIntent sets whether a registrar wants a replay or not.
 // Setting this before sending a replay request avoids a
 // race condition where a replay request is canceled before
-// the original request is sent
+// the original request is sent.
 func (r *replayTracker) setIntent(reg *Registrar, gvk schema.GroupVersionKind, wantReplay bool) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
@@ -67,7 +67,7 @@ func (r *replayTracker) setIntent(reg *Registrar, gvk schema.GroupVersionKind, w
 	delete(r.intent[reg], gvk)
 }
 
-// ReplayIntended returns whether a given registrar still wants a replay
+// ReplayIntended returns whether a given registrar still wants a replay.
 func (r *replayTracker) replayIntended(reg *Registrar, gvk schema.GroupVersionKind) bool {
 	r.mux.Lock()
 	defer r.mux.Unlock()
@@ -77,7 +77,7 @@ func (r *replayTracker) replayIntended(reg *Registrar, gvk schema.GroupVersionKi
 	return r.intent[reg][gvk]
 }
 
-// Add a GVK to the replay counter
+// Add a GVK to the replay counter.
 func (r *replayTracker) addReplay(gvk schema.GroupVersionKind) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
@@ -89,7 +89,7 @@ func (r *replayTracker) addReplay(gvk schema.GroupVersionKind) {
 	}
 }
 
-// Done decrements the replay counter for a GVK by 1
+// Done decrements the replay counter for a GVK by 1.
 func (r *replayTracker) replayDone(gvk schema.GroupVersionKind) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
