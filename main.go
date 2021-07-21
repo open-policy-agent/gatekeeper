@@ -233,6 +233,28 @@ func main() {
 	}
 }
 
+type mutationReporter struct{}
+
+// JULIAN - should I try to bind together this type and the reporter that's returned by NewMetricsReporter() ?
+func (mr *mutationReporter) ReportIterationConvergence(r *metrics.Reporter, scs mutation.SystemConvergenceStatus, iterations int) error {
+	return mutation.ReportIterationConvergence(r, scs, iterations)
+}
+
+// JULIAN - It feels like the effort to make a single reporter type be passed from main to all of
+// the controllers is at odds with the effort to make the System accept an interface type that can
+// handle all of its reporting needs.  In particular, I end up making this type above that's basically
+// just useless boilerplate.
+//
+// One way to make this all work better would be to move all the reporting for gatekeeper into a
+// single type.  That type would have the single context that all the calls should use.  This type
+// would be passed into all its consumers (controllers, mutation.System).  The consumers would only
+// define the interface for the exact metrics reporting functions that are used in their code.  This
+// way, the one metrics type could be used everywhere.
+//
+// This _does_ leave the problem of having to create implementations (even no-op) ones of each of
+// the reporting functions used in mutation.System to pass in a type that is a valid argument
+// to the mutation.System constructor function.
+
 func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
@@ -244,12 +266,22 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "unable to set up OPA backend")
 		os.Exit(1)
 	}
+
 	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	mutationCache := mutation.NewSystem()
+	reporter, err := metrics.NewMetricsReporter()
+	if err != nil {
+		setupLog.Error(err, "unable to initialize metrics reporter")
+	}
+
+	mutationSystem := mutation.NewSystem(reporter, &mutationReporter{})
+	if err != nil {
+		setupLog.Error(err, "unable to create mutation system")
+		os.Exit(1)
+	}
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -258,6 +290,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "fetching dynamic cache")
 		os.Exit(1)
 	}
+
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
@@ -279,7 +312,8 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ControllerSwitch: sw,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		MutationCache:    mutationCache,
+		MutationSystem:   mutationSystem,
+		MetricsReporter:  reporter,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
@@ -288,7 +322,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder, mutationCache); err != nil {
+		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}

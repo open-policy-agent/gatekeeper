@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -16,21 +17,29 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// System keeps the list of mutations and
-// provides an interface to apply mutations.
+// System keeps the list of mutators and provides an interface to apply mutations.
 type System struct {
 	schemaDB        schema.DB
 	orderedMutators []types.Mutator
 	mutatorsMap     map[types.ID]types.Mutator
 	mux             sync.RWMutex
+	reporter        *metrics.Reporter
+	metricsHooks    SystemReporter
+}
+
+type SystemReporter interface {
+	ReportIterationConvergence(r *metrics.Reporter, scs SystemConvergenceStatus, iterations int) error
 }
 
 // NewSystem initializes an empty mutation system.
-func NewSystem() *System {
+func NewSystem(reporter *metrics.Reporter, metricsHooks SystemReporter) *System {
+	// JULIAN - metricsHooks can be nil.  Should I throw an error for that?
 	return &System{
 		schemaDB:        *schema.New(),
 		orderedMutators: make([]types.Mutator, 0),
 		mutatorsMap:     make(map[types.ID]types.Mutator),
+		reporter:        reporter,
+		metricsHooks:    metricsHooks,
 	}
 }
 
@@ -48,7 +57,6 @@ func (s *System) Upsert(m types.Mutator) error {
 	toAdd := m.DeepCopy()
 
 	// Checking schema consistency only if the mutator has schema
-	var err error
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
@@ -65,19 +73,19 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	if i == len(s.orderedMutators) { // Adding to the bottom of the list
 		s.orderedMutators = append(s.orderedMutators, toAdd)
-		return err
+		return nil
 	}
 
 	found := equal(s.orderedMutators[i].ID(), toAdd.ID())
 	if found {
 		s.orderedMutators[i] = toAdd
-		return err
+		return nil
 	}
 
 	s.orderedMutators = append(s.orderedMutators, nil)
 	copy(s.orderedMutators[i+1:], s.orderedMutators[i:])
 	s.orderedMutators[i] = toAdd
-	return err
+	return nil
 }
 
 // Mutate applies the mutation in place to the given object. Returns
@@ -94,6 +102,19 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		allAppliedMutations = [][]types.Mutator{}
 	}
 
+	iterationsComplete := 0
+	convergence := SystemConvergenceFalse
+	defer func() {
+		if s.reporter == nil || s.metricsHooks == nil {
+			return
+		}
+
+		err := s.metricsHooks.ReportIterationConvergence(s.reporter, convergence, iterationsComplete)
+		if err != nil {
+			log.Error(err, "failed to report mutator ingestion request")
+		}
+	}()
+
 	for i := 0; i < maxIterations; i++ {
 		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
@@ -109,19 +130,31 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s", mutationUUID, m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
+						mutationUUID,
+						m.ID(),
+						obj.GroupVersionKind().Group,
+						obj.GroupVersionKind().Kind,
+						obj.GetNamespace(),
+						obj.GetName())
 				}
 			}
 		}
 		if cmp.Equal(old, obj) {
 			if i == 0 {
+				// JULIAN - Is this right?  I believe that a system that doesn't do any mutations is converging.
+				convergence = SystemConvergenceTrue
 				return false, nil
 			}
 			if cmp.Equal(original, obj) {
 				if *MutationLoggingEnabled {
 					logAppliedMutations("Oscillating mutation.", mutationUUID, original, allAppliedMutations)
 				}
-				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+				return false, fmt.Errorf("oscillating mutation for %s %s %s %s",
+					obj.GroupVersionKind().Group,
+					obj.GroupVersionKind().Kind,
+					obj.GetNamespace(),
+					obj.GetName())
 			}
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
@@ -133,16 +166,25 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					log.Error(err, "Error applying mutation annotations", "mutation id", mutationUUID)
 				}
 			}
+
+			convergence = SystemConvergenceTrue
 			return true, nil
 		}
 		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
 			allAppliedMutations = append(allAppliedMutations, appliedMutations)
 		}
+
+		iterationsComplete = i
 	}
 	if *MutationLoggingEnabled {
 		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
 	}
-	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s", mutationUUID, obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s",
+		mutationUUID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
 }
 
 func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, mutationUUID uuid.UUID) error {

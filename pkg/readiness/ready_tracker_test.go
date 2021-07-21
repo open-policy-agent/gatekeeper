@@ -30,12 +30,14 @@ import (
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	g8rmetrics "github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -118,7 +120,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 		Tracker:          tracker,
 		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
-		MutationCache:    mutationSystem,
+		MutationSystem:   mutationSystem,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
@@ -147,8 +149,15 @@ func Test_AssignMetadata(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	mutationCache := mutation.NewSystem()
-	if err := setupController(mgr, wm, opaClient, mutationCache); err != nil {
+
+	rep, err := g8rmetrics.NewMetricsReporter()
+	if err != nil {
+		t.Error(errors.Wrapf(err, "Failed to instantiate stats reporter"))
+	}
+
+	mutationSystem := mutation.NewSystem(rep, nil)
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -168,7 +177,7 @@ func Test_AssignMetadata(t *testing.T) {
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
 		id := mutationtypes.MakeID(am)
-		exptectedMutator := mutationCache.Get(id)
+		exptectedMutator := mutationSystem.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
 }
@@ -194,8 +203,14 @@ func Test_Assign(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	mutationCache := mutation.NewSystem()
-	if err := setupController(mgr, wm, opaClient, mutationCache); err != nil {
+
+	rep, err := g8rmetrics.NewMetricsReporter()
+	if err != nil {
+		t.Error(errors.Wrapf(err, "Failed to instantiate stats reporter"))
+	}
+	mutationSystem := mutation.NewSystem(rep, nil)
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -215,7 +230,7 @@ func Test_Assign(t *testing.T) {
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
 		id := mutationtypes.MakeID(am)
-		exptectedMutator := mutationCache.Get(id)
+		exptectedMutator := mutationSystem.Get(id)
 		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
 }

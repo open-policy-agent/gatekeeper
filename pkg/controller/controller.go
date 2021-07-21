@@ -24,6 +24,7 @@ import (
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -44,7 +45,8 @@ type Injector interface {
 	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
-	InjectMutationCache(mutationCache *mutation.System)
+	InjectMutationSystem(mutationSystem *mutation.System)
+	InjectMetricsReporter(metricsReporter *metrics.Reporter)
 	Add(mgr manager.Manager) error
 }
 
@@ -71,7 +73,8 @@ type Dependencies struct {
 	Tracker          *readiness.Tracker
 	GetPod           func() (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
-	MutationCache    *mutation.System
+	MutationSystem   *mutation.System
+	MetricsReporter  *metrics.Reporter
 }
 
 type defaultPodGetter struct {
@@ -149,7 +152,7 @@ func AddToManager(m manager.Manager, deps Dependencies) error {
 		a.InjectWatchManager(deps.WatchManger)
 		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
-		a.InjectMutationCache(deps.MutationCache)
+		a.InjectMutationSystem(deps.MutationSystem)
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)
 		}
