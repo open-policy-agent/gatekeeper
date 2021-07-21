@@ -56,7 +56,7 @@ var (
 	emptyAuditResults         []auditResult
 )
 
-// Manager allows us to audit resources periodically
+// Manager allows us to audit resources periodically.
 type Manager struct {
 	client          client.Client
 	opa             *opa.Client
@@ -85,7 +85,7 @@ type auditResult struct {
 	constraint        *unstructured.Unstructured
 }
 
-// StatusViolation represents each violation under status
+// StatusViolation represents each violation under status.
 type StatusViolation struct {
 	Kind              string `json:"kind"`
 	Name              string `json:"name"`
@@ -94,7 +94,7 @@ type StatusViolation struct {
 	EnforcementAction string `json:"enforcementAction"`
 }
 
-// nsCache is used for caching namespaces and their labels
+// nsCache is used for caching namespaces and their labels.
 type nsCache struct {
 	cache map[string]corev1.Namespace
 }
@@ -116,7 +116,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 	return c.cache[namespace], nil
 }
 
-// New creates a new manager for audit
+// New creates a new manager for audit.
 func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
@@ -144,7 +144,7 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExclu
 	return am, nil
 }
 
-// audit performs an audit then updates the status of all constraint resources with the results
+// audit performs an audit then updates the status of all constraint resources with the results.
 func (am *Manager) audit(ctx context.Context) error {
 	startTime := time.Now()
 	timestamp := startTime.UTC().Format(time.RFC3339)
@@ -233,7 +233,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	return nil
 }
 
-// Audits server resources via the discovery client, as an alternative to opa.Client.Audit()
+// Audits server resources via the discovery client, as an alternative to opa.Client.Audit().
 func (am *Manager) auditResources(
 	ctx context.Context,
 	constraintsGVK []schema.GroupVersionKind,
@@ -429,7 +429,7 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 	}
 }
 
-// Start implements controller.Controller
+// Start implements controller.Controller.
 func (am *Manager) Start(ctx context.Context) error {
 	log.Info("Starting Audit Manager")
 	go am.auditManagerLoop(ctx)

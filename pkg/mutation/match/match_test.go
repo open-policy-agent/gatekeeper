@@ -23,6 +23,48 @@ func TestMatch(t *testing.T) {
 		shouldMatch bool
 	}{
 		{
+			tname:   "match empty group kinds",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "match empty kinds",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{"*"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "don't match empty kinds in other group",
+			toMatch: makeObject("kind", "group", "namespace", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{"rbac"},
+					},
+				},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
+		{
 			tname:   "match kind with *",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
@@ -130,6 +172,15 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
+			tname:   "namespace prefix matches",
+			toMatch: makeObject("kind", "group", "kube-system", "name"),
+			match: Match{
+				Namespaces: []string{"nonmatching", "kube-*"},
+			},
+			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			shouldMatch: true,
+		},
+		{
 			tname:   "namespace is not in the matches list",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
@@ -162,6 +213,22 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []string{"namespace"},
 			},
 			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
+		{
+			tname:   "namespace is excluded by wildcard match",
+			toMatch: makeObject("kind", "group", "kube-system", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{"kind"},
+						APIGroups: []string{"group"},
+					},
+				},
+				Namespaces:         []string{"nonmatching", "kube-*"},
+				ExcludedNamespaces: []string{"kube-*"},
+			},
+			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			shouldMatch: false,
 		},
 		{

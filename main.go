@@ -76,7 +76,7 @@ const (
 )
 
 var (
-	// DNSName is <service name>.<namespace>.svc
+	// DNSName is <service name>.<namespace>.svc.
 	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	scheme           = runtime.NewScheme()
 	setupLog         = ctrl.Log.WithName("setup")

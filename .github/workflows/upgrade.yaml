@@ -59,6 +59,10 @@ jobs:
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest
           make e2e-helm-upgrade HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }} HELM_REPO=gatekeeper-e2e-helm HELM_RELEASE=latest
 
+      - name: Manually apply the CRDs.  Helm will not update CRDs.
+        run: |
+          kustomize build config/crd | kubectl apply -f -
+
       - name: Run e2e after upgrade
         run: |
           make test-e2e

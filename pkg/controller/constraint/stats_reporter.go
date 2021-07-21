@@ -50,12 +50,12 @@ func (r *reporter) reportConstraints(t tags, v int64) error {
 	return r.report(ctx, constraintsM.M(v))
 }
 
-// StatsReporter reports audit metrics
+// StatsReporter reports audit metrics.
 type StatsReporter interface {
 	reportConstraints(t tags, v int64) error
 }
 
-// newStatsReporter creaters a reporter for audit metrics
+// newStatsReporter creaters a reporter for audit metrics.
 func newStatsReporter() (StatsReporter, error) {
 	ctx, err := tag.New(
 		context.Background(),

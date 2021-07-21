@@ -31,17 +31,17 @@ func (k *objKey) String() string {
 	return fmt.Sprintf("%s [%s]", k.namespacedName.String(), k.gvk.String())
 }
 
-// objSet is a set of objKey types with no data
+// objSet is a set of objKey types with no data.
 type objSet map[objKey]struct{}
 
-// retryObjSet holds the allowed retries for a specific object
+// retryObjSet holds the allowed retries for a specific object.
 type objRetrySet map[objKey]objData
 
 type objData struct {
 	retries int
 }
 
-// decrementRetries handles objData retries, and returns `true` if it's time to delete the objData entry
+// decrementRetries handles objData retries, and returns `true` if it's time to delete the objData entry.
 func (o *objData) decrementRetries() bool {
 	// if retries is less than 0, allowed retries are infinite
 	if o.retries < 0 {

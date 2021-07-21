@@ -1,31 +1,32 @@
 package gktest
 
-import "io/fs"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
-// Suite defines a set of TestCases which all use the same ConstraintTemplate
-// and Constraint.
+// Suite defines a set of Constraint tests.
 type Suite struct {
-	TestCases []TestCase
+	metav1.ObjectMeta
+
+	// Tests is a list of Template&Constraint pairs, with tests to run on
+	// each.
+	Tests []Test
 }
 
-// Run executes every TestCase in the Suite. Returns the results for every
-// TestCase.
-func (s Suite) Run(f fs.FS, filter Filter) []Result {
-	results := make([]Result, len(s.TestCases))
-	for i, tc := range s.TestCases {
-		if !filter.MatchesTest(tc) {
-			continue
-		}
+// Test defines a Template&Constraint pair to instantiate, and Cases to
+// run on the instantiated Constraint.
+type Test struct {
+	// Template is the path to the ConstraintTemplate, relative to the file
+	// defining the Suite.
+	Template string
 
-		results[i] = tc.Run(f)
-	}
-	return results
+	// Constraint is the path to the Constraint, relative to the file defining
+	// the Suite. Must be an instance of Template.
+	Constraint string
+
+	// Cases are the test cases to run on the instantiated Constraint.
+	Cases []Case
 }
 
-// TestCase runs Constraint against a YAML object
-type TestCase struct{}
-
-// Run executes the TestCase and returns the Result of the run.
-func (tc TestCase) Run(f fs.FS) Result {
-	return Result{}
-}
+// Case runs Constraint against a YAML object.
+type Case struct{}

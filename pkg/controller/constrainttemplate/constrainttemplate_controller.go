@@ -112,7 +112,7 @@ func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {}
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
-// cstrEvents and regEvents point to same event channel except for testing
+// cstrEvents and regEvents point to same event channel except for testing.
 func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func() (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	w, err := wm.NewRegistrar(ctrlName, regEvents)
 	if err != nil {
@@ -188,7 +188,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 	return reconciler, nil
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
+// add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New(ctrlName, mgr, controller.Options{Reconciler: r})
@@ -228,7 +228,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileConstraintTemplate{}
 
-// ReconcileConstraintTemplate reconciles a ConstraintTemplate object
+// ReconcileConstraintTemplate reconciles a ConstraintTemplate object.
 type ReconcileConstraintTemplate struct {
 	client.Client
 	scheme        *runtime.Scheme
@@ -247,7 +247,7 @@ type ReconcileConstraintTemplate struct {
 // +kubebuilder:rbac:groups=templates.gatekeeper.sh,resources=constrainttemplates/status,verbs=get;update;patch
 
 // Reconcile reads that state of the cluster for a ConstraintTemplate object and makes changes based on the state read
-// and what is in the ConstraintTemplate.Spec
+// and what is in the ConstraintTemplate.Spec.
 func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log := log.WithValues("template_name", request.Name)
 	// Short-circuit if shutting down.

@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -43,13 +43,17 @@ var (
 type AssignMetadataMutator struct {
 	id             types.ID
 	assignMetadata *mutationsv1alpha1.AssignMetadata
-	path           parser.Path
+	assignValue    string
+
+	path parser.Path
+
+	tester *tester.Tester
 }
 
-// assignMetadataMutator implements mutator
+// assignMetadataMutator implements mutator.
 var _ types.Mutator = &AssignMetadataMutator{}
 
-func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace) bool {
+func (m *AssignMetadataMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	matches, err := match.Matches(&m.assignMetadata.Spec.Match, obj, ns)
 	if err != nil {
 		log.Error(err, "AssignMetadataMutator.Matches failed", "assignMeta", m.assignMetadata.Name)
@@ -59,14 +63,13 @@ func (m *AssignMetadataMutator) Matches(obj runtime.Object, ns *corev1.Namespace
 }
 
 func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	t, err := tester.New(m.Path(), []tester.Test{
-		{SubPath: m.Path(), Condition: tester.MustNotExist},
-	})
-	if err != nil {
-		return false, err
-	}
-	return core.Mutate(m, t, nil, obj)
+	// Note: Performance here can be improved by ~3x by writing a specialized
+	// function instead of using a generic function. AssignMetadata only ever
+	// mutates metadata.annotations or metadata.labels, and we spend ~70% of
+	// compute covering cases that aren't valid for this Mutator.
+	return core.Mutate(m, m.tester, nil, obj)
 }
+
 func (m *AssignMetadataMutator) ID() types.ID {
 	return m.id
 }
@@ -96,22 +99,15 @@ func (m *AssignMetadataMutator) DeepCopy() types.Mutator {
 	res := &AssignMetadataMutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
+		assignValue:    m.assignValue,
 		path:           m.path.DeepCopy(),
+		tester:         m.tester.DeepCopy(),
 	}
 	return res
 }
 
 func (m *AssignMetadataMutator) Value() (interface{}, error) {
-	value, err := types.UnmarshalValue(m.assignMetadata.Spec.Parameters.Assign.Raw)
-	if err != nil {
-		return nil, err
-	}
-	switch t := value.(type) {
-	case string:
-		return value, nil
-	default:
-		return nil, fmt.Errorf("incorrect value for AssignMetadataMutator. Value must be a string. Value: %s Type: %s", value, t)
-	}
+	return m.assignValue, nil
 }
 
 func (m *AssignMetadataMutator) String() string {
@@ -137,25 +133,34 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 	if !ok {
 		return nil, errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
 	}
-	if _, ok := value.(string); !ok {
+	valueString, isString := value.(string)
+	if !isString {
 		return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
+	}
+
+	t, err := tester.New(path, []tester.Test{
+		{SubPath: path, Condition: tester.MustNotExist},
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &AssignMetadataMutator{
 		id:             types.MakeID(assignMeta),
 		assignMetadata: assignMeta.DeepCopy(),
+		assignValue:    valueString,
 		path:           path,
+		tester:         t,
 	}, nil
 }
 
-// Verifies that the given path is valid for metadata
+// Verifies that the given path is valid for metadata.
 func isValidMetadataPath(path parser.Path) bool {
 	// Path must be metadata.annotations.something or metadata.labels.something
 	if len(path.Nodes) != 3 ||
 		path.Nodes[0].Type() != parser.ObjectNode ||
 		path.Nodes[1].Type() != parser.ObjectNode ||
 		path.Nodes[2].Type() != parser.ObjectNode {
-
 		return false
 	}
 
@@ -169,7 +174,7 @@ func isValidMetadataPath(path parser.Path) bool {
 }
 
 // IsValidAssignMetadata returns an error if the given assignmetadata object is not
-// semantically valid
+// semantically valid.
 func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
 	if _, err := MutatorForAssignMetadata(assignMeta); err != nil {
 		return err

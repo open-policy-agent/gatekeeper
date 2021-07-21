@@ -2,14 +2,15 @@ package match
 
 import (
 	"errors"
-	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ApplyTo determines what GVKs items the mutation should apply to.
@@ -19,6 +20,25 @@ type ApplyTo struct {
 	Groups   []string `json:"groups,omitempty"`
 	Kinds    []string `json:"kinds,omitempty"`
 	Versions []string `json:"versions,omitempty"`
+}
+
+// Flatten returns the set of GroupVersionKinds this ApplyTo matches.
+// The GVKs are not guaranteed to be sorted or unique.
+func (a ApplyTo) Flatten() []schema.GroupVersionKind {
+	var result []schema.GroupVersionKind
+	for _, group := range a.Groups {
+		for _, version := range a.Versions {
+			for _, kind := range a.Kinds {
+				gvk := schema.GroupVersionKind{
+					Group:   group,
+					Version: version,
+					Kind:    kind,
+				}
+				result = append(result, gvk)
+			}
+		}
+	}
+	return result
 }
 
 // Match selects objects to apply mutations to.
@@ -47,12 +67,7 @@ type Kinds struct {
 
 // Matches verifies if the given object belonging to the given namespace
 // matches the current mutator.
-func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, error) {
-	meta, err := meta.Accessor(obj)
-	if err != nil {
-		return false, fmt.Errorf("accessor failed for %s", obj.GetObjectKind().GroupVersionKind().Kind)
-	}
-
+func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	if isNamespace(obj) && ns == nil {
 		return false, errors.New("invalid call to Matches(), ns must not be nil for Namespace objects")
 	}
@@ -110,7 +125,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 	if ns != nil {
 		found := false
 		for _, n := range match.Namespaces {
-			if ns.Name == n {
+			if ns.Name == n || prefixMatch(n, ns.Name) {
 				found = true
 				break
 			}
@@ -120,7 +135,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 		}
 
 		for _, n := range match.ExcludedNamespaces {
-			if ns.Name == n {
+			if ns.Name == n || prefixMatch(n, ns.Name) {
 				return false, nil
 			}
 		}
@@ -129,7 +144,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 			if err != nil {
 				return false, err
 			}
-			if !selector.Matches(labels.Set(meta.GetLabels())) {
+			if !selector.Matches(labels.Set(obj.GetLabels())) {
 				return false, nil
 			}
 		}
@@ -142,7 +157,7 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 
 			switch {
 			case isNamespace(obj): // if the object is a namespace, namespace selector matches against the object
-				if !selector.Matches(labels.Set(meta.GetLabels())) {
+				if !selector.Matches(labels.Set(obj.GetLabels())) {
 					return false, nil
 				}
 			case clusterScoped:
@@ -156,7 +171,18 @@ func Matches(match *Match, obj runtime.Object, ns *corev1.Namespace) (bool, erro
 	return true, nil
 }
 
-// AppliesTo checks if any item the given slice of ApplyTo applies to the given object
+// prefixMatch matches checks if the candidate contains the prefix defined in the source.
+// The source is expected to end with a "*", which acts as a glob.  It is removed when
+// performing the prefix-based match.
+func prefixMatch(source, candidate string) bool {
+	if !strings.HasSuffix(source, "*") {
+		return false
+	}
+
+	return strings.HasPrefix(candidate, strings.TrimSuffix(source, "*"))
+}
+
+// AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
 func AppliesTo(applyTo []ApplyTo, obj runtime.Object) bool {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	for _, apply := range applyTo {

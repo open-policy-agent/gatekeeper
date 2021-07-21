@@ -22,14 +22,18 @@ linters:
   enable:
     - deadcode
     - errcheck
-    - ineffassign
+    - exportloopref
+    - forcetypeassert
     - gocritic
     - goconst
+    - godot
     - gofmt
+    - gofumpt
     - goimports
     - gosec
     - gosimple
     - govet
+    - ineffassign
     - misspell
     - revive # replacement for golint
     - staticcheck
@@ -37,3 +41,4 @@ linters:
     - typecheck
     - unused
     - varcheck
+    - whitespace
