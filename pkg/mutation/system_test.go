@@ -525,7 +525,8 @@ func (fr *fakeReporter) ReportIterationConvergence(scs SystemConvergenceStatus, 
 	return nil
 }
 
-// TestSystem_ReportingInjection verifies that a system with injected reporting calls the reporting
+// TestSystem_ReportingInjection verifies that a system with injected reporting calls the
+// reporting functions.
 func TestSystem_ReportingInjection(t *testing.T) {
 	// Prepare a mutate-able object
 	pod := &corev1.Pod{
