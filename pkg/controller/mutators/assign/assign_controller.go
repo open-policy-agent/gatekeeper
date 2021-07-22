@@ -70,7 +70,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// there is no need for this dependency.  We can access these functions directly from their
 	// package.  The interface StatsReporter is unnecessary and the context created in reporter
 	// could just be created in the Report* functions themselves.  This would save all of this work
-	// to create an object and pass it through correctly.   This is all squeeze and no juice.
+	// to create an object and pass it through correctly.   This is all squeeze and no juice...
 	statsReporter, err := ctrlmutators.NewStatsReporter()
 	if err != nil {
 		return err
