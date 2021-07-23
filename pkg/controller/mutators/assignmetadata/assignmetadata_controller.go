@@ -157,7 +157,7 @@ type Reconciler struct {
 // TODO (https://github.com/open-policy-agent/gatekeeper/issues/1449): DRY this and assign_controller.go.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
-	timeStart := time.Now()
+	startTime := time.Now()
 
 	deleted := false
 	assignMetadata := &mutationsv1alpha1.AssignMetadata{}
@@ -210,23 +210,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Since we aren't deleting the mutator, we are either adding or updating
 	ingestionStatus := ctrlmutators.MutatorStatusError
-	defer func() {
-		r.cache.Upsert(mID, ingestionStatus)
-
-		if r.reporter == nil {
-			return
-		}
-
-		if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(timeStart)); err != nil {
-			log.Error(err, "failed to report mutator ingestion request")
-		}
-
-		for status, count := range r.cache.Tally() {
-			if err = r.reporter.ReportMutatorsStatus(status, count); err != nil {
-				log.Error(err, "failed to report mutator status request")
-			}
-		}
-	}()
+	// incasing this call in a function prevents the arguments from being evaluated early
+	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
 
 	status, err := r.getOrCreatePodStatus(mID)
 	if err != nil {
@@ -302,4 +287,22 @@ func (r *Reconciler) defaultGetPod() (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
 	panic("GetPod must be injected")
+}
+
+func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
+	r.cache.Upsert(mID, ingestionStatus)
+
+	if r.reporter == nil {
+		return
+	}
+
+	if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
+		log.Error(err, "failed to report mutator ingestion request")
+	}
+
+	for status, count := range r.cache.Tally() {
+		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
+			log.Error(err, "failed to report mutator status request")
+		}
+	}
 }
