@@ -34,7 +34,18 @@ var (
 )
 
 func init() {
-	if err := register(); err != nil {
+	views := []*view.View{
+		{
+			Name:        mutationSystemIterationsMetricName,
+			Description: systemIterationsM.Description(),
+			Measure:     systemIterationsM,
+			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
+			Aggregation: view.Distribution(2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233),
+			TagKeys:     []tag.Key{systemConvergenceKey},
+		},
+	}
+
+	if err := view.Register(views...); err != nil {
 		panic(err)
 	}
 }
@@ -72,23 +83,5 @@ func (r *reporter) ReportIterationConvergence(scs SystemConvergenceStatus, itera
 		return err
 	}
 
-	return report(ctx, systemIterationsM.M(int64(iterations)))
-}
-
-func report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
-}
-
-func register() error {
-	views := []*view.View{
-		{
-			Name:        mutationSystemIterationsMetricName,
-			Description: systemIterationsM.Description(),
-			Measure:     systemIterationsM,
-			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
-			Aggregation: view.Distribution(2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233),
-			TagKeys:     []tag.Key{systemConvergenceKey},
-		},
-	}
-	return view.Register(views...)
+	return metrics.Record(ctx, systemIterationsM.M(int64(iterations)))
 }

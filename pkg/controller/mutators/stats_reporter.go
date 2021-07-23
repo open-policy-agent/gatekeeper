@@ -39,7 +39,32 @@ var (
 )
 
 func init() {
-	if err := register(); err != nil {
+	views := []*view.View{
+		{
+			Name:        mutatorIngestionCountMetricName,
+			Description: "Total number of Mutator ingestion actions",
+			Measure:     responseTimeInSecM,
+			Aggregation: view.Count(),
+			TagKeys:     []tag.Key{mutatorStatusKey},
+		},
+		{
+			Name:        mutatorIngestionDurationMetricName,
+			Description: responseTimeInSecM.Description(),
+			Measure:     responseTimeInSecM,
+			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			TagKeys:     []tag.Key{mutatorStatusKey},
+		},
+		{
+			Name:        mutatorsMetricName,
+			Description: "The current number of Mutator objects",
+			Measure:     mutatorsM,
+			Aggregation: view.LastValue(),
+			TagKeys:     []tag.Key{mutatorStatusKey},
+		},
+	}
+
+	if err := view.Register(views...); err != nil {
 		panic(err)
 	}
 }
@@ -79,7 +104,7 @@ func (r *reporter) ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d ti
 		return err
 	}
 
-	return report(ctx, responseTimeInSecM.M(d.Seconds()))
+	return metrics.Record(ctx, responseTimeInSecM.M(d.Seconds()))
 }
 
 // ReportMutatorsStatus reports the number of mutators of a specific status that are present in the
@@ -93,37 +118,5 @@ func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error 
 		return err
 	}
 
-	return report(ctx, mutatorsM.M(int64(n)))
-}
-
-func report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
-}
-
-func register() error {
-	views := []*view.View{
-		{
-			Name:        mutatorIngestionCountMetricName,
-			Description: "Total number of Mutator ingestion actions",
-			Measure:     responseTimeInSecM,
-			Aggregation: view.Count(),
-			TagKeys:     []tag.Key{mutatorStatusKey},
-		},
-		{
-			Name:        mutatorIngestionDurationMetricName,
-			Description: responseTimeInSecM.Description(),
-			Measure:     responseTimeInSecM,
-			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
-			TagKeys:     []tag.Key{mutatorStatusKey},
-		},
-		{
-			Name:        mutatorsMetricName,
-			Description: "The current number of Mutator objects",
-			Measure:     mutatorsM,
-			Aggregation: view.LastValue(),
-			TagKeys:     []tag.Key{mutatorStatusKey},
-		},
-	}
-	return view.Register(views...)
+	return metrics.Record(ctx, mutatorsM.M(int64(n)))
 }
