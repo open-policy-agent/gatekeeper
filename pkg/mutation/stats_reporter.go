@@ -61,15 +61,8 @@ type reporter struct {
 }
 
 // NewStatsReporter creaters a reporter for webhook metrics.
-func NewStatsReporter() (StatsReporter, error) {
-	ctx, err := tag.New(
-		context.Background(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &reporter{ctx: ctx}, nil
+func NewStatsReporter() StatsReporter {
+	return &reporter{ctx: context.Background()}
 }
 
 // ReportIterationConvergence reports the success or failure of the mutation system to converge.

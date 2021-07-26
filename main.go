@@ -250,13 +250,8 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	reporter, err := mutation.NewStatsReporter()
-	if err != nil {
-		setupLog.Error(err, "unable to initialize metrics reporter")
-	}
-
 	mutationSystem := mutation.NewSystem()
-	mutationSystem.InjectReporting(reporter)
+	mutationSystem.InjectReporting(mutation.NewStatsReporter())
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)

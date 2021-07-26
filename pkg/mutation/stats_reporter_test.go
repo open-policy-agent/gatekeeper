@@ -7,11 +7,6 @@ import (
 )
 
 func TestReportIterationConvergence(t *testing.T) {
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
-	}
-
 	const (
 		successMax = 5
 		successMin = 3
@@ -19,7 +14,9 @@ func TestReportIterationConvergence(t *testing.T) {
 		failureMin = failureMax
 	)
 
-	err = r.ReportIterationConvergence(SystemConvergenceTrue, successMax)
+	r := NewStatsReporter()
+
+	err := r.ReportIterationConvergence(SystemConvergenceTrue, successMax)
 	if err != nil {
 		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
