@@ -50,10 +50,10 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		t.Error("ReportRequest should have aggregation Distribution()")
 	}
 	if durationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionDurationMetricName, expectedDurationMin, durationValue.Min)
+		t.Errorf("got tag '%v' min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, expectedDurationMin)
 	}
 	if durationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionDurationMetricName, expectedDurationMax, durationValue.Max)
+		t.Errorf("got tag '%v' max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, expectedDurationMax)
 	}
 
 	verifyTags(t, expectedTags, row.Tags)
@@ -65,7 +65,7 @@ func checkData(t *testing.T, name string, rowLength int) *view.Row {
 		t.Errorf("Error when retrieving data: %v from %v", err, name)
 	}
 	if len(row) != rowLength {
-		t.Errorf("Expected '%v' row to have length %v, got %v", name, rowLength, len(row))
+		t.Errorf("Got '%v' row length %v, want %v", name, len(row), rowLength)
 	}
 	if row[0].Data == nil {
 		t.Errorf("Expected row data not to be nil")
@@ -77,7 +77,7 @@ func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
 	for _, tag := range actual {
 		ex := expected[tag.Key.Name()]
 		if tag.Value != ex {
-			t.Errorf("Expected tag '%v' to have value '%v' but found '%v'", tag.Key.Name(), ex, tag.Value)
+			t.Errorf("Got tag '%v' value '%v', want '%v'", tag.Key.Name(), tag.Value, ex)
 		}
 	}
 }

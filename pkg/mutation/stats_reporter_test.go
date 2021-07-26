@@ -21,15 +21,15 @@ func TestReportIterationConvergence(t *testing.T) {
 
 	err = r.ReportIterationConvergence(SystemConvergenceTrue, successMax)
 	if err != nil {
-		t.Errorf("reportIterationConvergence error: %v", err)
+		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
 	err = r.ReportIterationConvergence(SystemConvergenceFalse, failureMax)
 	if err != nil {
-		t.Errorf("reportIterationConvergence error: %v", err)
+		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
 	err = r.ReportIterationConvergence(SystemConvergenceTrue, successMin)
 	if err != nil {
-		t.Errorf("reportIterationConvergence error: %v", err)
+		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
 
 	rows, err := view.RetrieveData(mutationSystemIterationsMetricName)
@@ -40,7 +40,7 @@ func TestReportIterationConvergence(t *testing.T) {
 	validConvergenceStatuses := 2
 	l := len(rows)
 	if l != validConvergenceStatuses {
-		t.Errorf("Expected '%v' view to have length %v, got %v", mutationSystemIterationsMetricName, validConvergenceStatuses, l)
+		t.Errorf("got '%v' view length %v, want %v", mutationSystemIterationsMetricName, l, validConvergenceStatuses)
 	}
 
 	verifyDistributionRow(t, rows, SystemConvergenceTrue, 2, successMin, successMax)
@@ -59,13 +59,13 @@ func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergence
 		}
 
 		if int(distData.Count) != count {
-			t.Errorf("Expected count '%v' for tag '%v' but received '%v'", count, tag, distData.Count)
+			t.Errorf("got tag '%v' count %v, want %v", tag, distData.Count, count)
 		}
 		if int(distData.Min) != min {
-			t.Errorf("Expected count '%v' for tag '%v' but received '%v'", min, tag, distData.Min)
+			t.Errorf("got tag '%v' min %v, want %v", tag, distData.Min, min)
 		}
 		if int(distData.Max) != max {
-			t.Errorf("Expected max '%v' for tag '%v' but received '%v'", max, tag, distData.Max)
+			t.Errorf("got tag '%v' max %v, want %v", tag, distData.Max, max)
 		}
 
 		return
