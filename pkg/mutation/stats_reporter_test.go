@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"fmt"
 	"testing"
 
 	"go.opencensus.io/stats/view"
@@ -40,11 +41,17 @@ func TestReportIterationConvergence(t *testing.T) {
 		t.Errorf("got '%v' view length %v, want %v", mutationSystemIterationsMetricName, l, validConvergenceStatuses)
 	}
 
-	verifyDistributionRow(t, rows, SystemConvergenceTrue, 2, successMin, successMax)
-	verifyDistributionRow(t, rows, SystemConvergenceFalse, 1, failureMin, failureMax)
+	err = verifyDistributionRow(t, rows, SystemConvergenceTrue, 2, successMin, successMax)
+	if err != nil {
+		t.Error(err)
+	}
+	err = verifyDistributionRow(t, rows, SystemConvergenceFalse, 1, failureMin, failureMax)
+	if err != nil {
+		t.Error(err)
+	}
 }
 
-func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) {
+func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) error {
 	for _, r := range rows {
 		if !hasTag(r, systemConvergenceKey.Name(), string(tag)) {
 			continue
@@ -52,23 +59,23 @@ func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergence
 
 		distData, ok := r.Data.(*view.DistributionData)
 		if !ok {
-			t.Errorf("Data is not of type *view.DistributionData")
+			return fmt.Errorf("Data is not of type *view.DistributionData")
 		}
 
 		if int(distData.Count) != count {
-			t.Errorf("got tag '%v' count %v, want %v", tag, distData.Count, count)
+			return fmt.Errorf("got tag '%v' count %v, want %v", tag, distData.Count, count)
 		}
 		if int(distData.Min) != min {
-			t.Errorf("got tag '%v' min %v, want %v", tag, distData.Min, min)
+			return fmt.Errorf("got tag '%v' min %v, want %v", tag, distData.Min, min)
 		}
 		if int(distData.Max) != max {
-			t.Errorf("got tag '%v' max %v, want %v", tag, distData.Max, max)
+			return fmt.Errorf("got tag '%v' max %v, want %v", tag, distData.Max, max)
 		}
 
-		return
+		return nil
 	}
 
-	t.Errorf("Expected to find row with tag '%v' but none were found", tag)
+	return fmt.Errorf("Expected to find row with tag '%v' but none were found", tag)
 }
 
 func hasTag(row *view.Row, key, value string) bool {

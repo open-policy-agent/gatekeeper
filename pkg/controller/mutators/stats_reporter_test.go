@@ -1,6 +1,7 @@
 package mutators
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,11 +15,11 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	}
 
 	const (
-		expectedDurationValueMin         = time.Duration(1 * time.Second)
-		expectedDurationValueMax         = time.Duration(5 * time.Second)
-		expectedDurationMin      float64 = 1
-		expectedDurationMax      float64 = 5
-		expectedRowLength                = 1
+		expectedDurationValueMin = time.Duration(1 * time.Second)
+		expectedDurationValueMax = time.Duration(5 * time.Second)
+		expectedDurationMin      = 1.0
+		expectedDurationMax      = 5.0
+		expectedRowLength        = 1
 	)
 
 	r := NewStatsReporter()
@@ -32,7 +33,10 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	}
 
 	// Count test
-	row := checkData(t, mutatorIngestionCountMetricName, expectedRowLength)
+	row, err := checkData(t, mutatorIngestionCountMetricName, expectedRowLength)
+	if err != nil {
+		t.Error(err)
+	}
 	count, ok := row.Data.(*view.CountData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Count()")
@@ -44,7 +48,10 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 
 	// Duration test
-	row = checkData(t, mutatorIngestionDurationMetricName, expectedRowLength)
+	row, err = checkData(t, mutatorIngestionDurationMetricName, expectedRowLength)
+	if err != nil {
+		t.Error(err)
+	}
 	durationValue, ok := row.Data.(*view.DistributionData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Distribution()")
@@ -59,18 +66,18 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 }
 
-func checkData(t *testing.T, name string, rowLength int) *view.Row {
+func checkData(t *testing.T, name string, rowLength int) (*view.Row, error) {
 	row, err := view.RetrieveData(name)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+		return nil, fmt.Errorf("Error when retrieving data: %v from %v", err, name)
 	}
 	if len(row) != rowLength {
-		t.Errorf("Got '%v' row length %v, want %v", name, len(row), rowLength)
+		return nil, fmt.Errorf("Got '%v' row length %v, want %v", name, len(row), rowLength)
 	}
 	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
+		return nil, fmt.Errorf("Expected row data not to be nil")
 	}
-	return row[0]
+	return row[0], nil
 }
 
 func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
