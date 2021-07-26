@@ -21,12 +21,8 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		expectedRowLength                = 1
 	)
 
-	r, err := NewStatsReporter()
-	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
-	}
-
-	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
+	r := NewStatsReporter()
+	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}

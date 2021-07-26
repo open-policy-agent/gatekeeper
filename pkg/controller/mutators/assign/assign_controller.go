@@ -65,18 +65,7 @@ type Adder struct {
 // Add creates a new Assign Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	// JULIAN - THis doesn't seem like a natural place to do this.  The Adder type is for
-	// injecting global dependencies into the controllers.  This dependency isn't global.  In reality,
-	// there is no need for this dependency.  We can access these functions directly from their
-	// package.  The interface StatsReporter is unnecessary and the context created in reporter
-	// could just be created in the Report* functions themselves.  This would save all of this work
-	// to create an object and pass it through correctly.   This is all squeeze and no juice...
-	statsReporter, err := ctrlmutators.NewStatsReporter()
-	if err != nil {
-		return err
-	}
-
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, statsReporter)
+	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod)
 	return add(mgr, r)
 }
 
@@ -99,14 +88,14 @@ func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, mutationSystem *mutation.System, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error), statsReporter ctrlmutators.StatsReporter) *Reconciler {
+func newReconciler(mgr manager.Manager, mutationSystem *mutation.System, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) *Reconciler {
 	r := &Reconciler{
 		system:   mutationSystem,
 		Client:   mgr.GetClient(),
 		tracker:  tracker,
 		getPod:   getPod,
 		scheme:   mgr.GetScheme(),
-		reporter: statsReporter,
+		reporter: ctrlmutators.NewStatsReporter(),
 		cache:    ctrlmutators.NewMutationCache(),
 	}
 	if getPod == nil {
