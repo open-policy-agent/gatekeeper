@@ -25,17 +25,19 @@ type System struct {
 	reporter        StatsReporter
 }
 
+// SystemOpts allows for optional dependencies to be passed into the mutation System.
+type SystemOpts struct {
+	Reporter StatsReporter
+}
+
 // NewSystem initializes an empty mutation system.
-func NewSystem() *System {
+func NewSystem(options SystemOpts) *System {
 	return &System{
 		schemaDB:        *schema.New(),
 		orderedMutators: make([]types.Mutator, 0),
 		mutatorsMap:     make(map[types.ID]types.Mutator),
+		reporter:        options.Reporter,
 	}
-}
-
-func (s *System) InjectReporting(sr StatsReporter) {
-	s.reporter = sr
 }
 
 // Upsert updates or insert the given object, and returns

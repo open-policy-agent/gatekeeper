@@ -95,7 +95,7 @@ func TestReconcile(t *testing.T) {
 	// force mutation to be enabled
 	*mutation.MutationEnabled = true
 
-	mSys := mutation.NewSystem()
+	mSys := mutation.NewSystem(mutation.SystemOpts{})
 
 	tracker, err := readiness.SetupTracker(mgr, true)
 	g.Expect(err).NotTo(gomega.HaveOccurred())

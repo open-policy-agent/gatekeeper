@@ -33,7 +33,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	}
 
 	// Count test
-	row, err := checkData(t, mutatorIngestionCountMetricName, expectedRowLength)
+	row, err := checkData(mutatorIngestionCountMetricName, expectedRowLength)
 	if err != nil {
 		t.Error(err)
 	}
@@ -48,7 +48,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 
 	// Duration test
-	row, err = checkData(t, mutatorIngestionDurationMetricName, expectedRowLength)
+	row, err = checkData(mutatorIngestionDurationMetricName, expectedRowLength)
 	if err != nil {
 		t.Error(err)
 	}
@@ -66,7 +66,7 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	verifyTags(t, expectedTags, row.Tags)
 }
 
-func checkData(t *testing.T, name string, rowLength int) (*view.Row, error) {
+func checkData(name string, rowLength int) (*view.Row, error) {
 	row, err := view.RetrieveData(name)
 	if err != nil {
 		return nil, fmt.Errorf("Error when retrieving data: %v from %v", err, name)

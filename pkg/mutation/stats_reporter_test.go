@@ -41,17 +41,17 @@ func TestReportIterationConvergence(t *testing.T) {
 		t.Errorf("got '%v' view length %v, want %v", mutationSystemIterationsMetricName, l, validConvergenceStatuses)
 	}
 
-	err = verifyDistributionRow(t, rows, SystemConvergenceTrue, 2, successMin, successMax)
+	err = verifyDistributionRow(rows, SystemConvergenceTrue, 2, successMin, successMax)
 	if err != nil {
 		t.Error(err)
 	}
-	err = verifyDistributionRow(t, rows, SystemConvergenceFalse, 1, failureMin, failureMax)
+	err = verifyDistributionRow(rows, SystemConvergenceFalse, 1, failureMin, failureMax)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func verifyDistributionRow(t *testing.T, rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) error {
+func verifyDistributionRow(rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) error {
 	for _, r := range rows {
 		if !hasTag(r, systemConvergenceKey.Name(), string(tag)) {
 			continue
