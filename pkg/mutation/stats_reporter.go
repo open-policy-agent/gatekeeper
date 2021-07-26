@@ -29,7 +29,7 @@ var (
 
 	systemIterationsM = stats.Int64(
 		mutationSystemIterationsMetricName,
-		"The distribution of Mutator ingestion durations",
+		"The distribution of Mutation System iterations before convergence",
 		stats.UnitDimensionless)
 )
 
