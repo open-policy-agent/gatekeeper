@@ -124,7 +124,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 
 			if m.Matches(obj, ns) {
 				mutated, err := m.Mutate(obj)
-				if mutated && (*MutationLoggingEnabled || *MutationAnnotationsEnabled) {
+				if mutated {
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
@@ -137,6 +137,12 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 						obj.GetName())
 				}
 			}
+		}
+
+		if len(appliedMutations) == 0 {
+			// If no mutations were applied, we can safely assume the object is
+			// identical to before.
+			return i > 0, nil
 		}
 
 		if cmp.Equal(old, obj) {
