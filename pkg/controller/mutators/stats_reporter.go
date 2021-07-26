@@ -76,13 +76,11 @@ type StatsReporter interface {
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct {
-	ctx context.Context
-}
+type reporter struct{}
 
 // NewStatsReporter creaters a reporter for webhook metrics.
 func NewStatsReporter() StatsReporter {
-	return &reporter{ctx: context.Background()}
+	return &reporter{}
 }
 
 // ReportMutatorIngestionRequest reports both the action of a mutator ingestion and the time
@@ -90,7 +88,7 @@ func NewStatsReporter() StatsReporter {
 // status argument.
 func (r *reporter) ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d time.Duration) error {
 	ctx, err := tag.New(
-		r.ctx,
+		context.TODO(),
 		tag.Insert(mutatorStatusKey, string(ms)),
 	)
 	if err != nil {
@@ -104,7 +102,7 @@ func (r *reporter) ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d ti
 // mutation System.
 func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error {
 	ctx, err := tag.New(
-		r.ctx,
+		context.TODO(),
 		tag.Insert(mutatorStatusKey, string(ms)),
 	)
 	if err != nil {

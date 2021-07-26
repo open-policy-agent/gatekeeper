@@ -56,20 +56,18 @@ type StatsReporter interface {
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct {
-	ctx context.Context
-}
+type reporter struct{}
 
 // NewStatsReporter creaters a reporter for webhook metrics.
 func NewStatsReporter() StatsReporter {
-	return &reporter{ctx: context.Background()}
+	return &reporter{}
 }
 
 // ReportIterationConvergence reports the success or failure of the mutation system to converge.
 // It also records the number of system iterations that were required to reach this end.
 func (r *reporter) ReportIterationConvergence(scs SystemConvergenceStatus, iterations int) error {
 	ctx, err := tag.New(
-		r.ctx,
+		context.TODO(),
 		tag.Insert(systemConvergenceKey, string(scs)),
 	)
 	if err != nil {
