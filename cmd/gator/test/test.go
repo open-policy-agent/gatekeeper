@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
@@ -77,8 +78,7 @@ func runE(cmd *cobra.Command, args []string) error {
 		recursive = true
 		path = strings.TrimSuffix(path, "...")
 	}
-	path = strings.TrimSuffix(path, "/")
-	path = strings.TrimPrefix(path, "/")
+	path = strings.Trim(path, "/")
 
 	suites, err := gktest.ReadSuites(fileSystem, path, recursive)
 	if err != nil {
@@ -92,20 +92,21 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter gktest.Filter) error {
 	isFailure := false
 
 	runner := gktest.Runner{
 		FS:        fileSystem,
-		SuiteDir: "usr/local/google/home/willbeason/gator-test",
 		NewClient: gktest.NewOPAClient,
 	}
 
 	results := make([]gktest.SuiteResult, len(suites))
-	for i := range suites {
-		s := &suites[i]
+	i := 0
 
-		suiteResult := runner.Run(ctx, filter, s)
+	for path, suite := range suites {
+		suiteDir := filepath.Dir(path)
+
+		suiteResult := runner.Run(ctx, filter, suiteDir, suite)
 		for _, testResult := range suiteResult.TestResults {
 			if testResult.Error != nil {
 				isFailure = true
@@ -115,8 +116,14 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 					isFailure = true
 				}
 			}
+
 			results[i] = suiteResult
+			i++
 		}
+
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].Path < results[j].Path
+		})
 
 		w := &strings.Builder{}
 		printer := gktest.PrinterGo{}

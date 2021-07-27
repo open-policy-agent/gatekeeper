@@ -16,17 +16,13 @@ type Runner struct {
 	// FS is the filesystem the Runner interacts with to read Suites and objects.
 	FS fs.FS
 
-	SuiteDir string
-
 	// NewClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
 	NewClient func() (Client, error)
-
-	// TODO: Add Printer.
 }
 
 // Run executes all Tests in the Suite and returns the results.
-func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
+func (r *Runner) Run(ctx context.Context, filter Filter, suiteDir string, s *Suite) SuiteResult {
 	start := time.Now()
 	result := SuiteResult{
 		TestResults: make([]TestResult, len(s.Tests)),
@@ -34,7 +30,7 @@ func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 	for i, t := range s.Tests {
 		if filter.MatchesTest(t) {
 			start := time.Now()
-			result.TestResults[i] = r.runTest(ctx, filter, t)
+			result.TestResults[i] = r.runTest(ctx, suiteDir, filter, t)
 			result.TestResults[i].Name = t.Name
 			result.TestResults[i].Runtime = Duration(time.Since(start))
 		}
@@ -45,7 +41,7 @@ func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 }
 
 // runTest executes every Case in the Test. Returns the results for every Case.
-func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult {
+func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
 	client, err := r.NewClient()
 	if err != nil {
 		return TestResult{Error: fmt.Errorf("%w: %v", ErrCreatingClient, err)}
@@ -54,7 +50,7 @@ func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult 
 	if t.Template == "" {
 		return TestResult{Error: fmt.Errorf("%w: missing template", ErrInvalidSuite)}
 	}
-	template, err := readTemplate(r.FS, filepath.Join(r.SuiteDir, t.Template))
+	template, err := readTemplate(r.FS, filepath.Join(suiteDir, t.Template))
 	if err != nil {
 		return TestResult{Error: err}
 	}
@@ -66,7 +62,7 @@ func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult 
 	if t.Constraint == "" {
 		return TestResult{Error: fmt.Errorf("%w: missing constraint", ErrInvalidSuite)}
 	}
-	cObj, err := readConstraint(r.FS, filepath.Join(r.SuiteDir, t.Constraint))
+	cObj, err := readConstraint(r.FS, filepath.Join(suiteDir, t.Constraint))
 	if err != nil {
 		return TestResult{Error: err}
 	}
@@ -81,7 +77,7 @@ func (r *Runner) runTest(ctx context.Context, filter Filter, t Test) TestResult 
 			continue
 		}
 
-		results[i] = r.runCase(ctx, client, c)
+		results[i] = r.runCase(ctx, client, suiteDir, c)
 	}
 	return TestResult{CaseResults: results}
 }
@@ -133,15 +129,15 @@ func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Asser
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, client Client, c Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c Case) CaseResult {
 	start := time.Now()
 
 	var result CaseResult
 	switch {
 	case c.Allow != "" && c.Deny == "":
-		result = runAllow(ctx, client, r.FS, filepath.Join(r.SuiteDir, c.Allow))
+		result = runAllow(ctx, client, r.FS, filepath.Join(suiteDir, c.Allow))
 	case c.Allow == "" && c.Deny != "":
-		result = runDeny(ctx, client, r.FS, filepath.Join(r.SuiteDir, c.Deny), c.Assertions)
+		result = runDeny(ctx, client, r.FS, filepath.Join(suiteDir, c.Deny), c.Assertions)
 	default:
 		result = CaseResult{Error: fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)}
 	}
