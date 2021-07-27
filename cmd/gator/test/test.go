@@ -119,10 +119,6 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 			i++
 		}
 
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Path < results[j].Path
-		})
-
 		w := &strings.Builder{}
 		printer := gktest.PrinterGo{}
 		err := printer.Print(w, results, verbose)
@@ -131,6 +127,10 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 		}
 		fmt.Println(w)
 	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Path < results[j].Path
+	})
 
 	if isFailure {
 		// At least one test failed or there was a problem executing tests in at
