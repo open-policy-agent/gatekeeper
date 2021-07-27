@@ -28,6 +28,7 @@ spec:
         package k8salwaysvalidate
         violation[{"msg": msg}] {
           false
+          msg := "should always pass"
         }
 `
 
@@ -65,8 +66,9 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8sdisallowedtags
-        violation {
-          false
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
         }
 `
 
@@ -85,8 +87,9 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8sdisallowedtags
-        violation {
-          false
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
         }
 `
 
@@ -112,8 +115,9 @@ spec:
     - target: admission.k8s.gatekeeper.sh
       rego: |
         package k8sdisallowedtags
-        violation {
+        violation[{"msg": msg}] {
           f
+          msg := "never validate"
         }
 `
 
@@ -601,9 +605,11 @@ func TestRunner_Run(t *testing.T) {
 		}
 
 		t.Run(tc.name, func(t *testing.T) {
-			got := runner.Run(ctx, Filter{}, &tc.suite)
+			got := runner.Run(ctx, Filter{}, "", &tc.suite)
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
+				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
+				); diff != "" {
 				t.Errorf(diff)
 			}
 		})
@@ -627,9 +633,11 @@ func TestRunner_Run_ClientError(t *testing.T) {
 	suite := &Suite{
 		Tests: []Test{{}},
 	}
-	got := runner.Run(ctx, Filter{}, suite)
+	got := runner.Run(ctx, Filter{}, "", suite)
 
-	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
+		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
+		); diff != "" {
 		t.Error(diff)
 	}
 }

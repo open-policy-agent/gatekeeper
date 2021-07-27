@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	run string
+	run     string
 	verbose bool
 )
 
@@ -114,10 +114,10 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 					isFailure = true
 				}
 			}
-
-			results[i] = suiteResult
-			i++
 		}
+
+		results[i] = suiteResult
+		i++
 
 		w := &strings.Builder{}
 		printer := gktest.PrinterGo{}
