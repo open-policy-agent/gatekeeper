@@ -25,7 +25,7 @@ type Runner struct {
 func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
 	start := time.Now()
 	result := SuiteResult{
-		Path: suitePath,
+		Path:        suitePath,
 		TestResults: make([]TestResult, len(s.Tests)),
 	}
 	suiteDir := filepath.Dir(suitePath)

@@ -142,7 +142,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:     map[string]*Suite{"tests/test.yaml": {}},
+			want:    map[string]*Suite{"tests/test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -214,10 +214,10 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    map[string]*Suite{
-				"tests/labels/test.yaml": {},
+			want: map[string]*Suite{
+				"tests/labels/test.yaml":      {},
 				"tests/annotations/test.yaml": {},
-				"tests/test.yaml": {},
+				"tests/test.yaml":             {},
 			},
 			wantErr: nil,
 		},
@@ -269,16 +269,15 @@ tests:
 `),
 				},
 			},
-			want: map[string]*Suite{"test.yaml":
-				{Tests: []Test{{
-					Template:   "template.yaml",
-					Constraint: "constraint.yaml",
-					Cases: []Case{{
-						Allow: "allow.yaml",
-					}, {
-						Deny: "deny.yaml",
-					}},
+			want: map[string]*Suite{"test.yaml": {Tests: []Test{{
+				Template:   "template.yaml",
+				Constraint: "constraint.yaml",
+				Cases: []Case{{
+					Allow: "allow.yaml",
+				}, {
+					Deny: "deny.yaml",
 				}},
+			}},
 			}},
 			wantErr: nil,
 		},
