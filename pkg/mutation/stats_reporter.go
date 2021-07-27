@@ -20,8 +20,6 @@ type SystemConvergenceStatus string
 var (
 	systemConvergenceKey = tag.MustNewKey("success")
 
-	// JULIAN need to try making this a boolean somehow.
-
 	// SystemConvergenceTrue denotes a successfully converged mutation system request.
 	SystemConvergenceTrue SystemConvergenceStatus = "true"
 	// SystemConvergenceFalse denotes an unsuccessfully converged mutation system request.
@@ -39,8 +37,7 @@ func init() {
 			Name:        mutationSystemIterationsMetricName,
 			Description: systemIterationsM.Description(),
 			Measure:     systemIterationsM,
-			// JULIAN - We'll need to tune this.  I'm not sure if these histogram sections are valid.
-			Aggregation: view.Distribution(2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233),
+			Aggregation: view.Distribution(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 50, 100, 200, 500),
 			TagKeys:     []tag.Key{systemConvergenceKey},
 		},
 	}
