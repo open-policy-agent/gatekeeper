@@ -203,7 +203,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	// Since we aren't deleting the mutator, we are either adding or updating
 	ingestionStatus := ctrlmutators.MutatorStatusError
 	// encasing this call in a function prevents the arguments from being evaluated early
 	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
