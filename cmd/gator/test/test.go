@@ -104,9 +104,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 	i := 0
 
 	for path, suite := range suites {
-		suiteDir := filepath.Dir(path)
-
-		suiteResult := runner.Run(ctx, filter, suiteDir, suite)
+		suiteResult := runner.Run(ctx, filter, path, suite)
 		for _, testResult := range suiteResult.TestResults {
 			if testResult.Error != nil {
 				isFailure = true

@@ -22,11 +22,14 @@ type Runner struct {
 }
 
 // Run executes all Tests in the Suite and returns the results.
-func (r *Runner) Run(ctx context.Context, filter Filter, suiteDir string, s *Suite) SuiteResult {
+func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
 	start := time.Now()
 	result := SuiteResult{
+		Path: suitePath,
 		TestResults: make([]TestResult, len(s.Tests)),
 	}
+	suiteDir := filepath.Dir(suitePath)
+
 	for i, t := range s.Tests {
 		if filter.MatchesTest(t) {
 			start := time.Now()
