@@ -149,7 +149,6 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 
 		if cmp.Equal(old, obj) {
 			if i == 0 {
-				// JULIAN - Is this right?  I believe that a system that doesn't do any mutations is converging.
 				convergence = SystemConvergenceTrue
 				return false, nil
 			}
