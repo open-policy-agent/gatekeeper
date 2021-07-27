@@ -269,15 +269,16 @@ tests:
 `),
 				},
 			},
-			want: map[string]*Suite{"test.yaml": {Tests: []Test{{
-				Template:   "template.yaml",
-				Constraint: "constraint.yaml",
-				Cases: []Case{{
-					Allow: "allow.yaml",
-				}, {
-					Deny: "deny.yaml",
+			want: map[string]*Suite{"test.yaml": {
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []Case{{
+						Allow: "allow.yaml",
+					}, {
+						Deny: "deny.yaml",
+					}},
 				}},
-			}},
 			}},
 			wantErr: nil,
 		},
