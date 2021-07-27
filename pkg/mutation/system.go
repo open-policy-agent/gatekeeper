@@ -54,6 +54,7 @@ func (s *System) Upsert(m types.Mutator) error {
 	toAdd := m.DeepCopy()
 
 	// Checking schema consistency only if the mutator has schema
+	var err error
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
@@ -70,19 +71,19 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	if i == len(s.orderedMutators) { // Adding to the bottom of the list
 		s.orderedMutators = append(s.orderedMutators, toAdd)
-		return nil
+		return err
 	}
 
 	found := equal(s.orderedMutators[i].ID(), toAdd.ID())
 	if found {
 		s.orderedMutators[i] = toAdd
-		return nil
+		return err
 	}
 
 	s.orderedMutators = append(s.orderedMutators, nil)
 	copy(s.orderedMutators[i+1:], s.orderedMutators[i:])
 	s.orderedMutators[i] = toAdd
-	return nil
+	return err
 }
 
 // Mutate applies the mutation in place to the given object. Returns
@@ -114,7 +115,6 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 
 	for i := 0; i < maxIterations; i++ {
 		iterations++
-
 		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
 
