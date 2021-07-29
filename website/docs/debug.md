@@ -84,8 +84,8 @@ spec:
           group: ""
           version: "v1"
           kind: "Namespace"
-          # If dump is defined and set to `All`, also dump the state of OPA
-          dump: "All"
+        # If dump is defined and set to `All`, also dump the state of OPA
+        dump: "All"
 ```
 
 Traces will be written to the stdout logs of the Gatekeeper controller.
