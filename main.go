@@ -244,12 +244,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "unable to set up OPA backend")
 		os.Exit(1)
 	}
+
 	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
 	}
 
-	mutationCache := mutation.NewSystem()
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{Reporter: mutation.NewStatsReporter()})
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -258,6 +259,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		setupLog.Error(err, "fetching dynamic cache")
 		os.Exit(1)
 	}
+
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
@@ -279,7 +281,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ControllerSwitch: sw,
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
-		MutationCache:    mutationCache,
+		MutationSystem:   mutationSystem,
 	}
 	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
@@ -288,7 +290,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if operations.IsAssigned(operations.Webhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder, mutationCache); err != nil {
+		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}

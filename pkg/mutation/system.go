@@ -16,21 +16,27 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// System keeps the list of mutations and
-// provides an interface to apply mutations.
+// System keeps the list of mutators and provides an interface to apply mutations.
 type System struct {
 	schemaDB        schema.DB
 	orderedMutators []types.Mutator
 	mutatorsMap     map[types.ID]types.Mutator
 	mux             sync.RWMutex
+	reporter        StatsReporter
+}
+
+// SystemOpts allows for optional dependencies to be passed into the mutation System.
+type SystemOpts struct {
+	Reporter StatsReporter
 }
 
 // NewSystem initializes an empty mutation system.
-func NewSystem() *System {
+func NewSystem(options SystemOpts) *System {
 	return &System{
 		schemaDB:        *schema.New(),
 		orderedMutators: make([]types.Mutator, 0),
 		mutatorsMap:     make(map[types.ID]types.Mutator),
+		reporter:        options.Reporter,
 	}
 }
 
@@ -94,9 +100,24 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		allAppliedMutations = [][]types.Mutator{}
 	}
 
+	iterations := 0
+	convergence := SystemConvergenceFalse
+	defer func() {
+		if s.reporter == nil {
+			return
+		}
+
+		err := s.reporter.ReportIterationConvergence(convergence, iterations)
+		if err != nil {
+			log.Error(err, "failed to report mutator ingestion request")
+		}
+	}()
+
 	for i := 0; i < maxIterations; i++ {
+		iterations++
 		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
+
 		for _, m := range s.orderedMutators {
 			if s.schemaDB.HasConflicts(m.ID()) {
 				// Don't try to apply Mutators which have conflicts.
@@ -109,7 +130,13 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s", mutationUUID, m.ID(), obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
+						mutationUUID,
+						m.ID(),
+						obj.GroupVersionKind().Group,
+						obj.GroupVersionKind().Kind,
+						obj.GetNamespace(),
+						obj.GetName())
 				}
 			}
 		}
@@ -122,13 +149,18 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 
 		if cmp.Equal(old, obj) {
 			if i == 0 {
+				convergence = SystemConvergenceTrue
 				return false, nil
 			}
 			if cmp.Equal(original, obj) {
 				if *MutationLoggingEnabled {
 					logAppliedMutations("Oscillating mutation.", mutationUUID, original, allAppliedMutations)
 				}
-				return false, fmt.Errorf("oscillating mutation for %s %s %s %s", obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+				return false, fmt.Errorf("oscillating mutation for %s %s %s %s",
+					obj.GroupVersionKind().Group,
+					obj.GroupVersionKind().Kind,
+					obj.GetNamespace(),
+					obj.GetName())
 			}
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
@@ -140,16 +172,26 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					log.Error(err, "Error applying mutation annotations", "mutation id", mutationUUID)
 				}
 			}
+
+			convergence = SystemConvergenceTrue
 			return true, nil
 		}
+
 		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
 			allAppliedMutations = append(allAppliedMutations, appliedMutations)
 		}
 	}
+
 	if *MutationLoggingEnabled {
 		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
 	}
-	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s", mutationUUID, obj.GroupVersionKind().Group, obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName())
+
+	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s",
+		mutationUUID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
 }
 
 func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, mutationUUID uuid.UUID) error {

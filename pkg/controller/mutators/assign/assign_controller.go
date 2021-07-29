@@ -19,10 +19,12 @@ package assign
 import (
 	"context"
 	"fmt"
+	"time"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	ctrlmutators "github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -55,15 +57,15 @@ var gvkAssign = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	MutationCache *mutation.System
-	Tracker       *readiness.Tracker
-	GetPod        func() (*corev1.Pod, error)
+	MutationSystem *mutation.System
+	Tracker        *readiness.Tracker
+	GetPod         func() (*corev1.Pod, error)
 }
 
 // Add creates a new Assign Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationCache, a.Tracker, a.GetPod)
+	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod)
 	return add(mgr, r)
 }
 
@@ -81,18 +83,20 @@ func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
 
-func (a *Adder) InjectMutationCache(mutationCache *mutation.System) {
-	a.MutationCache = mutationCache
+func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
+	a.MutationSystem = mutationSystem
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, mutationCache *mutation.System, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) *Reconciler {
+func newReconciler(mgr manager.Manager, mutationSystem *mutation.System, tracker *readiness.Tracker, getPod func() (*corev1.Pod, error)) *Reconciler {
 	r := &Reconciler{
-		system:  mutationCache,
-		Client:  mgr.GetClient(),
-		tracker: tracker,
-		getPod:  getPod,
-		scheme:  mgr.GetScheme(),
+		system:   mutationSystem,
+		Client:   mgr.GetClient(),
+		tracker:  tracker,
+		getPod:   getPod,
+		scheme:   mgr.GetScheme(),
+		reporter: ctrlmutators.NewStatsReporter(),
+		cache:    ctrlmutators.NewMutationCache(),
 	}
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
@@ -133,18 +137,23 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // Reconciler reconciles a Assign object.
 type Reconciler struct {
 	client.Client
-	system  *mutation.System
-	tracker *readiness.Tracker
-	getPod  func() (*corev1.Pod, error)
-	scheme  *runtime.Scheme
+	system   *mutation.System
+	tracker  *readiness.Tracker
+	getPod   func() (*corev1.Pod, error)
+	scheme   *runtime.Scheme
+	reporter ctrlmutators.StatsReporter
+	cache    *ctrlmutators.Cache
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reads that state of the cluster for a Assign object and makes changes based on the state read
 // and what is in the Assign.Spec.
+// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1449): DRY this and assignmetadata_controller.go .
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	log.Info("Reconcile", "request", request)
+	startTime := time.Now()
+
 	deleted := false
 	assign := &mutationsv1alpha1.Assign{}
 	err := r.Get(ctx, request.NamespacedName, assign)
@@ -152,6 +161,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
+
 		deleted = true
 		assign = &mutationsv1alpha1.Assign{
 			ObjectMeta: metav1.ObjectMeta{
@@ -171,6 +181,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if deleted {
 		tracker.CancelExpect(assign)
+		r.cache.Remove(mID)
 
 		if err := r.system.Remove(mID); err != nil {
 			log.Error(err, "Remove failed", "resource", request.NamespacedName)
@@ -192,6 +203,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		return reconcile.Result{}, nil
 	}
+
+	ingestionStatus := ctrlmutators.MutatorStatusError
+	// encasing this call in a function prevents the arguments from being evaluated early
+	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
 
 	status, err := r.getOrCreatePodStatus(mID)
 	if err != nil {
@@ -230,6 +245,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		log.Error(err, "could not update mutator status")
 		return reconcile.Result{}, err
 	}
+
+	ingestionStatus = ctrlmutators.MutatorStatusActive
 	return reconcile.Result{}, nil
 }
 
@@ -265,4 +282,22 @@ func (r *Reconciler) defaultGetPod() (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
 	panic("GetPod must be injected")
+}
+
+func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
+	r.cache.Upsert(mID, ingestionStatus)
+
+	if r.reporter == nil {
+		return
+	}
+
+	if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
+		log.Error(err, "failed to report mutator ingestion request")
+	}
+
+	for status, count := range r.cache.Tally() {
+		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
+			log.Error(err, "failed to report mutator status request")
+		}
+	}
 }

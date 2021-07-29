@@ -41,7 +41,7 @@ func assign(value interface{}, location string) *v1alpha1.Assign {
 }
 
 func BenchmarkSystem_Mutate(b *testing.B) {
-	s := NewSystem()
+	s := NewSystem(SystemOpts{})
 
 	a := assign("", "spec")
 	m, err := mutators.MutatorForAssign(a)
