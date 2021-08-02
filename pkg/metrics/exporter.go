@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
+	"go.opencensus.io/plugin/runmetrics"
 	"go.opencensus.io/stats/view"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -21,6 +23,17 @@ var _ manager.Runnable = &runner{}
 
 type runner struct {
 	mgr manager.Manager
+}
+
+func init() {
+	err := runmetrics.Enable(runmetrics.RunMetricOptions{
+		EnableCPU:    true,
+		EnableMemory: true,
+		Prefix:       "go_runtime/",
+	})
+	if err != nil {
+		panic(errors.Wrap(err, "Failed to Enable golang runtime metrics"))
+	}
 }
 
 func AddToManager(m manager.Manager) error {

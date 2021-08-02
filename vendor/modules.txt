@@ -268,9 +268,11 @@ github.com/yashtewari/glob-intersection
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/internal/tagencoding
+go.opencensus.io/metric
 go.opencensus.io/metric/metricdata
 go.opencensus.io/metric/metricexport
 go.opencensus.io/metric/metricproducer
+go.opencensus.io/plugin/runmetrics
 go.opencensus.io/resource
 go.opencensus.io/stats
 go.opencensus.io/stats/internal
