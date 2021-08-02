@@ -25,7 +25,6 @@ import (
 
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	frameworksapi "github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	api "github.com/open-policy-agent/gatekeeper/apis"
@@ -107,7 +106,6 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = api.AddToScheme(scheme)
-	_ = frameworksapi.AddToScheme(scheme)
 
 	_ = configv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
