@@ -131,8 +131,25 @@ spec:
             - --operation=audit
             - --operation=status
             - --logtostderr
+            - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_PROMETHEUS_PORT
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+          ports:
+          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_PROMETHEUS_PORT
+            name: metrics
+            protocol: TCP
+          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            name: healthz
+            protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
           resources:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:

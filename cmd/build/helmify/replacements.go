@@ -15,6 +15,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
 
+	"HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT": `{{ .Values.audit.healthPort }}`,
+
+	"HELMSUBST_DEPLOYMENT_AUDIT_PROMETHEUS_PORT": `{{ .Values.audit.prometheusPort }}`,
+
 	`HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""`: `{{- toYaml .Values.audit.nodeSelector | nindent 8 }}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""`: `{{- toYaml .Values.audit.affinity | nindent 8 }}`,
