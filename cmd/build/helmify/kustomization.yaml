@@ -8,6 +8,7 @@ bases:
   - "../../../config/overlays/mutation_webhook" # calls ../../default
 patchesStrategicMerge:
   - kustomize-for-helm.yaml
+  - delete-ports.yaml
 patchesJson6902:
   - target:
       group: apiextensions.k8s.io
@@ -78,9 +79,3 @@ patchesJson6902:
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
         path: /spec/template/spec/affinity/podAntiAffinity
-      - op: remove
-        path: /spec/template/spec/containers/0/ports/3
-      - op: remove
-        path: /spec/template/spec/containers/0/ports/3
-      - op: remove
-        path: /spec/template/spec/containers/0/ports/3
