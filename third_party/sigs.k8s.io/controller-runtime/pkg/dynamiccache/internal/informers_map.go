@@ -137,6 +137,17 @@ type specificInformersMap struct {
 	selectors SelectorsByGVK
 }
 
+// Start starts the informer managed by a MapEntry.
+// Blocks until the informer stops. The informer can be stopped
+// either individually (via the entry's stop channel) or globally
+// via the provided stop argument.
+func (e *MapEntry) Start(stop <-chan struct{}) {
+	// Stop on either the whole map stopping or just this informer being removed.
+	internalStop, cancel := eitherChan(stop, e.stop)
+	defer cancel()
+	e.Informer.Run(internalStop)
+}
+
 // Start calls Run on each of the informers and sets started to true.  Blocks on the context.
 // It doesn't return start because it can't return an error, and it's not a runnable directly.
 func (ip *specificInformersMap) Start(ctx context.Context) {
@@ -148,8 +159,8 @@ func (ip *specificInformersMap) Start(ctx context.Context) {
 		ip.stop = ctx.Done()
 
 		// Start each informer
-		for _, informer := range ip.informersByGVK {
-			go informer.Informer.Run(ctx.Done())
+		for _, entry := range ip.informersByGVK {
+			go entry.Start(ctx.Done())
 		}
 
 		// Set started to true so we immediately start any informers added later.
@@ -199,8 +210,12 @@ func (ip *specificInformersMap) Get(ctx context.Context, gvk schema.GroupVersion
 
 	if started && !i.Informer.HasSynced() {
 		// Wait for it to sync before returning the Informer so that folks don't read from a stale cache.
-		if !cache.WaitForCacheSync(ctx.Done(), i.Informer.HasSynced) {
-			return started, nil, apierrors.NewTimeoutError(fmt.Sprintf("failed waiting for %T Informer to sync", obj), 0)
+		// Cancel for context, informer stopping, or entire map stopping.
+		syncStop, cancel := mergeChan(ctx.Done(), i.stop, ip.stop)
+		defer cancel()
+		if !cache.WaitForCacheSync(syncStop, i.Informer.HasSynced) {
+			// Return entry even on timeout - caller may have intended a non-blocking fetch.
+			return started, i, apierrors.NewTimeoutError(fmt.Sprintf("failed waiting for %T Informer to sync", obj), 0)
 		}
 	}
 
@@ -241,6 +256,7 @@ func (ip *specificInformersMap) addInformerToMap(gvk schema.GroupVersionKind, ob
 	i := &MapEntry{
 		Informer: ni,
 		Reader:   CacheReader{indexer: ni.GetIndexer(), groupVersionKind: gvk, scopeName: rm.Scope.Name()},
+		stop:     make(chan struct{}),
 	}
 	ip.informersByGVK[gvk] = i
 
@@ -248,7 +264,7 @@ func (ip *specificInformersMap) addInformerToMap(gvk schema.GroupVersionKind, ob
 	// TODO(seans): write thorough tests and document what happens here - can you add indexers?
 	// can you add eventhandlers?
 	if ip.started {
-		go i.Informer.Run(ip.stop)
+		go i.Start(ip.stop)
 	}
 	return i, ip.started, nil
 }
@@ -265,7 +281,6 @@ func (ip *specificInformersMap) Remove(gvk schema.GroupVersionKind) {
 	close(entry.stop)
 	delete(ip.informersByGVK, gvk)
 }
-
 
 // newListWatch returns a new ListWatch object that can be used to create a SharedIndexInformer.
 func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformersMap) (*cache.ListWatch, error) {
@@ -401,8 +416,57 @@ func createMetadataListWatch(gvk schema.GroupVersionKind, ip *specificInformersM
 // hammer the apiserver with list requests simultaneously.
 func resyncPeriod(resync time.Duration) func() time.Duration {
 	return func() time.Duration {
+		/* #nosec */
+		// using math/rand insted of crypto/rand will cause G404 issue while using gosec
 		// the factor will fall into [0.9, 1.1)
 		factor := rand.Float64()/5.0 + 0.9 //nolint:gosec
 		return time.Duration(float64(resync.Nanoseconds()) * factor)
 	}
+}
+
+// eitherChan returns a channel that is closed when either of the input channels are signaled.
+// The caller must call the returned CancelFunc to ensure no resources are leaked.
+func eitherChan(a, b <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
+	var once sync.Once
+	out := make(chan struct{})
+	cancel := make(chan struct{})
+	cancelFunc := func() {
+		once.Do(func() {
+			close(cancel)
+		})
+	}
+	go func() {
+		defer close(out)
+		select {
+		case <-a:
+		case <-b:
+		case <-cancel:
+		}
+	}()
+
+	return out, cancelFunc
+}
+
+// mergeChan returns a channel that is closed when any of the input channels are signaled.
+// The caller must call the returned CancelFunc to ensure no resources are leaked.
+func mergeChan(a, b, c <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
+	var once sync.Once
+	out := make(chan struct{})
+	cancel := make(chan struct{})
+	cancelFunc := func() {
+		once.Do(func() {
+			close(cancel)
+		})
+	}
+	go func() {
+		defer close(out)
+		select {
+		case <-a:
+		case <-b:
+		case <-c:
+		case <-cancel:
+		}
+	}()
+
+	return out, cancelFunc
 }

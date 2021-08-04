@@ -50,6 +50,30 @@ func New(config *rest.Config, opts cache.Options) (cache.Cache, error) {
 	return &dynamicInformerCache{InformersMap: im}, nil
 }
 
+// BuilderWithOptions returns a Cache constructor that will build the a cache
+// honoring the options argument, this is useful to specify options like
+// SelectorsByObject
+// WARNING: if SelectorsByObject is specified. filtered out resources are not
+//          returned.
+func BuilderWithOptions(options cache.Options) cache.NewCacheFunc {
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		if opts.Scheme == nil {
+			opts.Scheme = options.Scheme
+		}
+		if opts.Mapper == nil {
+			opts.Mapper = options.Mapper
+		}
+		if opts.Resync == nil {
+			opts.Resync = options.Resync
+		}
+		if opts.Namespace == "" {
+			opts.Namespace = options.Namespace
+		}
+		opts.SelectorsByObject = options.SelectorsByObject
+		return New(config, opts)
+	}
+}
+
 func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error) {
 	// Use the default Kubernetes Scheme if unset
 	if opts.Scheme == nil {
@@ -59,7 +83,7 @@ func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error)
 	// Construct a new Mapper if unset
 	if opts.Mapper == nil {
 		var err error
-		opts.Mapper, err = apiutil.NewDiscoveryRESTMapper(config)
+		opts.Mapper, err = apiutil.NewDynamicRESTMapper(config)
 		if err != nil {
 			log.WithName("setup").Error(err, "Failed to get API Group-Resources")
 			return opts, fmt.Errorf("could not create RESTMapper from config")

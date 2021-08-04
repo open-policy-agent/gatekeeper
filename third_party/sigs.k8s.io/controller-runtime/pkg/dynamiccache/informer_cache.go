@@ -38,9 +38,9 @@ import (
 )
 
 var (
-	_ cache.Informers     = &dynamicInformerCache{}
-	_ client.Reader = &dynamicInformerCache{}
-	_ cache.Cache         = &dynamicInformerCache{}
+	_ cache.Informers = &dynamicInformerCache{}
+	_ client.Reader   = &dynamicInformerCache{}
+	_ cache.Cache     = &dynamicInformerCache{}
 )
 
 // ErrCacheNotStarted is returned when trying to read from the cache that wasn't started.
