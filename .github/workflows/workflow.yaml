@@ -76,7 +76,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.19.11", "1.20.7", "1.21.1"]
+        KUBERNETES_VERSION: ["1.20.7", "1.21.1", "1.22.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -91,48 +91,6 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
           make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
-
-      - name: Run e2e
-        run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e:latest
-          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-          # there should be no additional manifest changes
-          git diff --exit-code
-          make test-e2e
-
-      - name: Save logs
-        run: |
-          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller.json
-          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs
-          path: |
-            logs-*.json
-
-  # This action is separate because it loads a k8s 1.22 from a separate source.  This isn't the
-  # pattern we want going forward, so keeping this separate makes it easy to delete in the future.
-  build_test_122:
-    name: "Build and Test - k8s 1.22"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-
-      - name: Set up Go 1.16
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-
-      - name: Bootstrap e2e
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap KUBERNETES_VERSION="1.21.1" KIND_NODE_VERSION="openpolicyagent/kind-node-image:v1.22.0-alpha.2"
 
       - name: Run e2e
         run: |
