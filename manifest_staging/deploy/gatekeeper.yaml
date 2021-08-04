@@ -841,7 +841,7 @@ metadata:
 spec:
   ports:
   - port: 443
-    targetPort: 8443
+    targetPort: webhook-server
   selector:
     control-plane: controller-manager
     gatekeeper.sh/operation: webhook
