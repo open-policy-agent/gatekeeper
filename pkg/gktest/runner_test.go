@@ -2,6 +2,7 @@ package gktest
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"testing"
 	"testing/fstest"
@@ -24,9 +25,29 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package k8sdisallowedtags
+        package k8salwaysvalidate
         violation {
           false
+        }
+`
+
+	templateNeverValidate = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: nevervalidate
+spec:
+  crd:
+    spec:
+      names:
+        kind: NeverValidate
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8snevervalidate
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
         }
 `
 
@@ -103,6 +124,13 @@ metadata:
   name: always-pass
 `
 
+	constraintNeverValidate = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-fail
+`
+
 	constraintInvalidYAML = `
 kind: AlwaysValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -117,9 +145,15 @@ apiVersion: constraints.gatekeeper.sh/v1beta1
 metadata:
   name: other
 `
+
+	object = `
+kind: Object
+apiVersion: v1
+metadata:
+  name: object`
 )
 
-func TestSuite_Run(t *testing.T) {
+func TestRunner_Run(t *testing.T) {
 	testCases := []struct {
 		name  string
 		suite Suite
@@ -264,15 +298,103 @@ func TestSuite_Run(t *testing.T) {
 			name: "valid Suite",
 			suite: Suite{
 				Tests: []Test{{
-					Template:   "template.yaml",
-					Constraint: "constraint.yaml",
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Allow: "object.yaml",
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []Case{{
+						Deny: "object.yaml",
+					}},
 				}},
 			},
 			f: fstest.MapFS{
-				"template.yaml": &fstest.MapFile{
+				"allow-template.yaml": &fstest.MapFile{
 					Data: []byte(templateAlwaysValidate),
 				},
-				"constraint.yaml": &fstest.MapFile{
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(templateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{}},
+				}, {
+					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "valid Suite failures",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Deny: "object.yaml",
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []Case{{
+						Allow: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(templateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrUnexpectedAllow,
+					}},
+				}, {
+					CaseResults: []CaseResult{{
+						Error: ErrUnexpectedDeny,
+					}},
+				}},
+			},
+		},
+		{
+			name: "valid Suite no cases",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
 					Data: []byte(constraintAlwaysValidate),
 				},
 			},
@@ -365,22 +487,149 @@ func TestSuite_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "allow case missing file",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Allow: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: fs.ErrNotExist,
+					}},
+				}},
+			},
+		},
+		{
+			name: "deny case missing file",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Deny: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: fs.ErrNotExist,
+					}},
+				}},
+			},
+		},
+		{
+			name: "case without allow or deny",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Allow: "object.yaml",
+						Deny:  "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{Error: ErrInvalidCase}},
+				}},
+			},
+		},
+		{
+			name: "case with both allow and deny",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases:      []Case{{}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{Error: ErrInvalidCase}},
+				}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		ctx := context.Background()
 
-		c, err := NewOPAClient()
-		if err != nil {
-			t.Fatal(err)
+		runner := Runner{
+			FS:        tc.f,
+			NewClient: NewOPAClient,
 		}
 
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.suite.Run(ctx, c, tc.f, Filter{})
+			got := runner.Run(ctx, Filter{}, &tc.suite)
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf(diff)
 			}
 		})
+	}
+}
+
+func TestRunner_Run_ClientError(t *testing.T) {
+	want := SuiteResult{
+		TestResults: []TestResult{{Error: ErrCreatingClient}},
+	}
+
+	runner := Runner{
+		FS: fstest.MapFS{},
+		NewClient: func() (Client, error) {
+			return nil, errors.New("error")
+		},
+	}
+
+	ctx := context.Background()
+
+	suite := &Suite{
+		Tests: []Test{{}},
+	}
+	got := runner.Run(ctx, Filter{}, suite)
+
+	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty()); diff != "" {
+		t.Error(diff)
 	}
 }

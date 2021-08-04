@@ -64,7 +64,7 @@ jobs:
           KUBEBUILDER_VERSION: 2.3.1
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@v1.5.2
+        uses: codecov/codecov-action@v2.0.2
         with:
           flags: unittests
           file: ./cover.out
@@ -274,7 +274,7 @@ jobs:
           prerelease: false
 
       - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@v1.2.0
+        uses: stefanprodan/helm-gh-pages@v1.4.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: charts
