@@ -80,7 +80,10 @@ func convertToSelectorsByGVK(selectorsByObject cache.SelectorsByObject, scheme *
 		if err != nil {
 			return nil, err
 		}
-		selectorsByGVK[gvk] = selector
+		selectorsByGVK[gvk] = internal.Selector{
+			Label: selector.Label,
+			Field: selector.Field,
+		}
 	}
 	return selectorsByGVK, nil
 }
