@@ -150,7 +150,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.2.0
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210522003146-5c034948ac29
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210803013759-9f2691290092
 ## explicit
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates
