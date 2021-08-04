@@ -29,8 +29,8 @@ _See [helm install](https://helm.sh/docs/helm/helm_install/) for command documen
 **Upgrading from < v3.4.0**
 Chart 3.4.0 deprecates support for Helm 2 and also removes the creation of the `gatekeeper-system` Namespace from within the chart. This follows Helm 3 Best Practices.
 
-Option 1:  
-A simple way to upgrade is to uninstall first and re-install with 3.4.0 or greater. 
+Option 1:
+A simple way to upgrade is to uninstall first and re-install with 3.4.0 or greater.
 
 ```console
 $ helm uninstall gatekeeper
@@ -38,7 +38,7 @@ $ helm install -n gatekeeper-system [RELEASE_NAME] gatekeeper/gatekeeper --creat
 
 ```
 
-Option 2:  
+Option 2:
 Run the `helm_migrate.sh` script before installing the 3.4.0 or greater chart. This will remove the Helm secret for the original release, while keeping all of the resources. It then updates the annotations of the resources so that the new chart can import and manage them.
 
 ```console
@@ -63,7 +63,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 ## Parameters
 
 | Parameter                                    | Description                                                                            | Default                                                                   |
-| :--------------------------------------------| :--------------------------------------------------------------------------------------| :-------------------------------------------------------------------------|
+| :------------------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
 | postInstall.labelNamespace.enabled           | Add labels to the namespace during post install hooks                                  | `true`                                                                    |
 | postInstall.labelNamespace.image.repository  | Image with kubectl to label the namespace                                              | `line/kubectl-kustomize`                                                  |
 | postInstall.labelNamespace.image.tag         | Image tag                                                                              | `1.20.4-4.0.5`                                                            |
@@ -73,11 +73,11 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | constraintViolationsLimit                    | The maximum # of audit violations reported on a constraint                             | `20`                                                                      |
 | auditFromCache                               | Take the roster of resources to audit from the OPA cache                               | `false`                                                                   |
 | auditChunkSize                               | Chunk size for listing cluster resources for audit (alpha feature)                     | `0`                                                                       |
-| auditMatchKindOnly                           | Only check resources of the kinds specified in all constraints defined in the cluster. | `false`                                                                        |
+| auditMatchKindOnly                           | Only check resources of the kinds specified in all constraints defined in the cluster. | `false`                                                                   |
 | disableValidatingWebhook                     | Disable the validating webhook                                                         | `false`                                                                   |
 | validatingWebhookTimeoutSeconds              | The timeout for the validating webhook in seconds                                      | `3`                                                                       |
-| validatingWebhookFailurePolicy               | The failurePolicy for the validating webhook                                           | `Ignore`                                                                       |
-| validatingWebhookCheckIgnoreFailurePolicy    | The failurePolicy for the check-ignore-label validating webhook                        | `Fail`                                                                       |
+| validatingWebhookFailurePolicy               | The failurePolicy for the validating webhook                                           | `Ignore`                                                                  |
+| validatingWebhookCheckIgnoreFailurePolicy    | The failurePolicy for the check-ignore-label validating webhook                        | `Fail`                                                                    |
 | enableDeleteOperations                       | Enable validating webhook for delete operations                                        | `false`                                                                   |
 | experimentalEnableMutation                   | Enable mutation  (alpha feature)                                                       | `false`                                                                   |
 | emitAdmissionEvents                          | Emit K8s events in gatekeeper namespace for admission violations (alpha feature)       | `false`                                                                   |
@@ -86,7 +86,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | logLevel                                     | Minimum log level                                                                      | `INFO`                                                                    |
 | image.pullPolicy                             | The image pull policy                                                                  | `IfNotPresent`                                                            |
 | image.repository                             | Image repository                                                                       | `openpolicyagent/gatekeeper`                                              |
-| image.release                                | The image release tag to use                                                           | Current release version: `v3.6.0-beta.3`                                         |
+| image.release                                | The image release tag to use                                                           | Current release version: `v3.6.0-beta.3`                                  |
 | image.pullSecrets                            | Specify an array of imagePullSecrets                                                   | `[]`                                                                      |
 | resources                                    | The resource request/limits for the container image                                    | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                            |
 | nodeSelector                                 | The node selector to use for pod scheduling                                            | `kubernetes.io/os: linux`                                                 |
@@ -96,10 +96,12 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | controllerManager.port                       | Webhook-server port for controller manager                                             | `8443`                                                                    |
 | controllerManager.prometheusPort             | Metrics port for controller manager                                                    | `8888`                                                                    |
 | controllerManager.priorityClassName          | Priority class name for controller manager                                             | `system-cluster-critical`                                                 |
-| controllerManager.exemptNamespaces           | The namespaces to exempt                                                                                   | `[]`                                                 |
+| controllerManager.exemptNamespaces           | The namespaces to exempt                                                               | `[]`                                                                      |
 | controllerManager.hostNetwork                | Enables controllerManager to be deployed on hostNetwork                                | `false`                                                                   |
 | audit.priorityClassName                      | Priority class name for audit controller                                               | `system-cluster-critical`                                                 |
 | audit.hostNetwork                            | Enables audit to be deployed on hostNetwork                                            | `false`                                                                   |
+| audit.healthPort                             | Health port for audit                                                                  | `9090`                                                                    |
+| audit.prometheusPort                         | Metrics port for audit                                                                 | `8888`                                                                    |
 | replicas                                     | The number of Gatekeeper replicas to deploy for the webhook                            | `3`                                                                       |
 | podAnnotations                               | The annotations to add to the Gatekeeper pods                                          | `container.seccomp.security.alpha.kubernetes.io/manager: runtime/default` |
 | podLabels                                    | The labels to add to the Gatekeeper pods                                               | `{}`                                                                      |
