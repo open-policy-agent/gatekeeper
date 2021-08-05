@@ -32,7 +32,7 @@ func init() {
 		Prefix:       "go_runtime/",
 	})
 	if err != nil {
-		panic(errors.Wrap(err, "Failed to Enable golang runtime metrics"))
+		panic(errors.Wrap(err, "Failed to enable golang runtime metrics"))
 	}
 }
 
