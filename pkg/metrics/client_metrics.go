@@ -24,7 +24,7 @@ import (
 )
 
 // DisableRESTClientMetrics disables the rest client latency histograms configured by
-// controller-runtime in sigs.k8s.io/controller-runtime/pkg/metrics/client_go_adapter.go#registerClientMetrics
+// controller-runtime in sigs.k8s.io/controller-runtime/pkg/metrics/client_go_adapter.go#registerClientMetrics.
 func DisableRESTClientMetrics() {
 	clientmetrics.RequestLatency = noopLatency{}
 }
