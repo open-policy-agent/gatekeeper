@@ -65,7 +65,7 @@ spec:
           args:
             - --port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
             - --health-addr=:HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
-            - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT
+            - --prometheus-port=HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
@@ -81,7 +81,7 @@ spec:
           - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
             name: webhook-server
             protocol: TCP
-          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PROMETHEUS_PORT
+          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
             name: metrics
             protocol: TCP
           - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
@@ -132,11 +132,11 @@ spec:
             - --operation=status
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
-            - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_PROMETHEUS_PORT
+            - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
           ports:
-          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_PROMETHEUS_PORT
+          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             name: metrics
             protocol: TCP
           - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT

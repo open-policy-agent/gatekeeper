@@ -43,7 +43,7 @@ spec:
       - args:
         - --port={{ .Values.controllerManager.port }}
         - --health-addr=:{{ .Values.controllerManager.healthPort }}
-        - --prometheus-port={{ .Values.controllerManager.prometheusPort }}
+        - --prometheus-port={{ .Values.controllerManager.metricsPort }}
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
@@ -82,7 +82,7 @@ spec:
         - containerPort: {{ .Values.controllerManager.port }}
           name: webhook-server
           protocol: TCP
-        - containerPort: {{ .Values.controllerManager.prometheusPort }}
+        - containerPort: {{ .Values.controllerManager.metricsPort }}
           name: metrics
           protocol: TCP
         - containerPort: {{ .Values.controllerManager.healthPort }}
