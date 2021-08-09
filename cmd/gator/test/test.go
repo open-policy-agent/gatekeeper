@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
@@ -118,19 +117,14 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 
 		results[i] = suiteResult
 		i++
-
-		w := &strings.Builder{}
-		printer := gktest.PrinterGo{}
-		err := printer.Print(w, results, verbose)
-		if err != nil {
-			return err
-		}
-		fmt.Println(w)
 	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Path < results[j].Path
-	})
+	w := &strings.Builder{}
+	printer := gktest.PrinterGo{}
+	err := printer.Print(w, results, verbose)
+	if err != nil {
+		return err
+	}
+	fmt.Println(w)
 
 	if isFailure {
 		// At least one test failed or there was a problem executing tests in at

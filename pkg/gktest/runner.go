@@ -23,7 +23,7 @@ type Runner struct {
 
 // Run executes all Tests in the Suite and returns the results.
 func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
-	start := time.Now()
+	suiteStart := time.Now()
 	result := SuiteResult{
 		Path:        suitePath,
 		TestResults: make([]TestResult, len(s.Tests)),
@@ -32,14 +32,14 @@ func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Su
 
 	for i, t := range s.Tests {
 		if filter.MatchesTest(t) {
-			start := time.Now()
+			testStart := time.Now()
 			result.TestResults[i] = r.runTest(ctx, suiteDir, filter, t)
 			result.TestResults[i].Name = t.Name
-			result.TestResults[i].Runtime = Duration(time.Since(start))
+			result.TestResults[i].Runtime = Duration(time.Since(testStart))
 		}
 	}
 
-	result.Runtime = Duration(time.Since(start))
+	result.Runtime = Duration(time.Since(suiteStart))
 	return result
 }
 
