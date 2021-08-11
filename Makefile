@@ -116,8 +116,7 @@ e2e-bootstrap:
 	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
 
 e2e-build-load-image: docker-buildx
-	kind load docker-image --name kind ${IMG}
-	kind load docker-image --name kind ${CRD_IMG}
+	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
@@ -238,14 +237,14 @@ generate: __controller-gen target-template-source
 
 # Prepare crds to be added to gatekeeper-crds image
 clean-crds:
-	rm -rf _output/crds/*
+	rm -rf .staging/crds/*
 
 build-crds: clean-crds
-	mkdir -p _output/crds
+	mkdir -p .staging/crds
 ifdef CI
-	cp -R manifest_staging/charts/gatekeeper/crds/ _output/crds/
+	cp -R manifest_staging/charts/gatekeeper/crds/ .staging/crds/
 else
-	cp -R charts/gatekeeper/crds/ _output/crds/
+	cp -R charts/gatekeeper/crds/ .staging/crds/
 endif
 
 # Docker Login
@@ -279,57 +278,57 @@ docker-push-release: docker-tag-release
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
 docker-build: build-crds
-	docker build --pull -f crd.Dockerfile _output/crds/ --build-arg LDFLAGS=${LDFLAGS} -t ${CRD_IMG}
+	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} -t ${CRD_IMG}
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
 
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
 docker-buildx: build-crds
-	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(IMG) \
 		. --load
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(CRD_IMG) \
-		-f crd.Dockerfile _output/crds/ --load
+		-f crd.Dockerfile .staging/crds/ --load
 
 docker-buildx-dev:
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(DEV_TAG) \
 		-t $(REPOSITORY):dev \
 		. --push
 
 docker-buildx-crds-dev: build-crds
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
 
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
-		-f crd.Dockerfile _output/crds/ --push
+		-f crd.Dockerfile .staging/crds/ --push
 
 docker-buildx-release:
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
 		. --push
 
 docker-buildx-crds-release: build-crds
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(VERSION) \
-		-f crd.Dockerfile _output/crds/ --push
+		-f crd.Dockerfile .staging/crds/ --push
 
 # Update manager_image_patch.yaml with image tag
 patch-image:

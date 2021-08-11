@@ -74,11 +74,6 @@ junit_*.xml
 
 .vscode/*
 
-# build output
-/output*/
-/_output*/
-/_output
-
 # Mac .DS_Store files
 .DS_Store
 

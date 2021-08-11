@@ -163,7 +163,7 @@ jobs:
 
       - name: make docker-push-dev
         run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull"
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
           bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
@@ -175,10 +175,7 @@ jobs:
             make docker-buildx-dev DEV_TAG=${GITHUB_SHA::7}
           fi
 
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
-          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
           listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
-          authz="Authorization: Bearer $bearerToken"
           version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
           exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
           if [[ $exists == null ]]
@@ -213,7 +210,7 @@ jobs:
 
       - name: Publish release
         run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull"
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
           bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
@@ -224,11 +221,8 @@ jobs:
             make docker-login
             make docker-buildx-release VERSION=${TAG}
           fi
-        
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
-          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
+
           listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
-          authz="Authorization: Bearer $bearerToken"
           version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
           exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
           if [[ $exists == null ]]
