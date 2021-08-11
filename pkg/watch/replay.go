@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -126,7 +125,7 @@ func (wm *Manager) replayEventsLoop(ctx context.Context) func() error {
 		var wg sync.WaitGroup
 		defer wg.Wait()
 
-		ctx, cancel := syncutil.ContextForChannel(ctx, wm.stopped)
+		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
 		// Entries remain until a watch is removed.

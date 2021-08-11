@@ -345,7 +345,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 		return nil, err
 	}
 	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-	if err := r.reader.Get(context.TODO(), key, statusObj); err != nil {
+	if err := r.reader.Get(ctx, key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
@@ -360,7 +360,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	if err != nil {
 		return nil, err
 	}
-	if err := r.writer.Create(context.TODO(), statusObj); err != nil {
+	if err := r.writer.Create(ctx, statusObj); err != nil {
 		return nil, err
 	}
 	return statusObj, nil

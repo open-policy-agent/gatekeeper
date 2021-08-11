@@ -206,7 +206,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	ingestionStatus := ctrlmutators.MutatorStatusError
 	// encasing this call in a function prevents the arguments from being evaluated early
-	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
+	defer func() { r.reportMutator(ctx, mID, ingestionStatus, startTime) }()
 
 	status, err := r.getOrCreatePodStatus(ctx, mID)
 	if err != nil {
@@ -257,7 +257,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 		return nil, err
 	}
 	key := apiTypes.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-	if err := r.Get(context.TODO(), key, statusObj); err != nil {
+	if err := r.Get(ctx, key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
@@ -272,7 +272,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 	if err != nil {
 		return nil, err
 	}
-	if err := r.Create(context.TODO(), statusObj); err != nil {
+	if err := r.Create(ctx, statusObj); err != nil {
 		return nil, err
 	}
 	return statusObj, nil
@@ -284,19 +284,19 @@ func (r *Reconciler) defaultGetPod(ctx context.Context) (*corev1.Pod, error) {
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
+func (r *Reconciler) reportMutator(ctx context.Context, mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
 	r.cache.Upsert(mID, ingestionStatus)
 
 	if r.reporter == nil {
 		return
 	}
 
-	if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
+	if err := r.reporter.ReportMutatorIngestionRequest(ctx, ingestionStatus, time.Since(startTime)); err != nil {
 		r.log.Error(err, "failed to report mutator ingestion request")
 	}
 
 	for status, count := range r.cache.Tally() {
-		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
+		if err := r.reporter.ReportMutatorsStatus(ctx, status, count); err != nil {
 			r.log.Error(err, "failed to report mutator status request")
 		}
 	}

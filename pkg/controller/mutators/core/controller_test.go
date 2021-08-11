@@ -157,7 +157,7 @@ func TestReconcile(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 		g.Expect(func() error {
-			_, err := mSys.Mutate(u, nil)
+			_, err := mSys.Mutate(ctx, u, nil)
 			return err
 		}()).NotTo(gomega.HaveOccurred())
 		g.Expect(func() error {
@@ -181,7 +181,7 @@ func TestReconcile(t *testing.T) {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 			g.Expect(func() error {
-				_, err := mSys.Mutate(u, nil)
+				_, err := mSys.Mutate(ctx, u, nil)
 				return err
 			}()).NotTo(gomega.HaveOccurred())
 			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")

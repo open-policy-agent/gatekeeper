@@ -108,7 +108,7 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 		return nil, err
 	}
 	uPod.SetGroupVersionKind(gvk)
-	if err := g.client.Get(context.TODO(), key, uPod); err != nil {
+	if err := g.client.Get(ctx, key, uPod); err != nil {
 		return nil, err
 	}
 	if err := g.scheme.Convert(uPod, pod, nil); err != nil {
