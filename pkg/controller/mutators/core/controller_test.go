@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package assignmetadata
+package core
 
 import (
 	"os"
@@ -26,6 +26,9 @@ import (
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,9 +39,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	apiTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -66,20 +70,21 @@ func setupManager(t *testing.T) manager.Manager {
 }
 
 func TestReconcile(t *testing.T) {
-	name := "assignmetadata-test-obj"
 	g := gomega.NewGomegaWithT(t)
-	mutator := &mutationsv1alpha1.AssignMetadata{
+	mutator := &mutationsv1alpha1.Assign{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: "assign-test-obj",
 		},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
-			Location: "metadata.labels.test",
-			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "works"}`)},
+		Spec: mutationsv1alpha1.AssignSpec{
+			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
+			Location: "spec.test",
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign:   runtime.RawExtension{Raw: []byte(`{"value": "works"}`)},
+				AssignIf: runtime.RawExtension{Raw: []byte(`{}`)},
 			},
 		},
 	}
-	objName := types.NamespacedName{Name: name}
+	objName := apiTypes.NamespacedName{Name: "assign-test-obj"}
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -94,16 +99,24 @@ func TestReconcile(t *testing.T) {
 	*mutation.MutationEnabled = true
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
+
 	tracker, err := readiness.SetupTracker(mgr, true)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	os.Setenv("POD_NAME", "no-pod")
 	podstatus.DisablePodOwnership()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
-	rec := newReconciler(mgr, mSys, tracker, func() (*corev1.Pod, error) { return pod, nil })
 
-	recFn, _ := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+	kind := "Assign"
+	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }
+	newMutator := func(obj client.Object) (types.Mutator, error) {
+		assign := obj.(*mutationsv1alpha1.Assign) // nolint:forcetypeassert
+		return mutators.MutatorForAssign(assign)
+	}
+
+	rec := newReconciler(mgr, mSys, tracker, func() (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
+
+	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}
 	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
@@ -125,7 +138,7 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("Mutator is reported as enforced", func(t *testing.T) {
 		g.Eventually(func() error {
-			v := &mutationsv1alpha1.AssignMetadata{}
+			v := &mutationsv1alpha1.Assign{}
 			v.SetName("assign-test-obj")
 			if err := c.Get(ctx, objName, v); err != nil {
 				return errors.Wrap(err, "cannot get mutator")
@@ -148,7 +161,7 @@ func TestReconcile(t *testing.T) {
 			return err
 		}()).NotTo(gomega.HaveOccurred())
 		g.Expect(func() error {
-			v, exists, err := unstructured.NestedString(u.Object, "metadata", "labels", "test")
+			v, exists, err := unstructured.NestedString(u.Object, "spec", "test")
 			if err != nil {
 				return err
 			}
@@ -171,7 +184,7 @@ func TestReconcile(t *testing.T) {
 				_, err := mSys.Mutate(u, nil)
 				return err
 			}()).NotTo(gomega.HaveOccurred())
-			_, exists, err := unstructured.NestedString(u.Object, "metadata", "labels", "test")
+			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")
 			if err != nil {
 				return err
 			}
