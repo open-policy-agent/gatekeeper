@@ -71,10 +71,6 @@ func (r *reporter) reportRequest(ctx context.Context, response requestResponse, 
 		return err
 	}
 
-	return r.report(ctx, m)
-}
-
-func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
 

@@ -47,7 +47,7 @@ func (r *reporter) reportConstraints(ctx context.Context, t tags, v int64) error
 		return err
 	}
 
-	return r.report(ctx, constraintsM.M(v))
+	return metrics.Record(ctx, constraintsM.M(v))
 }
 
 // StatsReporter reports audit metrics.
@@ -55,13 +55,9 @@ type StatsReporter interface {
 	reportConstraints(ctx context.Context, t tags, v int64) error
 }
 
-// newStatsReporter creaters a reporter for audit metrics.
+// newStatsReporter creates a reporter for audit metrics.
 func newStatsReporter() (StatsReporter, error) {
 	return &reporter{}, nil
 }
 
 type reporter struct{}
-
-func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
-}

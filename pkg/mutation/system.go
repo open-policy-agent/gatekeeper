@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -89,7 +88,7 @@ func (s *System) Upsert(m types.Mutator) error {
 
 // Mutate applies the mutation in place to the given object. Returns
 // true if a mutation was performed.
-func (s *System) Mutate(ctx context.Context, obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
+func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	mutationUUID := uuid.New()
@@ -108,7 +107,7 @@ func (s *System) Mutate(ctx context.Context, obj *unstructured.Unstructured, ns 
 			return
 		}
 
-		err := s.reporter.ReportIterationConvergence(ctx, convergence, iterations)
+		err := s.reporter.ReportIterationConvergence(convergence, iterations)
 		if err != nil {
 			log.Error(err, "failed to report mutator ingestion request")
 		}

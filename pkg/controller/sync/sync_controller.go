@@ -149,13 +149,13 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
-			if err := r.reporter.reportSyncDuration(ctx, time.Since(timeStart)); err != nil {
+			if err := r.reporter.reportSyncDuration(time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report sync duration")
 			}
 
 			r.metricsCache.ReportSync(ctx, &r.reporter)
 
-			if err := r.reporter.reportLastSync(ctx); err != nil {
+			if err := r.reporter.reportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
 			}
 		}

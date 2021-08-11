@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -55,10 +54,9 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		u := &unstructured.Unstructured{}
 
-		_, _ = s.Mutate(ctx, u, nil)
+		_, _ = s.Mutate(u, nil)
 	}
 }

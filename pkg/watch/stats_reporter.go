@@ -6,6 +6,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 const (
@@ -43,11 +44,21 @@ func register() error {
 	return view.Register(views...)
 }
 
-func (r *reporter) reportGvkCount(ctx context.Context, count int64) error {
+func (r *reporter) reportGvkCount(count int64) error {
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
 	return metrics.Record(ctx, gvkCountM.M(count))
 }
 
-func (r *reporter) reportGvkIntentCount(ctx context.Context, count int64) error {
+func (r *reporter) reportGvkIntentCount(count int64) error {
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
 	return metrics.Record(ctx, gvkIntentCountM.M(count))
 }
 

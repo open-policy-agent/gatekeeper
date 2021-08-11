@@ -54,9 +54,9 @@ func register() error {
 	return view.Register(views...)
 }
 
-func (r *reporter) reportTotalViolations(ctx context.Context, enforcementAction util.EnforcementAction, v int64) error {
+func (r *reporter) reportTotalViolations(enforcementAction util.EnforcementAction, v int64) error {
 	ctx, err := tag.New(
-		ctx,
+		context.Background(),
 		tag.Insert(enforcementActionKey, string(enforcementAction)))
 	if err != nil {
 		return err
@@ -65,8 +65,8 @@ func (r *reporter) reportTotalViolations(ctx context.Context, enforcementAction 
 	return r.report(ctx, violationsM.M(v))
 }
 
-func (r *reporter) reportLatency(ctx context.Context, d time.Duration) error {
-	ctx, err := tag.New(ctx)
+func (r *reporter) reportLatency(d time.Duration) error {
+	ctx, err := tag.New(context.Background())
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,12 @@ func (r *reporter) reportLatency(ctx context.Context, d time.Duration) error {
 	return r.report(ctx, auditDurationM.M(d.Seconds()))
 }
 
-func (r *reporter) reportRunStart(ctx context.Context, t time.Time) error {
+func (r *reporter) reportRunStart(t time.Time) error {
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
 	val := float64(t.UnixNano()) / 1e9
 	return metrics.Record(ctx, lastRunTimeM.M(val))
 }

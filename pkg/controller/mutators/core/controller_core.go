@@ -291,12 +291,12 @@ func (r *Reconciler) reportMutator(ctx context.Context, mID types.ID, ingestionS
 		return
 	}
 
-	if err := r.reporter.ReportMutatorIngestionRequest(ctx, ingestionStatus, time.Since(startTime)); err != nil {
+	if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
 		r.log.Error(err, "failed to report mutator ingestion request")
 	}
 
 	for status, count := range r.cache.Tally() {
-		if err := r.reporter.ReportMutatorsStatus(ctx, status, count); err != nil {
+		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
 			r.log.Error(err, "failed to report mutator status request")
 		}
 	}

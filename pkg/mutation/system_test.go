@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -294,8 +293,7 @@ func TestMutation(t *testing.T) {
 					t.Errorf(tc.tname, "Failed inserting %dth object", i)
 				}
 			}
-			ctx := context.Background()
-			mutated, err := c.Mutate(ctx, toMutate, nil)
+			mutated, err := c.Mutate(toMutate, nil)
 			if tc.expectError && err == nil {
 				t.Fatal(tc.tname, "Expecting error from mutate, did not fail")
 			}
@@ -361,9 +359,8 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 
 	// We can mutate objects before System is put in an inconsistent state.
 	t.Run("mutate works on consistent state", func(t *testing.T) {
-		ctx := context.Background()
 		u := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(ctx, u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -382,9 +379,8 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// TODO(willbeason): Fix once System is updated to properly report conflicts (#1216).
 	//  Should be "no mutation on inconsistent state".
 	t.Run("mutation on inconsistent state", func(t *testing.T) {
-		ctx := context.Background()
 		u2 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(ctx, u2, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(u2, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -404,9 +400,8 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 
 	// Mutations are performed again.
 	t.Run("mutations performed after conflict removed", func(t *testing.T) {
-		ctx := context.Background()
 		u3 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(ctx, u3, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(u3, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -448,8 +443,7 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	ctx := context.Background()
-	gotMutated, gotErr := s.Mutate(ctx, u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 	if gotMutated {
 		t.Errorf("got Mutate() = %t, want false", gotMutated)
 	}
@@ -500,8 +494,7 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	ctx := context.Background()
-	gotMutated, gotErr := s.Mutate(ctx, u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want true", gotMutated)
 	}
@@ -525,7 +518,7 @@ type fakeReporter struct {
 	iterations        int
 }
 
-func (fr *fakeReporter) ReportIterationConvergence(ctx context.Context, scs SystemConvergenceStatus, iterations int) error {
+func (fr *fakeReporter) ReportIterationConvergence(scs SystemConvergenceStatus, iterations int) error {
 	fr.called = true
 	fr.convergenceStatus = scs
 	fr.iterations = iterations
@@ -575,8 +568,7 @@ func TestSystem_ReportingInjection(t *testing.T) {
 		}
 	}
 
-	ctx := context.Background()
-	_, err = s.Mutate(ctx, toMutate, nil)
+	_, err = s.Mutate(toMutate, nil)
 
 	if err != nil {
 		t.Fatal("Mutate failed unexpectedly", err)

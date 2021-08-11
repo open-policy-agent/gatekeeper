@@ -1,7 +1,6 @@
 package mutators
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -24,12 +23,11 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	)
 
 	r := NewStatsReporter()
-	ctx := context.Background()
-	err := r.ReportMutatorIngestionRequest(ctx, MutatorStatusActive, expectedDurationValueMin)
+	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportMutatorIngestionRequest(ctx, MutatorStatusActive, expectedDurationValueMax)
+	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMax)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}

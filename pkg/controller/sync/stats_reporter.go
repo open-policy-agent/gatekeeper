@@ -70,12 +70,14 @@ func (r *Reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
 
-func (r *Reporter) reportSyncDuration(ctx context.Context, d time.Duration) error {
+func (r *Reporter) reportSyncDuration(d time.Duration) error {
+	ctx := context.Background()
 	return r.report(ctx, syncDurationM.M(d.Seconds()))
 }
 
-func (r *Reporter) reportLastSync(ctx context.Context) error {
-	return metrics.Record(ctx, lastRunSyncM.M(r.now()))
+func (r *Reporter) reportLastSync() error {
+	ctx := context.Background()
+	return r.report(ctx, lastRunSyncM.M(r.now()))
 }
 
 func (r *Reporter) reportSync(ctx context.Context, t Tags, v int64) error {

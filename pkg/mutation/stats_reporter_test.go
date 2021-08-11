@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -18,16 +17,15 @@ func TestReportIterationConvergence(t *testing.T) {
 
 	r := NewStatsReporter()
 
-	ctx := context.Background()
-	err := r.ReportIterationConvergence(ctx, SystemConvergenceTrue, successMax)
+	err := r.ReportIterationConvergence(SystemConvergenceTrue, successMax)
 	if err != nil {
 		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
-	err = r.ReportIterationConvergence(ctx, SystemConvergenceFalse, failureMax)
+	err = r.ReportIterationConvergence(SystemConvergenceFalse, failureMax)
 	if err != nil {
 		t.Errorf("ReportIterationConvergence error: %v", err)
 	}
-	err = r.ReportIterationConvergence(ctx, SystemConvergenceTrue, successMin)
+	err = r.ReportIterationConvergence(SystemConvergenceTrue, successMin)
 	if err != nil {
 		t.Errorf("ReportIterationConvergence error: %v", err)
 	}

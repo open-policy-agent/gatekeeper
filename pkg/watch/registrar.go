@@ -99,7 +99,7 @@ func (r *recordKeeper) Update(ctx context.Context, parentName string, m vitalsBy
 	defer r.intentMux.Unlock()
 
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(ctx, int64(r.count())); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 	}()
@@ -118,7 +118,7 @@ func (r *recordKeeper) ReplaceRegistrarRoster(ctx context.Context, reg *Registra
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(ctx, int64(r.count())); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 	}()
@@ -139,7 +139,7 @@ func (r *recordKeeper) Remove(ctx context.Context, parentName string, gvk schema
 	r.intentMux.Lock()
 	defer r.intentMux.Unlock()
 	defer func() {
-		if err := r.metrics.reportGvkIntentCount(ctx, int64(r.count())); err != nil {
+		if err := r.metrics.reportGvkIntentCount(int64(r.count())); err != nil {
 			log.Error(err, "while reporting gvk intent count metric")
 		}
 	}()
@@ -227,7 +227,7 @@ func (r *Registrar) AddWatch(ctx context.Context, gvk schema.GroupVersionKind) e
 		registrars: map[*Registrar]bool{r: true},
 	}
 	r.managedKinds.Update(ctx, r.parentName, vitalsByGVK{gvk: wv})
-	return r.mgr.addWatch(ctx, r, gvk)
+	return r.mgr.addWatch(r, gvk)
 }
 
 // ReplaceWatch replaces the set of watched resources.
@@ -241,14 +241,14 @@ func (r *Registrar) ReplaceWatch(ctx context.Context, gvks []schema.GroupVersion
 		roster[gvk] = wv
 	}
 	r.managedKinds.ReplaceRegistrarRoster(ctx, r, roster)
-	return r.mgr.replaceWatches(ctx, r)
+	return r.mgr.replaceWatches(r)
 }
 
 // RemoveWatch removes a watch for the given kind.
 // Ignores the request if the kind was not previously watched.
 func (r *Registrar) RemoveWatch(ctx context.Context, gvk schema.GroupVersionKind) error {
 	r.managedKinds.Remove(ctx, r.parentName, gvk)
-	return r.mgr.removeWatch(ctx, r, gvk)
+	return r.mgr.removeWatch(r, gvk)
 }
 
 // Watching returns whether a given GVK is being watched by the

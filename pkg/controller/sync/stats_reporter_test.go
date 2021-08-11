@@ -58,12 +58,11 @@ func TestReportSyncLatency(t *testing.T) {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
 
-	ctx := context.Background()
-	err = r.reportSyncDuration(ctx, expectedLatencyValueMin)
+	err = r.reportSyncDuration(expectedLatencyValueMin)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
-	err = r.reportSyncDuration(ctx, expectedLatencyValueMax)
+	err = r.reportSyncDuration(expectedLatencyValueMax)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
@@ -96,8 +95,7 @@ func TestLastRunSync(t *testing.T) {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
 	r.now = fakeNow
-	ctx := context.Background()
-	err = r.reportLastSync(ctx)
+	err = r.reportLastSync()
 	if err != nil {
 		t.Errorf("reportRestartCheck error %v", err)
 	}
