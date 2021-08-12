@@ -24,18 +24,15 @@ type runner struct {
 }
 
 func AddToManager(m manager.Manager) error {
-	mr, err := new(m)
-	if err != nil {
-		return err
-	}
+	mr := new(m)
 	return m.Add(mr)
 }
 
-func new(mgr manager.Manager) (*runner, error) {
+func new(mgr manager.Manager) *runner {
 	mr := &runner{
 		mgr: mgr,
 	}
-	return mr, nil
+	return mr
 }
 
 // Start implements the Runnable interface.

@@ -96,8 +96,8 @@ func newTracker(lister Lister, mutationEnabled bool, fn objDataFactory) *Tracker
 
 // CheckSatisfied implements healthz.Checker to report readiness based on tracker status.
 // Returns nil if all expectations have been satisfied, otherwise returns an error.
-func (t *Tracker) CheckSatisfied(req *http.Request) error {
-	if !t.Satisfied(req.Context()) {
+func (t *Tracker) CheckSatisfied(_ *http.Request) error {
+	if !t.Satisfied() {
 		return errors.New("expectations not satisfied")
 	}
 	return nil
@@ -173,7 +173,7 @@ func (t *Tracker) CancelData(gvk schema.GroupVersionKind) {
 }
 
 // Satisfied returns true if all tracked expectations have been satisfied.
-func (t *Tracker) Satisfied(ctx context.Context) bool {
+func (t *Tracker) Satisfied() bool {
 	// Check circuit-breaker first. Once satisfied, always satisfied.
 	t.mu.RLock()
 	satisfied := t.satisfied
@@ -265,7 +265,7 @@ func (t *Tracker) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				if t.Satisfied(ctx) {
+				if t.Satisfied() {
 					log.Info("readiness satisfied, no further collection")
 					ticker.Stop()
 					return nil
@@ -485,7 +485,7 @@ func (t *Tracker) trackConstraintTemplates(ctx context.Context) error {
 		handled[gvk] = true
 		// Set an expectation for this constraint type
 		ot := t.constraints.Get(gvk)
-		t.constraintTrackers.Go(gvk.String(), func(ctx context.Context) error {
+		t.constraintTrackers.Go(ctx, gvk.String(), func(ctx context.Context) error {
 			err := t.trackConstraints(ctx, gvk, ot)
 			if err != nil {
 				log.Error(err, "aborted trackConstraints", "gvk", gvk)
@@ -628,12 +628,12 @@ func (t *Tracker) trackConstraints(ctx context.Context, gvk schema.GroupVersionK
 }
 
 // EnableStats enables the verbose logging routine for the readiness tracker.
-func (t *Tracker) EnableStats(ctx context.Context) {
+func (t *Tracker) EnableStats() {
 	t.statsEnabled.Set(true)
 }
 
 // DisableStats disables the verbose logging routine for the readiness tracker.
-func (t *Tracker) DisableStats(ctx context.Context) {
+func (t *Tracker) DisableStats() {
 	t.statsEnabled.Set(false)
 }
 
@@ -651,7 +651,7 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 			continue
 		}
 
-		if t.Satisfied(ctx) {
+		if t.Satisfied() {
 			return
 		}
 

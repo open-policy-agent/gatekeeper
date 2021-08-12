@@ -116,11 +116,12 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 		WatchManger:      wm,
 		ControllerSwitch: sw,
 		Tracker:          tracker,
-		GetPod:           func() (*corev1.Pod, error) { return pod, nil },
+		GetPod:           func(ctx context.Context) (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 	}
-	if err := controller.AddToManager(mgr, opts); err != nil {
+	ctx := context.Background()
+	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
 	return nil
@@ -372,7 +373,7 @@ func Test_CollectDeleted(t *testing.T) {
 
 	client := mgr.GetClient()
 
-	g.Expect(tracker.Satisfied(ctx)).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
+	g.Expect(tracker.Satisfied()).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
 
 	// set up expected GVKs for tests
 	cgvk := schema.GroupVersionKind{

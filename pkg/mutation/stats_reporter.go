@@ -63,8 +63,9 @@ func NewStatsReporter() StatsReporter {
 // ReportIterationConvergence reports the success or failure of the mutation system to converge.
 // It also records the number of system iterations that were required to reach this end.
 func (r *reporter) ReportIterationConvergence(scs SystemConvergenceStatus, iterations int) error {
+	// No need for an actual Context.
 	ctx, err := tag.New(
-		context.TODO(),
+		context.Background(),
 		tag.Insert(systemConvergenceKey, string(scs)),
 	)
 	if err != nil {

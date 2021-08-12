@@ -55,6 +55,7 @@ func TestReportSyncLatency(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
+
 	err = r.reportSyncDuration(expectedLatencyValueMin)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)

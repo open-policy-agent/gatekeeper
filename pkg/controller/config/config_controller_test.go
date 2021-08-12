@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -159,11 +160,12 @@ func TestReconcile(t *testing.T) {
 	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
-	err = c.Create(context.TODO(), instance)
+	err = c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	defer func() {
-		err = c.Delete(context.TODO(), instance)
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
@@ -182,7 +184,7 @@ func TestReconcile(t *testing.T) {
 	ns.SetName("testns")
 	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 	ns.SetGroupVersionKind(nsGvk)
-	g.Expect(c.Create(context.TODO(), ns)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Create(ctx, ns)).NotTo(gomega.HaveOccurred())
 
 	fooNS := &unstructured.Unstructured{}
 	fooNS.SetName("foo")
@@ -253,11 +255,13 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 			},
 		},
 	}
-	err := c.Create(context.TODO(), instance)
+	ctx := context.Background()
+	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	defer func() {
-		err = c.Delete(context.TODO(), instance)
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
@@ -280,7 +284,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 			},
 		},
 	}
-	g.Expect(c.Create(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Create(ctx, pod)).NotTo(gomega.HaveOccurred())
 
 	// set up tracker
 	tracker, err := readiness.SetupTracker(mgr, false)
@@ -318,7 +322,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// delete the pod , the delete event will be reconciled by sync controller
 	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(context.TODO(), pod)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Delete(ctx, pod)).NotTo(gomega.HaveOccurred())
 
 	// register events for the pod to go in the event channel
 	podObj := &corev1.Pod{
@@ -415,28 +419,32 @@ func TestConfig_CacheContents(t *testing.T) {
 	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
-	err = c.Create(context.TODO(), instance)
+	ctx = context.Background()
+	err = c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	defer func() {
-		_ = c.Delete(context.TODO(), instance)
-	}()
+	t.Cleanup(func() {
+		err = c.Delete(ctx, instance)
+		if !apierrors.IsNotFound(err) {
+			t.Errorf("got Delete(instance) error %v, want IsNotFound", err)
+		}
+	})
 
 	// Create a configMap to test for
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
-	err = c.Create(context.TODO(), cm)
+	err = c.Create(ctx, cm)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
 	cm2.SetNamespace("kube-system")
-	err = c.Create(context.TODO(), cm2)
+	err = c.Create(ctx, cm2)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-2")
 
 	defer func() {
-		err = c.Delete(context.TODO(), cm)
+		err = c.Delete(ctx, cm)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		err = c.Delete(context.TODO(), cm2)
+		err = c.Delete(ctx, cm2)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}()
 
@@ -455,7 +463,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Reconfigure to drop the namespace watches
 	instance = configFor([]schema.GroupVersionKind{configMapGVK})
 	forUpdate := instance.DeepCopy()
-	_, err = controllerutil.CreateOrUpdate(context.TODO(), c, forUpdate, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, c, forUpdate, func() error {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
@@ -490,7 +498,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Delete the config resource - expect opa to empty out.
 	g.Expect(opa.Len()).ToNot(gomega.BeZero(), "sanity")
-	err = c.Delete(context.TODO(), instance)
+	err = c.Delete(ctx, instance)
 	g.Expect(err).ToNot(gomega.HaveOccurred(), "deleting Config resource")
 
 	// The cache will be cleared out.
@@ -561,22 +569,33 @@ func TestConfig_Retries(t *testing.T) {
 	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
-	err = c.Create(context.TODO(), instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	ctx = context.Background()
+	err = c.Create(ctx, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
-		_ = c.Delete(context.TODO(), instance)
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	// Create a configMap to test for
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
-	err = c.Create(context.TODO(), cm)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
+	err = c.Create(ctx, cm)
+	if err != nil {
+		t.Fatal("creating configMap config-test-1:", err)
+	}
 
 	defer func() {
-		err = c.Delete(context.TODO(), cm)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, cm)
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	expected := map[opaKey]interface{}{
@@ -587,7 +606,7 @@ func TestConfig_Retries(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
-	_, err = opa.RemoveData(context.TODO(), target.WipeData{})
+	_, err = opa.RemoveData(ctx, target.WipeData{})
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
 	g.Expect(opa.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
 
@@ -597,7 +616,7 @@ func TestConfig_Retries(t *testing.T) {
 	// Reconfigure to add a namespace watch.
 	instance = configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
 	forUpdate := instance.DeepCopy()
-	_, err = controllerutil.CreateOrUpdate(context.TODO(), c, forUpdate, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, c, forUpdate, func() error {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
