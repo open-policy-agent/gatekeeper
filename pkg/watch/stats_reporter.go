@@ -45,25 +45,26 @@ func register() error {
 }
 
 func (r *reporter) reportGvkCount(count int64) error {
-	return metrics.Record(r.ctx, gvkCountM.M(count))
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return metrics.Record(ctx, gvkCountM.M(count))
 }
 
 func (r *reporter) reportGvkIntentCount(count int64) error {
-	return metrics.Record(r.ctx, gvkIntentCountM.M(count))
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return metrics.Record(ctx, gvkIntentCountM.M(count))
 }
 
 // newStatsReporter creates a reporter for watch metrics.
 func newStatsReporter() (*reporter, error) {
-	ctx, err := tag.New(
-		context.TODO(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &reporter{ctx: ctx}, nil
+	return &reporter{}, nil
 }
 
-type reporter struct {
-	ctx context.Context
-}
+type reporter struct{}

@@ -63,7 +63,6 @@ type Manager struct {
 	stopper         chan struct{}
 	stopped         chan struct{}
 	mgr             manager.Manager
-	ctx             context.Context
 	ucloop          *updateConstraintLoop
 	reporter        *reporter
 	log             logr.Logger
@@ -117,7 +116,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
+func New(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -135,7 +134,6 @@ func New(ctx context.Context, mgr manager.Manager, opa *opa.Client, processExclu
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 		mgr:             mgr,
-		ctx:             ctx,
 		reporter:        reporter,
 		processExcluder: processExcluder,
 		eventRecorder:   recorder,
@@ -684,7 +682,6 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 			case <-ucloop.stop:
 				return true, nil
 			default:
-				ctx := context.Background()
 				var latestItem unstructured.Unstructured
 				item.DeepCopyInto(&latestItem)
 				name := latestItem.GetName()

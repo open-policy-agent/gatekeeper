@@ -17,6 +17,8 @@ limitations under the License.
 package assignmetadata
 
 import (
+	"context"
+
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/core"
@@ -33,7 +35,7 @@ import (
 type Adder struct {
 	MutationSystem *mutation.System
 	Tracker        *readiness.Tracker
-	GetPod         func() (*corev1.Pod, error)
+	GetPod         func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -66,7 +68,7 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 	a.Tracker = t
 }
 
-func (a *Adder) InjectGetPod(getPod func() (*corev1.Pod, error)) {
+func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, error)) {
 	a.GetPod = getPod
 }
 
