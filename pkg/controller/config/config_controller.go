@@ -238,10 +238,10 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// Enable verbose readiness stats if requested.
 	if statsEnabled {
 		log.Info("enabling readiness stats")
-		r.tracker.EnableStats(ctx)
+		r.tracker.EnableStats()
 	} else {
 		log.Info("disabling readiness stats")
-		r.tracker.DisableStats(ctx)
+		r.tracker.DisableStats()
 	}
 
 	// Remove expectations for resources we no longer watch.
@@ -286,7 +286,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	// Otherwise the sync controller will drop events for the newly watched kinds.
 	// Defer error handling so object re-sync happens even if the watch is hard
 	// errored due to a missing GVK in the watch set.
-	if err := r.watcher.ReplaceWatch(ctx, newSyncOnly.Items()); err != nil {
+	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -308,7 +308,7 @@ func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 
 		// reset sync cache before sending the metric
 		r.syncMetricsCache.ResetCache()
-		r.syncMetricsCache.ReportSync(ctx, &syncc.Reporter{})
+		r.syncMetricsCache.ReportSync(&syncc.Reporter{})
 
 		r.needsWipe = false
 	}
@@ -333,7 +333,7 @@ func (r *ReconcileConfig) replayData(ctx context.Context) error {
 			return fmt.Errorf("replaying data for %+v: %w", gvk, err)
 		}
 
-		defer r.syncMetricsCache.ReportSync(ctx, &syncc.Reporter{})
+		defer r.syncMetricsCache.ReportSync(&syncc.Reporter{})
 
 		for i := range u.Items {
 			syncKey := r.syncMetricsCache.GetSyncKey(u.Items[i].GetNamespace(), u.Items[i].GetName())

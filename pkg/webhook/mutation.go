@@ -139,16 +139,12 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
 	}
 
-	resp, err := h.mutateRequest(ctx, &req)
-	if err != nil {
-		requestResponse = errorResponse
-		return admission.Errored(int32(http.StatusInternalServerError), err)
-	}
+	resp := h.mutateRequest(ctx, &req)
 	requestResponse = successResponse
 	return resp
 }
 
-func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Request) (admission.Response, error) {
+func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Request) admission.Response {
 	ns := &corev1.Namespace{}
 
 	// if the object being mutated is a namespace itself, we use it as namespace
@@ -157,24 +153,24 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		req.Namespace = ""
 		obj, _, err := deserializer.Decode(req.Object.Raw, nil, &corev1.Namespace{})
 		if err != nil {
-			return admission.Errored(int32(http.StatusInternalServerError), err), nil
+			return admission.Errored(int32(http.StatusInternalServerError), err)
 		}
 		ok := false
 		ns, ok = obj.(*corev1.Namespace)
 		if !ok {
-			return admission.Errored(int32(http.StatusInternalServerError), errors.New("failed to cast namespace object")), nil
+			return admission.Errored(int32(http.StatusInternalServerError), errors.New("failed to cast namespace object"))
 		}
 	case req.AdmissionRequest.Namespace != "":
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				log.Error(err, "error retrieving namespace", "name", req.AdmissionRequest.Namespace)
-				return admission.Errored(int32(http.StatusInternalServerError), err), nil
+				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 			// bypass cached client and ask api-server directly
 			err = h.reader.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns)
 			if err != nil {
 				log.Error(err, "error retrieving namespace from API server", "name", req.AdmissionRequest.Namespace)
-				return admission.Errored(int32(http.StatusInternalServerError), err), nil
+				return admission.Errored(int32(http.StatusInternalServerError), err)
 			}
 		}
 	default:
@@ -184,25 +180,25 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	err := obj.UnmarshalJSON(req.Object.Raw)
 	if err != nil {
 		log.Error(err, "failed to unmarshal", "object", string(req.Object.Raw))
-		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 
 	mutated, err := h.mutationSystem.Mutate(&obj, ns)
 	if err != nil {
 		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
-		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 	if !mutated {
-		return admission.ValidationResponse(true, "Resource was not mutated"), nil
+		return admission.ValidationResponse(true, "Resource was not mutated")
 	}
 
 	newJSON, err := obj.MarshalJSON()
 	if err != nil {
 		log.Error(err, "failed to marshal mutated object", "object", obj)
-		return admission.Errored(int32(http.StatusInternalServerError), err), nil
+		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 	resp := admission.PatchResponseFromRaw(req.Object.Raw, newJSON)
-	return resp, nil
+	return resp
 }
 
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {

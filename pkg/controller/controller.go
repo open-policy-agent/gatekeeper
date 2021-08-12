@@ -49,7 +49,7 @@ type Injector interface {
 }
 
 type GetPodInjector interface {
-	InjectGetPod(func(ctx context.Context) (*corev1.Pod, error))
+	InjectGetPod(func(context.Context) (*corev1.Pod, error))
 }
 
 type GetProcessExcluderInjector interface {
@@ -69,7 +69,7 @@ type Dependencies struct {
 	WatchManger      *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
-	GetPod           func(ctx context.Context) (*corev1.Pod, error)
+	GetPod           func(context.Context) (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
 	MutationSystem   *mutation.System
 }

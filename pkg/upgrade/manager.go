@@ -35,11 +35,11 @@ type Manager struct {
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager) (*Manager, error) {
+func New(mgr manager.Manager) *Manager {
 	am := &Manager{
 		mgr: mgr,
 	}
-	return am, nil
+	return am
 }
 
 // Start implements the Runnable interface.

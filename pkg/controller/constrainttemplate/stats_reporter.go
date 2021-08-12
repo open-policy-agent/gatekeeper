@@ -89,9 +89,9 @@ func (r *reporter) reportIngestDuration(ctx context.Context, status metrics.Stat
 }
 
 // newStatsReporter creates a reporter for watch metrics.
-func newStatsReporter() (*reporter, error) {
+func newStatsReporter() *reporter {
 	reg := &ctRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
-	return &reporter{registry: reg}, nil
+	return &reporter{registry: reg}
 }
 
 type reporter struct {

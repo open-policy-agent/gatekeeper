@@ -18,9 +18,6 @@ import (
 
 // AddToManager adds upgrade manager to the Manager.
 func AddToManager(m manager.Manager) error {
-	am, err := New(m)
-	if err != nil {
-		return err
-	}
+	am := New(m)
 	return m.Add(am)
 }

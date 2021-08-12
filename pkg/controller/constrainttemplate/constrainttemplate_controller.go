@@ -164,10 +164,7 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 	if err != nil {
 		return nil, err
 	}
-	r, err := newStatsReporter()
-	if err != nil {
-		return nil, err
-	}
+	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
 		Client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
@@ -466,7 +463,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	}
 	// This must go after CRD creation/update as otherwise AddWatch will always fail
 	log.Info("making sure constraint is in watcher registry")
-	if err := r.addWatch(ctx, makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
+	if err := r.addWatch(makeGvk(ct.Spec.CRD.Spec.Names.Kind)); err != nil {
 		log.Error(err, "error adding template to watch registry")
 		return reconcile.Result{}, err
 	}
@@ -483,7 +480,7 @@ func (r *ReconcileConstraintTemplate) handleDelete(
 	log := log.WithValues("name", ct.GetName())
 	log.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)
-	if err := r.removeWatch(ctx, gvk); err != nil {
+	if err := r.removeWatch(gvk); err != nil {
 		return reconcile.Result{}, err
 	}
 	r.tracker.CancelTemplate(ct)
@@ -562,18 +559,18 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 	return statusObj, nil
 }
 
-func (r *ReconcileConstraintTemplate) addWatch(ctx context.Context, kind schema.GroupVersionKind) error {
-	if err := r.watcher.AddWatch(ctx, kind); err != nil {
+func (r *ReconcileConstraintTemplate) addWatch(kind schema.GroupVersionKind) error {
+	if err := r.watcher.AddWatch(kind); err != nil {
 		return err
 	}
-	return r.statusWatcher.AddWatch(ctx, kind)
+	return r.statusWatcher.AddWatch(kind)
 }
 
-func (r *ReconcileConstraintTemplate) removeWatch(ctx context.Context, kind schema.GroupVersionKind) error {
-	if err := r.watcher.RemoveWatch(ctx, kind); err != nil {
+func (r *ReconcileConstraintTemplate) removeWatch(kind schema.GroupVersionKind) error {
+	if err := r.watcher.RemoveWatch(kind); err != nil {
 		return err
 	}
-	return r.statusWatcher.RemoveWatch(ctx, kind)
+	return r.statusWatcher.RemoveWatch(kind)
 }
 
 type action string

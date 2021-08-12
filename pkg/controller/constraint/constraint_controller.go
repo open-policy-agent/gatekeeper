@@ -62,7 +62,7 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
-	GetPod           func(ctx context.Context) (*corev1.Pod, error)
+	GetPod           func(context.Context) (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
 	AssumeDeleted    func(schema.GroupVersionKind) bool
 }
@@ -188,7 +188,7 @@ type ReconcileConstraint struct {
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
-	getPod           func(ctx context.Context) (*corev1.Pod, error)
+	getPod           func(context.Context) (*corev1.Pod, error)
 	// assumeDeleted allows us to short-circuit get requests
 	// that would otherwise trigger a watch
 	assumeDeleted func(schema.GroupVersionKind) bool
@@ -332,7 +332,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileConstraint) defaultGetPod(ctx context.Context) (*corev1.Pod, error) {
+func (r *ReconcileConstraint) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
 	panic("GetPod must be injected to ReconcileConstraint")

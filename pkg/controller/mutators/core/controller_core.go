@@ -53,7 +53,7 @@ type Adder struct {
 	// Tracker accepts a handle for the readiness tracker
 	Tracker *readiness.Tracker
 	// GetPod returns an instance of the currently running Gatekeeper pod
-	GetPod func(ctx context.Context) (*corev1.Pod, error)
+	GetPod func(context.Context) (*corev1.Pod, error)
 	// Kind for the mutation object that is being reconciled
 	Kind string
 	// NewMutationObj creates a new instance of a mutation struct that can
@@ -77,7 +77,7 @@ func newReconciler(
 	mgr manager.Manager,
 	mutationSystem *mutation.System,
 	tracker *readiness.Tracker,
-	getPod func(ctx context.Context) (*corev1.Pod, error),
+	getPod func(context.Context) (*corev1.Pod, error),
 	kind string,
 	newMutationObj func() client.Object,
 	mutatorFor func(client.Object) (types.Mutator, error),
@@ -140,7 +140,7 @@ type Reconciler struct {
 
 	system   *mutation.System
 	tracker  *readiness.Tracker
-	getPod   func(ctx context.Context) (*corev1.Pod, error)
+	getPod   func(context.Context) (*corev1.Pod, error)
 	scheme   *runtime.Scheme
 	reporter ctrlmutators.StatsReporter
 	cache    *ctrlmutators.Cache
@@ -206,7 +206,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	ingestionStatus := ctrlmutators.MutatorStatusError
 	// encasing this call in a function prevents the arguments from being evaluated early
-	defer func() { r.reportMutator(ctx, mID, ingestionStatus, startTime) }()
+	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
 
 	status, err := r.getOrCreatePodStatus(ctx, mID)
 	if err != nil {
@@ -278,13 +278,13 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 	return statusObj, nil
 }
 
-func (r *Reconciler) defaultGetPod(ctx context.Context) (*corev1.Pod, error) {
+func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(ctx context.Context, mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
+func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
 	r.cache.Upsert(mID, ingestionStatus)
 
 	if r.reporter == nil {

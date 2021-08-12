@@ -66,30 +66,26 @@ func NewStatsReporter() (*Reporter, error) {
 	return &Reporter{now: now}, nil
 }
 
-func (r *Reporter) report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
-}
-
 func (r *Reporter) reportSyncDuration(d time.Duration) error {
 	ctx := context.Background()
-	return r.report(ctx, syncDurationM.M(d.Seconds()))
+	return metrics.Record(ctx, syncDurationM.M(d.Seconds()))
 }
 
 func (r *Reporter) reportLastSync() error {
 	ctx := context.Background()
-	return r.report(ctx, lastRunSyncM.M(r.now()))
+	return metrics.Record(ctx, lastRunSyncM.M(r.now()))
 }
 
-func (r *Reporter) reportSync(ctx context.Context, t Tags, v int64) error {
+func (r *Reporter) reportSync(t Tags, v int64) error {
 	ctx, err := tag.New(
-		ctx,
-		tag.Insert(kindKey, string(t.Kind)),
+		context.Background(),
+		tag.Insert(kindKey, t.Kind),
 		tag.Insert(statusKey, string(t.Status)))
 	if err != nil {
 		return err
 	}
 
-	return r.report(ctx, syncM.M(v))
+	return metrics.Record(ctx, syncM.M(v))
 }
 
 // now returns the timestamp as a second-denominated float.

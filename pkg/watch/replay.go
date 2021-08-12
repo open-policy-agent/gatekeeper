@@ -186,8 +186,8 @@ func (wm *Manager) replayEventsLoop(ctx context.Context) func() error {
 				m[req.gvk] = byRegistrar
 				wg.Add(1)
 				wm.replayTracker.addReplay(req.gvk)
-				go func(group *sync.WaitGroup, ctx context.Context, cancel context.CancelFunc, log logr.Logger) {
-					defer wg.Done()
+				go func(group *sync.WaitGroup, cancel context.CancelFunc, log logr.Logger) {
+					defer group.Done()
 					defer wm.replayTracker.replayDone(req.gvk)
 					defer cancel()
 
@@ -208,7 +208,7 @@ func (wm *Manager) replayEventsLoop(ctx context.Context) func() error {
 					if err != nil && err != context.Canceled {
 						log.Error(err, "replaying events")
 					}
-				}(&wg, childCtx, childCancel, log)
+				}(&wg, childCancel, log)
 			}
 		}
 	}

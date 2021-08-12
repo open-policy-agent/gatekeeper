@@ -59,10 +59,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
-	if err != nil {
-		return err
-	}
+	r := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
 	return add(mgr, r, a.Events)
 }
 
@@ -73,7 +70,7 @@ func newReconciler(
 	reporter Reporter,
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
-	processExcluder *process.Excluder) (reconcile.Reconciler, error) {
+	processExcluder *process.Excluder) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),
@@ -83,7 +80,7 @@ func newReconciler(
 		metricsCache:    metricsCache,
 		tracker:         tracker,
 		processExcluder: processExcluder,
-	}, nil
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
@@ -153,7 +150,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 				log.Error(err, "failed to report sync duration")
 			}
 
-			r.metricsCache.ReportSync(ctx, &r.reporter)
+			r.metricsCache.ReportSync(&r.reporter)
 
 			if err := r.reporter.reportLastSync(); err != nil {
 				log.Error(err, "failed to report last sync timestamp")
@@ -298,7 +295,7 @@ func (c *MetricsCache) DeleteObject(key string) {
 	delete(c.Cache, key)
 }
 
-func (c *MetricsCache) ReportSync(ctx context.Context, reporter *Reporter) {
+func (c *MetricsCache) ReportSync(reporter *Reporter) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
@@ -309,7 +306,7 @@ func (c *MetricsCache) ReportSync(ctx context.Context, reporter *Reporter) {
 
 	for kind := range c.KnownKinds {
 		for _, status := range metrics.AllStatuses {
-			if err := reporter.reportSync(ctx,
+			if err := reporter.reportSync(
 				Tags{
 					Kind:   kind,
 					Status: status,

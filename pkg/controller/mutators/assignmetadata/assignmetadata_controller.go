@@ -35,7 +35,7 @@ import (
 type Adder struct {
 	MutationSystem *mutation.System
 	Tracker        *readiness.Tracker
-	GetPod         func(ctx context.Context) (*corev1.Pod, error)
+	GetPod         func(context.Context) (*corev1.Pod, error)
 }
 
 // Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller

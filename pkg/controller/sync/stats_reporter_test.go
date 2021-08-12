@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -22,8 +21,7 @@ func TestReportSync(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	ctx := context.Background()
-	err = r.reportSync(ctx, expectedTags, expectedValue)
+	err = r.reportSync(expectedTags, expectedValue)
 	if err != nil {
 		t.Errorf("reportSync error %v", err)
 	}
