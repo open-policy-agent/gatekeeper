@@ -88,7 +88,7 @@ spec:
       - apiGroups: [""]
         kinds: ["Namespace"]
   parameters:
-    # Note that "labels" is now an array item, rather than an object
+    # Note that "labels" is now contained in an array item, rather than an object key under "parameters"
     - labels: ["gatekeeper"]
 ```
 
@@ -147,6 +147,6 @@ k8srequiredlabels.constraints.gatekeeper.sh/ns-must-have-gk created
 ```
 
 ```shell
-❯ kubectl create ns foobar
+$ kubectl create ns foobar
 Error from server ([ns-must-have-gk] you must provide labels: {"gatekeeper"}): admission webhook "validation.gatekeeper.sh" denied the request: [ns-must-have-gk] you must provide labels: {"gatekeeper"}
 ```
