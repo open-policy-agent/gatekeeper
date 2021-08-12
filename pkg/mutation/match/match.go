@@ -72,6 +72,109 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 		return false, errors.New("invalid call to Matches(), ns must not be nil for Namespace objects")
 	}
 
+	topLevelMatchers := []matchFunc{
+		kindsMatch,
+		scopeMatch,
+		namespacesMatch,
+		excludedNamespacesMatch,
+		labelSelectorMatch,
+		namespaceSelectorMatch,
+	}
+
+	for _, fn := range topLevelMatchers {
+		ok, err := fn(match, obj, ns)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// matchFunc defines the matching logic of a Top Level Matcher.  A TLM recieves the match criteria,
+// an object, and the namespace of the object and decides if there is a reason why the object does
+// not match.  If the TLM associated with the matching function is not defined by the user, the
+// matchFunc should return true.
+type matchFunc func(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error)
+
+func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	if match.NamespaceSelector == nil {
+		return true, nil
+	}
+
+	clusterScoped := ns == nil || isNamespace(obj)
+
+	selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
+	if err != nil {
+		return false, err
+	}
+
+	switch {
+	case isNamespace(obj): // if the object is a namespace, namespace selector matches against the object
+		if !selector.Matches(labels.Set(obj.GetLabels())) {
+			return false, nil
+		}
+	case clusterScoped:
+		// cluster scoped, matches by default
+	case !selector.Matches(labels.Set(ns.Labels)):
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func labelSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	if match.LabelSelector == nil {
+		return true, nil
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(match.LabelSelector)
+	if err != nil {
+		return false, err
+	}
+
+	return selector.Matches(labels.Set(obj.GetLabels())), nil
+}
+
+func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	for _, n := range match.ExcludedNamespaces {
+		if ns.Name == n || prefixMatch(n, ns.Name) {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	// If we don't have a namespace, we can't disqualify the match
+	if ns == nil {
+		return true, nil
+	}
+
+	found := false
+	for _, n := range match.Namespaces {
+		if ns.Name == n || prefixMatch(n, ns.Name) {
+			found = true
+			break
+		}
+	}
+
+	if !found && len(match.Namespaces) > 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	if len(match.Kinds) == 0 {
+		return true, nil
+	}
+
 	foundMatch := false
 
 	for _, kk := range match.Kinds {
@@ -102,14 +205,11 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 			foundMatch = true
 		}
 	}
-	if len(match.Kinds) == 0 {
-		foundMatch = true
-	}
 
-	if !foundMatch {
-		return false, nil
-	}
+	return foundMatch, nil
+}
 
+func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	clusterScoped := ns == nil || isNamespace(obj)
 
 	if match.Scope == apiextensionsv1.ClusterScoped &&
@@ -120,52 +220,6 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 	if match.Scope == apiextensionsv1.NamespaceScoped &&
 		clusterScoped {
 		return false, nil
-	}
-
-	if ns != nil {
-		found := false
-		for _, n := range match.Namespaces {
-			if ns.Name == n || prefixMatch(n, ns.Name) {
-				found = true
-				break
-			}
-		}
-		if !found && len(match.Namespaces) > 0 {
-			return false, nil
-		}
-
-		for _, n := range match.ExcludedNamespaces {
-			if ns.Name == n || prefixMatch(n, ns.Name) {
-				return false, nil
-			}
-		}
-		if match.LabelSelector != nil {
-			selector, err := metav1.LabelSelectorAsSelector(match.LabelSelector)
-			if err != nil {
-				return false, err
-			}
-			if !selector.Matches(labels.Set(obj.GetLabels())) {
-				return false, nil
-			}
-		}
-
-		if match.NamespaceSelector != nil {
-			selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
-			if err != nil {
-				return false, err
-			}
-
-			switch {
-			case isNamespace(obj): // if the object is a namespace, namespace selector matches against the object
-				if !selector.Matches(labels.Set(obj.GetLabels())) {
-					return false, nil
-				}
-			case clusterScoped:
-				// cluster scoped, matches by default
-			case !selector.Matches(labels.Set(ns.Labels)):
-				return false, nil
-			}
-		}
 	}
 
 	return true, nil
