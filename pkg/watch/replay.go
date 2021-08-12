@@ -125,9 +125,6 @@ func (wm *Manager) replayEventsLoop(ctx context.Context) func() error {
 		var wg sync.WaitGroup
 		defer wg.Wait()
 
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
 		// Entries remain until a watch is removed.
 		m := make(map[schema.GroupVersionKind]cancelMap)
 
