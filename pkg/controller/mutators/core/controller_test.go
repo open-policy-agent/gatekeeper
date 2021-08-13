@@ -114,7 +114,7 @@ func TestReconcile(t *testing.T) {
 		return mutators.MutatorForAssign(assign)
 	}
 
-	rec := newReconciler(mgr, mSys, tracker, func() (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
+	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
 
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}

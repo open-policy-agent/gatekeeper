@@ -103,7 +103,7 @@ func runAllow(ctx context.Context, client Client, f fs.FS, path string) CaseResu
 	return CaseResult{}
 }
 
-func runDeny(ctx context.Context, client Client, f fs.FS, path string, assertions []Assertion) CaseResult {
+func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Assertion) CaseResult {
 	u, err := readCase(f, path)
 	if err != nil {
 		return CaseResult{Error: err}

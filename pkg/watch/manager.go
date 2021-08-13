@@ -119,7 +119,7 @@ func (wm *Manager) Start(ctx context.Context) error {
 		return context.Canceled
 	})
 	// Routine for asynchronous replay of past events to joining listeners.
-	grp.Go(wm.replayEventsLoop)
+	grp.Go(wm.replayEventsLoop(ctx))
 	_ = grp.Wait()
 	return nil
 }

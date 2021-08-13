@@ -157,7 +157,7 @@ violation[{"msg": "denied!"}] {
 	pod.Name = "no-pod"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, events, func() (*corev1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	cstr := newDenyAllCstr()
@@ -211,7 +211,7 @@ violation[{"msg": "denied!"}] {
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
 		err = c.Create(ctx, cstr)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		constraintEnforced(c, g, timeout)
+		constraintEnforced(ctx, c, g, timeout)
 	})
 
 	log.Info("Running test: Constraint actually enforced")
@@ -280,7 +280,7 @@ violation[{"msg": "denied!"}] {
 
 		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
 		// we need a longer timeout because deleting the CRD interrupts the watch
-		constraintEnforced(c, g, 50*timeout)
+		constraintEnforced(ctx, c, g, 50*timeout)
 	})
 
 	log.Info("Running test: Templates with Invalid Rego throw errors")
@@ -480,7 +480,7 @@ violation[{"msg": "denied!"}] {
 	pod.Name = "no-pod"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, nil, func() (*corev1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	// get the object tracker for the constraint
@@ -509,10 +509,10 @@ violation[{"msg": "denied!"}] {
 	}, timeout).Should(gomega.BeTrue())
 }
 
-func constraintEnforced(c client.Client, g *gomega.GomegaWithT, timeout time.Duration) {
+func constraintEnforced(ctx context.Context, c client.Client, g *gomega.GomegaWithT, timeout time.Duration) {
 	g.Eventually(func() error {
 		cstr := newDenyAllCstr()
-		err := c.Get(context.TODO(), types.NamespacedName{Name: "denyallconstraint"}, cstr)
+		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
 		if err != nil {
 			return err
 		}

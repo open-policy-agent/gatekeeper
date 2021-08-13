@@ -59,10 +59,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		return err
 	}
 
-	r, err := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
-	if err != nil {
-		return err
-	}
+	r := newReconciler(mgr, a.Opa, *reporter, a.MetricsCache, a.Tracker, a.ProcessExcluder)
 	return add(mgr, r, a.Events)
 }
 
@@ -73,7 +70,7 @@ func newReconciler(
 	reporter Reporter,
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
-	processExcluder *process.Excluder) (reconcile.Reconciler, error) {
+	processExcluder *process.Excluder) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),
@@ -83,7 +80,7 @@ func newReconciler(
 		metricsCache:    metricsCache,
 		tracker:         tracker,
 		processExcluder: processExcluder,
-	}, nil
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
@@ -169,7 +166,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 			// This is a deletion; remove the data
 			instance.SetNamespace(unpackedRequest.Namespace)
 			instance.SetName(unpackedRequest.Name)
-			if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
+			if _, err := r.opa.RemoveData(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -199,7 +196,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 	}
 
 	if !instance.GetDeletionTimestamp().IsZero() {
-		if _, err := r.opa.RemoveData(context.Background(), instance); err != nil {
+		if _, err := r.opa.RemoveData(ctx, instance); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -220,7 +217,7 @@ func (r *ReconcileSync) Reconcile(ctx context.Context, request reconcile.Request
 		logging.ResourceName, instance.GetName(),
 	)
 
-	if _, err := r.opa.AddData(context.Background(), instance); err != nil {
+	if _, err := r.opa.AddData(ctx, instance); err != nil {
 		r.metricsCache.AddObject(syncKey, Tags{
 			Kind:   instance.GetKind(),
 			Status: metrics.ErrorStatus,
