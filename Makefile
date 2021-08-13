@@ -278,7 +278,7 @@ docker-push-release: docker-tag-release
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
 docker-build: build-crds
-	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} -t ${CRD_IMG}
+	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
 
 # Build docker image with buildx
@@ -291,7 +291,7 @@ docker-buildx: build-crds
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(IMG) \
 		. --load
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64" \
 		-t $(CRD_IMG) \
 		-f crd.Dockerfile .staging/crds/ --load
 
@@ -309,7 +309,7 @@ docker-buildx-crds-dev: build-crds
 		docker buildx create --name container-builder --use;\
 	fi
 
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
 		-f crd.Dockerfile .staging/crds/ --push
@@ -326,7 +326,7 @@ docker-buildx-crds-release: build-crds
 	@if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --name container-builder --use;\
 	fi
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push
 
