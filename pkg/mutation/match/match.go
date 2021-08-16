@@ -94,7 +94,7 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 	return true, nil
 }
 
-// matchFunc defines the matching logic of a Top Level Matcher.  A TLM recieves the match criteria,
+// matchFunc defines the matching logic of a Top Level Matcher.  A TLM receives the match criteria,
 // an object, and the namespace of the object and decides if there is a reason why the object does
 // not match.  If the TLM associated with the matching function is not defined by the user, the
 // matchFunc should return true.
