@@ -1,7 +1,8 @@
 # Image URL to use all building/pushing image targets
 REPOSITORY ?= openpolicyagent/gatekeeper
-
+CRD_REPOSITORY ?= openpolicyagent/gatekeeper-crds
 IMG := $(REPOSITORY):latest
+CRD_IMG := $(CRD_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
@@ -115,7 +116,7 @@ e2e-bootstrap:
 	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
 
 e2e-build-load-image: docker-buildx
-	kind load docker-image --name kind ${IMG}
+	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
@@ -132,6 +133,7 @@ e2e-helm-deploy: e2e-helm-install
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait \
 		--set image.repository=${HELM_REPO} \
+		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
@@ -155,6 +157,7 @@ e2e-helm-upgrade:
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
 		--set image.repository=${HELM_REPO} \
+		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
@@ -232,6 +235,18 @@ lint:
 generate: __controller-gen target-template-source
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 
+# Prepare crds to be added to gatekeeper-crds image
+clean-crds:
+	rm -rf .staging/crds/*
+
+build-crds: clean-crds
+	mkdir -p .staging/crds
+ifdef CI
+	cp -R manifest_staging/charts/gatekeeper/crds/ .staging/crds/
+else
+	cp -R charts/gatekeeper/crds/ .staging/crds/
+endif
+
 # Docker Login
 docker-login:
 	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(REGISTRY)
@@ -240,50 +255,80 @@ docker-login:
 docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
 	@docker tag $(IMG) $(REPOSITORY):dev
+	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(DEV_TAG)
+	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
+	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(VERSION)
 
 # Push for Dev
 docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):$(DEV_TAG)
 	@docker push $(REPOSITORY):dev
+	@docker push $(CRD_REPOSITORY):$(DEV_TAG)
+	@docker push $(CRD_REPOSITORY):dev
 
 # Push for Release
 docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
+	@docker push $(CRD_REPOSITORY):$(VERSION)
 
-docker-build:
+# Add crds to gatekeeper-crds image
+# Build gatekeeper image
+docker-build: build-crds
+	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
 
 # Build docker image with buildx
 # Experimental docker feature to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx:
-	if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+docker-buildx: build-crds
+	if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(IMG) \
 		. --load
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64" \
+		-t $(CRD_IMG) \
+		-f crd.Dockerfile .staging/crds/ --load
 
 docker-buildx-dev:
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(DEV_TAG) \
 		-t $(REPOSITORY):dev \
 		. --push
 
-docker-buildx-release:
-	@if ! DOCKER_CLI_EXPERIMENTAL=enabled docker buildx ls | grep -q container-builder; then\
-		DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create --name container-builder --use;\
+docker-buildx-crds-dev: build-crds
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
 	fi
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+		-t $(CRD_REPOSITORY):$(DEV_TAG) \
+		-t $(CRD_REPOSITORY):dev \
+		-f crd.Dockerfile .staging/crds/ --push
+
+docker-buildx-release:
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
+	fi
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
 		. --push
+
+docker-buildx-crds-release: build-crds
+	@if ! docker buildx ls | grep -q container-builder; then\
+		docker buildx create --name container-builder --use;\
+	fi
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+		-t $(CRD_REPOSITORY):$(VERSION) \
+		-f crd.Dockerfile .staging/crds/ --push
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
@@ -306,6 +351,7 @@ target-template-source:
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+	docker push ${CRD_IMG}
 
 release-manifest:
 	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
