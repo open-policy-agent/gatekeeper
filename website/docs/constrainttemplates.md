@@ -32,7 +32,8 @@ spec:
           properties:
             labels:
               type: array
-              items: string
+              items:
+                type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
@@ -55,7 +56,8 @@ openAPIV3Schema:
   properties:
     labels:
       type: array
-      items: string
+      items:
+        type: string
 ```
 
 This schema is _invalid_ by default in a `v1` ConstraintTemplate.  Adding the `type` information makes the schema valid:
@@ -66,7 +68,8 @@ openAPIV3Schema:
   properties:
     labels:
       type: array
-      items: string
+      items:
+        type: string
 ```
 
 For more information on valid types in JSONSchemas, see the [JSONSchema documentation](https://json-schema.org/understanding-json-schema/reference/type.html).
