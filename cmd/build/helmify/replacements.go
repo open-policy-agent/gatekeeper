@@ -66,4 +66,10 @@ var replacements = map[string]string{
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
         {{- end }}`,
+	`HELMSUBSET_PDB_POLICY_GROUP_VERSION: ""
+apiVersion: policy/v1beta1`: `{{- if .Capabilities.APIVersions.Has "policy/v1" }}
+apiVersion: policy/v1
+{{ else }}
+apiVersion: policy/v1beta1
+{{ end -}}`,
 }
