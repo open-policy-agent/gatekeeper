@@ -21,5 +21,6 @@ const (
 	ResourceName         = "resource_name"
 	RequestUsername      = "request_username"
 	MutationApplied      = "mutation_applied"
+	Mutator              = "mutator"
 	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )

@@ -33,7 +33,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -324,6 +326,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateAssignMetadata(req)
 	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "Assign":
 		return h.validateAssign(req)
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
+		return h.validateModifySet(req)
 	}
 
 	return false, nil
@@ -387,7 +391,7 @@ func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool
 	if !ok {
 		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
 	}
-	err = mutators.IsValidAssignMetadata(assignMetadata)
+	err = assignmeta.IsValidAssignMetadata(assignMetadata)
 	if err != nil {
 		return true, err
 	}
@@ -400,12 +404,30 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	assign, ok := obj.(*mutationsv1alpha1.Assign)
+	a, ok := obj.(*mutationsv1alpha1.Assign)
 	if !ok {
 		return false, fmt.Errorf("Deserialized object is not of type Assign")
 	}
 
-	err = mutators.IsValidAssign(assign)
+	err = assign.IsValidAssign(a)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (h *validationHandler) validateModifySet(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.ModifySet{})
+	if err != nil {
+		return false, err
+	}
+	m, ok := obj.(*mutationsv1alpha1.ModifySet)
+	if !ok {
+		return false, fmt.Errorf("Deserialized object is not of type ModifySet")
+	}
+
+	err = modifyset.IsValidModifySet(m)
 	if err != nil {
 		return true, err
 	}

@@ -5,7 +5,7 @@ commonLabels:
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
 bases:
-  - "../../../config/overlays/mutation_webhook" # calls ../../default
+  - "../../../config/overlays/mutation" # calls ../../default
 patchesStrategicMerge:
   - kustomize-for-helm.yaml
   - delete-ports.yaml
@@ -51,6 +51,12 @@ patchesJson6902:
       version: v1
       kind: CustomResourceDefinition
       name: assign.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: modifyset.mutations.gatekeeper.sh
     path: labels_patch.yaml
   # these are defined in the chart values rather than hard-coded
   - target:
