@@ -3,7 +3,7 @@ module github.com/open-policy-agent/gatekeeper
 go 1.16
 
 require (
-	contrib.go.opencensus.io/exporter/prometheus v0.1.0
+	contrib.go.opencensus.io/exporter/prometheus v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.4.0
@@ -16,13 +16,18 @@ require (
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210701194838-1dbe2618668d
 	github.com/open-policy-agent/opa v0.29.4
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.10.0
+	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/common v0.30.0 // indirect
+	github.com/prometheus/procfs v0.7.1 // indirect
+	github.com/prometheus/statsd_exporter v0.21.0 // indirect
 	github.com/spf13/cobra v1.1.3
-	go.opencensus.io v0.22.4
+	go.opencensus.io v0.23.0
 	go.uber.org/zap v1.15.0
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	k8s.io/api v0.20.2

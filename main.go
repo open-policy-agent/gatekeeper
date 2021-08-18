@@ -158,6 +158,10 @@ func main() {
 
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
+	// Disable high-cardinality REST client metrics (rest_client_request_latency).
+	// Must be called before ctrl.NewManager!
+	metrics.DisableRESTClientMetrics()
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
