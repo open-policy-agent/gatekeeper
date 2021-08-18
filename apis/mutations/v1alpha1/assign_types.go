@@ -48,6 +48,8 @@ type Parameters struct {
 	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
 	Assign runtime.RawExtension `json:"assign,omitempty"`
+
+	ExternalData ExternalData `json:"externalData,omitempty"`
 }
 
 // PathTest allows the user to customize how the mutation works if parent

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,8 +39,9 @@ func TestAssignToMutator(t *testing.T) {
 			},
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
-	mutatorWithSchema, err := MutatorForAssign(assign)
+	mutatorWithSchema, err := MutatorForAssign(assign, providerCache)
 	if err != nil {
 		t.Fatalf("MutatorForAssign failed, %v", err)
 	}
@@ -79,8 +81,9 @@ func TestAssignMetadataToMutator(t *testing.T) {
 			},
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
-	mutator, err := MutatorForAssignMetadata(assignMeta)
+	mutator, err := MutatorForAssignMetadata(assignMeta, providerCache)
 	if err != nil {
 		t.Fatalf("MutatorForAssignMetadata for failed, %v", err)
 	}
@@ -158,16 +161,17 @@ func TestAssignHasDiff(t *testing.T) {
 			true,
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
 	for _, tc := range table {
 		t.Run(tc.tname, func(t *testing.T) {
 			secondAssign := second.DeepCopy()
 			tc.modify(secondAssign)
-			firstMutator, err := MutatorForAssign(first)
+			firstMutator, err := MutatorForAssign(first, providerCache)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert first to mutator", err)
 			}
-			secondMutator, err := MutatorForAssign(secondAssign)
+			secondMutator, err := MutatorForAssign(secondAssign, providerCache)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert second to mutator", err)
 			}
@@ -240,16 +244,17 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 			true,
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
 	for _, tc := range table {
 		t.Run(tc.tname, func(t *testing.T) {
 			secondAssignMeta := second.DeepCopy()
 			tc.modify(secondAssignMeta)
-			firstMutator, err := MutatorForAssignMetadata(first)
+			firstMutator, err := MutatorForAssignMetadata(first, providerCache)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert first to mutator", err)
 			}
-			secondMutator, err := MutatorForAssignMetadata(secondAssignMeta)
+			secondMutator, err := MutatorForAssignMetadata(secondAssignMeta, providerCache)
 			if err != nil {
 				t.Fatal(tc.tname, "Failed to convert second to mutator", err)
 			}
@@ -286,8 +291,9 @@ func TestParseShouldFail(t *testing.T) {
 			},
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
-	_, err := MutatorForAssign(assign)
+	_, err := MutatorForAssign(assign, providerCache)
 	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign: %v", err)
 	}
@@ -305,7 +311,8 @@ func TestParseShouldFail(t *testing.T) {
 			},
 		},
 	}
-	_, err = MutatorForAssignMetadata(assignMeta)
+
+	_, err = MutatorForAssignMetadata(assignMeta, providerCache)
 	if err == nil || !strings.Contains(err.Error(), "invalid location format") {
 		t.Errorf("Parsing was expected to fail for assign metadata: %v", err)
 	}
@@ -324,6 +331,7 @@ func TestPathValidation(t *testing.T) {
 			},
 		},
 	}
+	providerCache := frameworksexternaldata.NewCache()
 
 	table := []struct {
 		tname    string
@@ -356,7 +364,7 @@ func TestPathValidation(t *testing.T) {
 		t.Run(tc.tname, func(t *testing.T) {
 			a := assignMeta.DeepCopy()
 			a.Spec.Location = tc.location
-			_, err := MutatorForAssignMetadata(a)
+			_, err := MutatorForAssignMetadata(a, providerCache)
 
 			if tc.isValid && err != nil {
 				t.Errorf("Unexpected error for location %s, %v", tc.location, err)

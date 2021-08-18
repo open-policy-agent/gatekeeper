@@ -24,8 +24,14 @@ import (
 )
 
 func Convert_v1alpha1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
-	if in.OpenAPIV3Schema != nil {
-		inSchemaCopy := in.OpenAPIV3Schema.DeepCopy()
+	inSchema := in.OpenAPIV3Schema
+	// legacySchema should allow for users to provide arbitrary parameters, regardless of whether the user specified them
+	if in.LegacySchema && inSchema == nil {
+		inSchema = &apiextensionsv1.JSONSchemaProps{}
+	}
+
+	if inSchema != nil {
+		inSchemaCopy := inSchema.DeepCopy()
 
 		if in.LegacySchema {
 			if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {

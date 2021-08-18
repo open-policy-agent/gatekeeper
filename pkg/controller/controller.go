@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -44,6 +45,7 @@ type Injector interface {
 	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
+	InjectProviderCache(providerCache *externaldata.ProviderCache)
 	InjectMutationSystem(mutationSystem *mutation.System)
 	Add(mgr manager.Manager) error
 }
@@ -71,6 +73,7 @@ type Dependencies struct {
 	Tracker          *readiness.Tracker
 	GetPod           func(context.Context) (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
+	ProviderCache    *externaldata.ProviderCache
 	MutationSystem   *mutation.System
 }
 
@@ -149,6 +152,7 @@ func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) err
 		a.InjectWatchManager(deps.WatchManger)
 		a.InjectControllerSwitch(deps.ControllerSwitch)
 		a.InjectTracker(deps.Tracker)
+		a.InjectProviderCache(deps.ProviderCache)
 		a.InjectMutationSystem(deps.MutationSystem)
 		if a2, ok := a.(GetPodInjector); ok {
 			a2.InjectGetPod(deps.GetPod)

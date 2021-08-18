@@ -130,6 +130,13 @@ spec:
                     description: Assign.value holds the value to be assigned
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
+                  externalData:
+                    properties:
+                      dataSource:
+                        type: string
+                      provider:
+                        type: string
+                    type: object
                 type: object
             type: object
           status:

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
@@ -44,7 +45,8 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 	s := NewSystem(SystemOpts{})
 
 	a := assign("", "spec")
-	m, err := mutators.MutatorForAssign(a)
+	providerCache := frameworksexternaldata.NewCache()
+	m, err := mutators.MutatorForAssign(a, providerCache)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -57,6 +59,6 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		u := &unstructured.Unstructured{}
 
-		_, _ = s.Mutate(u, nil)
+		_, _ = s.Mutate(u, nil, "")
 	}
 }

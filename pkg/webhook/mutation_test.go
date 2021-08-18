@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -35,7 +36,8 @@ func TestWebhookAssign(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := mutators.MutatorForAssign(v)
+	providerCache := frameworksexternaldata.NewCache()
+	m, err := mutators.MutatorForAssign(v, providerCache)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,8 @@ func TestWebhookAssignMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := mutators.MutatorForAssignMetadata(v)
+	providerCache := frameworksexternaldata.NewCache()
+	m, err := mutators.MutatorForAssignMetadata(v, providerCache)
 	if err != nil {
 		t.Fatal(err)
 	}

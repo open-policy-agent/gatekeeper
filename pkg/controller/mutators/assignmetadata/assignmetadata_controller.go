@@ -20,6 +20,7 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -33,9 +34,10 @@ import (
 )
 
 type Adder struct {
-	MutationSystem *mutation.System
+	ProviderCache  *externaldata.ProviderCache
 	Tracker        *readiness.Tracker
 	GetPod         func(context.Context) (*corev1.Pod, error)
+	MutationSystem *mutation.System
 }
 
 // Add creates a new AssignMetadata Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -45,6 +47,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		Tracker:        a.Tracker,
 		GetPod:         a.GetPod,
 		MutationSystem: a.MutationSystem,
+		ProviderCache:  a.ProviderCache,
 		Kind:           "AssignMetadata",
 		NewMutationObj: func() client.Object { return &mutationsv1alpha1.AssignMetadata{} },
 		MutatorFor: func(obj client.Object) (types.Mutator, error) {
@@ -52,7 +55,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			// are fed the wrong type, this is a non-recoverable error and we
 			// may as well crash for visibility
 			assignMeta := obj.(*mutationsv1alpha1.AssignMetadata) // nolint:forcetypeassert
-			return mutators.MutatorForAssignMetadata(assignMeta)
+			return mutators.MutatorForAssignMetadata(assignMeta, a.ProviderCache)
 		},
 	}
 	return adder.Add(mgr)
@@ -74,4 +77,8 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
 	a.MutationSystem = mutationSystem
+}
+
+func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
+	a.ProviderCache = providerCache
 }

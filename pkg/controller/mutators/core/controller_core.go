@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	ctrlmutators "github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
@@ -62,13 +63,14 @@ type Adder struct {
 	// MutatorFor takes the object returned by NewMutationObject and
 	// turns it into a mutator. The contents of the mutation object
 	// are set by the API server.
-	MutatorFor func(client.Object) (types.Mutator, error)
+	MutatorFor    func(client.Object) (types.Mutator, error)
+	ProviderCache *externaldata.ProviderCache
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
+	r := newReconciler(mgr, a.MutationSystem, a.ProviderCache, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
 	return add(mgr, r)
 }
 
@@ -76,6 +78,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 func newReconciler(
 	mgr manager.Manager,
 	mutationSystem *mutation.System,
+	providerCache *externaldata.ProviderCache,
 	tracker *readiness.Tracker,
 	getPod func(context.Context) (*corev1.Pod, error),
 	kind string,
@@ -90,6 +93,7 @@ func newReconciler(
 		scheme:         mgr.GetScheme(),
 		reporter:       ctrlmutators.NewStatsReporter(),
 		cache:          ctrlmutators.NewMutationCache(),
+		providerCache:  providerCache,
 		kind:           kind,
 		newMutationObj: newMutationObj,
 		mutatorFor:     mutatorFor,
@@ -138,13 +142,14 @@ type Reconciler struct {
 	newMutationObj func() client.Object
 	mutatorFor     func(client.Object) (types.Mutator, error)
 
-	system   *mutation.System
-	tracker  *readiness.Tracker
-	getPod   func(context.Context) (*corev1.Pod, error)
-	scheme   *runtime.Scheme
-	reporter ctrlmutators.StatsReporter
-	cache    *ctrlmutators.Cache
-	log      logr.Logger
+	system        *mutation.System
+	tracker       *readiness.Tracker
+	getPod        func(context.Context) (*corev1.Pod, error)
+	scheme        *runtime.Scheme
+	reporter      ctrlmutators.StatsReporter
+	cache         *ctrlmutators.Cache
+	log           logr.Logger
+	providerCache *externaldata.ProviderCache
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete

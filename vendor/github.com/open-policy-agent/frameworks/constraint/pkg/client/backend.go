@@ -10,9 +10,9 @@ import (
 )
 
 type Backend struct {
-	driver    drivers.Driver
-	crd       *crdHelper
-	hasClient bool
+	driver        drivers.Driver
+	crd           *crdHelper
+	hasClient     bool
 }
 
 type BackendOpt func(*Backend)

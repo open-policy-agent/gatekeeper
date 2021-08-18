@@ -24,6 +24,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
@@ -108,6 +109,8 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 }
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events

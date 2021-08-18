@@ -70,9 +70,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=status\
 \n        - --logtostderr"
 
-
-FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -176,25 +173,25 @@ run: generate manifests
 # Install CRDs into a cluster
 install: manifests
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/crd | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/crd | kubectl apply -f -
 
 deploy-mutation: patch-image
 	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./config/overlays/dev_mutation/manager_image_patch.yaml
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone \
-	  /config/overlays/dev_mutation | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		--load_restrictor LoadRestrictionsNone \
+		/config/overlays/dev_mutation | kubectl apply -f -
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone \
-	  /config/overlays/mutation | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		--load_restrictor LoadRestrictionsNone \
+		/config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/overlays/dev | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: __controller-gen
@@ -213,20 +210,20 @@ manifests: __controller-gen
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
 # Source: https://golangci-lint.run/usage/install/#docker
 lint:
 	docker run --rm -v $(shell pwd):/app \
-	 -v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
-	 -w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
-	 golangci-lint run -v
+		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
+		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
+		golangci-lint run -v
 
 # Generate code
 generate: __controller-gen target-template-source
@@ -326,8 +323,8 @@ promote-staging-manifest:
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/overlays/dev | kubectl delete -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/overlays/dev | kubectl delete -f -
 
 __controller-gen: __tooling-image
 CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen

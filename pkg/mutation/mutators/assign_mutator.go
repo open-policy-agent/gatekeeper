@@ -7,6 +7,8 @@ import (
 	"sort"
 
 	"github.com/google/go-cmp/cmp"
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
@@ -39,6 +41,8 @@ type AssignMutator struct {
 	bindings  []runtimeschema.GroupVersionKind
 	tester    *patht.Tester
 	valueTest *mutationsv1alpha1.AssignIf
+
+	providerCache *externaldata.ProviderCache
 }
 
 // AssignMutator implements mutatorWithSchema.
@@ -56,8 +60,8 @@ func (m *AssignMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	return core.Mutate(m, m.tester, m.testValue, obj)
+func (m *AssignMutator) Mutate(obj *unstructured.Unstructured, providerResponseCache map[types.ProviderCacheKey]string) (bool, error) {
+	return core.Mutate(m, m.tester, m.testValue, obj, providerResponseCache)
 }
 
 // valueTest returns true if it is okay for the mutation func to override the value.
@@ -140,7 +144,8 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 		path: parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
-		bindings: make([]runtimeschema.GroupVersionKind, len(m.bindings)),
+		bindings:      make([]runtimeschema.GroupVersionKind, len(m.bindings)),
+		providerCache: m.providerCache,
 	}
 
 	copy(res.path.Nodes, m.path.Nodes)
@@ -154,9 +159,25 @@ func (m *AssignMutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assign.GetGeneration())
 }
 
+func (m *AssignMutator) GetExternalDataProvider() string {
+	return m.assign.Spec.Parameters.ExternalData.Provider
+}
+
+func (m *AssignMutator) GetExternalDataSource() types.DataSource {
+	return m.assign.Spec.Parameters.ExternalData.DataSource
+}
+
+func (m *AssignMutator) GetExternalDataCache(name string) (*externaldatav1alpha1.Provider, error) {
+	data, err := m.providerCache.Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
 // MutatorForAssign returns an AssignMutator built from
 // the given assign instance.
-func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
+func MutatorForAssign(assign *mutationsv1alpha1.Assign, providerCache *externaldata.ProviderCache) (*AssignMutator, error) {
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
@@ -213,13 +234,14 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 	}
 
 	return &AssignMutator{
-		id:          id,
-		assign:      assign.DeepCopy(),
-		assignValue: value,
-		bindings:    gvks,
-		path:        path,
-		tester:      tester,
-		valueTest:   &valueTests,
+		id:            id,
+		assign:        assign.DeepCopy(),
+		assignValue:   value,
+		bindings:      gvks,
+		path:          path,
+		tester:        tester,
+		valueTest:     &valueTests,
+		providerCache: providerCache,
 	}, nil
 }
 
@@ -239,7 +261,7 @@ func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
 // IsValidAssign returns an error if the given assign object is not
 // semantically valid.
 func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
-	if _, err := MutatorForAssign(assign); err != nil {
+	if _, err := MutatorForAssign(assign, &externaldata.ProviderCache{}); err != nil {
 		return err
 	}
 	return nil

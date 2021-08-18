@@ -6,7 +6,10 @@ import (
 	"reflect"
 
 	"github.com/google/go-cmp/cmp"
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -48,6 +51,8 @@ type AssignMetadataMutator struct {
 	path parser.Path
 
 	tester *tester.Tester
+
+	providerCache *frameworksexternaldata.ProviderCache
 }
 
 // assignMetadataMutator implements mutator.
@@ -62,12 +67,12 @@ func (m *AssignMetadataMutator) Matches(obj client.Object, ns *corev1.Namespace)
 	return matches
 }
 
-func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (m *AssignMetadataMutator) Mutate(obj *unstructured.Unstructured, providerResponseCache map[types.ProviderCacheKey]string) (bool, error) {
 	// Note: Performance here can be improved by ~3x by writing a specialized
 	// function instead of using a generic function. AssignMetadata only ever
 	// mutates metadata.annotations or metadata.labels, and we spend ~70% of
 	// compute covering cases that aren't valid for this Mutator.
-	return core.Mutate(m, m.tester, nil, obj)
+	return core.Mutate(m, m.tester, nil, obj, providerResponseCache)
 }
 
 func (m *AssignMetadataMutator) ID() types.ID {
@@ -102,6 +107,7 @@ func (m *AssignMetadataMutator) DeepCopy() types.Mutator {
 		assignValue:    m.assignValue,
 		path:           m.path.DeepCopy(),
 		tester:         m.tester.DeepCopy(),
+		providerCache:  m.providerCache,
 	}
 	return res
 }
@@ -114,14 +120,36 @@ func (m *AssignMetadataMutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
 }
 
+func (m *AssignMetadataMutator) GetExternalDataProvider() string {
+	return m.assignMetadata.Spec.Parameters.ExternalData.Provider
+}
+
+func (m *AssignMetadataMutator) GetExternalDataSource() types.DataSource {
+	return m.assignMetadata.Spec.Parameters.ExternalData.DataSource
+}
+
+func (m *AssignMetadataMutator) GetExternalDataCache(name string) (*externaldatav1alpha1.Provider, error) {
+	data, err := m.providerCache.Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
 // MutatorForAssignMetadata builds an AssignMetadataMutator from the given AssignMetadata object.
-func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*AssignMetadataMutator, error) {
+func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata, providerCache *frameworksexternaldata.ProviderCache) (*AssignMetadataMutator, error) {
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format for AssignMetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
 	}
 	if !isValidMetadataPath(path) {
 		return nil, fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
+	}
+
+	if *externaldata.ExternalDataEnabled && assignMeta.Spec.Parameters.ExternalData.Provider != "" {
+		if !isValidExternalDataSource(assignMeta.Spec.Parameters.ExternalData.DataSource) {
+			return nil, fmt.Errorf("invalid external data source for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Parameters.ExternalData.DataSource)
+		}
 	}
 
 	assign := make(map[string]interface{})
@@ -150,6 +178,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*As
 		assignMetadata: assignMeta.DeepCopy(),
 		assignValue:    valueString,
 		path:           path,
+		providerCache:  providerCache,
 		tester:         t,
 	}, nil
 }
@@ -173,10 +202,14 @@ func isValidMetadataPath(path parser.Path) bool {
 	return false
 }
 
+func isValidExternalDataSource(source types.DataSource) bool {
+	return source == types.Username
+}
+
 // IsValidAssignMetadata returns an error if the given assignmetadata object is not
 // semantically valid.
 func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
-	if _, err := MutatorForAssignMetadata(assignMeta); err != nil {
+	if _, err := MutatorForAssignMetadata(assignMeta, &frameworksexternaldata.ProviderCache{}); err != nil {
 		return err
 	}
 	return nil

@@ -3,7 +3,9 @@ package mutators
 import (
 	"testing"
 
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -21,7 +23,8 @@ func assignMetadata(value interface{}, location string) *v1alpha1.AssignMetadata
 }
 
 func BenchmarkAssignMetadataMutator_Always(b *testing.B) {
-	mutator, err := MutatorForAssignMetadata(assignMetadata("bar", "metadata.labels.foo"))
+	providerCache := frameworksexternaldata.NewCache()
+	mutator, err := MutatorForAssignMetadata(assignMetadata("bar", "metadata.labels.foo"), providerCache)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -37,12 +40,14 @@ func BenchmarkAssignMetadataMutator_Always(b *testing.B) {
 		obj := &unstructured.Unstructured{
 			Object: make(map[string]interface{}),
 		}
-		_, _ = mutator.Mutate(obj)
+		providerResponseCache := make(map[types.ProviderCacheKey]string)
+		_, _ = mutator.Mutate(obj, providerResponseCache)
 	}
 }
 
 func BenchmarkAssignMetadataMutator_Never(b *testing.B) {
-	mutator, err := MutatorForAssignMetadata(assignMetadata("bar", "metadata.labels.foo"))
+	providerCache := frameworksexternaldata.NewCache()
+	mutator, err := MutatorForAssignMetadata(assignMetadata("bar", "metadata.labels.foo"), providerCache)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -50,7 +55,8 @@ func BenchmarkAssignMetadataMutator_Never(b *testing.B) {
 	obj := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
-	_, err = mutator.Mutate(obj)
+	providerResponseCache := make(map[types.ProviderCacheKey]string)
+	_, err = mutator.Mutate(obj, providerResponseCache)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -60,6 +66,6 @@ func BenchmarkAssignMetadataMutator_Never(b *testing.B) {
 		// Use the same object each time as AssignMetadata.Mutate does nothing if
 		// a label/annotation already exists. Thus, this test is for the case where
 		// no mutation is necessary.
-		_, _ = mutator.Mutate(obj)
+		_, _ = mutator.Mutate(obj, providerResponseCache)
 	}
 }

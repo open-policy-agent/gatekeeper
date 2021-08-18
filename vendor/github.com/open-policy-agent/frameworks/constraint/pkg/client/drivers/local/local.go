@@ -5,16 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	opatypes "github.com/open-policy-agent/opa/types"
 	"github.com/pkg/errors"
 )
 
@@ -65,6 +69,12 @@ func DisableBuiltins(builtins ...string) Arg {
 	}
 }
 
+func AddExternalDataProviderCache(providerCache *externaldata.ProviderCache) Arg {
+	return func(d *driver) {
+		d.providerCache = providerCache
+	}
+}
+
 func New(args ...Arg) drivers.Driver {
 	d := &driver{
 		compiler:     ast.NewCompiler(),
@@ -75,6 +85,15 @@ func New(args ...Arg) drivers.Driver {
 	for _, arg := range args {
 		arg(d)
 	}
+
+	// adding externaldata builtin otherwise capabilities get overridden
+	// if a capability, like http.send, is disabled
+	if d.providerCache != nil {
+		d.capabilities.Builtins = append(d.capabilities.Builtins, &ast.Builtin{
+			Name: "externaldata",
+			Decl: opatypes.NewFunction(opatypes.Args(opatypes.S, opatypes.S), opatypes.A),
+		})
+	}
 	d.compiler.WithCapabilities(d.capabilities)
 	return d
 }
@@ -82,15 +101,66 @@ func New(args ...Arg) drivers.Driver {
 var _ drivers.Driver = &driver{}
 
 type driver struct {
-	modulesMux   sync.RWMutex
-	compiler     *ast.Compiler
-	modules      map[string]*ast.Module
-	storage      storage.Store
-	capabilities *ast.Capabilities
-	traceEnabled bool
+	modulesMux    sync.RWMutex
+	compiler      *ast.Compiler
+	modules       map[string]*ast.Module
+	storage       storage.Store
+	capabilities  *ast.Capabilities
+	traceEnabled  bool
+	providerCache *externaldata.ProviderCache
 }
 
 func (d *driver) Init(ctx context.Context) error {
+	if d.providerCache != nil {
+		rego.RegisterBuiltin2(
+			&rego.Function{
+				Name:    "externaldata",
+				Decl:    opatypes.NewFunction(opatypes.Args(opatypes.S, opatypes.S), opatypes.A),
+				Memoize: true,
+			},
+			func(bctx rego.BuiltinContext, a, b *ast.Term) (*ast.Term, error) {
+				var providerName, body string
+
+				if err := ast.As(a.Value, &providerName); err != nil {
+					return nil, err
+				}
+				if err := ast.As(b.Value, &body); err != nil {
+					return nil, err
+				}
+
+				provider, err := d.providerCache.Get(providerName)
+				if err != nil {
+					return nil, fmt.Errorf("unable to retrieve provider %v cache", providerName)
+				}
+
+				req, err := http.NewRequest("GET", provider.Spec.ProxyURL, bytes.NewBuffer([]byte(body)))
+				if err != nil {
+					return nil, err
+				}
+
+				ctx, cancel := context.WithDeadline(bctx.Context, time.Now().Add(time.Duration(provider.Spec.Timeout)*time.Second))
+				defer cancel()
+
+				resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+				if err != nil {
+					return nil, err
+				}
+
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					return nil, fmt.Errorf(resp.Status)
+				}
+
+				v, err := ast.ValueFromReader(resp.Body)
+				if err != nil {
+					return nil, err
+				}
+
+				return ast.NewTerm(v), nil
+			},
+		)
+	}
 	return nil
 }
 
@@ -257,7 +327,7 @@ func (d *driver) listModuleSet(namePrefix string) []string {
 func parsePath(path string) ([]string, error) {
 	p, ok := storage.ParsePathEscaped(path)
 	if !ok {
-		return nil, fmt.Errorf("Bad data path: %s", path)
+		return nil, fmt.Errorf("bad data path: %s", path)
 	}
 	return p, nil
 }

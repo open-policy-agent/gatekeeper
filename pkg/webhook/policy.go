@@ -385,7 +385,7 @@ func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool
 	}
 	assignMetadata, ok := obj.(*mutationsv1alpha1.AssignMetadata)
 	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
+		return false, fmt.Errorf("deserialized object is not of type AssignMetadata")
 	}
 	err = mutators.IsValidAssignMetadata(assignMetadata)
 	if err != nil {
@@ -402,7 +402,7 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 	}
 	assign, ok := obj.(*mutationsv1alpha1.Assign)
 	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type Assign")
+		return false, fmt.Errorf("deserialized object is not of type Assign")
 	}
 
 	err = mutators.IsValidAssign(assign)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
@@ -16,10 +18,11 @@ import (
 var _ MutatorWithSchema = &fakeMutator{}
 
 type fakeMutator struct {
-	id       types.ID
-	bindings []schema.GroupVersionKind
-	pathStr  string
-	path     parser.Path
+	id            types.ID
+	bindings      []schema.GroupVersionKind
+	pathStr       string
+	path          parser.Path
+	providerCache *frameworksexternaldata.ProviderCache
 }
 
 func newFakeMutator(id types.ID, pathStr string, bindings ...schema.GroupVersionKind) *fakeMutator {
@@ -39,7 +42,7 @@ func (m *fakeMutator) Matches(_ client.Object, _ *corev1.Namespace) bool {
 	panic("should not be called")
 }
 
-func (m *fakeMutator) Mutate(_ *unstructured.Unstructured) (bool, error) {
+func (m *fakeMutator) Mutate(_ *unstructured.Unstructured, providerResponseCache map[types.ProviderCacheKey]string) (bool, error) {
 	panic("should not be called")
 }
 
@@ -69,12 +72,26 @@ func (m *fakeMutator) String() string {
 	return ""
 }
 
+func (m *fakeMutator) GetExternalDataProvider() string {
+	return ""
+}
+
+func (m *fakeMutator) GetExternalDataSource() types.DataSource {
+	return ""
+}
+
+func (m *fakeMutator) GetExternalDataCache(name string) (*externaldatav1alpha1.Provider, error) {
+	provider := externaldatav1alpha1.Provider{}
+	return &provider, nil
+}
+
 func (m *fakeMutator) DeepCopy() types.Mutator {
 	result := &fakeMutator{
-		id:       m.id,
-		pathStr:  m.pathStr,
-		bindings: make([]schema.GroupVersionKind, len(m.bindings)),
-		path:     m.path.DeepCopy(),
+		id:            m.id,
+		pathStr:       m.pathStr,
+		bindings:      make([]schema.GroupVersionKind, len(m.bindings)),
+		path:          m.path.DeepCopy(),
+		providerCache: m.providerCache,
 	}
 	copy(result.bindings, m.bindings)
 	return result

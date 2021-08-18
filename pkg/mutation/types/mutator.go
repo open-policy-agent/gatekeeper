@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,32 @@ type ID struct {
 	Name      string
 }
 
+type DataSource string
+
+const (
+	ValueAtLocation DataSource = "valueAtLocation"
+	Username        DataSource = "username"
+)
+
+// ProviderCacheKey is the map key for provider requests
+type ProviderCacheKey struct {
+	ProviderName string `json:"providerName,omitempty"`
+	// outbound data is based on Provider DataSource
+	// it is either value of location or username in admission request
+	OutboundData string     `json:"outboundData,omitempty"`
+	DataSource   DataSource `json:"dataSource,omitempty"`
+}
+
+func (k ProviderCacheKey) MarshalText() ([]byte, error) {
+	type p ProviderCacheKey
+	return json.Marshal(p(k))
+}
+
+func (k *ProviderCacheKey) UnmarshalText(text []byte) error {
+	type x ProviderCacheKey
+	return json.Unmarshal(text, (*x)(k))
+}
+
 func (id ID) String() string {
 	return fmt.Sprintf("%v %v",
 		schema.GroupKind{Group: id.Group, Kind: id.Kind},
@@ -31,7 +58,7 @@ type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
 	Matches(obj client.Object, ns *corev1.Namespace) bool
 	// Mutate applies the mutation to the given object
-	Mutate(obj *unstructured.Unstructured) (bool, error)
+	Mutate(obj *unstructured.Unstructured, providerResponseCache map[ProviderCacheKey]string) (bool, error)
 	// ID returns the id of the current mutator.
 	ID() ID
 	// Has diff tells if the mutator has meaningful differences
@@ -42,6 +69,9 @@ type Mutator interface {
 	Value() (interface{}, error)
 	Path() parser.Path
 	String() string
+	GetExternalDataProvider() string
+	GetExternalDataSource() DataSource
+	GetExternalDataCache(name string) (*externaldatav1alpha1.Provider, error)
 }
 
 // MakeID builds an ID object for the given object.

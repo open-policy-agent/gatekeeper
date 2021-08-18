@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
@@ -99,22 +100,21 @@ func TestReconcile(t *testing.T) {
 	*mutation.MutationEnabled = true
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
-
-	tracker, err := readiness.SetupTracker(mgr, true)
+	pCache := frameworksexternaldata.NewCache()
+	tracker, err := readiness.SetupTracker(mgr, true, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	os.Setenv("POD_NAME", "no-pod")
 	podstatus.DisablePodOwnership()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
-
 	kind := "Assign"
 	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }
 	newMutator := func(obj client.Object) (types.Mutator, error) {
 		assign := obj.(*mutationsv1alpha1.Assign) // nolint:forcetypeassert
-		return mutators.MutatorForAssign(assign)
+		return mutators.MutatorForAssign(assign, pCache)
 	}
 
-	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
+	rec := newReconciler(mgr, mSys, pCache, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
 
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}
@@ -157,7 +157,7 @@ func TestReconcile(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 		g.Expect(func() error {
-			_, err := mSys.Mutate(u, nil)
+			_, err := mSys.Mutate(u, nil, "")
 			return err
 		}()).NotTo(gomega.HaveOccurred())
 		g.Expect(func() error {
@@ -181,7 +181,7 @@ func TestReconcile(t *testing.T) {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 			g.Expect(func() error {
-				_, err := mSys.Mutate(u, nil)
+				_, err := mSys.Mutate(u, nil, "")
 				return err
 			}()).NotTo(gomega.HaveOccurred())
 			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")

@@ -9,9 +9,11 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -58,7 +60,9 @@ func newAssignMutator(cfg *assignTestCfg) *AssignMutator {
 		panic(err)
 	}
 	m.Spec.Parameters.AssignIf = runtime.RawExtension{Raw: bs}
-	m2, err := MutatorForAssign(m)
+	providerCache := frameworksexternaldata.NewCache()
+
+	m2, err := MutatorForAssign(m, providerCache)
 	if err != nil {
 		panic(err)
 	}
@@ -724,11 +728,13 @@ func TestPathTests(t *testing.T) {
 			},
 		},
 	}
+	providerResponseCache := make(map[types.ProviderCacheKey]string)
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := newFoo(test.spec)
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(obj, providerResponseCache)
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
@@ -1439,11 +1445,13 @@ func TestValueTests(t *testing.T) {
 
 		// test nil
 	}
+	providerResponseCache := make(map[types.ProviderCacheKey]string)
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := newFoo(test.spec)
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(obj, providerResponseCache)
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
@@ -1690,12 +1698,13 @@ func TestAssign(t *testing.T) {
 			},
 		},
 	}
+	providerResponseCache := make(map[types.ProviderCacheKey]string)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := test.obj.DeepCopy()
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(obj, providerResponseCache)
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}

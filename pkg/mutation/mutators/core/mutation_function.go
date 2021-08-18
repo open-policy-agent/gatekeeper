@@ -3,7 +3,11 @@ package core
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
@@ -14,7 +18,7 @@ import (
 
 var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
-func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
+func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured, providerResponseCache map[types.ProviderCacheKey]string) (bool, error) {
 	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
 	if len(mutator.Path().Nodes) == 0 {
 		return false, fmt.Errorf("mutator %v has an empty target location", mutator.ID())
@@ -22,8 +26,73 @@ func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface
 	if obj == nil {
 		return false, errors.New("attempting to mutate a nil object")
 	}
-	mutated, _, err := s.mutateInternal(obj.Object, 0)
+
+	var err error
+	var isFallback bool
+	if *externaldata.ExternalDataEnabled {
+		providerResponseCache, isFallback, err = processExternalData(mutator, providerResponseCache)
+		if err != nil {
+			return false, err
+		}
+	}
+	mutated, _, err := s.mutateInternal(obj.Object, 0, providerResponseCache, isFallback)
 	return mutated, err
+}
+
+func processExternalData(mutator types.Mutator, providerResponseCache map[types.ProviderCacheKey]string) (map[types.ProviderCacheKey]string, bool, error) {
+	var response map[types.ProviderCacheKey]string
+	if len(providerResponseCache) != 0 {
+		providerName := mutator.GetExternalDataProvider()
+		dataSource := mutator.GetExternalDataSource()
+		if providerName != "" {
+			providerStore, err := mutator.GetExternalDataCache(providerName)
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to get external data provider cache: %v", err)
+			}
+			response, err = externaldata.SendProviderRequest(providerStore, providerResponseCache)
+			if err != nil {
+				// return if failure policy is set to fail
+				if strings.EqualFold(string(providerStore.Spec.FailurePolicy), string(externaldatav1alpha1.Fail)) {
+					return nil, false, fmt.Errorf("error while sending request to provider: %v", err)
+				}
+
+				// fallback to assign value if failure policy is set to ignore
+				log.Error(err, "error while sending request to provider. falling back to assign value")
+				return nil, true, nil
+			}
+
+			providerResponseCache = assignProviderCache(providerResponseCache, response, providerName, dataSource)
+		}
+	}
+	return providerResponseCache, false, nil
+}
+
+func assignProviderCache(providerResponseCache map[types.ProviderCacheKey]string, response map[types.ProviderCacheKey]string, providerName string, dataSource types.DataSource) map[types.ProviderCacheKey]string {
+	for outboundEntry := range providerResponseCache {
+		for inboundEntry := range response {
+			o := types.ProviderCacheKey{
+				OutboundData: outboundEntry.OutboundData,
+			}
+			i := types.ProviderCacheKey{
+				OutboundData: inboundEntry.OutboundData,
+			}
+
+			// if outbound key and inbound key is equal, then update the cache using inbound value
+			if reflect.DeepEqual(o, i) {
+				// updating existing cache entry with the response data
+				providerResponseCache[outboundEntry] = response[inboundEntry]
+
+				// creating a new cache entry with the response data
+				newKey := types.ProviderCacheKey{
+					ProviderName: providerName,
+					OutboundData: response[inboundEntry],
+					DataSource:   dataSource,
+				}
+				providerResponseCache[newKey] = response[inboundEntry]
+			}
+		}
+	}
+	return providerResponseCache
 }
 
 type mutatorState struct {
@@ -36,7 +105,7 @@ type mutatorState struct {
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
 // to any downstream objects in the tree, indicating that the mutation should not be persisted.
-func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, interface{}, error) {
+func (s *mutatorState) mutateInternal(current interface{}, depth int, providerResponseCache map[types.ProviderCacheKey]string, isFallBack bool) (bool, interface{}, error) {
 	pathEntry := s.mutator.Path().Nodes[depth]
 	switch castPathEntry := pathEntry.(type) {
 	case *parser.Object:
@@ -54,14 +123,39 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 				return false, nil, nil
 			}
 		}
+
+		provider := s.mutator.GetExternalDataProvider()
+
 		// we have hit the end of our path, this is the base case
 		if len(s.mutator.Path().Nodes)-1 == depth {
 			if s.valueTest != nil && !s.valueTest(next, exists) {
 				return false, nil, nil
 			}
-			value, err := s.mutator.Value()
-			if err != nil {
-				return false, nil, err
+
+			var value interface{}
+			var err error
+			if provider != "" && !isFallBack {
+				for key := range providerResponseCache {
+					if currentAsObject[castPathEntry.Reference] != nil {
+						// cache key matches current object value so we update the value
+						if strings.EqualFold(key.OutboundData, currentAsObject[castPathEntry.Reference].(string)) {
+							value = providerResponseCache[key]
+						}
+					}
+
+					// for AssignMetadata, username is a new value
+					if currentAsObject[castPathEntry.Reference] == nil {
+						dataSource := s.mutator.GetExternalDataSource()
+						if key.DataSource == dataSource {
+							value = providerResponseCache[key]
+						}
+					}
+				}
+			} else {
+				value, err = s.mutator.Value()
+				if err != nil {
+					return false, nil, err
+				}
 			}
 			currentAsObject[castPathEntry.Reference] = value
 			return true, currentAsObject, nil
@@ -73,13 +167,14 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 				return false, nil, err
 			}
 		}
-		mutated, next, err := s.mutateInternal(next, depth+1)
+		mutated, next, err := s.mutateInternal(next, depth+1, providerResponseCache, isFallBack)
 		if err != nil {
 			return false, nil, err
 		}
 		if mutated {
 			currentAsObject[castPathEntry.Reference] = next
 		}
+
 		return mutated, currentAsObject, nil
 	case *parser.List:
 		elementFound := false
@@ -102,7 +197,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		mutated := false
 		for _, listElement := range shallowCopy {
 			if glob {
-				m, _, err := s.mutateInternal(listElement, depth+1)
+				m, _, err := s.mutateInternal(listElement, depth+1, providerResponseCache, isFallBack)
 				if err != nil {
 					return false, nil, err
 				}
@@ -114,7 +209,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 						if !s.tester.ExistsOkay(depth) {
 							return false, nil, nil
 						}
-						m, _, err := s.mutateInternal(listElement, depth+1)
+						m, _, err := s.mutateInternal(listElement, depth+1, providerResponseCache, isFallBack)
 						if err != nil {
 							return false, nil, err
 						}
@@ -134,7 +229,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 				return false, nil, err
 			}
 			shallowCopy = append(shallowCopy, next)
-			m, _, err := s.mutateInternal(next, depth+1)
+			m, _, err := s.mutateInternal(next, depth+1, providerResponseCache, isFallBack)
 			if err != nil {
 				return false, nil, err
 			}

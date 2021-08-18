@@ -9,10 +9,10 @@ namespace: gatekeeper-system
 namePrefix: gatekeeper-
 
 commonLabels:
-  gatekeeper.sh/system: "yes"    
+  gatekeeper.sh/system: "yes"
 
 resources:
-- ../../crd/bases/mutations.gatekeeper.sh_assign.yaml  
+- ../../crd/bases/mutations.gatekeeper.sh_assign.yaml
 - ../../crd/bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - ../../crd/bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 

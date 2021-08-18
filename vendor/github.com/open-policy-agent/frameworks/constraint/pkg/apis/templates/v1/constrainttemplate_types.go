@@ -34,7 +34,8 @@ type CRD struct {
 }
 
 type CRDSpec struct {
-	Names      Names       `json:"names,omitempty"`
+	Names Names `json:"names,omitempty"`
+	// +kubebuilder:default={legacySchema: false}
 	Validation *Validation `json:"validation,omitempty"`
 }
 

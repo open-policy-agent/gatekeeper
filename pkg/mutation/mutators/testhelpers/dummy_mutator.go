@@ -3,6 +3,7 @@ package testhelpers
 import (
 	"reflect"
 
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -51,13 +52,25 @@ func (d *DummyMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (d *DummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (d *DummyMutator) Mutate(obj *unstructured.Unstructured, providerResponseCache map[types.ProviderCacheKey]string) (bool, error) {
 	t, _ := path.New(parser.Path{}, nil)
-	return core.Mutate(d, t, func(_ interface{}, _ bool) bool { return true }, obj)
+	return core.Mutate(d, t, func(_ interface{}, _ bool) bool { return true }, obj, nil)
 }
 
 func (d *DummyMutator) String() string {
 	return ""
+}
+
+func (d *DummyMutator) GetExternalDataProvider() string {
+	return ""
+}
+
+func (d *DummyMutator) GetExternalDataSource() types.DataSource {
+	return ""
+}
+
+func (d *DummyMutator) GetExternalDataCache(name string) (*externaldatav1alpha1.Provider, error) {
+	return &externaldatav1alpha1.Provider{}, nil
 }
 
 func NewDummyMutator(name, path string, value interface{}) *DummyMutator {

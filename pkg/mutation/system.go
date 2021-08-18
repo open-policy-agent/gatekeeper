@@ -88,7 +88,7 @@ func (s *System) Upsert(m types.Mutator) error {
 
 // Mutate applies the mutation in place to the given object. Returns
 // true if a mutation was performed.
-func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
+func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace, username string) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	mutationUUID := uuid.New()
@@ -98,6 +98,19 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 	var allAppliedMutations [][]types.Mutator
 	if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
 		allAppliedMutations = [][]types.Mutator{}
+	}
+
+	providerResponseCache := make(map[types.ProviderCacheKey]string)
+
+	// pre-fill cache for mutators that contain external data
+	for _, m := range s.orderedMutators {
+		provider := m.GetExternalDataProvider()
+		if provider != "" {
+			err := s.populateProviderCache(m, obj.Object, 0, providerResponseCache, username)
+			if err != nil {
+				log.Error(err, "error while populating provider cache")
+			}
+		}
 	}
 
 	iterations := 0
@@ -125,7 +138,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 			}
 
 			if m.Matches(obj, ns) {
-				mutated, err := m.Mutate(obj)
+				mutated, err := m.Mutate(obj, providerResponseCache)
 				if mutated {
 					appliedMutations = append(appliedMutations, m)
 				}
@@ -208,11 +221,11 @@ func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][
 
 	metadata, ok := obj.Object["metadata"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("Incorrect metadata type")
+		return fmt.Errorf("incorrect metadata type")
 	}
 	annotations, ok := metadata["annotations"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("Incorrect metadata type")
+		return fmt.Errorf("incorrect metadata type")
 	}
 	annotations["gatekeeper.sh/mutations"] = strings.Join(mutatorStrings, ", ")
 	annotations["gatekeeper.sh/mutation-id"] = mutationUUID
@@ -272,7 +285,7 @@ func (s *System) Remove(id types.ID) error {
 	// The map is expected to be in sync with the list, so if we don't find it
 	// we return an error.
 	if !found {
-		return fmt.Errorf("Failed to find mutator with ID %v on sorted list", id)
+		return fmt.Errorf("failed to find mutator with ID %v on sorted list", id)
 	}
 	copy(s.orderedMutators[i:], s.orderedMutators[i+1:])
 	s.orderedMutators[len(s.orderedMutators)-1] = nil
