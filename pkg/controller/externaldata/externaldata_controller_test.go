@@ -99,7 +99,6 @@ func TestReconcile(t *testing.T) {
 		g.Expect(c.Create(ctx, instance)).NotTo(gomega.HaveOccurred())
 	})
 
-
 	t.Run("Can delete a provider object", func(t *testing.T) {
 		g.Expect(c.Delete(ctx, instance)).NotTo(gomega.HaveOccurred())
 	})

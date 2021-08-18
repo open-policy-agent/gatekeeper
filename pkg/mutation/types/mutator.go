@@ -24,11 +24,13 @@ type ID struct {
 type DataSource string
 
 const (
+	// ValueAtLocation represents the value of the location field.
 	ValueAtLocation DataSource = "valueAtLocation"
-	Username        DataSource = "username"
+	// Username represents the admission request username.
+	Username DataSource = "username"
 )
 
-// ProviderCacheKey is the map key for provider requests
+// ProviderCacheKey is the map key for provider requests.
 type ProviderCacheKey struct {
 	ProviderName string `json:"providerName,omitempty"`
 	// outbound data is based on Provider DataSource

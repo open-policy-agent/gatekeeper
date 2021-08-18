@@ -27,7 +27,7 @@ type fakeMutator struct {
 	Labels        map[string]string
 	MutationCount int
 	UnstableFor   int // makes the mutation unstable for the first n mutations
-	ProviderCache  *frameworksexternaldata.ProviderCache
+	ProviderCache *frameworksexternaldata.ProviderCache
 }
 
 func (m *fakeMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {

@@ -50,7 +50,7 @@ type Validation struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	OpenAPIV3Schema *apiextensionsv1.JSONSchemaProps `json:"openAPIV3Schema,omitempty"`
 	// +kubebuilder:default=false
-	LegacySchema bool `json:"legacySchema,omitempty"`
+	LegacySchema *bool `json:"legacySchema,omitempty"` // *bool allows for "unset" state which we need to apply appropriate defaults
 }
 
 type Target struct {
