@@ -39,4 +39,4 @@ require (
 	sigs.k8s.io/yaml v1.2.0
 )
 
-replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210815063935-e72d0e03f837
+replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210818034338-061d1400c729

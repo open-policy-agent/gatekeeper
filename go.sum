@@ -712,8 +712,8 @@ github.com/soheilhy/cmux v0.1.4/go.mod h1:IM3LyeVVIOuxMH7sFAkER9+bJ4dT7Ms6E4xg4k
 github.com/sonatard/noctx v0.0.1/go.mod h1:9D2D/EoULe8Yy2joDHJj7bv3sZoq9AaSb8B4lqBjiZI=
 github.com/sony/gobreaker v0.4.1/go.mod h1:ZKptC7FHNvhBz7dN2LGjPVBz2sZJmc0/PkyDJOjmxWY=
 github.com/sourcegraph/go-diff v0.6.1/go.mod h1:iBszgVvyxdc8SFZ7gm69go2KDdt3ag071iBaWPF6cjs=
-github.com/sozercan/frameworks/constraint v0.0.0-20210815063935-e72d0e03f837 h1:vkDfv5z2Nv7/mzz+TUOzjLoECRWm+8xrudfMxgy6fhQ=
-github.com/sozercan/frameworks/constraint v0.0.0-20210815063935-e72d0e03f837/go.mod h1:yyVeZWP50/M0U8uxdthjT6TE+xTtIM6/TVLGZ5L1Wmw=
+github.com/sozercan/frameworks/constraint v0.0.0-20210818034338-061d1400c729 h1:Ca1jHMvn1YYrSwFQYcKOOUhOlgWOPrWrPQHJwjUSyaU=
+github.com/sozercan/frameworks/constraint v0.0.0-20210818034338-061d1400c729/go.mod h1:sxECOn2E9o4DIK6ttinq1frfiErxi0Z8oIgtz7VDVBc=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/afero v1.2.2 h1:5jhuqJyZCZf2JRofRvN/nIFgIWNzPa3/Vz8mYylgbWc=
