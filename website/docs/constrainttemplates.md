@@ -12,7 +12,7 @@ ConstraintTemplates define a way to validate some set of Kubernetes objects in G
 
 In release version 3.6.0, Gatekeeper included the `v1` version of `ConstraintTemplate`.  Unlike past versions of `ConstraintTemplate`, `v1` requires the Constraint schema section to be [structural](https://kubernetes.io/blog/2019/06/20/crd-structural-schema/).
 
-Structural schemas have a variety of [requirements](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#specifying-a-structural-schema).  One such requirement is that of the `type` field to be defined for each level of the schema.
+Structural schemas have a variety of [requirements](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#specifying-a-structural-schema).  One such requirement is that the `type` field be defined for each level of the schema.
 
 For example, users of Gatekeeper may recognize the `k8srequiredlabels` ConstraintTemplate, defined here in version `v1beta1`:
 
