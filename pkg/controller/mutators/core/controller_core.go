@@ -154,95 +154,45 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.log.Info("Reconcile", "request", request)
 	startTime := time.Now()
 
-	gvk := schema.GroupVersionKind{
-		Group:   mutationsv1alpha1.GroupVersion.Group,
-		Version: mutationsv1alpha1.GroupVersion.Version,
-		Kind:    r.kind,
-	}
-
-	deleted := false
-	mutationObj := r.newMutationObj()
-	err := r.Get(ctx, request.NamespacedName, mutationObj)
+	mutationObj, deleted, err := r.getOrDefault(ctx, request.NamespacedName)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, err
-		}
-
-		deleted = true
-		mutationObj = r.newMutationObj()
-		mutationObj.SetName(request.NamespacedName.Name)
-		mutationObj.SetNamespace(request.NamespacedName.Namespace)
-		mutationObj.GetObjectKind().SetGroupVersionKind(gvk)
+		return reconcile.Result{}, err
 	}
-	deleted = deleted || !mutationObj.GetDeletionTimestamp().IsZero()
-	tracker := r.tracker.For(gvk)
-
-	mID := types.MakeID(mutationObj)
 
 	if deleted {
-		tracker.CancelExpect(mutationObj)
-		r.cache.Remove(mID)
-
-		if err := r.system.Remove(mID); err != nil {
-			r.log.Error(err, "Remove failed", "resource", request.NamespacedName)
-			return reconcile.Result{}, err
-		}
-
-		sName, err := statusv1beta1.KeyForMutatorID(util.GetPodName(), mID)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		status := &statusv1beta1.MutatorPodStatus{}
-		status.SetName(sName)
-		status.SetNamespace(util.GetNamespace())
-		if err := r.Delete(ctx, status); err != nil {
-			if !errors.IsNotFound(err) {
-				return reconcile.Result{}, err
-			}
-		}
-
-		return reconcile.Result{}, nil
+		// Either the mutator was deleted before we were able to process this request, or it has been marked for
+		// deletion.
+		return r.reconcileDeleted(ctx, mutationObj)
 	}
 
 	ingestionStatus := ctrlmutators.MutatorStatusError
 	// encasing this call in a function prevents the arguments from being evaluated early
-	defer func() { r.reportMutator(mID, ingestionStatus, startTime) }()
 
-	status, err := r.getOrCreatePodStatus(ctx, mID)
-	if err != nil {
-		r.log.Info("could not get/create pod status object", "error", err)
-		return reconcile.Result{}, err
-	}
-	status.Status.MutatorUID = mutationObj.GetUID()
-	status.Status.ObservedGeneration = mutationObj.GetGeneration()
-	status.Status.Errors = nil
+	defer func() {
+		r.reportMutator(types.MakeID(mutationObj), ingestionStatus, startTime)
+	}()
 
 	mutator, err := r.mutatorFor(mutationObj)
 	if err != nil {
 		r.log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
-		tracker.TryCancelExpect(mutationObj)
-		status.Status.Errors = append(status.Status.Errors, statusv1beta1.MutatorError{Message: err.Error()})
-		if err2 := r.Update(ctx, status); err != nil {
-			r.log.Error(err2, "could not update mutator status")
-		}
+		r.getTracker().TryCancelExpect(mutationObj)
+
+		err = r.updateStatus(ctx, mutationObj, false, err)
 		return reconcile.Result{}, err
 	}
 
-	if err := r.system.Upsert(mutator); err != nil {
+	if err = r.system.Upsert(mutator); err != nil {
 		r.log.Error(err, "Insert failed", "resource", request.NamespacedName)
-		tracker.TryCancelExpect(mutationObj)
-		status.Status.Errors = append(status.Status.Errors, statusv1beta1.MutatorError{Message: err.Error()})
-		if err2 := r.Update(ctx, status); err != nil {
-			r.log.Error(err2, "could not update mutator status")
-		}
+		r.getTracker().TryCancelExpect(mutationObj)
+
+		err = r.updateStatus(ctx, mutationObj, false, err)
 		return reconcile.Result{}, err
 	}
 
-	tracker.Observe(mutationObj)
-	status.Status.Enforced = true
+	r.getTracker().Observe(mutationObj)
 
-	if err := r.Update(ctx, status); err != nil {
-		r.log.Error(err, "could not update mutator status")
+	err = r.updateStatus(ctx, mutationObj, true, nil)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -256,6 +206,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 	if err != nil {
 		return nil, err
 	}
+
 	key := apiTypes.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.Get(ctx, key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
@@ -268,6 +219,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 	if err != nil {
 		return nil, err
 	}
+
 	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, mutatorID, r.scheme)
 	if err != nil {
 		return nil, err
@@ -286,7 +238,6 @@ func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 
 func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
 	r.cache.Upsert(mID, ingestionStatus)
-
 	if r.reporter == nil {
 		return
 	}
@@ -300,4 +251,94 @@ func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.Mu
 			r.log.Error(err, "failed to report mutator status request")
 		}
 	}
+}
+
+func (r *Reconciler) gvk() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   mutationsv1alpha1.GroupVersion.Group,
+		Version: mutationsv1alpha1.GroupVersion.Version,
+		Kind:    r.kind,
+	}
+}
+
+// getOrDefault attempts to get the Mutator from the cluster, or returns a default-instantiated Mutator if one does not
+// exist.
+func (r *Reconciler) getOrDefault(ctx context.Context, namespacedName apiTypes.NamespacedName) (client.Object, bool, error) {
+	obj := r.newMutationObj()
+	err := r.Get(ctx, namespacedName, obj)
+	switch {
+	case err == nil:
+		// Treat objects with a DeletionTimestamp as if they are deleted.
+		deleted := !obj.GetDeletionTimestamp().IsZero()
+		return obj, deleted, nil
+	case errors.IsNotFound(err):
+		obj = r.newMutationObj()
+		obj.SetName(namespacedName.Name)
+		obj.SetNamespace(namespacedName.Namespace)
+		obj.GetObjectKind().SetGroupVersionKind(r.gvk())
+		return obj, true, nil
+	default:
+		return nil, false, err
+	}
+}
+
+func (r *Reconciler) getTracker() readiness.Expectations {
+	return r.tracker.For(r.gvk())
+}
+
+// reconcileDeleted removes the Mutator from the controller and deletes the corresponding PodStatus.
+func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (reconcile.Result, error) {
+	mID := types.MakeID(obj)
+	r.getTracker().CancelExpect(obj)
+	r.cache.Remove(mID)
+
+	if err := r.system.Remove(mID); err != nil {
+		r.log.Error(err, "Remove failed", "resource",
+			apiTypes.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()})
+		return reconcile.Result{}, err
+	}
+
+	sName, err := statusv1beta1.KeyForMutatorID(util.GetPodName(), mID)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	status := &statusv1beta1.MutatorPodStatus{}
+	status.SetName(sName)
+	status.SetNamespace(util.GetNamespace())
+	if err = r.Delete(ctx, status); !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// updateStatus updates the PodStatus corresponding to the passed Mutator with whether the Mutator is enforced, and
+// whether there is an error instantiating the Mutator within the controller.
+func (r *Reconciler) updateStatus(ctx context.Context, obj client.Object, enforced bool, statusErr error) error {
+	mID := types.MakeID(obj)
+
+	status, err := r.getOrCreatePodStatus(ctx, mID)
+	if err != nil {
+		r.log.Info("could not get/create pod status object", "error", err)
+		return err
+	}
+
+	status.Status.MutatorUID = obj.GetUID()
+	status.Status.ObservedGeneration = obj.GetGeneration()
+	if statusErr != nil {
+		status.Status.Errors = []statusv1beta1.MutatorError{{Message: statusErr.Error()}}
+	} else {
+		status.Status.Errors = nil
+	}
+
+	if enforced {
+		status.Status.Enforced = true
+	}
+
+	if err = r.Update(ctx, status); err != nil {
+		r.log.Error(err, "could not update mutator status")
+	}
+
+	return nil
 }

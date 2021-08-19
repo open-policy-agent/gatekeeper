@@ -117,6 +117,10 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}
 
+			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {
+				obj = strings.Replace(obj, "apiVersion: policy/v1beta1", "{{- if .Capabilities.APIVersions.Has \"policy/v1\" }}\napiVersion: policy/v1\n{{ else }}\napiVersion: policy/v1beta1\n{{ end -}}", 1)
+			}
+
 			if err := os.WriteFile(destFile, []byte(obj), 0600); err != nil {
 				return err
 			}
