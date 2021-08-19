@@ -76,7 +76,11 @@ For more information on valid types in JSONSchemas, see the [JSONSchema document
 
 ## Why implement this change?
 
-Requiring structural schemas in Constraint Templates yields usability improvements.  As the required data types are defined, the API server will reject a `Constraint` with an incorrect `parameters` field, as opposed to ingesting it and simply not passing those `parameters` into Gatekeeper.
+Structural schemas are required in version `v1` of `CustomResourceDefinition` resources, which underlie ConstraintTemplates.  Requiring the same in ConstraintTemplates puts Gatekeeper in line with the overall direction of Kubernetes.
+
+Beyond this alignment, structural schemas yield significant usability improvements. The schema of a ConstraintTemplate's associated Constraint is both more visible and type validated.
+
+As the data types of Constraint fields are defined in the ConstraintTemplate, the API server will reject a Constraint with an incorrect `parameters` field. Previously, the API server would ingest it and simply not pass those `parameters` to Gatekeeper.  This experience was confusing for users, and is noticeably improved by structural schemas.
 
 For example, see this incorrectly defined `k8srequiredlabels` Constraint:
 
