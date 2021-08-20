@@ -6,6 +6,7 @@ CRD_IMG := $(CRD_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
+ENABLE_EXTERNAL_DATA ?= false
 
 VERSION := v3.6.0-beta.3
 
@@ -181,6 +182,9 @@ install: manifests
 
 deploy-mutation: patch-image
 	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./config/overlays/dev_mutation/manager_image_patch.yaml
+ifeq ($(ENABLE_EXTERNAL_DATA),true)
+	@grep -q -v 'enable-external-data' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --enable-mutation=true/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev_mutation/manager_image_patch.yaml
+endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		--load_restrictor LoadRestrictionsNone \
@@ -192,6 +196,9 @@ deploy-mutation: patch-image
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
+ifeq ($(ENABLE_EXTERNAL_DATA),true)
+	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
+endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl apply -f -

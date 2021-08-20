@@ -75,6 +75,71 @@ teardown_file() {
   assert_equal "" "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc
+  kubectl delete --ignore-not-found assignmetadata k8sownerlabel
+  kubectl delete --ignore-not-found assign k8sexternalip
+}
+
+@test "external data provider crd is established" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data tests"
+  fi
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/providers.externaldata.gatekeeper.sh"
+}
+
+@test "gatekeeper external data mutation test" {
+  if [[ -z $ENABLE_EXTERNAL_DATA_TESTS || -z $ENABLE_MUTATION_TESTS ]]; then
+    skip "skipping external data mutation tests"
+  fi
+
+  # TODO(sertac): location is temporary for testing purposes.
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/manifest/deployment.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/manifest/service.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/manifest/rbac.yaml"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/policy/provider.yaml"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/policy/assign.yaml"
+
+  kubectl wait --for=condition=Ready --timeout=60s pod -l run=tagtodigest-provider
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/tagToDigest-provider/v0.0.1/policy/examples/test.yaml"
+
+  run kubectl get deploy test-deployment -o jsonpath="{.spec.template.spec.containers[?(@.name=='tag')].image}"
+  assert_match "sha256" "${output}"
+  assert_success
+
+  kubectl delete --ignore-not-found deploy test-deployment
+  kubectl delete --ignore-not-found assign mutate-image
+}
+
+@test "gatekeeper external data validation test" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data validation tests"
+  fi
+
+  # TODO(sertac): location is temporary for testing purposes.
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/manifest/deployment.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/manifest/rbac.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/manifest/service.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/manifest/secret.yaml"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/policy/provider.yaml"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/policy/template.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/policy/constraint.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8ssignedimages signed-image"
+
+  kubectl wait --for=condition=Ready --timeout=60s pod -l run=cosign-provider
+
+  run kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/policy/examples/unsigned.yaml
+  assert_match 'denied the request' "${output}"
+  assert_failure
+
+  run kubectl apply -f https://raw.githubusercontent.com/sozercan/cosign-provider/v0.0.1/policy/examples/signed.yaml
+  assert_success
+
+  kubectl delete --ignore-not-found deploy signed-deployment unsigned-deployment
+  kubectl delete --ignore-not-found constrainttemplate k8ssignedimages
 }
 
 @test "applying sync config" {
