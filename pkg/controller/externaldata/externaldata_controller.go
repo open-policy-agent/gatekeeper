@@ -122,22 +122,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	deleted = deleted || !provider.GetDeletionTimestamp().IsZero()
 	tracker := r.tracker.For(gvkExternalData)
 
-	if err != nil {
-		log.Error(err, "Creating provider for resource failed", "resource", request.NamespacedName)
-		tracker.CancelExpect(provider)
-		return ctrl.Result{}, err
-	}
 	if !deleted {
 		if err := r.providerCache.Upsert(provider); err != nil {
 			log.Error(err, "Upsert failed", "resource", request.NamespacedName)
 			tracker.TryCancelExpect(provider)
-		} else {
-			tracker.Observe(provider)
+			return reconcile.Result{}, err
 		}
+		tracker.Observe(provider)
 	} else {
-		if err := r.providerCache.Remove(provider.Name); err != nil {
-			log.Error(err, "Remove failed", "resource", request.NamespacedName)
-		}
+		r.providerCache.Remove(provider.Name)
 		tracker.CancelExpect(provider)
 	}
 

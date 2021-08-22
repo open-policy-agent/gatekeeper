@@ -130,7 +130,7 @@ func (d *driver) Init(ctx context.Context) error {
 
 				provider, err := d.providerCache.Get(providerName)
 				if err != nil {
-					return nil, fmt.Errorf("unable to retrieve provider %v cache", providerName)
+					return nil, fmt.Errorf("unable to retrieve provider %v from cache", providerName)
 				}
 
 				req, err := http.NewRequest("GET", provider.Spec.ProxyURL, bytes.NewBuffer([]byte(body)))

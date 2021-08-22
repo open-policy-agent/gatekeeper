@@ -33,6 +33,9 @@ spec:
             description: ProviderSpec defines the desired state of Provider
             properties:
               failurePolicy:
+                enum:
+                - Ignore
+                - Fail
                 type: string
               maxRetry:
                 type: integer

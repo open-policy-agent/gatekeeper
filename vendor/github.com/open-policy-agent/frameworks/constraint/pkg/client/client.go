@@ -11,7 +11,6 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 
 	constraintlib "github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -76,7 +75,6 @@ type Client struct {
 	templates         map[templateKey]*templateEntry
 	constraints       map[schema.GroupKind]map[string]*unstructured.Unstructured
 	allowedDataFields []string
-	ProviderCache     externaldata.ProviderCache
 }
 
 // createDataPath compiles the data destination: data.external.<target>.<path>
