@@ -1,0 +1,33 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          ports:
+            - containerPort: 8888
+              $patch: delete
+            - containerPort: 8443
+              $patch: delete
+            - containerPort: 9090
+              $patch: delete
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gatekeeper-audit
+  namespace: gatekeeper-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          ports:
+            - containerPort: 8888
+              $patch: delete
+            - containerPort: 9090
+              $patch: delete
