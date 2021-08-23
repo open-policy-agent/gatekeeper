@@ -140,6 +140,11 @@ func labelSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (
 }
 
 func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	// If we don't have a namespace, we can't disqualify the match
+	if ns == nil {
+		return true, nil
+	}
+
 	for _, n := range match.ExcludedNamespaces {
 		if ns.Name == n || prefixMatch(n, ns.Name) {
 			return false, nil

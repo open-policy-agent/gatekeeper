@@ -172,6 +172,16 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
+			// Insures that namespaceMatch handles ns==nil
+			tname:   "namespaces configured, but cluster scoped",
+			toMatch: makeObject("kind", "group", "", "name"),
+			match: Match{
+				Namespaces: []string{"nonmatching", "namespace"},
+			},
+			namespace:   nil,
+			shouldMatch: true,
+		},
+		{
 			tname:   "namespace prefix matches",
 			toMatch: makeObject("kind", "group", "kube-system", "name"),
 			match: Match{
@@ -214,6 +224,23 @@ func TestMatch(t *testing.T) {
 			},
 			namespace:   &corev1.Namespace{},
 			shouldMatch: false,
+		},
+		{
+			// Insures that namespaceMatch handles ns==nil
+			tname:   "a namespace is excluded, but object is cluster scoped",
+			toMatch: makeObject("kind", "group", "", "name"),
+			match: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{"kind"},
+						APIGroups: []string{"group"},
+					},
+				},
+				Namespaces:         []string{"nonmatching", "namespace"},
+				ExcludedNamespaces: []string{"namespace"},
+			},
+			namespace:   nil,
+			shouldMatch: true,
 		},
 		{
 			tname:   "namespace is excluded by wildcard match",
