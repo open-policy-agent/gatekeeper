@@ -87,7 +87,7 @@ func register() error {
 			Name:        validationRequestDurationMetricName,
 			Description: validationResponseTimeInSecM.Description(),
 			Measure:     validationResponseTimeInSecM,
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
 		{
@@ -101,8 +101,7 @@ func register() error {
 			Name:        mutationRequestDurationMetricName,
 			Description: mutationResponseTimeInSecM.Description(),
 			Measure:     mutationResponseTimeInSecM,
-			// TODO: Adjust the distribution once we know what value make sense here
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3),
 			TagKeys:     []tag.Key{mutationStatusKey},
 		},
 	}

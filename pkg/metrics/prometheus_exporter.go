@@ -7,6 +7,7 @@ import (
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats/view"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	ctlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 var curPromSrv *http.Server
@@ -16,7 +17,11 @@ var log = logf.Log.WithName("metrics")
 const namespace = "gatekeeper"
 
 func newPrometheusExporter() (view.Exporter, error) {
-	e, err := prometheus.NewExporter(prometheus.Options{Namespace: namespace})
+	e, err := prometheus.NewExporter(prometheus.Options{
+		Namespace:  namespace,
+		Registerer: ctlmetrics.Registry,
+		Gatherer:   ctlmetrics.Registry,
+	})
 	if err != nil {
 		log.Error(err, "Failed to create the Prometheus exporter.")
 		return nil, err
