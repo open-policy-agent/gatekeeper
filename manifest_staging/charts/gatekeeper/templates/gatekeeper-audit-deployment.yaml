@@ -51,6 +51,8 @@ spec:
         - --operation=audit
         - --operation=status
         - --logtostderr
+        - --health-addr=:{{ .Values.audit.healthPort }}
+        - --prometheus-port={{ .Values.audit.metricsPort }}
         command:
         - /manager
         env:
@@ -68,19 +70,19 @@ spec:
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 9090
+            port: {{ .Values.audit.healthPort }}
         name: manager
         ports:
-        - containerPort: 8888
+        - containerPort: {{ .Values.audit.metricsPort }}
           name: metrics
           protocol: TCP
-        - containerPort: 9090
+        - containerPort: {{ .Values.audit.healthPort }}
           name: healthz
           protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 9090
+            port: {{ .Values.audit.healthPort }}
         resources:
           {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
