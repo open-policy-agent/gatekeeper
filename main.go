@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -155,6 +156,10 @@ func main() {
 
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
+	// Disable high-cardinality REST client metrics (rest_client_request_latency).
+	// Must be called before ctrl.NewManager!
+	metrics.DisableRESTClientMetrics()
+
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		NewCache:               dynamiccache.New,
 		Scheme:                 scheme,
@@ -283,7 +288,9 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 	}
-	if err := controller.AddToManager(mgr, opts); err != nil {
+
+	ctx := context.Background()
+	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}

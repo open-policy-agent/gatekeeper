@@ -51,17 +51,6 @@ type fakeNsGetter struct {
 	scheme *runtime.Scheme
 }
 
-func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
-	if ns, ok := obj.(*corev1.Namespace); ok {
-		ns.ObjectMeta = metav1.ObjectMeta{
-			Name: key.Name,
-		}
-		return nil
-	}
-
-	return errors.New("not found")
-}
-
 // getFiles reads a directory and returns a list of files ending with .yaml/.yml
 // returns an error if directory does not exist.
 func getFiles(dir string) ([]string, error) {
@@ -83,6 +72,17 @@ func getFiles(dir string) ([]string, error) {
 		filePaths = append(filePaths, filepath.Join(dir, file.Name()))
 	}
 	return filePaths, nil
+}
+
+func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+	if ns, ok := obj.(*corev1.Namespace); ok {
+		ns.ObjectMeta = metav1.ObjectMeta{
+			Name: key.Name,
+		}
+		return nil
+	}
+
+	return errors.New("not found")
 }
 
 // readTemplates reads templates from a directory
@@ -152,9 +152,9 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	return result, nil
 }
 
-func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
+func addTemplates(ctx context.Context, opa *opa.Client, list []templates.ConstraintTemplate) error {
 	for index := range list {
-		_, err := opa.AddTemplate(context.TODO(), &list[index])
+		_, err := opa.AddTemplate(ctx, &list[index])
 		if err != nil {
 			return err
 		}
@@ -162,9 +162,9 @@ func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
 	return nil
 }
 
-func addConstraints(opa *opa.Client, list []unstructured.Unstructured) error {
+func addConstraints(ctx context.Context, opa *opa.Client, list []unstructured.Unstructured) error {
 	for index := range list {
-		_, err := opa.AddConstraint(context.TODO(), &list[index])
+		_, err := opa.AddConstraint(ctx, &list[index])
 		if err != nil {
 			return err
 		}
@@ -289,7 +289,8 @@ func BenchmarkValidationHandler(b *testing.B) {
 
 		for _, bm := range tc.load {
 			// remove all data from OPA
-			err = opa.Reset(context.TODO())
+			ctx := context.Background()
+			err = opa.Reset(ctx)
 			if err != nil {
 				b.Errorf("test %s, failed to reset OPA: %s", name, err)
 			}
@@ -297,12 +298,12 @@ func BenchmarkValidationHandler(b *testing.B) {
 			rand.Seed(time.Now().UnixNano())
 
 			// create T templates
-			err = addTemplates(opa, ctList)
+			err = addTemplates(ctx, opa, ctList)
 			if err != nil {
 				b.Errorf("test %s, failed to load templates into OPA: %s", name, err)
 			}
 			// load constraints into OPA
-			err = addConstraints(opa, generateConstraints(bm, crList))
+			err = addConstraints(ctx, opa, generateConstraints(bm, crList))
 			if err != nil {
 				b.Errorf("test %s, failed to load constraints into OPA: %s", name, err)
 			}
@@ -312,14 +313,14 @@ func BenchmarkValidationHandler(b *testing.B) {
 					b.StopTimer()
 					req := createAdmissionRequests(resList, i)
 					b.StartTimer()
-					resp := h.Handle(context.TODO(), req)
+					resp := h.Handle(ctx, req)
 					if resp.Result.Code == http.StatusInternalServerError || resp.Result.Code == http.StatusUnprocessableEntity {
 						b.Errorf("expected a decision, received server error %d on test %s", resp.Result.Code, name)
 					}
 				}
 			})
 			// remove all data from OPA
-			err = opa.Reset(context.TODO())
+			err = opa.Reset(ctx)
 			if err != nil {
 				b.Errorf("test %s, failed to reset OPA: %s", name, err)
 			}

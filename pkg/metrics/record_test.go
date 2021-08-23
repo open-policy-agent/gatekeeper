@@ -14,7 +14,6 @@ func TestRecord(t *testing.T) {
 	const expectedRowLength = 1
 	testM := stats.Int64(measureName, measureName, stats.UnitDimensionless)
 
-	ctx := context.Background()
 	testView := &view.View{
 		Measure:     testM,
 		Aggregation: view.LastValue(),
@@ -25,6 +24,7 @@ func TestRecord(t *testing.T) {
 	}
 	defer view.Unregister(testView)
 
+	ctx := context.Background()
 	if err := Record(ctx, testM.M(expectedValue)); err != nil {
 		t.Errorf("failed while recording: %v", err)
 	}

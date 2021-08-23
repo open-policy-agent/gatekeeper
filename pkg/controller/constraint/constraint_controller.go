@@ -62,7 +62,7 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
 	Tracker          *readiness.Tracker
-	GetPod           func() (*corev1.Pod, error)
+	GetPod           func(context.Context) (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
 	AssumeDeleted    func(schema.GroupVersionKind) bool
 }
@@ -188,7 +188,7 @@ type ReconcileConstraint struct {
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
 	tracker          *readiness.Tracker
-	getPod           func() (*corev1.Pod, error)
+	getPod           func(context.Context) (*corev1.Pod, error)
 	// assumeDeleted allows us to short-circuit get requests
 	// that would otherwise trigger a watch
 	assumeDeleted func(schema.GroupVersionKind) bool
@@ -252,20 +252,20 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	reportMetrics := false
 	defer func() {
 		if reportMetrics {
-			r.constraintsCache.reportTotalConstraints(r.reporter)
+			r.constraintsCache.reportTotalConstraints(ctx, r.reporter)
 		}
 	}()
 
 	if HasFinalizer(instance) {
 		RemoveFinalizer(instance)
-		if err := r.writer.Update(context.Background(), instance); err != nil {
+		if err := r.writer.Update(ctx, instance); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 	}
 
 	if !deleted {
 		r.log.Info("handling constraint update", "instance", instance)
-		status, err := r.getOrCreatePodStatus(instance)
+		status, err := r.getOrCreatePodStatus(ctx, instance)
 		if err != nil {
 			log.Info("could not get/create pod status object", "error", err)
 			return reconcile.Result{}, err
@@ -274,7 +274,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
 		if c, err := r.opa.GetConstraint(ctx, instance); err != nil || !constraints.SemanticEqual(instance, c) {
-			if err := r.cacheConstraint(instance); err != nil {
+			if err := r.cacheConstraint(ctx, instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,
 					status:            metrics.ErrorStatus,
@@ -290,7 +290,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		status.Status.Enforced = true
-		if err = r.writer.Update(context.Background(), status); err != nil {
+		if err = r.writer.Update(ctx, status); err != nil {
 			return reconcile.Result{Requeue: true}, nil
 		}
 
@@ -302,7 +302,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		reportMetrics = true
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
-		if _, err := r.opa.RemoveConstraint(context.Background(), instance); err != nil {
+		if _, err := r.opa.RemoveConstraint(ctx, instance); err != nil {
 			if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
 				return reconcile.Result{}, err
 			}
@@ -332,27 +332,27 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileConstraint) defaultGetPod() (*corev1.Pod, error) {
+func (r *ReconcileConstraint) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	// require injection of GetPod in order to control what client we use to
 	// guarantee we don't inadvertently create a watch
-	panic("GetPod must be injected")
+	panic("GetPod must be injected to ReconcileConstraint")
 }
 
-func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
+func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constraint *unstructured.Unstructured) (*constraintstatusv1beta1.ConstraintPodStatus, error) {
 	statusObj := &constraintstatusv1beta1.ConstraintPodStatus{}
 	sName, err := constraintstatusv1beta1.KeyForConstraint(util.GetPodName(), constraint)
 	if err != nil {
 		return nil, err
 	}
 	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
-	if err := r.reader.Get(context.TODO(), key, statusObj); err != nil {
+	if err := r.reader.Get(ctx, key, statusObj); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
 	} else {
 		return statusObj, nil
 	}
-	pod, err := r.getPod()
+	pod, err := r.getPod(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +360,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(constraint *unstructured.Unst
 	if err != nil {
 		return nil, err
 	}
-	if err := r.writer.Create(context.TODO(), statusObj); err != nil {
+	if err := r.writer.Create(ctx, statusObj); err != nil {
 		return nil, err
 	}
 	return statusObj, nil
@@ -392,13 +392,13 @@ func logRemoval(l logr.Logger, constraint *unstructured.Unstructured, enforcemen
 	)
 }
 
-func (r *ReconcileConstraint) cacheConstraint(instance *unstructured.Unstructured) error {
+func (r *ReconcileConstraint) cacheConstraint(ctx context.Context, instance *unstructured.Unstructured) error {
 	t := r.tracker.For(instance.GroupVersionKind())
 
 	obj := instance.DeepCopy()
 	// Remove the status field since we do not need it for OPA
 	unstructured.RemoveNestedField(obj.Object, "status")
-	_, err := r.opa.AddConstraint(context.Background(), obj)
+	_, err := r.opa.AddConstraint(ctx, obj)
 	if err != nil {
 		t.TryCancelExpect(obj)
 		return err
@@ -461,7 +461,7 @@ func (c *ConstraintsCache) deleteConstraintKey(constraintKey string) {
 	delete(c.cache, constraintKey)
 }
 
-func (c *ConstraintsCache) reportTotalConstraints(reporter StatsReporter) {
+func (c *ConstraintsCache) reportTotalConstraints(ctx context.Context, reporter StatsReporter) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
@@ -477,7 +477,7 @@ func (c *ConstraintsCache) reportTotalConstraints(reporter StatsReporter) {
 				enforcementAction: enforcementAction,
 				status:            status,
 			}
-			if err := reporter.reportConstraints(t, int64(totals[t])); err != nil {
+			if err := reporter.reportConstraints(ctx, t, int64(totals[t])); err != nil {
 				log.Error(err, "failed to report total constraints")
 			}
 		}

@@ -41,49 +41,36 @@ func init() {
 
 // StatsReporter reports webhook metrics.
 type StatsReporter interface {
-	ReportValidationRequest(response requestResponse, d time.Duration) error
-	ReportMutationRequest(response requestResponse, d time.Duration) error
+	ReportValidationRequest(ctx context.Context, response requestResponse, d time.Duration) error
+	ReportMutationRequest(ctx context.Context, response requestResponse, d time.Duration) error
 }
 
 // reporter implements StatsReporter interface.
-type reporter struct {
-	ctx context.Context
-}
+type reporter struct{}
 
 // newStatsReporter creaters a reporter for webhook metrics.
 func newStatsReporter() (StatsReporter, error) {
-	ctx, err := tag.New(
-		context.Background(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &reporter{ctx: ctx}, nil
+	return &reporter{}, nil
 }
 
-func (r *reporter) ReportValidationRequest(response requestResponse, d time.Duration) error {
-	return r.reportRequest(response, admissionStatusKey, validationResponseTimeInSecM.M(d.Seconds()))
+func (r *reporter) ReportValidationRequest(ctx context.Context, response requestResponse, d time.Duration) error {
+	return r.reportRequest(ctx, response, admissionStatusKey, validationResponseTimeInSecM.M(d.Seconds()))
 }
 
-func (r *reporter) ReportMutationRequest(response requestResponse, d time.Duration) error {
-	return r.reportRequest(response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
+func (r *reporter) ReportMutationRequest(ctx context.Context, response requestResponse, d time.Duration) error {
+	return r.reportRequest(ctx, response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
 }
 
 // Captures req count metric, recording the count and the duration.
-func (r *reporter) reportRequest(response requestResponse, statusKey tag.Key, m stats.Measurement) error {
+func (r *reporter) reportRequest(ctx context.Context, response requestResponse, statusKey tag.Key, m stats.Measurement) error {
 	ctx, err := tag.New(
-		r.ctx,
+		ctx,
 		tag.Insert(statusKey, string(response)),
 	)
 	if err != nil {
 		return err
 	}
 
-	return r.report(ctx, m)
-}
-
-func (r *reporter) report(ctx context.Context, m stats.Measurement) error {
 	return metrics.Record(ctx, m)
 }
 
@@ -100,7 +87,7 @@ func register() error {
 			Name:        validationRequestDurationMetricName,
 			Description: validationResponseTimeInSecM.Description(),
 			Measure:     validationResponseTimeInSecM,
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3),
 			TagKeys:     []tag.Key{admissionStatusKey},
 		},
 		{
@@ -114,8 +101,7 @@ func register() error {
 			Name:        mutationRequestDurationMetricName,
 			Description: mutationResponseTimeInSecM.Description(),
 			Measure:     mutationResponseTimeInSecM,
-			// TODO: Adjust the distribution once we know what value make sense here
-			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05),
+			Aggregation: view.Distribution(0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3),
 			TagKeys:     []tag.Key{mutationStatusKey},
 		},
 	}

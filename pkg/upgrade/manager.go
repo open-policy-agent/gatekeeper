@@ -32,16 +32,14 @@ const (
 type Manager struct {
 	client client.Client
 	mgr    manager.Manager
-	ctx    context.Context
 }
 
 // New creates a new manager for audit.
-func New(ctx context.Context, mgr manager.Manager) (*Manager, error) {
+func New(mgr manager.Manager) *Manager {
 	am := &Manager{
 		mgr: mgr,
-		ctx: ctx,
 	}
-	return am, nil
+	return am
 }
 
 // Start implements the Runnable interface.
@@ -151,7 +149,7 @@ func (um *Manager) upgradeGroupVersion(ctx context.Context, groupVersion string)
 				stopped: make(chan struct{}),
 			}
 			log.Info("starting update resources loop", "group", group, "version", version, "kind", kind)
-			go urloop.update()
+			go urloop.update(ctx)
 		}
 	}
 	return nil
@@ -164,7 +162,7 @@ type updateResourceLoop struct {
 	stopped chan struct{}
 }
 
-func (urloop *updateResourceLoop) update() {
+func (urloop *updateResourceLoop) update(ctx context.Context) {
 	defer close(urloop.stopped)
 	updateLoop := func() (bool, error) {
 		for _, item := range urloop.ur {
@@ -173,7 +171,6 @@ func (urloop *updateResourceLoop) update() {
 				return true, nil
 			default:
 				failure := false
-				ctx := context.Background()
 				var latestItem unstructured.Unstructured
 				item.DeepCopyInto(&latestItem)
 				name := latestItem.GetName()

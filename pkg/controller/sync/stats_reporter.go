@@ -58,50 +58,34 @@ func register() error {
 }
 
 type Reporter struct {
-	Ctx context.Context
 	now func() float64
 }
 
 // NewStatsReporter creates a reporter for sync metrics.
 func NewStatsReporter() (*Reporter, error) {
-	ctx, err := tag.New(
-		context.TODO(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &Reporter{Ctx: ctx, now: now}, nil
-}
-
-func (r *Reporter) report(ctx context.Context, m stats.Measurement) error {
-	return metrics.Record(ctx, m)
+	return &Reporter{now: now}, nil
 }
 
 func (r *Reporter) reportSyncDuration(d time.Duration) error {
-	ctx, err := tag.New(
-		r.Ctx,
-	)
-	if err != nil {
-		return err
-	}
-
-	return r.report(ctx, syncDurationM.M(d.Seconds()))
+	ctx := context.Background()
+	return metrics.Record(ctx, syncDurationM.M(d.Seconds()))
 }
 
 func (r *Reporter) reportLastSync() error {
-	return metrics.Record(r.Ctx, lastRunSyncM.M(r.now()))
+	ctx := context.Background()
+	return metrics.Record(ctx, lastRunSyncM.M(r.now()))
 }
 
 func (r *Reporter) reportSync(t Tags, v int64) error {
 	ctx, err := tag.New(
-		r.Ctx,
-		tag.Insert(kindKey, string(t.Kind)),
+		context.Background(),
+		tag.Insert(kindKey, t.Kind),
 		tag.Insert(statusKey, string(t.Status)))
 	if err != nil {
 		return err
 	}
 
-	return r.report(ctx, syncM.M(v))
+	return metrics.Record(ctx, syncM.M(v))
 }
 
 // now returns the timestamp as a second-denominated float.
