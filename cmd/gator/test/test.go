@@ -31,11 +31,16 @@ const (
   gator test tests/... --run '^forbid-labels$'`
 )
 
-var run string
+var (
+	run     string
+	verbose bool
+)
 
 func init() {
 	Cmd.Flags().StringVarP(&run, "run", "r", "",
 		`regular expression which filters tests to run by name`)
+	Cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
+		`print extended test output`)
 }
 
 // Cmd is the gator test subcommand.
@@ -48,6 +53,7 @@ var Cmd = &cobra.Command{
 }
 
 func runE(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	path := args[0]
 
 	// Convert path to be absolute. Allowing for relative and absolute paths
@@ -71,7 +77,7 @@ func runE(cmd *cobra.Command, args []string) error {
 		recursive = true
 		path = strings.TrimSuffix(path, "...")
 	}
-	path = strings.TrimSuffix(path, "/")
+	path = strings.Trim(path, "/")
 
 	suites, err := gktest.ReadSuites(fileSystem, path, recursive)
 	if err != nil {
@@ -85,7 +91,7 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter gktest.Filter) error {
 	isFailure := false
 
 	runner := gktest.Runner{
@@ -93,10 +99,11 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 		NewClient: gktest.NewOPAClient,
 	}
 
-	for i := range suites {
-		s := &suites[i]
+	results := make([]gktest.SuiteResult, len(suites))
+	i := 0
 
-		suiteResult := runner.Run(ctx, filter, s)
+	for path, suite := range suites {
+		suiteResult := runner.Run(ctx, filter, path, suite)
 		for _, testResult := range suiteResult.TestResults {
 			if testResult.Error != nil {
 				isFailure = true
@@ -107,7 +114,17 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []gktest.Suite, fil
 				}
 			}
 		}
+
+		results[i] = suiteResult
+		i++
 	}
+	w := &strings.Builder{}
+	printer := gktest.PrinterGo{}
+	err := printer.Print(w, results, verbose)
+	if err != nil {
+		return err
+	}
+	fmt.Println(w)
 
 	if isFailure {
 		// At least one test failed or there was a problem executing tests in at
