@@ -32,10 +32,10 @@ func TestPrinterGo_Print(t *testing.T) {
 			result: []SuiteResult{{
 				Path: "tests.go",
 			}},
-			want: `ok	tests.go	0s
+			want: `ok	tests.go	0.000s
 PASS
 `,
-			wantVerbose: `ok	tests.go	0s
+			wantVerbose: `ok	tests.go	0.000s
 PASS
 `,
 		},
@@ -49,12 +49,12 @@ PASS
 					Runtime: Duration(330 * time.Millisecond),
 				}},
 			}},
-			want: `ok	tests.go	0.33s
+			want: `ok	tests.go	0.330s
 PASS
 `,
 			wantVerbose: `=== RUN   forbid-labels
---- PASS: forbid-labels	(0.33s)
-ok	tests.go	0.33s
+--- PASS: forbid-labels	(0.330s)
+ok	tests.go	0.330s
 PASS
 `,
 		},
@@ -75,16 +75,16 @@ PASS
 					}},
 				}},
 			}},
-			want: `ok	tests.go	0.33s
+			want: `ok	tests.go	0.330s
 PASS
 `,
 			wantVerbose: `=== RUN   forbid-labels
     === RUN   forbid-labels/with label
-    --- PASS: forbid-labels/with label	(0.1s)
+    --- PASS: forbid-labels/with label	(0.100s)
     === RUN   forbid-labels/without label
-    --- PASS: forbid-labels/without label	(0.23s)
---- PASS: forbid-labels	(0.33s)
-ok	tests.go	0.33s
+    --- PASS: forbid-labels/without label	(0.230s)
+--- PASS: forbid-labels	(0.330s)
+ok	tests.go	0.330s
 PASS
 `,
 		},
@@ -106,20 +106,20 @@ PASS
 					}},
 				}},
 			}},
-			want: `    --- FAIL: forbid-labels/without label	(0.23s)
+			want: `    --- FAIL: forbid-labels/without label	(0.230s)
         got violation but want allow
---- FAIL: forbid-labels	(0.33s)
-FAIL	tests.go	0.33s
+--- FAIL: forbid-labels	(0.330s)
+FAIL	tests.go	0.330s
 FAIL
 `,
 			wantVerbose: `=== RUN   forbid-labels
     === RUN   forbid-labels/with label
-    --- PASS: forbid-labels/with label	(0.1s)
+    --- PASS: forbid-labels/with label	(0.100s)
     === RUN   forbid-labels/without label
-    --- FAIL: forbid-labels/without label	(0.23s)
+    --- FAIL: forbid-labels/without label	(0.230s)
         got violation but want allow
---- FAIL: forbid-labels	(0.33s)
-FAIL	tests.go	0.33s
+--- FAIL: forbid-labels	(0.330s)
+FAIL	tests.go	0.330s
 FAIL
 `,
 		},
@@ -154,24 +154,24 @@ FAIL
 					}},
 				}},
 			}},
-			want: `ok	tests.go	0.33s
-ok	tests-2.go	0.4s
+			want: `ok	tests.go	0.330s
+ok	tests-2.go	0.400s
 PASS
 `,
 			wantVerbose: `=== RUN   forbid-labels
     === RUN   forbid-labels/with label
-    --- PASS: forbid-labels/with label	(0.1s)
+    --- PASS: forbid-labels/with label	(0.100s)
     === RUN   forbid-labels/without label
-    --- PASS: forbid-labels/without label	(0.23s)
---- PASS: forbid-labels	(0.33s)
-ok	tests.go	0.33s
+    --- PASS: forbid-labels/without label	(0.230s)
+--- PASS: forbid-labels	(0.330s)
+ok	tests.go	0.330s
 === RUN   require-labels
     === RUN   require-labels/with label
-    --- PASS: require-labels/with label	(0.17s)
+    --- PASS: require-labels/with label	(0.170s)
     === RUN   require-labels/without label
-    --- PASS: require-labels/without label	(0.23s)
---- PASS: require-labels	(0.4s)
-ok	tests-2.go	0.4s
+    --- PASS: require-labels/without label	(0.230s)
+--- PASS: require-labels	(0.400s)
+ok	tests-2.go	0.400s
 PASS
 `,
 		},
@@ -202,22 +202,22 @@ PASS
 					}},
 				}},
 			}},
-			want: `ok	tests.go	0.73s
+			want: `ok	tests.go	0.730s
 PASS
 `,
 			wantVerbose: `=== RUN   forbid-labels
     === RUN   forbid-labels/with label
-    --- PASS: forbid-labels/with label	(0.1s)
+    --- PASS: forbid-labels/with label	(0.100s)
     === RUN   forbid-labels/without label
-    --- PASS: forbid-labels/without label	(0.23s)
---- PASS: forbid-labels	(0.33s)
+    --- PASS: forbid-labels/without label	(0.230s)
+--- PASS: forbid-labels	(0.330s)
 === RUN   require-labels
     === RUN   require-labels/with label
-    --- PASS: require-labels/with label	(0.17s)
+    --- PASS: require-labels/with label	(0.170s)
     === RUN   require-labels/without label
-    --- PASS: require-labels/without label	(0.23s)
---- PASS: require-labels	(0.4s)
-ok	tests.go	0.73s
+    --- PASS: require-labels/without label	(0.230s)
+--- PASS: require-labels	(0.400s)
+ok	tests.go	0.730s
 PASS
 `,
 		},

@@ -10,7 +10,7 @@ import (
 type Duration time.Duration
 
 func (d Duration) String() string {
-	return fmt.Sprintf("%.3gs", float64(time.Duration(d).Milliseconds())/1000.0)
+	return fmt.Sprintf("%.3fs", time.Duration(d).Seconds())
 }
 
 // SuiteResult is the Result of running a Suite of tests.
