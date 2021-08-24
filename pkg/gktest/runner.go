@@ -94,56 +94,62 @@ func readCase(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	return readUnstructured(bytes)
 }
 
-func runAllow(ctx context.Context, client Client, f fs.FS, path string) CaseResult {
+func runAllow(ctx context.Context, client Client, f fs.FS, path string) error {
 	u, err := readCase(f, path)
 	if err != nil {
-		return CaseResult{Error: err}
+		return err
 	}
 
 	result, err := client.Review(ctx, u)
 	if err != nil {
-		return CaseResult{Error: err}
+		return err
 	}
 
 	results := result.Results()
 	if len(results) > 0 {
-		return CaseResult{Error: fmt.Errorf("%w: %v", ErrUnexpectedDeny, results[0].Msg)}
+		return fmt.Errorf("%w: %v", ErrUnexpectedDeny, results[0].Msg)
 	}
-	return CaseResult{}
+	return nil
 }
 
-func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Assertion) CaseResult {
+func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Assertion) error {
 	u, err := readCase(f, path)
 	if err != nil {
-		return CaseResult{Error: err}
+		return err
 	}
 
 	result, err := client.Review(ctx, u)
 	if err != nil {
-		return CaseResult{Error: err}
+		return err
 	}
 
 	results := result.Results()
 	if len(results) == 0 {
-		return CaseResult{Error: ErrUnexpectedAllow}
+		return ErrUnexpectedAllow
 	}
 
-	return CaseResult{}
+	return nil
 }
 
 // RunCase executes a Case and returns the result of the run.
 func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c Case) CaseResult {
 	start := time.Now()
 
-	var result CaseResult
+	var err error
+	objectPath := filepath.Join(suiteDir, c.Object)
 
-	if len(c.Assertions) == 0 {
-		result = runAllow(ctx, client, r.FS, filepath.Join(suiteDir, c.Object))
-	} else {
-		result = runDeny(ctx, client, r.FS, filepath.Join(suiteDir, c.Deny), c.Assertions)
+	switch {
+	case c.Object == "":
+		err = fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)
+	case len(c.Assertions) == 0:
+		err = runAllow(ctx, client, r.FS, objectPath)
+	default:
+		err = runDeny(ctx, client, r.FS, objectPath, c.Assertions)
 	}
 
-	result.Runtime = Duration(time.Since(start))
-	result.Name = c.Name
-	return result
+	return CaseResult{
+		Name:    c.Name,
+		Error:   err,
+		Runtime: Duration(time.Since(start)),
+	}
 }

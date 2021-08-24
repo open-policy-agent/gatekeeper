@@ -264,8 +264,10 @@ tests:
 - template: template.yaml
   constraint: constraint.yaml
   cases:
-  - allow: allow.yaml
-  - deny: deny.yaml
+  - object: allow.yaml
+  - object: deny.yaml
+    assertions:
+    - {}
 `),
 				},
 			},
@@ -274,9 +276,10 @@ tests:
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
 					Cases: []Case{{
-						Allow: "allow.yaml",
+						Object: "allow.yaml",
 					}, {
-						Deny: "deny.yaml",
+						Object: "deny.yaml",
+						Assertions: []Assertion{{}},
 					}},
 				}},
 			}},
