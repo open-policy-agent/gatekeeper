@@ -172,7 +172,7 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
-			// Insures that namespaceMatch handles ns==nil
+			// Ensures that namespaceMatch handles ns==nil
 			tname:   "namespaces configured, but cluster scoped",
 			toMatch: makeObject("kind", "group", "", "name"),
 			match: Match{
@@ -226,7 +226,7 @@ func TestMatch(t *testing.T) {
 			shouldMatch: false,
 		},
 		{
-			// Insures that namespaceMatch handles ns==nil
+			// Ensures that namespaceMatch handles ns==nil
 			tname:   "a namespace is excluded, but object is cluster scoped",
 			toMatch: makeObject("kind", "group", "", "name"),
 			match: Match{

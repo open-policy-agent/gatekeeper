@@ -114,16 +114,12 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 
 	switch {
 	case isNamespace(obj): // if the object is a namespace, namespace selector matches against the object
-		if !selector.Matches(labels.Set(obj.GetLabels())) {
-			return false, nil
-		}
+		return selector.Matches(labels.Set(obj.GetLabels())), nil
 	case clusterScoped:
-		// cluster scoped, matches by default
-	case !selector.Matches(labels.Set(ns.Labels)):
-		return false, nil
+		return true, nil
 	}
 
-	return true, nil
+	return selector.Matches(labels.Set(ns.Labels)), nil
 }
 
 func labelSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
@@ -160,15 +156,13 @@ func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (boo
 		return true, nil
 	}
 
-	found := false
 	for _, n := range match.Namespaces {
 		if ns.Name == n || prefixMatch(n, ns.Name) {
-			found = true
-			break
+			return true, nil
 		}
 	}
 
-	if !found && len(match.Namespaces) > 0 {
+	if len(match.Namespaces) > 0 {
 		return false, nil
 	}
 
@@ -179,8 +173,6 @@ func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	if len(match.Kinds) == 0 {
 		return true, nil
 	}
-
-	foundMatch := false
 
 	for _, kk := range match.Kinds {
 		kindMatches := false
@@ -207,11 +199,11 @@ func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 		}
 
 		if kindMatches && groupMatches {
-			foundMatch = true
+			return true, nil
 		}
 	}
 
-	return foundMatch, nil
+	return false, nil
 }
 
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
