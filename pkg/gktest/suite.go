@@ -33,8 +33,7 @@ type Test struct {
 // Case runs Constraint against a YAML object.
 type Case struct {
 	Name       string `json:"name"`
-	Allow      string `json:"allow"`
-	Deny       string `json:"deny"`
+	Object     string `json:"object"`
 	Assertions []Assertion
 }
 

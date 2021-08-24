@@ -136,13 +136,11 @@ func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c 
 	start := time.Now()
 
 	var result CaseResult
-	switch {
-	case c.Allow != "" && c.Deny == "":
-		result = runAllow(ctx, client, r.FS, filepath.Join(suiteDir, c.Allow))
-	case c.Allow == "" && c.Deny != "":
+
+	if len(c.Assertions) == 0 {
+		result = runAllow(ctx, client, r.FS, filepath.Join(suiteDir, c.Object))
+	} else {
 		result = runDeny(ctx, client, r.FS, filepath.Join(suiteDir, c.Deny), c.Assertions)
-	default:
-		result = CaseResult{Error: fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)}
 	}
 
 	result.Runtime = Duration(time.Since(start))
