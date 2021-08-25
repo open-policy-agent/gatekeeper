@@ -7,8 +7,7 @@ title: Installation
 
 ### Minimum Kubernetes Version
 
-**To use Gatekeeper, you should have a minimum Kubernetes version of 1.16, which adds
-v1 CRDs.**
+**To use Gatekeeper, the minimum supported Kubernetes version is n-4 of the latest stable Kubernetes release per [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). The minimum compatible version is v1.16, which adds support for v1 CRDs.**
 
 ### RBAC Permissions
 

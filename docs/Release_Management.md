@@ -56,7 +56,7 @@ We expect to "support" n (current) and n-1 major.minor releases. "Support" means
 
 ## Supported Kubernetes Versions
 
-Gatekeeper is assumed to be compatible with n-3 versions of the latest stable Kubernetes release per Kubernetes Supported Versions policy (this may change to n-4 once LTS is available). If you choose to use Gatekeeper with a version of Kubernetes that it does not support, you are using it at your own risk.
+Gatekeeper is assumed to be compatible with n-4 versions of the latest stable Kubernetes release per Kubernetes Supported Versions policy. If you choose to use Gatekeeper with a version of Kubernetes that it does not support, you are using it at your own risk.
 
 ## Upgrades
 
