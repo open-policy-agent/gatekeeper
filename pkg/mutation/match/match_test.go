@@ -431,6 +431,34 @@ func TestMatch(t *testing.T) {
 			},
 			shouldMatch: false,
 		},
+		{
+			tname:   "match name",
+			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
+			match: Match{
+				Name: "name-foo",
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "wrong name does not match",
+			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
+			match: Match{
+				Name: "name-bar",
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
+		{
+			tname:   "no match with correct name and wrong namespace",
+			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
+			match: Match{
+				Name:       "name-foo",
+				Namespaces: []string{"other-namespace"},
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
 	}
 	for _, tc := range table {
 		t.Run(tc.tname, func(t *testing.T) {

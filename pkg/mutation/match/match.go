@@ -50,6 +50,7 @@ type Match struct {
 	ExcludedNamespaces []string                      `json:"excludedNamespaces,omitempty"`
 	LabelSelector      *metav1.LabelSelector         `json:"labelSelector,omitempty"`
 	NamespaceSelector  *metav1.LabelSelector         `json:"namespaceSelector,omitempty"`
+	Name               string                        `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields
@@ -79,6 +80,7 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 		excludedNamespacesMatch,
 		labelSelectorMatch,
 		namespaceSelectorMatch,
+		namesMatch,
 	}
 
 	for _, fn := range topLevelMatchers {
@@ -204,6 +206,17 @@ func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	}
 
 	return false, nil
+}
+
+func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	// A blank string could be undefined or an intentional blank string by the user.  Either way,
+	// we will assume this means "any name".  This goes with the undefined == match everything
+	// pattern that we've already got going in the Match.
+	if match.Name == "" {
+		return true, nil
+	}
+
+	return match.Name == obj.GetName(), nil
 }
 
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
