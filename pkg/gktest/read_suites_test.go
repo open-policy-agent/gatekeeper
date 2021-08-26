@@ -280,9 +280,9 @@ tests:
 					Cases: []Case{{
 						Object: "allow.yaml",
 					}, {
-						Object:     "deny.yaml",
+						Object: "deny.yaml",
 						Violations: &Violations{
-							Count: pointer.Int32Ptr(2),
+							Count:    pointer.Int32Ptr(2),
 							Messages: []string{"some message"},
 						},
 					}},
