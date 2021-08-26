@@ -7,7 +7,7 @@ CRD_IMG := $(CRD_REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.6.0-beta.3
+VERSION := v3.6.0
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
