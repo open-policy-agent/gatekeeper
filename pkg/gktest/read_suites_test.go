@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"k8s.io/utils/pointer"
 )
 
 func TestReadSuites(t *testing.T) {
@@ -253,6 +254,44 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 		},
 		{
 			name:      "suite with test and cases",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests:
+- template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - object: allow.yaml
+  - object: deny.yaml
+    violations:
+      count: 2
+      messages: ["some message"]
+`),
+				},
+			},
+			want: map[string]*Suite{"test.yaml": {
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []Case{{
+						Object: "allow.yaml",
+					}, {
+						Object:     "deny.yaml",
+						Violations: &Violations{
+							Count: pointer.Int32Ptr(2),
+							Messages: []string{"some message"},
+						},
+					}},
+				}},
+			}},
+			wantErr: nil,
+		},
+		{
+			name:      "suite with empty violations",
 			target:    "test.yaml",
 			recursive: false,
 			fileSystem: fstest.MapFS{
