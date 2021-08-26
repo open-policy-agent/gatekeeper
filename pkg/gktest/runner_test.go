@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"k8s.io/utils/pointer"
 )
 
 const (
@@ -49,6 +50,31 @@ spec:
         violation[{"msg": msg}] {
           true
           msg := "never validate"
+        }
+`
+
+	templateNeverValidateTwice = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: nevervalidatetwice
+spec:
+  crd:
+    spec:
+      names:
+        kind: NeverValidateTwice
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8snevervalidate
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
+        }
+
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate twice"
         }
 `
 
@@ -133,6 +159,13 @@ kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
 metadata:
   name: always-fail
+`
+
+	constraintNeverValidateTwice = `
+kind: NeverValidateTwice
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-fail-twice
 `
 
 	constraintInvalidYAML = `
@@ -311,8 +344,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []Case{{
-						Object: "object.yaml",
-						Assertions: []Assertion{{}},
+						Object:     "object.yaml",
+						Violations: &Violations{},
 					}},
 				}},
 			},
@@ -480,8 +513,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Object: "object.yaml",
-						Assertions: []Assertion{{}},
+						Object:     "object.yaml",
+						Violations: &Violations{},
 					}},
 				}},
 			},
@@ -527,14 +560,14 @@ func TestRunner_Run(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		ctx := context.Background()
-
-		runner := Runner{
-			FS:        tc.f,
-			NewClient: NewOPAClient,
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			runner := Runner{
+				FS:        tc.f,
+				NewClient: NewOPAClient,
+			}
+
 			got := runner.Run(ctx, Filter{}, "", &tc.suite)
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
@@ -569,5 +602,170 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 	); diff != "" {
 		t.Error(diff)
+	}
+}
+
+func TestRunner_RunCase(t *testing.T) {
+	testCases := []struct {
+		name       string
+		template   string
+		constraint string
+		object     string
+		violations *Violations
+		want       CaseResult
+	}{
+		{
+			name:       "expected allow",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			violations: nil,
+			want:       CaseResult{},
+		},
+		{
+			name:       "unexpected deny",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: nil,
+			want: CaseResult{
+				Error: ErrUnexpectedDeny,
+			},
+		},
+		{
+			name:       "expected deny",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{},
+			want:       CaseResult{},
+		},
+		{
+			name:       "unexpected allow",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			violations: &Violations{},
+			want: CaseResult{
+				Error: ErrUnexpectedAllow,
+			},
+		},
+		{
+			name:       "num violations correct",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Count: pointer.Int32Ptr(1),
+			},
+			want: CaseResult{},
+		},
+		{
+			name:       "num violations incorrect",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Count: pointer.Int32Ptr(2),
+			},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "multiple violations count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			violations: &Violations{
+				Count: pointer.Int32Ptr(2),
+			},
+			want: CaseResult{},
+		},
+		{
+			name:       "message correct",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"never validate",
+				},
+			},
+		},
+		{
+			name:       "multiple violation messages",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"never validate",
+					"twice",
+				},
+			},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violations, missing message",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"never validate",
+					"not present message",
+				},
+			},
+			want: CaseResult{
+				Error: ErrMissingMessage,
+			},
+		},
+	}
+
+	const (
+		templateFile   = "template.yaml"
+		constraintFile = "constraint.yaml"
+		objectFile     = "object.yaml"
+	)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			suite := &Suite{
+				Tests: []Test{{
+					Template:   templateFile,
+					Constraint: constraintFile,
+					Cases: []Case{{
+						Object:     objectFile,
+						Violations: tc.violations,
+					}},
+				}},
+			}
+
+			ctx := context.Background()
+
+			runner := Runner{
+				FS: fstest.MapFS{
+					templateFile:   &fstest.MapFile{Data: []byte(tc.template)},
+					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
+					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
+				},
+				NewClient: NewOPAClient,
+			}
+
+			got := runner.Run(ctx, Filter{}, "", suite)
+
+			want := SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{tc.want},
+				}},
+			}
+
+			if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
+				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
+			); diff != "" {
+				t.Errorf(diff)
+			}
+		})
 	}
 }

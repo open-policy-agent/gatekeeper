@@ -26,4 +26,10 @@ var (
 	// ErrUnexpectedDeny indicates a Case failed because it got violations, but
 	// was not expected to get any.
 	ErrUnexpectedDeny = errors.New("got violations")
+	// ErrNumViolations indicates an Object did not get the expected number of
+	// violations.
+	ErrNumViolations = errors.New("unexpected number of violations")
+	// ErrMissingMessage indicates an Object did not get a message matching an
+	// expected one.
+	ErrMissingMessage = errors.New("missing expected violation")
 )

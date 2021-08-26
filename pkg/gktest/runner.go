@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -112,7 +113,7 @@ func runAllow(ctx context.Context, client Client, f fs.FS, path string) error {
 	return nil
 }
 
-func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Assertion) error {
+func runDeny(ctx context.Context, client Client, f fs.FS, path string, violations Violations) error {
 	u, err := readCase(f, path)
 	if err != nil {
 		return err
@@ -128,6 +129,29 @@ func runDeny(ctx context.Context, client Client, f fs.FS, path string, _ []Asser
 		return ErrUnexpectedAllow
 	}
 
+	gotViolations := int32(len(results))
+	if violations.Count != nil && gotViolations != *violations.Count {
+		return fmt.Errorf("%w: got %d violations but want %d", ErrNumViolations, len(results), *violations.Count)
+	}
+
+	gotMessages := make([]string, len(results))
+	for i, r := range results {
+		gotMessages[i] = r.Msg
+	}
+
+	for _, msg := range violations.Messages {
+		foundMsg := false
+		for _, got := range results {
+			if strings.Contains(got.Msg, msg) {
+				foundMsg = true
+			}
+		}
+
+		if !foundMsg {
+			return fmt.Errorf("%w: got messages %s, missing message including %q", ErrMissingMessage, gotMessages, msg)
+		}
+	}
+
 	return nil
 }
 
@@ -141,10 +165,10 @@ func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c 
 	switch {
 	case c.Object == "":
 		err = fmt.Errorf("%w: must define exactly one of allow and deny", ErrInvalidCase)
-	case len(c.Assertions) == 0:
+	case c.Violations == nil:
 		err = runAllow(ctx, client, r.FS, objectPath)
 	default:
-		err = runDeny(ctx, client, r.FS, objectPath, c.Assertions)
+		err = runDeny(ctx, client, r.FS, objectPath, *c.Violations)
 	}
 
 	return CaseResult{

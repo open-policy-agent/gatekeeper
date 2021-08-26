@@ -266,8 +266,7 @@ tests:
   cases:
   - object: allow.yaml
   - object: deny.yaml
-    assertions:
-    - {}
+    violations: {}
 `),
 				},
 			},
@@ -278,8 +277,8 @@ tests:
 					Cases: []Case{{
 						Object: "allow.yaml",
 					}, {
-						Object: "deny.yaml",
-						Assertions: []Assertion{{}},
+						Object:     "deny.yaml",
+						Violations: &Violations{},
 					}},
 				}},
 			}},
