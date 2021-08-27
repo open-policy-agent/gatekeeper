@@ -40,7 +40,7 @@ type Case struct {
 	// If unset, Constraint should return no violations. An empty Violations
 	// object represents that the Constraint is expected to deny Object, but no
 	// specific validation of the rejection.
-	Violations *Violations `json:"assertions,omitempty"`
+	Violations *Violations `json:"violations,omitempty"`
 }
 
 // Violations indicate Object should be rejected by the Constraint, and the

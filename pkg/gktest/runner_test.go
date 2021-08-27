@@ -692,6 +692,47 @@ func TestRunner_RunCase(t *testing.T) {
 					"never validate",
 				},
 			},
+			want: CaseResult{},
+		},
+		{
+			name:       "message invalid regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"never validate [(",
+				},
+			},
+			want: CaseResult{
+				Error: ErrInvalidRegex,
+			},
+		},
+		{
+			name:       "message valid regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"[enrv]+ [adeiltv]+",
+				},
+			},
+			want: CaseResult{},
+		},
+		{
+			name:       "message missing regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			violations: &Violations{
+				Messages: []string{
+					"[enrv]+x [adeiltv]+",
+				},
+			},
+			want: CaseResult{
+				Error: ErrMissingMessage,
+			},
 		},
 		{
 			name:       "multiple violation messages",

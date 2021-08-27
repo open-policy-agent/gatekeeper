@@ -32,4 +32,7 @@ var (
 	// ErrMissingMessage indicates an Object did not get a message matching an
 	// expected one.
 	ErrMissingMessage = errors.New("missing expected violation")
+	// ErrInvalidRegex indicates a Case specified a Violation regex that could not
+	// be compiled.
+	ErrInvalidRegex = errors.New("message contains invalid regular expression")
 )
