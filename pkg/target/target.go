@@ -349,6 +349,9 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					"Namespaced",
 				},
 			},
+			"name": {
+				Type: "string",
+			},
 		},
 	}
 }

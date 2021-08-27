@@ -39,6 +39,7 @@ spec:
         }
 `
 )
+const testResourceName = "test-resource"
 
 type buildArg func(*unstructured.Unstructured)
 
@@ -102,6 +103,14 @@ func setScope(scope string) buildArg {
 	}
 }
 
+func setName(name string) buildArg {
+	return func(obj *unstructured.Unstructured) {
+		if err := unstructured.SetNestedField(obj.Object, name, "spec", "match", "name"); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func makeConstraint(o ...buildArg) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetName("my-constraint")
@@ -114,6 +123,7 @@ func makeConstraint(o ...buildArg) *unstructured.Unstructured {
 
 func makeResource(group, kind string, labels ...map[string]string) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
+	u.SetName(testResourceName)
 	u.SetGroupVersionKind(schema.GroupVersionKind{Group: group, Version: "v1", Kind: kind})
 	if len(labels) > 0 {
 		u.SetLabels(labels[0])
@@ -213,6 +223,20 @@ func TestConstraintEnforcement(t *testing.T) {
 			obj:        makeResource("some", "Thing"),
 			ns:         makeNamespace("my-ns"),
 			constraint: makeConstraint(setKinds([]string{"different"}, []string{"Thing"})),
+			allowed:    true,
+		},
+		{
+			name:       "match name",
+			obj:        makeResource("some", "Thing"),
+			ns:         makeNamespace("my-ns"),
+			constraint: makeConstraint(setName(testResourceName)),
+			allowed:    false,
+		},
+		{
+			name:       "no match name",
+			obj:        makeResource("some", "Thing"),
+			ns:         makeNamespace("my-ns"),
+			constraint: makeConstraint(setName("other-name")),
 			allowed:    true,
 		},
 		{

@@ -152,6 +152,19 @@ kind_matches(ks) {
   ks.kinds[_] == input.review.kind.kind
 }
 
+#######################
+# Name Selector Logic #
+#######################
+
+matches_name(match) {
+  not has_field(match, "name")
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  input.review.name == match.name
+}
+
 ########################
 # Scope Selector Logic #
 ########################
