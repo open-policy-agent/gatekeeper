@@ -59,6 +59,10 @@ spec:
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
         {{- end }}
+        
+        {{- range .Values.controllerManager.exemptNamespacePrefixes}}
+        - --exempt-namespace-prefix={{ . }}
+        {{- end }}
         command:
         - /manager
         env:
