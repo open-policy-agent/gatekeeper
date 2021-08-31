@@ -17,15 +17,17 @@ type Assertion struct {
 	//
 	// The value may be either an integer, of a string. If an integer, exactly
 	// this number of violations must otherwise match this Assertion. If a string,
-	// must be either "yes" or "no".
+	// must be either "yes" or "no". If "yes", states that exactly one violation
+	// matches this Assertion. If "no", states that no violations match this
+	// assertion.
 	//
-	// Defaults to true.
+	// Defaults to "yes".
 	Violations *intstr.IntOrString `json:"violations,omitempty"`
 
 	// Message is a regular expression which matches the Msg field of individual
 	// violations.
 	//
-	// If unset, has no effect.
+	// If unset, has no effect and all violations match this Assertion.
 	Message *string `json:"message,omitempty"`
 
 	onceMsgRegex sync.Once
