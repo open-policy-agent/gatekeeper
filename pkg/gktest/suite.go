@@ -41,5 +41,7 @@ type Case struct {
 	// Review with the Test's Constraint on the Case's Object.
 	//
 	// All Assertions must succeed in order for the test to pass.
+	// If no assertions are present, assumes reviewing Object produces no
+	// violations.
 	Assertions []Assertion `json:"assertions"`
 }
