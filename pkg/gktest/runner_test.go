@@ -877,14 +877,26 @@ func TestRunner_RunCase(t *testing.T) {
 				Error: ErrUnexpectedNoViolations,
 			},
 		},
-		// Invalid assertion
+		// Invalid assertions
 		{
-			name:       "deny bool",
+			name:       "invalid IntOrStr",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
 				Violations: &intstr.IntOrString{Type: 3},
+			}},
+			want: CaseResult{
+				Error: ErrInvalidYAML,
+			},
+		},
+		{
+			name:       "invalid IntOrStr string value",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: &intstr.IntOrString{Type: intstr.String, StrVal: "other"},
 			}},
 			want: CaseResult{
 				Error: ErrInvalidYAML,
