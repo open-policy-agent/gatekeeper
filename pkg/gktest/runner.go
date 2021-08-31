@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -168,7 +167,7 @@ func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, 
 	if len(c.Assertions) == 0 {
 		// Default to assuming the object passes validation if no Assertions are
 		// defined.
-		c.Assertions = []Assertion{{Violations: uint64bool.FromBool(false)}}
+		c.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
 	}
 
 	for i := range c.Assertions {

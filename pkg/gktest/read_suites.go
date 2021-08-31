@@ -1,6 +1,7 @@
 package gktest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -167,8 +168,14 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 		return nil, nil
 	}
 
+	// We must pass through JSON as IntOrStr does not unmarshal from YAML properly.
+	jsn, err := json.Marshal(u.Object)
+	if err != nil {
+		return nil, fmt.Errorf("%w: marshaling yaml to json: %v", ErrInvalidYAML, err)
+	}
+
 	suite := Suite{}
-	err = yaml.Unmarshal(bytes, &suite)
+	err = json.Unmarshal(jsn, &suite)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing Test %q into Suite: %v", ErrInvalidYAML, path, err)
 	}

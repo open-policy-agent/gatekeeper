@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 )
 
@@ -347,7 +347,7 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
-							Violations: uint64bool.FromBool(true),
+							Violations: intStrFromStr("yes"),
 						}},
 					}},
 				}},
@@ -518,7 +518,7 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
-							Violations: uint64bool.FromBool(true),
+							Violations: intStrFromStr("yes"),
 						}},
 					}},
 				}},
@@ -634,7 +634,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromBool(false),
+				Violations: intStrFromStr("no"),
 			}},
 			want: CaseResult{},
 		},
@@ -654,7 +654,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromBool(true),
+				Violations: intStrFromStr("yes"),
 			}},
 			want: CaseResult{
 				Error: ErrUnexpectedNoViolations,
@@ -666,7 +666,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(0),
+				Violations: intStrFromInt(0),
 			}},
 			want: CaseResult{},
 		},
@@ -676,7 +676,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(1),
+				Violations: intStrFromInt(1),
 			}},
 			want: CaseResult{
 				Error: ErrUnexpectedNoViolations,
@@ -709,7 +709,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromBool(true),
+				Violations: intStrFromStr("yes"),
 			}},
 			want: CaseResult{},
 		},
@@ -719,7 +719,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(1),
+				Violations: intStrFromInt(1),
 			}},
 			want: CaseResult{},
 		},
@@ -729,7 +729,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(2),
+				Violations: intStrFromInt(2),
 			}},
 			want: CaseResult{
 				Error: ErrNumViolations,
@@ -741,7 +741,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromBool(false),
+				Violations: intStrFromStr("no"),
 			}},
 			want: CaseResult{
 				Error: ErrUnexpectedViolation,
@@ -753,7 +753,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(0),
+				Violations: intStrFromInt(0),
 			}},
 			want: CaseResult{
 				Error: ErrUnexpectedViolation,
@@ -812,7 +812,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidateTwice,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(2),
+				Violations: intStrFromInt(2),
 			}},
 			want: CaseResult{},
 		},
@@ -834,10 +834,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidateTwice,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(1),
+				Violations: intStrFromInt(1),
 				Message:    pointer.StringPtr("first message"),
 			}, {
-				Violations: uint64bool.FromUint64(1),
+				Violations: intStrFromInt(1),
 				Message:    pointer.StringPtr("second message"),
 			}},
 			want: CaseResult{},
@@ -858,7 +858,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidateTwice,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(2),
+				Violations: intStrFromInt(2),
 				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
@@ -884,10 +884,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: &uint64bool.Uint64OrBool{Type: 3},
+				Violations: &intstr.IntOrString{Type: 3},
 			}},
 			want: CaseResult{
-				Error: uint64bool.ErrInvalidUint64OrBool,
+				Error: ErrInvalidYAML,
 			},
 		},
 	}

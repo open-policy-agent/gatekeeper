@@ -10,7 +10,7 @@ type Suite struct {
 
 	// Tests is a list of Template&Constraint pairs, with tests to run on
 	// each.
-	Tests []Test `json:"spec"`
+	Tests []Test `json:"tests"`
 }
 
 // Test defines a Template&Constraint pair to instantiate, and Cases to

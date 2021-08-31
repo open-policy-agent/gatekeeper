@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
 	"k8s.io/utils/pointer"
 )
 
@@ -283,7 +282,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: uint64bool.FromUint64(2),
+							Violations: intStrFromInt(2),
 							Message:    pointer.StringPtr("some message"),
 						}},
 					}},
@@ -307,7 +306,7 @@ tests:
   - object: allow.yaml
   - object: deny.yaml
     assertions:
-    - violations: true
+    - violations: "yes"
 `),
 				},
 			},
@@ -320,7 +319,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: uint64bool.FromBool(true),
+							Violations: intStrFromStr("yes"),
 						}},
 					}},
 				}},
