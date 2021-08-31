@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"regexp"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -163,11 +163,20 @@ func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, 
 		return err
 	}
 
-	if c.Violations == nil {
-		return checkAllow(review)
+	results := review.Results()
+
+	if len(c.Assertions) == 0 {
+		c.Assertions = []Assertion{{Violations: uint64bool.FromBool(false)}}
 	}
 
-	return checkDeny(review, *c.Violations)
+	for i := range c.Assertions {
+		err = c.Assertions[i].Run(results)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *Runner) runReview(ctx context.Context, client Client, path string) (*types.Responses, error) {
@@ -186,85 +195,4 @@ func readCase(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	}
 
 	return readUnstructured(bytes)
-}
-
-func checkAllow(result *types.Responses) error {
-	results := result.Results()
-	if len(results) > 0 {
-		return fmt.Errorf("%w: %v", ErrUnexpectedDeny, results[0].Msg)
-	}
-	return nil
-}
-
-func checkDeny(result *types.Responses, violations Violations) error {
-	results := result.Results()
-	if len(results) == 0 {
-		return ErrUnexpectedAllow
-	}
-
-	err := checkCounts(results, violations)
-	if err != nil {
-		return err
-	}
-
-	return checkMessages(results, violations)
-}
-
-func checkCounts(results []*types.Result, violations Violations) error {
-	gotViolations := int32(len(results))
-	if violations.Count != nil && gotViolations != *violations.Count {
-		return fmt.Errorf("%w: got %d violations but want %d", ErrNumViolations, len(results), *violations.Count)
-	}
-
-	return nil
-}
-
-func checkMessages(results []*types.Result, violations Violations) error {
-	wantRegexes, err := compileRegexes(violations.Messages)
-	if err != nil {
-		return err
-	}
-
-	gotMessages := toGotMessages(results)
-
-	for _, r := range wantRegexes {
-		err = checkMessage(r, gotMessages)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func checkMessage(r *regexp.Regexp, gotMessages []string) error {
-	for _, got := range gotMessages {
-		if r.MatchString(got) {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: got messages %s, missing message including %q", ErrMissingMessage, gotMessages, r.String())
-}
-
-func compileRegexes(regexes []string) ([]*regexp.Regexp, error) {
-	rs := make([]*regexp.Regexp, len(regexes))
-	for i, r := range regexes {
-		var err error
-		rs[i], err = regexp.Compile(r)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidRegex, err)
-		}
-	}
-
-	return rs, nil
-}
-
-func toGotMessages(results []*types.Result) []string {
-	gotMessages := make([]string, len(results))
-	for i, r := range results {
-		gotMessages[i] = r.Msg
-	}
-
-	return gotMessages
 }

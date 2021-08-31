@@ -20,18 +20,15 @@ var (
 	ErrCreatingClient = errors.New("creating client")
 	// ErrInvalidCase indicates a Case cannot be run due to not being configured properly.
 	ErrInvalidCase = errors.New("invalid Case")
-	// ErrUnexpectedAllow indicates a Case failed because it was expected to get
-	// violations, but did not get any.
-	ErrUnexpectedAllow = errors.New("got no violations")
-	// ErrUnexpectedDeny indicates a Case failed because it got violations, but
-	// was not expected to get any.
-	ErrUnexpectedDeny = errors.New("got violations")
+	// ErrUnexpectedNoViolations indicates a Case failed because it was expected
+	// to get violations matching an Assertion, but did not get any.
+	ErrUnexpectedNoViolations = errors.New("got no violations")
+	// ErrUnexpectedViolation indicates a Case failed because it got unexpected
+	// violations matching an Assertion.
+	ErrUnexpectedViolation = errors.New("got violations")
 	// ErrNumViolations indicates an Object did not get the expected number of
 	// violations.
 	ErrNumViolations = errors.New("unexpected number of violations")
-	// ErrMissingMessage indicates an Object did not get a message matching an
-	// expected one.
-	ErrMissingMessage = errors.New("missing expected violation")
 	// ErrInvalidRegex indicates a Case specified a Violation regex that could not
 	// be compiled.
 	ErrInvalidRegex = errors.New("message contains invalid regular expression")

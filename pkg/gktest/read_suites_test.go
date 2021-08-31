@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
 	"k8s.io/utils/pointer"
 )
 
@@ -267,9 +268,9 @@ tests:
   cases:
   - object: allow.yaml
   - object: deny.yaml
-    violations:
-      count: 2
-      messages: ["some message"]
+    assertions:
+    - violations: 2
+      message: "some message"
 `),
 				},
 			},
@@ -281,17 +282,17 @@ tests:
 						Object: "allow.yaml",
 					}, {
 						Object: "deny.yaml",
-						Violations: &Violations{
-							Count:    pointer.Int32Ptr(2),
-							Messages: []string{"some message"},
-						},
+						Assertions: []Assertion{{
+							Violations: uint64bool.FromUint64(2),
+							Message:    pointer.StringPtr("some message"),
+						}},
 					}},
 				}},
 			}},
 			wantErr: nil,
 		},
 		{
-			name:      "suite with empty violations",
+			name:      "suite with empty assertions",
 			target:    "test.yaml",
 			recursive: false,
 			fileSystem: fstest.MapFS{
@@ -305,7 +306,8 @@ tests:
   cases:
   - object: allow.yaml
   - object: deny.yaml
-    violations: {}
+    assertions:
+    - violations: true
 `),
 				},
 			},
@@ -316,8 +318,10 @@ tests:
 					Cases: []Case{{
 						Object: "allow.yaml",
 					}, {
-						Object:     "deny.yaml",
-						Violations: &Violations{},
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: uint64bool.FromBool(true),
+						}},
 					}},
 				}},
 			}},
@@ -352,11 +356,11 @@ tests:
 		t.Run(tc.name, func(t *testing.T) {
 			got, gotErr := ReadSuites(tc.fileSystem, tc.target, tc.recursive)
 			if !errors.Is(gotErr, tc.wantErr) {
-				t.Errorf("got error %v, want error %v",
+				t.Fatalf("got error %v, want error %v",
 					gotErr, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty(), cmpopts.IgnoreUnexported(Assertion{})); diff != "" {
 				t.Error(diff)
 			}
 		})

@@ -27,7 +27,7 @@ type Test struct {
 	Constraint string `json:"constraint"`
 
 	// Cases are the test cases to run on the instantiated Constraint.
-	Cases []Case `json:"cases"`
+	Cases []Case `json:"cases,omitempty"`
 }
 
 // Case runs Constraint against a YAML object.
@@ -37,21 +37,9 @@ type Case struct {
 	// Object is the path to the file containing a Kubernetes object to test.
 	Object string `json:"object"`
 
-	// If unset, Constraint should return no violations. An empty Violations
-	// object represents that the Constraint is expected to deny Object, but no
-	// specific validation of the rejection.
-	Violations *Violations `json:"violations,omitempty"`
-}
-
-// Violations indicate Object should be rejected by the Constraint, and the
-// specifics.
-type Violations struct {
-	// Count is the number of distinct violations the Constraint should return for
-	// Object.
-	Count *int32 `json:"count,omitempty"`
-
-	// Messages is a list of exact-string matches the Case expects the Constraint
-	// will return. Each message must match at least one violation's message, and
-	// multiple messages may match a single violation.
-	Messages []string `json:"messages,omitempty"`
+	// Assertions are statements which must be true about the result of running
+	// Review with the Test's Constraint on the Case's Object.
+	//
+	// All Assertions must succeed in order for the test to pass.
+	Assertions []Assertion `json:"assertions"`
 }

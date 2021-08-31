@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/gatekeeper/pkg/gktest/uint64bool"
 	"k8s.io/utils/pointer"
 )
 
@@ -344,8 +345,10 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []Case{{
-						Object:     "object.yaml",
-						Violations: &Violations{},
+						Object: "object.yaml",
+						Assertions: []Assertion{{
+							Violations: uint64bool.FromBool(true),
+						}},
 					}},
 				}},
 			},
@@ -513,8 +516,10 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Object:     "object.yaml",
-						Violations: &Violations{},
+						Object: "object.yaml",
+						Assertions: []Assertion{{
+							Violations: uint64bool.FromBool(true),
+						}},
 					}},
 				}},
 			},
@@ -611,7 +616,7 @@ func TestRunner_RunCase(t *testing.T) {
 		template   string
 		constraint string
 		object     string
-		violations *Violations
+		assertions []Assertion
 		want       CaseResult
 	}{
 		{
@@ -619,7 +624,7 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
-			violations: nil,
+			assertions: nil,
 			want:       CaseResult{},
 		},
 		{
@@ -627,9 +632,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: nil,
+			assertions: nil,
 			want: CaseResult{
-				Error: ErrUnexpectedDeny,
+				Error: ErrUnexpectedViolation,
 			},
 		},
 		{
@@ -637,17 +642,21 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{},
-			want:       CaseResult{},
+			assertions: []Assertion{{
+				Violations: uint64bool.FromBool(true),
+			}},
+			want: CaseResult{},
 		},
 		{
 			name:       "unexpected allow",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
-			violations: &Violations{},
+			assertions: []Assertion{{
+				Violations: uint64bool.FromBool(true),
+			}},
 			want: CaseResult{
-				Error: ErrUnexpectedAllow,
+				Error: ErrUnexpectedNoViolations,
 			},
 		},
 		{
@@ -655,9 +664,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Count: pointer.Int32Ptr(1),
-			},
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(1),
+			}},
 			want: CaseResult{},
 		},
 		{
@@ -665,9 +674,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Count: pointer.Int32Ptr(2),
-			},
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(2),
+			}},
 			want: CaseResult{
 				Error: ErrNumViolations,
 			},
@@ -677,9 +686,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidateTwice,
 			constraint: constraintNeverValidateTwice,
 			object:     object,
-			violations: &Violations{
-				Count: pointer.Int32Ptr(2),
-			},
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(2),
+			}},
 			want: CaseResult{},
 		},
 		{
@@ -687,11 +696,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"never validate",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate"),
+			}},
 			want: CaseResult{},
 		},
 		{
@@ -699,11 +706,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"never validate [(",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate [("),
+			}},
 			want: CaseResult{
 				Error: ErrInvalidRegex,
 			},
@@ -713,11 +718,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"[enrv]+ [adeiltv]+",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
+			}},
 			want: CaseResult{},
 		},
 		{
@@ -725,13 +728,11 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"[enrv]+x [adeiltv]+",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
+			}},
 			want: CaseResult{
-				Error: ErrMissingMessage,
+				Error: ErrUnexpectedNoViolations,
 			},
 		},
 		{
@@ -739,12 +740,11 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidateTwice,
 			constraint: constraintNeverValidateTwice,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"never validate",
-					"twice",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate"),
+			}, {
+				Message: pointer.StringPtr("twice"),
+			}},
 			want: CaseResult{},
 		},
 		{
@@ -752,14 +752,13 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidateTwice,
 			constraint: constraintNeverValidateTwice,
 			object:     object,
-			violations: &Violations{
-				Messages: []string{
-					"never validate",
-					"not present message",
-				},
-			},
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate"),
+			}, {
+				Message: pointer.StringPtr("not present message"),
+			}},
 			want: CaseResult{
-				Error: ErrMissingMessage,
+				Error: ErrUnexpectedNoViolations,
 			},
 		},
 	}
@@ -778,7 +777,7 @@ func TestRunner_RunCase(t *testing.T) {
 					Constraint: constraintFile,
 					Cases: []Case{{
 						Object:     objectFile,
-						Violations: tc.violations,
+						Assertions: tc.assertions,
 					}},
 				}},
 			}
