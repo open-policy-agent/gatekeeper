@@ -166,6 +166,8 @@ func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, 
 	results := review.Results()
 
 	if len(c.Assertions) == 0 {
+		// Default to assuming the object passes validation if no Assertions are
+		// defined.
 		c.Assertions = []Assertion{{Violations: uint64bool.FromBool(false)}}
 	}
 

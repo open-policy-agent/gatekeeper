@@ -70,12 +70,12 @@ spec:
         package k8snevervalidate
         violation[{"msg": msg}] {
           true
-          msg := "never validate"
+          msg := "first message"
         }
 
         violation[{"msg": msg}] {
           true
-          msg := "never validate twice"
+          msg := "second message"
         }
 `
 
@@ -619,8 +619,9 @@ func TestRunner_RunCase(t *testing.T) {
 		assertions []Assertion
 		want       CaseResult
 	}{
+		// Validation successful
 		{
-			name:       "expected allow",
+			name:       "implicit allow",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -628,27 +629,27 @@ func TestRunner_RunCase(t *testing.T) {
 			want:       CaseResult{},
 		},
 		{
-			name:       "unexpected deny",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
-			assertions: nil,
-			want: CaseResult{
-				Error: ErrUnexpectedViolation,
-			},
-		},
-		{
-			name:       "expected deny",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
+			name:       "explicit allow boolean",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{
-				Violations: uint64bool.FromBool(true),
+				Violations: uint64bool.FromBool(false),
 			}},
 			want: CaseResult{},
 		},
 		{
-			name:       "unexpected allow",
+			name:       "implicit deny fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{}},
+			want: CaseResult{
+				Error: ErrUnexpectedNoViolations,
+			},
+		},
+		{
+			name:       "explicit deny boolean fail",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -660,7 +661,60 @@ func TestRunner_RunCase(t *testing.T) {
 			},
 		},
 		{
-			name:       "num violations correct",
+			name:       "allow int",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(0),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "deny int fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(1),
+			}},
+			want: CaseResult{
+				Error: ErrUnexpectedNoViolations,
+			},
+		},
+		{
+			name:       "deny message fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("first message"),
+			}},
+			want: CaseResult{
+				Error: ErrUnexpectedNoViolations,
+			},
+		},
+		// Single violation
+		{
+			name:       "implicit deny",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{}},
+			want:       CaseResult{},
+		},
+		{
+			name:       "deny bool",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromBool(true),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "deny int",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -670,7 +724,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want: CaseResult{},
 		},
 		{
-			name:       "num violations incorrect",
+			name:       "deny int not enough violations",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -682,22 +736,48 @@ func TestRunner_RunCase(t *testing.T) {
 			},
 		},
 		{
-			name:       "multiple violations count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
-			assertions: []Assertion{{
-				Violations: uint64bool.FromUint64(2),
-			}},
-			want: CaseResult{},
-		},
-		{
-			name:       "message correct",
+			name:       "allow bool fail",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
 			assertions: []Assertion{{
+				Violations: uint64bool.FromBool(false),
+			}},
+			want: CaseResult{
+				Error: ErrUnexpectedViolation,
+			},
+		},
+		{
+			name:       "allow int fail",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(0),
+			}},
+			want: CaseResult{
+				Error: ErrUnexpectedViolation,
+			},
+		},
+		{
+			name:       "deny message",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
 				Message: pointer.StringPtr("never validate"),
+			}},
+			want: CaseResult{
+				Error: ErrUnexpectedNoViolations,
+			},
+		},
+		{
+			name:       "message valid regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -714,16 +794,6 @@ func TestRunner_RunCase(t *testing.T) {
 			},
 		},
 		{
-			name:       "message valid regex",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
-			assertions: []Assertion{{
-				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
-			}},
-			want: CaseResult{},
-		},
-		{
 			name:       "message missing regex",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
@@ -735,30 +805,89 @@ func TestRunner_RunCase(t *testing.T) {
 				Error: ErrUnexpectedNoViolations,
 			},
 		},
+		// Deny multiple violations
 		{
-			name:       "multiple violation messages",
+			name:       "multiple violations count",
 			template:   templateNeverValidateTwice,
 			constraint: constraintNeverValidateTwice,
 			object:     object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("never validate"),
-			}, {
-				Message: pointer.StringPtr("twice"),
+				Violations: uint64bool.FromUint64(2),
 			}},
 			want: CaseResult{},
 		},
 		{
-			name:       "multiple violations, missing message",
+			name:       "multiple violation both messages implicit count",
 			template:   templateNeverValidateTwice,
 			constraint: constraintNeverValidateTwice,
 			object:     object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("never validate"),
+				Message: pointer.StringPtr("first message"),
 			}, {
-				Message: pointer.StringPtr("not present message"),
+				Message: pointer.StringPtr("second message"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation both messages explicit count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(1),
+				Message:    pointer.StringPtr("first message"),
+			}, {
+				Violations: uint64bool.FromUint64(1),
+				Message:    pointer.StringPtr("second message"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation regex implicit count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation regex exact count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: uint64bool.FromUint64(2),
+				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violations and one missing message",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("first message"),
+			}, {
+				Message: pointer.StringPtr("third message"),
 			}},
 			want: CaseResult{
 				Error: ErrUnexpectedNoViolations,
+			},
+		},
+		// Invalid assertion
+		{
+			name:       "deny bool",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: &uint64bool.Uint64OrBool{Type: 3},
+			}},
+			want: CaseResult{
+				Error: uint64bool.ErrInvalidUint64OrBool,
 			},
 		},
 	}

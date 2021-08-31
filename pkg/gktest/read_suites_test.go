@@ -350,6 +350,21 @@ tests:
 			}},
 			wantErr: nil,
 		},
+		{
+			name:      "invalid suite",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests: {}
+`),
+				},
+			},
+			wantErr: ErrInvalidYAML,
+		},
 	}
 
 	for _, tc := range testCases {

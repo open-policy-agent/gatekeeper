@@ -170,7 +170,7 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 	suite := Suite{}
 	err = yaml.Unmarshal(bytes, &suite)
 	if err != nil {
-		return nil, fmt.Errorf("parsing Test %q into Suite: %w", path, err)
+		return nil, fmt.Errorf("%w: parsing Test %q into Suite: %v", ErrInvalidYAML, path, err)
 	}
 	return &suite, nil
 }

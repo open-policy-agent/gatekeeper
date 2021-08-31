@@ -50,6 +50,7 @@ func (a *Assertion) Run(results []*types.Result) error {
 		}
 	}
 
+	// Default to assuming the object fails validation.
 	if a.Violations == nil {
 		a.Violations = uint64bool.FromBool(true)
 	}
@@ -69,19 +70,29 @@ func (a *Assertion) Run(results []*types.Result) error {
 	case uint64bool.Uint64:
 		wantMatching := a.Violations.Uint64Val
 
-		if wantMatching == 0 && matching != 0 {
-			return fmt.Errorf("%w: got messages %v",
-				ErrUnexpectedViolation, messages)
-		} else if wantMatching != matching {
+		if wantMatching == 0 {
+			if matching != 0 {
+				return fmt.Errorf("%w: got messages %v",
+					ErrUnexpectedViolation, messages)
+			}
+
+			return nil
+		}
+
+		if matching == 0 {
+			return fmt.Errorf("%w: want %d", ErrUnexpectedNoViolations, wantMatching)
+		} else if matching != wantMatching {
 			return fmt.Errorf("%w: got %d violations but want %d",
 				ErrNumViolations, matching, wantMatching)
 		}
 
 		return nil
 	default:
+		// Requires a bug in our unmarshalling code, or a misuse of the Uint64OrBool
+		// type.
+		return fmt.Errorf("%w: assertion.violations improperly parsed to type %d",
+			uint64bool.ErrInvalidUint64OrBool, a.Violations.Type)
 	}
-
-	return nil
 }
 
 func (a *Assertion) matches(result *types.Result) (bool, error) {
