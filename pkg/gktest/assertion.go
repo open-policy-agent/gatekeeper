@@ -56,7 +56,12 @@ func (a *Assertion) Run(results []*types.Result) error {
 		a.Violations = intStrFromStr("yes")
 	}
 
-	return a.matchesCount(matching)
+	err := a.matchesCount(matching)
+	if err != nil {
+		return fmt.Errorf("%w: got messages %v", err, messages)
+	}
+
+	return nil
 }
 
 func (a *Assertion) matchesCount(matching int32) error {
