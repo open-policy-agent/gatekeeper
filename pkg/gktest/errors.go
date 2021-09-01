@@ -20,12 +20,6 @@ var (
 	ErrCreatingClient = errors.New("creating client")
 	// ErrInvalidCase indicates a Case cannot be run due to not being configured properly.
 	ErrInvalidCase = errors.New("invalid Case")
-	// ErrUnexpectedNoViolations indicates a Case failed because it was expected
-	// to get violations matching an Assertion, but did not get any.
-	ErrUnexpectedNoViolations = errors.New("got no violations")
-	// ErrUnexpectedViolation indicates a Case failed because it got unexpected
-	// violations matching an Assertion.
-	ErrUnexpectedViolation = errors.New("got violations")
 	// ErrNumViolations indicates an Object did not get the expected number of
 	// violations.
 	ErrNumViolations = errors.New("unexpected number of violations")

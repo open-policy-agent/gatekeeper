@@ -17,9 +17,9 @@ type Assertion struct {
 	//
 	// The value may be either an integer, of a string. If an integer, exactly
 	// this number of violations must otherwise match this Assertion. If a string,
-	// must be either "yes" or "no". If "yes", states that exactly one violation
-	// matches this Assertion. If "no", states that no violations match this
-	// assertion.
+	// must be either "yes" or "no". If "yes" at least one violation must match
+	// the Assertion to be satisfied. If "no", there must be zero violations
+	// matching the Assertion to be satisfied.
 	//
 	// Defaults to "yes".
 	Violations *intstr.IntOrString `json:"violations,omitempty"`
@@ -56,48 +56,52 @@ func (a *Assertion) Run(results []*types.Result) error {
 		a.Violations = intStrFromStr("yes")
 	}
 
+	return a.matchesCount(matching)
+}
+
+func (a *Assertion) matchesCount(matching int32) error {
 	switch a.Violations.Type {
-	case intstr.String:
-		switch a.Violations.StrVal {
-		case "yes":
-			if matching == 0 {
-				return ErrUnexpectedNoViolations
-			}
-		case "no":
-			if matching != 0 {
-				return fmt.Errorf("%w: got messages %v",
-					ErrUnexpectedViolation, messages)
-			}
-		default:
-			return fmt.Errorf(`%w: assertion.violation, if set, must be an integer, "yes", or "no"`, ErrInvalidYAML)
-		}
-
-		return nil
 	case intstr.Int:
-		wantMatching := a.Violations.IntVal
-
-		if wantMatching == 0 {
-			if matching != 0 {
-				return fmt.Errorf("%w: got messages %v",
-					ErrUnexpectedViolation, messages)
-			}
-
-			return nil
-		}
-
-		if matching == 0 {
-			return fmt.Errorf("%w: want %d", ErrUnexpectedNoViolations, wantMatching)
-		} else if matching != wantMatching {
-			return fmt.Errorf("%w: got %d violations but want %d",
-				ErrNumViolations, matching, wantMatching)
-		}
-
-		return nil
+		return a.matchesCountInt(matching)
+	case intstr.String:
+		return a.matchesCountStr(matching)
 	default:
 		// Requires a bug in intstr unmarshalling code, or a misuse of the IntOrStr
 		// type in Go code.
 		return fmt.Errorf("%w: assertion.violations improperly parsed to type %d",
 			ErrInvalidYAML, a.Violations.Type)
+	}
+}
+
+func (a *Assertion) matchesCountInt(matching int32) error {
+	wantMatching := a.Violations.IntVal
+	if wantMatching != matching {
+		return fmt.Errorf("%w: got %d violations but want exactly %d",
+			ErrNumViolations, matching, wantMatching)
+	}
+
+	return nil
+}
+
+func (a *Assertion) matchesCountStr(matching int32) error {
+	switch a.Violations.StrVal {
+	case "yes":
+		if matching == 0 {
+			return fmt.Errorf("%w: got %d violations but want at least %d",
+				ErrNumViolations, matching, 1)
+		}
+
+		return nil
+	case "no":
+		if matching > 0 {
+			return fmt.Errorf("%w: got %d violations but want none",
+				ErrNumViolations, matching)
+		}
+
+		return nil
+	default:
+		return fmt.Errorf(`%w: assertion.violation, if set, must be an integer, "yes", or "no"`,
+			ErrInvalidYAML)
 	}
 }
 

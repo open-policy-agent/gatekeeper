@@ -40,14 +40,14 @@ func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Su
 func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, tests []Test) ([]TestResult, error) {
 	suiteDir := filepath.Dir(suitePath)
 
-	result := make([]TestResult, len(tests))
+	results := make([]TestResult, len(tests))
 	for i, t := range tests {
 		if filter.MatchesTest(t) {
-			result[i] = r.runTest(ctx, suiteDir, filter, t)
+			results[i] = r.runTest(ctx, suiteDir, filter, t)
 		}
 	}
 
-	return result, nil
+	return results, nil
 }
 
 // runTest runs an individual Test.

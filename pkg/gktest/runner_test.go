@@ -621,7 +621,7 @@ func TestRunner_RunCase(t *testing.T) {
 	}{
 		// Validation successful
 		{
-			name:       "implicit allow",
+			name:       "implicit expect allow",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -629,7 +629,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want:       CaseResult{},
 		},
 		{
-			name:       "explicit allow boolean",
+			name:       "explicit expect allow boolean",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -639,17 +639,17 @@ func TestRunner_RunCase(t *testing.T) {
 			want: CaseResult{},
 		},
 		{
-			name:       "implicit deny fail",
+			name:       "implicit expect deny fail",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: []Assertion{{}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		{
-			name:       "explicit deny boolean fail",
+			name:       "explicit expect deny boolean fail",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -657,11 +657,11 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: intStrFromStr("yes"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		{
-			name:       "allow int",
+			name:       "expect allow int",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -671,7 +671,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want: CaseResult{},
 		},
 		{
-			name:       "deny int fail",
+			name:       "expect deny int fail",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -679,11 +679,11 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: intStrFromInt(1),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		{
-			name:       "deny message fail",
+			name:       "expect deny message fail",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -691,12 +691,12 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("first message"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		// Single violation
 		{
-			name:       "implicit deny",
+			name:       "implicit expect deny",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -704,7 +704,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want:       CaseResult{},
 		},
 		{
-			name:       "deny bool",
+			name:       "expect deny bool",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -714,7 +714,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want: CaseResult{},
 		},
 		{
-			name:       "deny int",
+			name:       "expect deny int",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -724,7 +724,7 @@ func TestRunner_RunCase(t *testing.T) {
 			want: CaseResult{},
 		},
 		{
-			name:       "deny int not enough violations",
+			name:       "expect deny int not enough violations",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -736,7 +736,7 @@ func TestRunner_RunCase(t *testing.T) {
 			},
 		},
 		{
-			name:       "allow bool fail",
+			name:       "expect allow bool fail",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -744,11 +744,11 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: intStrFromStr("no"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedViolation,
+				Error: ErrNumViolations,
 			},
 		},
 		{
-			name:       "allow int fail",
+			name:       "expect allow int fail",
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
@@ -756,11 +756,11 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: intStrFromInt(0),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedViolation,
+				Error: ErrNumViolations,
 			},
 		},
 		{
-			name:       "deny message",
+			name:       "expect deny message",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
@@ -768,7 +768,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("never validate"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		{
@@ -802,7 +802,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		// Deny multiple violations
@@ -874,7 +874,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("third message"),
 			}},
 			want: CaseResult{
-				Error: ErrUnexpectedNoViolations,
+				Error: ErrNumViolations,
 			},
 		},
 		// Invalid assertions
