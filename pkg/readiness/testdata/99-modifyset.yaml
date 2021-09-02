@@ -14,5 +14,5 @@ spec:
         kinds: ["Pod"]
   location: "spec.some.set"
   parameters:
-    using:
-      values:  ["demo"]
+    values:
+      fromList:  ["demo"]

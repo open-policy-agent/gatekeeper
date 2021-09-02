@@ -148,6 +148,10 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		}
 
 		if cmp.Equal(old, obj) {
+			if i == 0 {
+				convergence = SystemConvergenceTrue
+				return false, nil
+			}
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
 			}
