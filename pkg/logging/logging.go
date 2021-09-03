@@ -3,6 +3,7 @@ package logging
 // Log keys.
 const (
 	Process              = "process"
+	Details              = "details"
 	EventType            = "event_type"
 	TemplateName         = "template_name"
 	ConstraintNamespace  = "constraint_namespace"
