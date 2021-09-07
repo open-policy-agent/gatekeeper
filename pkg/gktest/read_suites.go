@@ -1,12 +1,13 @@
 package gktest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -167,10 +168,16 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 		return nil, nil
 	}
 
-	suite := Suite{}
-	err = yaml.Unmarshal(bytes, &suite)
+	// We must pass through JSON as IntOrStr does not unmarshal from YAML properly.
+	jsn, err := json.Marshal(u.Object)
 	if err != nil {
-		return nil, fmt.Errorf("parsing Test %q into Suite: %w", path, err)
+		return nil, fmt.Errorf("%w: marshaling yaml to json: %v", ErrInvalidYAML, err)
+	}
+
+	suite := Suite{}
+	err = json.Unmarshal(jsn, &suite)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parsing Test %q into Suite: %v", ErrInvalidYAML, path, err)
 	}
 	return &suite, nil
 }

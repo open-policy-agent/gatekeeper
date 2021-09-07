@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/pointer"
 )
 
 const (
@@ -49,6 +51,31 @@ spec:
         violation[{"msg": msg}] {
           true
           msg := "never validate"
+        }
+`
+
+	templateNeverValidateTwice = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: nevervalidatetwice
+spec:
+  crd:
+    spec:
+      names:
+        kind: NeverValidateTwice
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8snevervalidate
+        violation[{"msg": msg}] {
+          true
+          msg := "first message"
+        }
+
+        violation[{"msg": msg}] {
+          true
+          msg := "second message"
         }
 `
 
@@ -133,6 +160,13 @@ kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
 metadata:
   name: always-fail
+`
+
+	constraintNeverValidateTwice = `
+kind: NeverValidateTwice
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-fail-twice
 `
 
 	constraintInvalidYAML = `
@@ -305,13 +339,16 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Allow: "object.yaml",
+						Object: "object.yaml",
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []Case{{
-						Deny: "object.yaml",
+						Object: "object.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
 					}},
 				}},
 			},
@@ -337,52 +374,6 @@ func TestRunner_Run(t *testing.T) {
 					CaseResults: []CaseResult{{}},
 				}, {
 					CaseResults: []CaseResult{{}},
-				}},
-			},
-		},
-		{
-			name: "valid Suite failures",
-			suite: Suite{
-				Tests: []Test{{
-					Template:   "allow-template.yaml",
-					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
-						Deny: "object.yaml",
-					}},
-				}, {
-					Template:   "deny-template.yaml",
-					Constraint: "deny-constraint.yaml",
-					Cases: []Case{{
-						Allow: "object.yaml",
-					}},
-				}},
-			},
-			f: fstest.MapFS{
-				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
-				},
-				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
-				},
-				"deny-template.yaml": &fstest.MapFile{
-					Data: []byte(templateNeverValidate),
-				},
-				"deny-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintNeverValidate),
-				},
-				"object.yaml": &fstest.MapFile{
-					Data: []byte(object),
-				},
-			},
-			want: SuiteResult{
-				TestResults: []TestResult{{
-					CaseResults: []CaseResult{{
-						Error: ErrUnexpectedAllow,
-					}},
-				}, {
-					CaseResults: []CaseResult{{
-						Error: ErrUnexpectedDeny,
-					}},
 				}},
 			},
 		},
@@ -498,7 +489,7 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Allow: "object.yaml",
+						Object: "object.yaml",
 					}},
 				}},
 			},
@@ -525,7 +516,10 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Deny: "object.yaml",
+						Object: "object.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
 					}},
 				}},
 			},
@@ -546,33 +540,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 		},
 		{
-			name: "case without allow or deny",
-			suite: Suite{
-				Tests: []Test{{
-					Template:   "allow-template.yaml",
-					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
-						Allow: "object.yaml",
-						Deny:  "object.yaml",
-					}},
-				}},
-			},
-			f: fstest.MapFS{
-				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
-				},
-				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
-				},
-			},
-			want: SuiteResult{
-				TestResults: []TestResult{{
-					CaseResults: []CaseResult{{Error: ErrInvalidCase}},
-				}},
-			},
-		},
-		{
-			name: "case with both allow and deny",
+			name: "case without Object",
 			suite: Suite{
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
@@ -597,14 +565,14 @@ func TestRunner_Run(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		ctx := context.Background()
-
-		runner := Runner{
-			FS:        tc.f,
-			NewClient: NewOPAClient,
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			runner := Runner{
+				FS:        tc.f,
+				NewClient: NewOPAClient,
+			}
+
 			got := runner.Run(ctx, Filter{}, "", &tc.suite)
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
@@ -639,5 +607,346 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
 	); diff != "" {
 		t.Error(diff)
+	}
+}
+
+func TestRunner_RunCase(t *testing.T) {
+	testCases := []struct {
+		name       string
+		template   string
+		constraint string
+		object     string
+		assertions []Assertion
+		want       CaseResult
+	}{
+		// Validation successful
+		{
+			name:       "implicit expect allow",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: nil,
+			want:       CaseResult{},
+		},
+		{
+			name:       "explicit expect allow boolean",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromStr("no"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "implicit expect deny fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "explicit expect deny boolean fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromStr("yes"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "expect allow int",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(0),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "expect deny int fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(1),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "expect deny message fail",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("first message"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		// Single violation
+		{
+			name:       "implicit expect deny",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{}},
+			want:       CaseResult{},
+		},
+		{
+			name:       "expect deny bool",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromStr("yes"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "expect deny int",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(1),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "expect deny int not enough violations",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(2),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "expect allow bool fail",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromStr("no"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "expect allow int fail",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(0),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "expect deny message",
+			template:   templateAlwaysValidate,
+			constraint: constraintAlwaysValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		{
+			name:       "message valid regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "message invalid regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("never validate [("),
+			}},
+			want: CaseResult{
+				Error: ErrInvalidRegex,
+			},
+		},
+		{
+			name:       "message missing regex",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		// Deny multiple violations
+		{
+			name:       "multiple violations count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(2),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation both messages implicit count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("first message"),
+			}, {
+				Message: pointer.StringPtr("second message"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation both messages explicit count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(1),
+				Message:    pointer.StringPtr("first message"),
+			}, {
+				Violations: intStrFromInt(1),
+				Message:    pointer.StringPtr("second message"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation regex implicit count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violation regex exact count",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: intStrFromInt(2),
+				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+			}},
+			want: CaseResult{},
+		},
+		{
+			name:       "multiple violations and one missing message",
+			template:   templateNeverValidateTwice,
+			constraint: constraintNeverValidateTwice,
+			object:     object,
+			assertions: []Assertion{{
+				Message: pointer.StringPtr("first message"),
+			}, {
+				Message: pointer.StringPtr("third message"),
+			}},
+			want: CaseResult{
+				Error: ErrNumViolations,
+			},
+		},
+		// Invalid assertions
+		{
+			name:       "invalid IntOrStr",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: &intstr.IntOrString{Type: 3},
+			}},
+			want: CaseResult{
+				Error: ErrInvalidYAML,
+			},
+		},
+		{
+			name:       "invalid IntOrStr string value",
+			template:   templateNeverValidate,
+			constraint: constraintNeverValidate,
+			object:     object,
+			assertions: []Assertion{{
+				Violations: &intstr.IntOrString{Type: intstr.String, StrVal: "other"},
+			}},
+			want: CaseResult{
+				Error: ErrInvalidYAML,
+			},
+		},
+	}
+
+	const (
+		templateFile   = "template.yaml"
+		constraintFile = "constraint.yaml"
+		objectFile     = "object.yaml"
+	)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			suite := &Suite{
+				Tests: []Test{{
+					Template:   templateFile,
+					Constraint: constraintFile,
+					Cases: []Case{{
+						Object:     objectFile,
+						Assertions: tc.assertions,
+					}},
+				}},
+			}
+
+			ctx := context.Background()
+
+			runner := Runner{
+				FS: fstest.MapFS{
+					templateFile:   &fstest.MapFile{Data: []byte(tc.template)},
+					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
+					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
+				},
+				NewClient: NewOPAClient,
+			}
+
+			got := runner.Run(ctx, Filter{}, "", suite)
+
+			want := SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{tc.want},
+				}},
+			}
+
+			if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
+				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
+			); diff != "" {
+				t.Errorf(diff)
+			}
+		})
 	}
 }
