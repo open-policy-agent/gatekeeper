@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"k8s.io/utils/pointer"
 )
 
 func TestReadSuites(t *testing.T) {
@@ -264,8 +265,11 @@ tests:
 - template: template.yaml
   constraint: constraint.yaml
   cases:
-  - allow: allow.yaml
-  - deny: deny.yaml
+  - object: allow.yaml
+  - object: deny.yaml
+    assertions:
+    - violations: 2
+      message: "some message"
 `),
 				},
 			},
@@ -274,9 +278,49 @@ tests:
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
 					Cases: []Case{{
-						Allow: "allow.yaml",
+						Object: "allow.yaml",
 					}, {
-						Deny: "deny.yaml",
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromInt(2),
+							Message:    pointer.StringPtr("some message"),
+						}},
+					}},
+				}},
+			}},
+			wantErr: nil,
+		},
+		{
+			name:      "suite with empty assertions",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests:
+- template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - object: allow.yaml
+  - object: deny.yaml
+    assertions:
+    - violations: "yes"
+`),
+				},
+			},
+			want: map[string]*Suite{"test.yaml": {
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []Case{{
+						Object: "allow.yaml",
+					}, {
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
 					}},
 				}},
 			}},
@@ -305,17 +349,32 @@ tests:
 			}},
 			wantErr: nil,
 		},
+		{
+			name:      "invalid suite",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests: {}
+`),
+				},
+			},
+			wantErr: ErrInvalidYAML,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, gotErr := ReadSuites(tc.fileSystem, tc.target, tc.recursive)
 			if !errors.Is(gotErr, tc.wantErr) {
-				t.Errorf("got error %v, want error %v",
+				t.Fatalf("got error %v, want error %v",
 					gotErr, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty(), cmpopts.IgnoreUnexported(Assertion{})); diff != "" {
 				t.Error(diff)
 			}
 		})
