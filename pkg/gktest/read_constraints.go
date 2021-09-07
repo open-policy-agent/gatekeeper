@@ -19,6 +19,10 @@ func init() {
 	_ = apis.AddToScheme(scheme)
 }
 
+type versionless interface {
+	ToVersionless() (*templates.ConstraintTemplate, error)
+}
+
 func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
@@ -68,8 +72,12 @@ func readTemplate(f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 		return nil, fmt.Errorf("%w: %v", ErrAddingTemplate, err)
 	}
 
-	template := &templates.ConstraintTemplate{}
-	err = scheme.Convert(t, template, nil)
+	v, isVersionless := t.(versionless)
+	if !isVersionless {
+		return nil, fmt.Errorf("%w: %T", nil, t)
+	}
+
+	template, err := v.ToVersionless()
 	if err != nil {
 		// This shouldn't happen unless there's a bug in the conversion functions.
 		// Most likely it means the conversion functions weren't generated.
