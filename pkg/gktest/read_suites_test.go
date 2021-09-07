@@ -7,6 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestReadSuites(t *testing.T) {
@@ -15,7 +16,7 @@ func TestReadSuites(t *testing.T) {
 		target     string
 		recursive  bool
 		fileSystem fs.FS
-		want       []Suite
+		want       map[string]*Suite
 		wantErr    error
 	}{
 		{
@@ -66,7 +67,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []Suite{{}},
+			want:    map[string]*Suite{"test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -141,7 +142,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []Suite{{}},
+			want:    map[string]*Suite{"tests/test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -159,7 +160,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 					Data: []byte(`some data`),
 				},
 			},
-			want:    []Suite{{}},
+			want:    map[string]*Suite{"tests/test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -186,7 +187,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []Suite{{}},
+			want:    map[string]*Suite{"tests/test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -213,7 +214,11 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []Suite{{}, {}, {}},
+			want: map[string]*Suite{
+				"tests/labels/test.yaml":      {},
+				"tests/annotations/test.yaml": {},
+				"tests/test.yaml":             {},
+			},
 			wantErr: nil,
 		},
 		{
@@ -228,7 +233,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []Suite{{}},
+			want:    map[string]*Suite{"tests/labels.yaml/test.yaml": {}},
 			wantErr: nil,
 		},
 		{
@@ -264,7 +269,7 @@ tests:
 `),
 				},
 			},
-			want: []Suite{{
+			want: map[string]*Suite{"test.yaml": {
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -292,7 +297,7 @@ tests:
 `),
 				},
 			},
-			want: []Suite{{
+			want: map[string]*Suite{"test.yaml": {
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -310,7 +315,7 @@ tests:
 					gotErr, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty()); diff != "" {
 				t.Error(diff)
 			}
 		})

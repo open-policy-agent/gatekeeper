@@ -25,7 +25,8 @@ postInstall:
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
-  release: v3.6.0-beta.3
+  crdRepository: openpolicyagent/gatekeeper-crds
+  release: v3.7.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
@@ -36,6 +37,9 @@ secretAnnotations: {}
 controllerManager:
   exemptNamespaces: []
   hostNetwork: false
+  port: 8443
+  metricsPort: 8888
+  healthPort: 9090
   priorityClassName: system-cluster-critical
   affinity:
     podAntiAffinity:
@@ -60,6 +64,8 @@ controllerManager:
       memory: 256Mi
 audit:
   hostNetwork: false
+  metricsPort: 8888
+  healthPort: 9090
   priorityClassName: system-cluster-critical
   affinity: {}
   tolerations: []

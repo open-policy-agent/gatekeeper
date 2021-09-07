@@ -25,14 +25,6 @@ Two ways of working around this:
         protocol: TCP
     ```
 
-  - update Gatekeeper service manifest spec:
-    - update `targetPort` from `8443` to `443`
-    ```yaml
-    ports:
-    - port: 443
-      targetPort: 443
-    ```
-
 ## Running on OpenShift 4.x
 
 When running on OpenShift, the `nouid` scc must be used to keep a restricted profile but being able to set the UserID.

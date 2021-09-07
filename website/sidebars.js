@@ -28,7 +28,8 @@ module.exports = {
         'emergency',
         'vendor-specific',
         'failing-closed',
-        'mutation'
+        'mutation',
+        'constrainttemplates'
       ],
     },
     {
