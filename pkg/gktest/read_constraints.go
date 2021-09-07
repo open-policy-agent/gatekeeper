@@ -8,7 +8,6 @@ import (
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/apis"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -24,7 +23,7 @@ func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
-	err := yaml.Unmarshal(bytes, u.Object)
+	err := parseYAML(bytes, u)
 	if err != nil {
 		return nil, err
 	}
