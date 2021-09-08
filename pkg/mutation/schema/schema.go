@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -16,6 +17,9 @@ type MutatorWithSchema interface {
 
 	// SchemaBindings returns the set of GVKs this Mutator applies to.
 	SchemaBindings() []schema.GroupVersionKind
+
+	// TerminalType specifies the inferred type of the last node in a path
+	TerminalType() parser.NodeType
 }
 
 var log = logf.Log.WithName("mutation_schema")
@@ -101,7 +105,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 			s = &node{}
 			db.schemas[gvk] = s
 		}
-		newConflicts := s.Add(id, path.Nodes)
+		newConflicts := s.Add(id, path.Nodes, mutator.TerminalType())
 		conflicts = merge(conflicts, newConflicts)
 	}
 
@@ -138,7 +142,7 @@ func (db *DB) remove(id types.ID) {
 			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", gvk)
 			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, gvk))
 		}
-		s.Remove(id, cachedMutator.Path().Nodes)
+		s.Remove(id, cachedMutator.Path().Nodes, cachedMutator.TerminalType())
 		db.schemas[gvk] = s
 
 		if len(s.ReferencedBy) == 0 {
@@ -161,7 +165,7 @@ func (db *DB) remove(id types.ID) {
 		mutator := db.cachedMutators[conflictID]
 		hasConflict := false
 		for _, gvk := range mutator.SchemaBindings() {
-			if isConflict, _ := db.schemas[gvk].HasConflicts(mutator.Path().Nodes); isConflict {
+			if isConflict, _ := db.schemas[gvk].HasConflicts(mutator.Path().Nodes, mutator.TerminalType()); isConflict {
 				hasConflict = true
 				break
 			}

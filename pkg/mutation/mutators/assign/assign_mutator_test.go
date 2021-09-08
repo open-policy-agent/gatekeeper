@@ -1,4 +1,4 @@
-package mutators
+package assign
 
 import (
 	"encoding/json"
@@ -39,7 +39,7 @@ func makeValue(v interface{}) runtime.RawExtension {
 	return runtime.RawExtension{Raw: j}
 }
 
-func newAssignMutator(cfg *assignTestCfg) *AssignMutator {
+func newAssignMutator(cfg *assignTestCfg) *Mutator {
 	m := &mutationsv1alpha1.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Foo",
