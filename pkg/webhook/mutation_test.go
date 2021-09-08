@@ -11,6 +11,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +33,7 @@ func TestWebhookAssign(t *testing.T) {
 			},
 		},
 	}
-	if err := mutators.IsValidAssign(v); err != nil {
+	if err := assign.IsValidAssign(v); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,7 +99,7 @@ func TestWebhookAssignMetadata(t *testing.T) {
 			},
 		},
 	}
-	if err := mutators.IsValidAssignMetadata(v); err != nil {
+	if err := assignmeta.IsValidAssignMetadata(v); err != nil {
 		t.Fatal(err)
 	}
 

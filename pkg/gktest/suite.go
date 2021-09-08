@@ -10,7 +10,7 @@ type Suite struct {
 
 	// Tests is a list of Template&Constraint pairs, with tests to run on
 	// each.
-	Tests []Test `json:"spec"`
+	Tests []Test `json:"tests"`
 }
 
 // Test defines a Template&Constraint pair to instantiate, and Cases to
@@ -27,18 +27,21 @@ type Test struct {
 	Constraint string `json:"constraint"`
 
 	// Cases are the test cases to run on the instantiated Constraint.
-	Cases []Case `json:"cases"`
+	Cases []Case `json:"cases,omitempty"`
 }
 
 // Case runs Constraint against a YAML object.
 type Case struct {
-	Name       string `json:"name"`
-	Allow      string `json:"allow"`
-	Deny       string `json:"deny"`
-	Assertions []Assertion
-}
+	Name string `json:"name"`
 
-type Assertion struct {
-	RejectionCount int
-	Message        string
+	// Object is the path to the file containing a Kubernetes object to test.
+	Object string `json:"object"`
+
+	// Assertions are statements which must be true about the result of running
+	// Review with the Test's Constraint on the Case's Object.
+	//
+	// All Assertions must succeed in order for the test to pass.
+	// If no assertions are present, assumes reviewing Object produces no
+	// violations.
+	Assertions []Assertion `json:"assertions"`
 }

@@ -31,6 +31,7 @@ type Excluder struct {
 var allProcesses = []Process{
 	Audit,
 	Webhook,
+	Mutation,
 	Sync,
 }
 

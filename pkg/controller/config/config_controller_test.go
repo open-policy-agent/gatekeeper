@@ -570,10 +570,9 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Create the Config object and expect the Reconcile to be created
 	ctx = context.Background()
-	err = c.Create(ctx, instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	g.Eventually(func() error {
+		return c.Create(ctx, instance.DeepCopy())
+	}, timeout).Should(gomega.BeNil())
 
 	defer func() {
 		ctx := context.Background()

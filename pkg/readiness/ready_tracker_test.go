@@ -176,6 +176,55 @@ func Test_AssignMetadata(t *testing.T) {
 	}
 }
 
+func Test_ModifySet(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	defer func() {
+		mutationEnabled := false
+		mutation.MutationEnabled = &mutationEnabled
+	}()
+
+	mutationEnabled := true
+	mutation.MutationEnabled = &mutationEnabled
+
+	os.Setenv("POD_NAME", "no-pod")
+	podstatus.DisablePodOwnership()
+
+	// Apply fixtures *before* the controllers are setup.
+	err := applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	defer func() {
+		cancelFunc()
+		mgrStopped.Wait()
+	}()
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the ModifySet is present in the cache
+	for _, am := range testModifySet {
+		id := mutationtypes.MakeID(am)
+		exptectedMutator := mutationSystem.Get(id)
+		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+	}
+}
+
 func Test_Assign(t *testing.T) {
 	g := gomega.NewWithT(t)
 
