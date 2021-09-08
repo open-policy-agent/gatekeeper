@@ -3,11 +3,14 @@ package gktest
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
-// Filter filters tests and cases to run.
-type Filter struct {
-	regex *regexp.Regexp
+type Filter interface {
+	// MatchesTest returns true if the Test should be run.
+	MatchesTest(Test) bool
+	// MatchesCase returns true if Case caseName in Test testName should be run.
+	MatchesCase(testName, caseName string) bool
 }
 
 // NewFilter parses run into a Filter for selecting constraint tests and
@@ -17,8 +20,8 @@ type Filter struct {
 //
 // Examples:
 // 1) NewFiler("require-foo-label//missing-label")
-// Matches tests ending with the string "require-foo-label"
-// and cases beginning with the string "missing-label". So this would match all
+// Matches tests containing the string "require-foo-label"
+// and cases containing the string "missing-label". So this would match all
 // of the following:
 // - Test: "require-foo-label", Case: "missing-label"
 // - Test: "not-require-foo-label, Case: "not-missing-label"
@@ -41,33 +44,55 @@ type Filter struct {
 // - Test: "forbid-foo-label", Case: "empty-object"
 // - Test: "forbid-foo-label", Case: "another-empty-object"
 // - Test: "require-bar-annotation", Case: "empty-object".
-func NewFilter(filter string) (*Filter, error) {
+func NewFilter(filter string) (Filter, error) {
 	if filter == "" {
-		return &Filter{}, nil
+		return &nilFilter{}, nil
 	}
 
+	filters := strings.Split(filter, "//")
+
+	switch len(filters) {
+	case 1:
+		return newOrFilter(filters[0])
+	case 2:
+		return newAndFilter(filters[0], filters[1])
+	default:
+		return nil, fmt.Errorf(`%w: a filter may include at most one "//"`, ErrInvalidFilter)
+	}
+}
+
+// nilFilter matches all tests.
+type nilFilter struct{}
+
+var _ Filter = &nilFilter{}
+
+func (f *nilFilter) MatchesTest(Test) bool {
+	return true
+}
+
+func (f *nilFilter) MatchesCase(string, string) bool {
+	return true
+}
+
+// orFilter matches:
+// 1) Tests which are matched by regex.
+// 2) Tests which contain a Case matched by regex.
+// 3) Cases which are matched by regex.
+type orFilter struct {
+	regex *regexp.Regexp
+}
+
+func newOrFilter(filter string) (Filter, error) {
 	regex, err := regexp.Compile(filter)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
 	}
 
-	return &Filter{regex: regex}, nil
+	return &orFilter{regex: regex}, nil
 }
 
-// MatchesTest filters the set of tests to run by test name
-// and the cases contained in the test. Returns true if the Test should be run.
-//
-// If a constraint regex was specified, returns true if the constraint regex
-// matches `constraint`.
-// If a constraint regex was not specified but a test regex was, returns true if
-// at least one test in `tests` matches the test regex.
-func (f Filter) MatchesTest(t Test) bool {
-	if f.regex == nil {
-		return true
-	}
-
-	testName := t.Name + "//"
-	if f.regex.MatchString(testName) {
+func (f *orFilter) MatchesTest(t Test) bool {
+	if f.regex.MatchString(t.Name) {
 		return true
 	}
 
@@ -80,15 +105,37 @@ func (f Filter) MatchesTest(t Test) bool {
 	return false
 }
 
-// MatchesCase filters Cases to run by name.
-//
-// Returns true if the test regex matches test.
-func (f Filter) MatchesCase(testName, caseName string) bool {
-	if f.regex == nil {
-		return true
+func (f *orFilter) MatchesCase(testName, caseName string) bool {
+	return f.regex.MatchString(caseName) || f.regex.MatchString(testName)
+}
+
+// andFilter matches Cases which match caseRegex which are in Tests which match
+// testRegex.
+type andFilter struct {
+	testRegex *regexp.Regexp
+	caseRegex *regexp.Regexp
+}
+
+var _ Filter = &andFilter{}
+
+func newAndFilter(testFilter, caseFilter string) (Filter, error) {
+	testRegex, err := regexp.Compile(testFilter)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
 	}
 
-	fullName := fmt.Sprintf("%s//%s", testName, caseName)
+	caseRegex, err := regexp.Compile(caseFilter)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+	}
 
-	return f.regex.MatchString(fullName)
+	return &andFilter{testRegex: testRegex, caseRegex: caseRegex}, nil
+}
+
+func (f *andFilter) MatchesTest(t Test) bool {
+	return f.testRegex.MatchString(t.Name)
+}
+
+func (f *andFilter) MatchesCase(testName, caseName string) bool {
+	return f.caseRegex.MatchString(caseName) && f.testRegex.MatchString(testName)
 }

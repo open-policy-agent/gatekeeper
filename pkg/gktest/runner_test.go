@@ -665,7 +665,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 	suite := &Suite{
 		Tests: []Test{{}},
 	}
-	got := runner.Run(ctx, &Filter{}, "", suite)
+	got := runner.Run(ctx, &nilFilter{}, "", suite)
 
 	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
@@ -998,7 +998,7 @@ func TestRunner_RunCase(t *testing.T) {
 				NewClient: NewOPAClient,
 			}
 
-			got := runner.Run(ctx, &Filter{}, "", suite)
+			got := runner.Run(ctx, &nilFilter{}, "", suite)
 
 			want := SuiteResult{
 				TestResults: []TestResult{{

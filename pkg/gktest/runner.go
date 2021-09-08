@@ -23,7 +23,7 @@ type Runner struct {
 }
 
 // Run executes all Tests in the Suite and returns the results.
-func (r *Runner) Run(ctx context.Context, filter *Filter, suitePath string, s *Suite) SuiteResult {
+func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
 	start := time.Now()
 
 	results, err := r.runTests(ctx, filter, suitePath, s.Tests)
@@ -37,7 +37,7 @@ func (r *Runner) Run(ctx context.Context, filter *Filter, suitePath string, s *S
 }
 
 // runTests runs every Test in Suite.
-func (r *Runner) runTests(ctx context.Context, filter *Filter, suitePath string, tests []Test) ([]TestResult, error) {
+func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, tests []Test) ([]TestResult, error) {
 	suiteDir := filepath.Dir(suitePath)
 
 	results := make([]TestResult, len(tests))
@@ -58,7 +58,7 @@ func (r *Runner) skipTest(t Test) TestResult {
 }
 
 // runTest runs an individual Test.
-func (r *Runner) runTest(ctx context.Context, suiteDir string, filter *Filter, t Test) TestResult {
+func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
 	start := time.Now()
 
 	results, err := r.runCases(ctx, suiteDir, filter, t)
@@ -73,7 +73,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter *Filter, t
 
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
-func (r *Runner) runCases(ctx context.Context, suiteDir string, filter *Filter, t Test) ([]CaseResult, error) {
+func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t Test) ([]CaseResult, error) {
 	client, err := r.makeTestClient(ctx, suiteDir, t)
 	if err != nil {
 		return nil, err
