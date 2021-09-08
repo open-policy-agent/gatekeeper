@@ -441,6 +441,24 @@ func TestMatch(t *testing.T) {
 			shouldMatch: true,
 		},
 		{
+			tname:   "match wildcard name",
+			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
+			match: Match{
+				Name: "name-*",
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: true,
+		},
+		{
+			tname:   "missing asterisk in name wildcard does not match",
+			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
+			match: Match{
+				Name: "name-",
+			},
+			namespace:   &corev1.Namespace{},
+			shouldMatch: false,
+		},
+		{
 			tname:   "wrong name does not match",
 			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
 			match: Match{

@@ -216,7 +216,7 @@ func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 		return true, nil
 	}
 
-	return match.Name == obj.GetName(), nil
+	return match.Name == obj.GetName() || prefixMatch(match.Name, obj.GetName()), nil
 }
 
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
