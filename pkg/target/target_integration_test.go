@@ -240,6 +240,13 @@ func TestConstraintEnforcement(t *testing.T) {
 			allowed:    true,
 		},
 		{
+			name:       "match name wildcard",
+			obj:        makeResource("some", "Thing"),
+			ns:         makeNamespace("my-ns"),
+			constraint: makeConstraint(setName("test-*")),
+			allowed:    false,
+		},
+		{
 			name: "match everything",
 			obj:  makeResource("some", "Thing", map[string]string{"obj": "label"}),
 			ns:   makeNamespace("my-ns", map[string]string{"ns": "label"}),

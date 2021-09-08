@@ -15,4 +15,12 @@ test_no_name_is_match {
     with input.review.name as "foo"
 }
 
-# JULIAN - Will we ever situation where match.name is "" ?
+test_wildcard_name_match {
+  matches_name({"name": "foo*"})
+    with input.review.name as "foobar"
+}
+
+test_wildcard_no_asterisk_no_match {
+  not matches_name({"name": "foo"})
+    with input.review.name as "foobar"
+}
