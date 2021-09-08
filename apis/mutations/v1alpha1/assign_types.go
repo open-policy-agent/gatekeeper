@@ -32,10 +32,22 @@ import (
 type AssignSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	ApplyTo    []match.ApplyTo `json:"applyTo,omitempty"`
-	Match      match.Match     `json:"match,omitempty"`
-	Location   string          `json:"location,omitempty"`
-	Parameters Parameters      `json:"parameters,omitempty"`
+
+	// ApplyTo lists the specific groups, versions and kinds a mutation will be applied to.
+	// This is necessary because every mutation implies part of an object schema and object
+	// schemas are associated with specific GVKs.
+	ApplyTo []match.ApplyTo `json:"applyTo,omitempty"`
+
+	// Match allows the user to limit which resources get mutated.
+	// Individual match criteria are AND-ed together. An undefined
+	// match criteria matches everything.
+	Match match.Match `json:"match,omitempty"`
+
+	// Location describes the path to be mutated, for example: `spec.containers[name: main]`.
+	Location string `json:"location,omitempty"`
+
+	// Parameters define the behavior of the mutator.
+	Parameters Parameters `json:"parameters,omitempty"`
 }
 
 type Parameters struct {

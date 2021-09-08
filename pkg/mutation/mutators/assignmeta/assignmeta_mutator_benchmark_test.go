@@ -1,11 +1,24 @@
-package mutators
+package assignmeta
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+func makeValue(v interface{}) runtime.RawExtension {
+	v2 := map[string]interface{}{
+		"value": v,
+	}
+	j, err := json.Marshal(v2)
+	if err != nil {
+		panic(err)
+	}
+	return runtime.RawExtension{Raw: j}
+}
 
 func assignMetadata(value interface{}, location string) *v1alpha1.AssignMetadata {
 	result := &v1alpha1.AssignMetadata{

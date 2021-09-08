@@ -12,10 +12,6 @@ import (
 
 type idSet map[types.ID]bool
 
-// unknown represents a path element we do not know the type of.
-// Elements of type unknown do not conflict with path elements of known types.
-const unknown = parser.NodeType("Unknown")
-
 func (c idSet) String() string {
 	var keys []string
 	for k := range c {
@@ -47,7 +43,7 @@ type node struct {
 //
 // If the returned references is non-nil it contains at least two elements, one
 // of which is the passed id.
-func (n *node) Add(id types.ID, path []parser.Node) idSet {
+func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType) idSet {
 	if n.ReferencedBy == nil {
 		n.ReferencedBy = make(map[types.ID]bool)
 	}
@@ -68,7 +64,7 @@ func (n *node) Add(id types.ID, path []parser.Node) idSet {
 	if n.Children[childKey] == nil {
 		n.Children[childKey] = make(map[parser.NodeType]node)
 	}
-	childType := headType(path)
+	childType := headType(path, terminalType)
 	if _, exists := n.Children[childKey][childType]; !exists {
 		n.Children[childKey][childType] = node{}
 	}
@@ -76,7 +72,7 @@ func (n *node) Add(id types.ID, path []parser.Node) idSet {
 	// Add the remaining path to the appropriate child, collecting any conflicts
 	// found when adding it.
 	child := n.Children[childKey][childType]
-	conflicts := child.Add(id, path[1:])
+	conflicts := child.Add(id, path[1:], terminalType)
 	n.Children[childKey][childType] = child
 
 	// Detect conflicts at this node.
@@ -90,7 +86,7 @@ const ErrNotFound = util.Error("path not found")
 
 // Remove removes the id and path from the tree.
 // Panics if the ID is not defined or was Add()ed with a different path.
-func (n *node) Remove(id types.ID, path []parser.Node) {
+func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeType) {
 	// This ID no longer references this node.
 	if _, isReferenced := n.ReferencedBy[id]; isReferenced {
 		delete(n.ReferencedBy, id)
@@ -108,7 +104,7 @@ func (n *node) Remove(id types.ID, path []parser.Node) {
 		// The child does not exist.
 		panic(fmt.Errorf("no child for key %q: %w", childKey, ErrNotFound))
 	}
-	childType := headType(path)
+	childType := headType(path, terminalType)
 	if _, found := n.Children[childKey][childType]; !found {
 		// No child of the key and type exists.
 		// This is how we detect that the path for id is incomplete. If the path
@@ -118,7 +114,7 @@ func (n *node) Remove(id types.ID, path []parser.Node) {
 	}
 
 	child := n.Children[childKey][childType]
-	child.Remove(id, path[1:])
+	child.Remove(id, path[1:], terminalType)
 
 	// Delete the type from the child if it is no longer referenced.
 	if len(child.ReferencedBy) == 0 {
@@ -139,14 +135,14 @@ func (n *node) conflicts(childKey string) idSet {
 
 	// Count the number of distinct types with this key.
 	nTypes := len(n.Children[childKey])
-	if _, hasUnknown := n.Children[childKey][unknown]; hasUnknown {
+	if _, hasUnknown := n.Children[childKey][Unknown]; hasUnknown {
 		// Nodes whose types we are unable to determine do not count against this
 		// check.
 		nTypes--
 	}
 
 	for nodeType, child := range n.Children[childKey] {
-		if nodeType == unknown {
+		if nodeType == Unknown {
 			// If we don't know the type of a node, we assume it conflicts with nothing.
 			continue
 		}
@@ -167,13 +163,13 @@ func (n *node) conflicts(childKey string) idSet {
 // passed path.
 //
 // Returns an error if the path does not exist.
-func (n *node) HasConflicts(path []parser.Node) (bool, error) {
+func (n *node) HasConflicts(path []parser.Node, terminalType parser.NodeType) (bool, error) {
 	if len(path) == 0 {
 		return false, nil
 	}
 
 	childKey := key(path[0])
-	childType := headType(path)
+	childType := headType(path, terminalType)
 	if _, found := n.Children[childKey]; !found {
 		// Path has not been added, so there can be no conflicts.
 		return false, ErrNotFound
@@ -189,7 +185,7 @@ func (n *node) HasConflicts(path []parser.Node) (bool, error) {
 		return false, ErrNotFound
 	}
 	child := n.Children[childKey][childType]
-	return child.HasConflicts(path[1:])
+	return child.HasConflicts(path[1:], terminalType)
 }
 
 // merge inserts elements from `from` into `into`. Returns `into`, or a
@@ -210,10 +206,10 @@ func merge(into, from idSet) idSet {
 // headType returns the type of the second Node, if it exists.
 // This is essential for determining whether the current location in a schema
 // path is a list.
-func headType(path []parser.Node) parser.NodeType {
+func headType(path []parser.Node, terminalType parser.NodeType) parser.NodeType {
 	if len(path) < 2 {
-		// Default unknown as we have no information either way.
-		return unknown
+		// Default to the terminal type, as we are at the last path node.
+		return terminalType
 	}
 	return path[1].Type()
 }

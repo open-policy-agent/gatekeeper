@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
+	mschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +52,10 @@ func (m *fakeMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	obj.SetLabels(current)
 
 	return true, nil
+}
+
+func (m *fakeMutator) TerminalType() parser.NodeType {
+	return mschema.Unknown
 }
 
 func (m *fakeMutator) ID() types.ID {
