@@ -12,6 +12,7 @@ resources:
 # add the mutation crds to resources:
 #- bases/mutations.gatekeeper.sh_assigns.yaml  
 #- bases/mutations.gatekeeper.sh_assignmetadata.yaml
+#- bases/mutations.gatekeeper.sh_modifyset.yaml
 
 bases:
 - ../../vendor/github.com/open-policy-agent/frameworks/constraint/deploy
@@ -24,6 +25,7 @@ patches:
   path: patches/preserve_unknown_fields_false.yaml
 
 patchesStrategicMerge:
+#- patches/max_name_size_for_modifyset.yaml
 #- patches/max_name_size_for_assign.yaml
 #- patches/max_name_size_for_assignmetadata.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.

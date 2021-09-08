@@ -33,7 +33,7 @@ spec:
             description: AssignSpec defines the desired state of Assign.
             properties:
               applyTo:
-                description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run "make" to regenerate code after modifying this file'
+                description: ApplyTo lists the specific groups, versions and kinds a mutation will be applied to. This is necessary because every mutation implies part of an object schema and object schemas are associated with specific GVKs.
                 items:
                   description: ApplyTo determines what GVKs items the mutation should apply to. Globs are not allowed.
                   properties:
@@ -52,9 +52,10 @@ spec:
                   type: object
                 type: array
               location:
+                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
                 type: string
               match:
-                description: Match selects objects to apply mutations to.
+                description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
                     items:
@@ -144,6 +145,7 @@ spec:
                     type: string
                 type: object
               parameters:
+                description: Parameters define the behavior of the mutator.
                 properties:
                   assign:
                     description: Assign.value holds the value to be assigned

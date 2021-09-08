@@ -152,16 +152,6 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 				convergence = SystemConvergenceTrue
 				return false, nil
 			}
-			if cmp.Equal(original, obj) {
-				if *MutationLoggingEnabled {
-					logAppliedMutations("Oscillating mutation.", mutationUUID, original, allAppliedMutations)
-				}
-				return false, fmt.Errorf("oscillating mutation for %s %s %s %s",
-					obj.GroupVersionKind().Group,
-					obj.GroupVersionKind().Kind,
-					obj.GetNamespace(),
-					obj.GetName())
-			}
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
 			}

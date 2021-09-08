@@ -2,7 +2,7 @@
 namespace: gatekeeper-system
 
 resources:
-  - ../mutation_webhook
+  - ../mutation
 
 patchesStrategicMerge:
 - manager_image_patch.yaml

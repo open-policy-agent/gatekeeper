@@ -1,4 +1,4 @@
-package mutators
+package assign
 
 import (
 	"encoding/json"
@@ -24,11 +24,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
+var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation", logging.Mutator, "assign")
 
-// AssignMutator is a mutator object built out of a
+// Mutator is a mutator object built out of an
 // Assign instance.
-type AssignMutator struct {
+type Mutator struct {
 	id          types.ID
 	assign      *mutationsv1alpha1.Assign
 	assignValue interface{}
@@ -41,27 +41,31 @@ type AssignMutator struct {
 	valueTest *mutationsv1alpha1.AssignIf
 }
 
-// AssignMutator implements mutatorWithSchema.
-var _ schema.MutatorWithSchema = &AssignMutator{}
+// Mutator implements mutatorWithSchema.
+var _ schema.MutatorWithSchema = &Mutator{}
 
-func (m *AssignMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
+func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
 		return false
 	}
 	matches, err := match.Matches(&m.assign.Spec.Match, obj, ns)
 	if err != nil {
-		log.Error(err, "AssignMutator.Matches failed", "assign", m.assign.Name)
+		log.Error(err, "Matches failed for assign", "assign", m.assign.Name)
 		return false
 	}
 	return matches
 }
 
-func (m *AssignMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	return core.Mutate(m, m.tester, m.testValue, obj)
+func (m *Mutator) TerminalType() parser.NodeType {
+	return schema.Unknown
+}
+
+func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+	return core.Mutate(m.Path(), m.tester, m.testValue, core.NewDefaultSetter(m), obj)
 }
 
 // valueTest returns true if it is okay for the mutation func to override the value.
-func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
+func (m *Mutator) testValue(v interface{}, exists bool) bool {
 	if len(m.valueTest.In) != 0 {
 		ifInMatched := false
 		if !exists {
@@ -92,20 +96,20 @@ func (m *AssignMutator) testValue(v interface{}, exists bool) bool {
 	return true
 }
 
-func (m *AssignMutator) ID() types.ID {
+func (m *Mutator) ID() types.ID {
 	return m.id
 }
 
-func (m *AssignMutator) SchemaBindings() []runtimeschema.GroupVersionKind {
+func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
 }
 
-func (m *AssignMutator) Value() (interface{}, error) {
+func (m *Mutator) Value() (interface{}, error) {
 	return runtime.DeepCopyJSONValue(m.assignValue), nil
 }
 
-func (m *AssignMutator) HasDiff(mutator types.Mutator) bool {
-	toCheck, ok := mutator.(*AssignMutator)
+func (m *Mutator) HasDiff(mutator types.Mutator) bool {
+	toCheck, ok := mutator.(*Mutator)
 	if !ok { // different types, different
 		return true
 	}
@@ -128,12 +132,12 @@ func (m *AssignMutator) HasDiff(mutator types.Mutator) bool {
 	return false
 }
 
-func (m *AssignMutator) Path() parser.Path {
+func (m *Mutator) Path() parser.Path {
 	return m.path
 }
 
-func (m *AssignMutator) DeepCopy() types.Mutator {
-	res := &AssignMutator{
+func (m *Mutator) DeepCopy() types.Mutator {
+	res := &Mutator{
 		id:          m.id,
 		assign:      m.assign.DeepCopy(),
 		assignValue: runtime.DeepCopyJSONValue(m.assignValue),
@@ -150,13 +154,13 @@ func (m *AssignMutator) DeepCopy() types.Mutator {
 	return res
 }
 
-func (m *AssignMutator) String() string {
+func (m *Mutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assign.GetGeneration())
 }
 
-// MutatorForAssign returns an AssignMutator built from
+// MutatorForAssign returns an mutator built from
 // the given assign instance.
-func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) {
+func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
@@ -212,7 +216,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*AssignMutator, error) 
 		return nil, fmt.Errorf("applyTo required for Assign mutator %s", assign.GetName())
 	}
 
-	return &AssignMutator{
+	return &Mutator{
 		id:          id,
 		assign:      assign.DeepCopy(),
 		assignValue: value,

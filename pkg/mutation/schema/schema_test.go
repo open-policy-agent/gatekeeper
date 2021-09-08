@@ -47,6 +47,10 @@ func (m *fakeMutator) Value() (interface{}, error) {
 	panic("should not be called")
 }
 
+func (m *fakeMutator) TerminalType() parser.NodeType {
+	return Unknown
+}
+
 func (m *fakeMutator) ID() types.ID { return m.id }
 
 func (m *fakeMutator) HasDiff(other types.Mutator) bool {
