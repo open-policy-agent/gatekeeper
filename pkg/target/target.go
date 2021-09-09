@@ -264,6 +264,12 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	return nil
 }
 
+func propsWithDescription(props apiextensions.JSONSchemaProps, description string) apiextensions.JSONSchemaProps {
+	propCopy := props.DeepCopy()
+	propCopy.Description = description
+	return *propCopy
+}
+
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	// Define some repeatedly used sections
 	stringList := apiextensions.JSONSchemaProps{
@@ -326,7 +332,8 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"kinds": {
-				Type: "array",
+				Type:        "array",
+				Description: "kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
 						Type: "object",
@@ -337,12 +344,13 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					},
 				},
 			},
-			"namespaces":         wildcardNSList,
-			"excludedNamespaces": wildcardNSList,
-			"labelSelector":      labelSelectorSchema,
-			"namespaceSelector":  labelSelectorSchema,
+			"namespaces":         propsWithDescription(wildcardNSList, "namespaces is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace."),
+			"excludedNamespaces": propsWithDescription(wildcardNSList, "excludedNamespaces is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace."),
+			"labelSelector":      propsWithDescription(labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
+			"namespaceSelector":  propsWithDescription(labelSelectorSchema, "namespaceSelector is a standard Kubernetes namespace selector. If defined, make sure to add Namespaces to your configs.config.gatekeeper.sh object to ensure namespaces are synced into OPA."),
 			"scope": {
-				Type: "string",
+				Type:        "string",
+				Description: "scope accepts *, Cluster, or Namespaced which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to *)",
 				Enum: []apiextensions.JSON{
 					"*",
 					"Cluster",
