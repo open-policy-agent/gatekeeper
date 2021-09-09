@@ -480,6 +480,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		gvk := r.Constraint.GroupVersionKind()
 		enforcementAction := r.EnforcementAction
 		message := r.Msg
+		details := r.Metadata["details"]
 		resource, ok := r.Resource.(*unstructured.Unstructured)
 		if !ok {
 			return errors.Errorf("could not cast resource as reviewResource: %v", r.Resource)
@@ -505,7 +506,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		}
 		ea := util.EnforcementAction(enforcementAction)
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, r.EnforcementAction, resource.GroupVersionKind(), rnamespace, rname, message)
+		logViolation(am.log, r.Constraint, r.EnforcementAction, resource.GroupVersionKind(), rnamespace, rname, message, details)
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, enforcementAction, resource.GroupVersionKind(), rnamespace, rname, message, am.gkNamespace, am.eventRecorder)
 		}
@@ -768,9 +769,10 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string) {
+	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}) {
 	l.Info(
 		message,
+		logging.Details, details,
 		logging.EventType, "violation_audited",
 		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
 		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
