@@ -23,20 +23,27 @@ type System struct {
 	mutatorsMap     map[types.ID]types.Mutator
 	mux             sync.RWMutex
 	reporter        StatsReporter
+	newUUID         func() uuid.UUID
 }
 
 // SystemOpts allows for optional dependencies to be passed into the mutation System.
 type SystemOpts struct {
 	Reporter StatsReporter
+	NewUUID     func() uuid.UUID
 }
 
 // NewSystem initializes an empty mutation system.
 func NewSystem(options SystemOpts) *System {
+	if options.NewUUID == nil {
+		options.NewUUID = uuid.New
+	}
+
 	return &System{
 		schemaDB:        *schema.New(),
 		orderedMutators: orderedMutators{},
 		mutatorsMap:     make(map[types.ID]types.Mutator),
 		reporter:        options.Reporter,
+		newUUID:         options.NewUUID,
 	}
 }
 
@@ -52,8 +59,8 @@ func (s *System) Get(id types.ID) types.Mutator {
 	return mutator.DeepCopy()
 }
 
-// Upsert updates or insert the given object, and returns
-// an error in case of conflicts.
+// Upsert updates or inserts the given object. Returns an error in case of
+// schema conflicts.
 func (s *System) Upsert(m types.Mutator) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -65,7 +72,7 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	toAdd := m.DeepCopy()
 
-	// Checking schema consistency only if the mutator has schema
+	// Check schema consistency only if the mutator has schema.
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
@@ -75,7 +82,6 @@ func (s *System) Upsert(m types.Mutator) error {
 	}
 
 	s.mutatorsMap[toAdd.ID()] = toAdd
-
 	return s.orderedMutators.insert(toAdd)
 }
 
@@ -91,40 +97,42 @@ func (s *System) Remove(id types.ID) error {
 	s.schemaDB.Remove(id)
 
 	delete(s.mutatorsMap, id)
-
 	return s.orderedMutators.remove(id)
 }
 
 // Mutate applies the mutation in place to the given object. Returns
-// true if a mutation was performed.
+// true if applying Mutators caused any changes to the object.
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 
-	mutationUUID := uuid.New()
-	original := obj.DeepCopy()
+	convergence := SystemConvergenceFalse
 
-	var allAppliedMutations [][]types.Mutator
-	if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
-		allAppliedMutations = [][]types.Mutator{}
+	iterations, err := s.mutate(obj, ns)
+	if err == nil {
+		convergence = SystemConvergenceTrue
 	}
 
-	iterations := 0
-	convergence := SystemConvergenceFalse
-	defer func() {
-		if s.reporter == nil {
-			return
-		}
-
-		err := s.reporter.ReportIterationConvergence(convergence, iterations)
+	if s.reporter != nil {
+		err = s.reporter.ReportIterationConvergence(convergence, iterations)
 		if err != nil {
 			log.Error(err, "failed to report mutator ingestion request")
 		}
-	}()
+	}
 
+	mutated := iterations != 0 && err == nil
+	return mutated, err
+}
+
+// mutate runs all Mutators on obj. Returns the number of iterations required
+// to converge, and any error encountered attempting to run Mutators.
+func (s *System) mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (int, error) {
+	mutationUUID := s.newUUID()
+	original := obj.DeepCopy()
+	var allAppliedMutations [][]types.Mutator
 	maxIterations := len(s.orderedMutators.mutators) + 1
-	for i := 0; i < maxIterations; i++ {
-		iterations++
+
+	for iteration := 1; iteration <= maxIterations; iteration++ {
 		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
 
@@ -140,7 +148,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
+					return iteration, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
 						mutationUUID,
 						m.ID(),
 						obj.GroupVersionKind().Group,
@@ -151,30 +159,22 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 			}
 		}
 
-		if len(appliedMutations) == 0 {
+		if len(appliedMutations) == 0 || cmp.Equal(old, obj) {
 			// If no mutations were applied, we can safely assume the object is
 			// identical to before.
-			return i > 0, nil
-		}
-
-		if cmp.Equal(old, obj) {
-			if i == 0 {
-				convergence = SystemConvergenceTrue
-				return false, nil
+			if iteration == 1 {
+				return 0, nil
 			}
+
 			if *MutationLoggingEnabled {
 				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
 			}
 
 			if *MutationAnnotationsEnabled {
-				err := mutationAnnotations(obj, allAppliedMutations, mutationUUID)
-				if err != nil {
-					log.Error(err, "Error applying mutation annotations", "mutation id", mutationUUID)
-				}
+				mutationAnnotations(obj, allAppliedMutations, mutationUUID)
 			}
 
-			convergence = SystemConvergenceTrue
-			return true, nil
+			return iteration, nil
 		}
 
 		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
@@ -186,7 +186,7 @@ func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (b
 		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
 	}
 
-	return false, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
+	return maxIterations, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
 		ErrNotConverging,
 		mutationUUID,
 		obj.GroupVersionKind().Group,

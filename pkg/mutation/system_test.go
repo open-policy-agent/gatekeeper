@@ -105,7 +105,7 @@ func (m *fakeMutator) DeepCopy() types.Mutator {
 }
 
 func (m *fakeMutator) String() string {
-	return ""
+	return m.MID.String()
 }
 
 func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
@@ -685,62 +685,37 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	}
 }
 
-var _ types.Mutator = &errorMutator{}
+func TestSystem_Mutate_InverseMutations(t *testing.T) {
+	// Construct Mutators which perform conflicting operations and an object which
+	// will be unchanged by applying the Mutators in order.
+	m1 := &fakeMutator{
+		MID:    types.ID{Name: "mutation-1"},
+		Labels: map[string]string{"foo": "qux"},
+	}
+	m2 := &fakeMutator{
+		MID:    types.ID{Name: "mutation-2"},
+		Labels: map[string]string{"foo": "bar"},
+	}
 
-type errorMutator struct {
-	err error
-}
-
-func (e errorMutator) Matches(client.Object, *corev1.Namespace) bool {
-	return true
-}
-
-func (e errorMutator) Mutate(*unstructured.Unstructured) (bool, error) {
-	return false, e.err
-}
-
-func (e errorMutator) ID() types.ID {
-	return types.ID{}
-}
-
-func (e errorMutator) HasDiff(types.Mutator) bool {
-	panic("implement me")
-}
-
-func (e errorMutator) DeepCopy() types.Mutator {
-	return errorMutator{err: fmt.Errorf(e.err.Error())}
-}
-
-func (e errorMutator) Value() (interface{}, error) {
-	return nil, nil
-}
-
-func (e errorMutator) Path() parser.Path {
-	return parser.Path{}
-}
-
-func (e errorMutator) String() string {
-	return ""
-}
-
-func TestSystem_Mutate_Fail(t *testing.T) {
-	m := &errorMutator{err: errors.New("some error")}
+	obj := &unstructured.Unstructured{}
+	obj.SetLabels(map[string]string{"foo": "bar"})
 
 	s := NewSystem(SystemOpts{})
-
-	err := s.Upsert(m)
+	err := s.Upsert(m1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.Upsert(m2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(u, nil)
-
-	if gotMutated != false {
-		t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
+	mutated, err := s.Mutate(obj, nil)
+	if mutated {
+		t.Errorf("got Mutate() = %t, want %t", mutated, false)
 	}
 
-	if gotErr == nil {
-		t.Errorf("got Mutate() error = %v, want error", gotErr)
+	if err != nil {
+		t.Errorf("got Mutate() error = %v, want %v", err, nil)
 	}
 }
