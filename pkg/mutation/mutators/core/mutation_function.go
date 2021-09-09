@@ -14,10 +14,79 @@ import (
 
 var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
-func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface{}, bool) bool, obj *unstructured.Unstructured) (bool, error) {
-	s := &mutatorState{mutator: mutator, tester: tester, valueTest: valueTest}
-	if len(mutator.Path().Nodes) == 0 {
-		return false, fmt.Errorf("mutator %v has an empty target location", mutator.ID())
+// Setter tells the mutate function what to do once we have found the
+// node that needs mutating.
+type Setter interface {
+	// SetValue takes the object that needs mutating and the key of the
+	// field on that object that should be mutated. It is up to the
+	// implementor to actually mutate the object.
+	SetValue(obj map[string]interface{}, key string) error
+
+	// KeyedListOkay returns whether this setter can handle keyed lists.
+	// If it can't, an attempt to mutate a keyed-list-type field will
+	// result in an error.
+	KeyedListOkay() bool
+
+	// KeyedListValue is the value that will be assigned to the
+	// targeted keyed list entry. Unline SetValue(), this does
+	// not do mutation directly.
+	KeyedListValue() (map[string]interface{}, error)
+}
+
+var _ Setter = &DefaultSetter{}
+
+func NewDefaultSetter(m types.Mutator) *DefaultSetter {
+	return &DefaultSetter{mutator: m}
+}
+
+// DefaultSetter is a setter that merely sets the value at the specified path
+// to the provided value. No special logic, like set merging.
+type DefaultSetter struct {
+	mutator types.Mutator
+}
+
+func (s *DefaultSetter) KeyedListOkay() bool { return true }
+
+func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
+	value, err := s.mutator.Value()
+	if err != nil {
+		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
+		return nil, err
+	}
+	valueAsObject, ok := value.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("assign.value for keyed list mutator %s is not an object", s.mutator.ID())
+	}
+	return valueAsObject, nil
+}
+
+func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
+	value, err := s.mutator.Value()
+	if err != nil {
+		return err
+	}
+	obj[key] = value
+	return nil
+}
+
+func Mutate(
+	path parser.Path,
+	tester *path.Tester,
+	valueTest func(interface{}, bool) bool,
+	setter Setter,
+	obj *unstructured.Unstructured,
+) (bool, error) {
+	if setter == nil {
+		return false, errors.New("setter must not be nil")
+	}
+	s := &mutatorState{
+		path:      path,
+		tester:    tester,
+		valueTest: valueTest,
+		setter:    setter,
+	}
+	if len(path.Nodes) == 0 {
+		return false, errors.New("attempting to mutate an empty target location")
 	}
 	if obj == nil {
 		return false, errors.New("attempting to mutate a nil object")
@@ -27,17 +96,18 @@ func Mutate(mutator types.Mutator, tester *path.Tester, valueTest func(interface
 }
 
 type mutatorState struct {
-	mutator types.Mutator
-	tester  *path.Tester
+	path   parser.Path
+	tester *path.Tester
 	// valueTest takes the input value and whether that value already existed.
 	// It returns true if the value should be mutated
 	valueTest func(interface{}, bool) bool
+	setter    Setter
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
 // to any downstream objects in the tree, indicating that the mutation should not be persisted.
 func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, interface{}, error) {
-	pathEntry := s.mutator.Path().Nodes[depth]
+	pathEntry := s.path.Nodes[depth]
 	switch castPathEntry := pathEntry.(type) {
 	case *parser.Object:
 		currentAsObject, ok := current.(map[string]interface{})
@@ -55,15 +125,13 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 			}
 		}
 		// we have hit the end of our path, this is the base case
-		if len(s.mutator.Path().Nodes)-1 == depth {
+		if len(s.path.Nodes)-1 == depth {
 			if s.valueTest != nil && !s.valueTest(next, exists) {
 				return false, nil, nil
 			}
-			value, err := s.mutator.Value()
-			if err != nil {
+			if err := s.setter.SetValue(currentAsObject, castPathEntry.Reference); err != nil {
 				return false, nil, err
 			}
-			currentAsObject[castPathEntry.Reference] = value
 			return true, currentAsObject, nil
 		}
 		if !exists { // Next element is missing and needs to be added
@@ -89,7 +157,11 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		}
 		shallowCopy := make([]interface{}, len(currentAsList))
 		copy(shallowCopy, currentAsList)
-		if len(s.mutator.Path().Nodes)-1 == depth {
+		// base case
+		if len(s.path.Nodes)-1 == depth {
+			if !s.setter.KeyedListOkay() {
+				return false, nil, ErrNonKeyedSetter
+			}
 			return s.setListElementToValue(shallowCopy, castPathEntry, depth)
 		}
 
@@ -150,14 +222,10 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 	if listPathEntry.Glob {
 		return false, nil, fmt.Errorf("last path entry can not be globbed")
 	}
-	newValue, err := s.mutator.Value()
+
+	newValueAsObject, err := s.setter.KeyedListValue()
 	if err != nil {
-		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
 		return false, nil, err
-	}
-	newValueAsObject, ok := newValue.(map[string]interface{})
-	if !ok {
-		return false, nil, fmt.Errorf("last path entry of type list requires an object value, pathEntry: %+v", listPathEntry)
 	}
 
 	key := listPathEntry.KeyField
@@ -189,8 +257,8 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 
 func (s *mutatorState) createMissingElement(depth int) (interface{}, error) {
 	var next interface{}
-	pathEntry := s.mutator.Path().Nodes[depth]
-	nextPathEntry := s.mutator.Path().Nodes[depth+1]
+	pathEntry := s.path.Nodes[depth]
+	nextPathEntry := s.path.Nodes[depth+1]
 
 	// Create new element of type
 	switch nextPathEntry.(type) {

@@ -3,6 +3,7 @@ package logging
 // Log keys.
 const (
 	Process              = "process"
+	Details              = "details"
 	EventType            = "event_type"
 	TemplateName         = "template_name"
 	ConstraintNamespace  = "constraint_namespace"
@@ -21,5 +22,6 @@ const (
 	ResourceName         = "resource_name"
 	RequestUsername      = "request_username"
 	MutationApplied      = "mutation_applied"
+	Mutator              = "mutator"
 	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )

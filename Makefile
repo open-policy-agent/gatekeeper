@@ -7,7 +7,7 @@ CRD_IMG := $(CRD_REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 
-VERSION := v3.6.0-beta.3
+VERSION := v3.7.0-beta.1
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -188,10 +188,6 @@ deploy-mutation: patch-image
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  --load_restrictor LoadRestrictionsNone \
 	  /config/overlays/dev_mutation | kubectl apply -f -
-	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone \
-	  /config/overlays/mutation | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
@@ -208,10 +204,6 @@ manifests: __controller-gen
 		paths="./apis/..." \
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
-	# As mutation CRDs are not ready to be included in our final gatekeeper.yaml, we leave them out of config/crd/kustomization.yaml.
-	# This makes these files unavailable to the helmify step below.  The solve for this was to copy the mutation CRDs into
-	# config/overlays/mutation_webhook/.  To maintain the generation pipeline, we do that copy step here.
-	cp config/crd/bases/*mutat* config/overlays/mutation_webhook/
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy
 	mkdir -p manifest_staging/charts/gatekeeper

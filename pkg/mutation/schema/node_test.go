@@ -13,7 +13,8 @@ import (
 
 type idPath struct {
 	types.ID
-	path string
+	path         string
+	terminalType parser.NodeType
 }
 
 func id(name string) types.ID {
@@ -29,7 +30,11 @@ func ids(names ...string) idSet {
 }
 
 func ip(name string, path string) idPath {
-	return idPath{ID: id(name), path: path}
+	return idPath{ID: id(name), path: path, terminalType: Unknown}
+}
+
+func ipt(name string, path string, terminalType parser.NodeType) idPath {
+	return idPath{ID: id(name), path: path, terminalType: terminalType}
 }
 
 func gvk(group, version, kind string) schema.GroupVersionKind {
@@ -85,6 +90,14 @@ func TestNode_Add(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "no conflict if ambiguous Set",
+			before: []idPath{
+				ip("object", "spec.containers"),
+			},
+			add:  ipt("set", "spec.containers", Set),
+			want: nil,
+		},
+		{
 			name: "list vs. object conflict",
 			before: []idPath{
 				ip("object", "spec.name"),
@@ -93,6 +106,28 @@ func TestNode_Add(t *testing.T) {
 			want: map[types.ID]bool{
 				id("object"): true,
 				id("list"):   true,
+			},
+		},
+		{
+			name: "list vs. set conflict",
+			before: []idPath{
+				ip("list", "spec.containers[name: foo]"),
+			},
+			add: ipt("set", "spec.containers", Set),
+			want: map[types.ID]bool{
+				id("list"): true,
+				id("set"):  true,
+			},
+		},
+		{
+			name: "obj vs. set conflict",
+			before: []idPath{
+				ip("object", "spec.containers.name"),
+			},
+			add: ipt("set", "spec.containers", Set),
+			want: map[types.ID]bool{
+				id("object"): true,
+				id("set"):    true,
 			},
 		},
 		{
@@ -129,14 +164,14 @@ func TestNode_Add(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes)
+				root.Add(p.ID, path.Nodes, p.terminalType)
 			}
 
 			path, err := parser.Parse(tc.add.path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			conflicts := root.Add(tc.add.ID, path.Nodes)
+			conflicts := root.Add(tc.add.ID, path.Nodes, tc.add.terminalType)
 			if diff := cmp.Diff(tc.want, conflicts); diff != "" {
 				t.Error(diff)
 			}
@@ -192,7 +227,7 @@ func TestNode_RemovePanic(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes)
+				root.Add(p.ID, path.Nodes, Unknown)
 			}
 
 			pRemove, err := parser.Parse(tc.toRemove.path)
@@ -207,7 +242,7 @@ func TestNode_RemovePanic(t *testing.T) {
 					t.Errorf("expected Remove to succeed but panicked: %v", r)
 				}
 			}()
-			root.Remove(tc.toRemove.ID, pRemove.Nodes)
+			root.Remove(tc.toRemove.ID, pRemove.Nodes, Unknown)
 		})
 	}
 }
@@ -218,6 +253,7 @@ func TestNode_Remove(t *testing.T) {
 		before             []idPath
 		toRemove           []idPath
 		toCheck            string
+		terminalType       parser.NodeType
 		wantConflictBefore bool
 		wantConflictAfter  bool
 	}{
@@ -229,6 +265,17 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("object", "spec.name")},
 			toCheck:            "spec[name: foo]",
+			wantConflictBefore: true,
+			wantConflictAfter:  false,
+		},
+		{
+			name: "remove set conflict same key",
+			before: []idPath{
+				ip("object", "spec.containers.hello"),
+				ipt("set", "spec.containers", Set),
+			},
+			toRemove:           []idPath{ipt("set", "spec.containers", Set)},
+			toCheck:            "spec.containers.hello",
 			wantConflictBefore: true,
 			wantConflictAfter:  false,
 		},
@@ -251,6 +298,17 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("list", "spec[name: foo]")},
 			toCheck:            "spec.name.id",
+			wantConflictBefore: true,
+			wantConflictAfter:  false,
+		},
+		{
+			name: "remove list-set conflict",
+			before: []idPath{
+				ipt("set", "spec.containers", Set),
+				ip("list", "spec.containers[name: foo]"),
+			},
+			toRemove:           []idPath{ipt("set", "spec.containers", Set)},
+			toCheck:            "spec.containers[name: foo]",
 			wantConflictBefore: true,
 			wantConflictAfter:  false,
 		},
@@ -316,14 +374,14 @@ func TestNode_Remove(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes)
+				root.Add(p.ID, path.Nodes, p.terminalType)
 			}
 
 			pCheck, err := parser.Parse(tc.toCheck)
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotConflictBefore, gotConflictBeforeErr := root.HasConflicts(pCheck.Nodes)
+			gotConflictBefore, gotConflictBeforeErr := root.HasConflicts(pCheck.Nodes, Unknown)
 			if gotConflictBefore != tc.wantConflictBefore {
 				t.Errorf("before remove got HasConflicts(%q) = %t, want %t",
 					tc.toCheck, gotConflictBefore, tc.wantConflictBefore)
@@ -338,10 +396,10 @@ func TestNode_Remove(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Remove(toRemove.ID, pRemove.Nodes)
+				root.Remove(toRemove.ID, pRemove.Nodes, toRemove.terminalType)
 			}
 
-			gotConflictAfter, gotConflictAfterErr := root.HasConflicts(pCheck.Nodes)
+			gotConflictAfter, gotConflictAfterErr := root.HasConflicts(pCheck.Nodes, Unknown)
 			if gotConflictAfter != tc.wantConflictAfter {
 				t.Errorf("after remove got HasConflicts(%q) = %t, want %t",
 					tc.toCheck, gotConflictAfter, tc.wantConflictAfter)
@@ -360,10 +418,11 @@ func TestNode_Add_Internals(t *testing.T) {
 	// desired.
 
 	testCases := []struct {
-		name   string
-		before []string
-		toAdd  string
-		want   node
+		name         string
+		before       []string
+		toAdd        string
+		terminalType parser.NodeType
+		want         node
 	}{
 		{
 			name:  "just root",
@@ -372,7 +431,7 @@ func TestNode_Add_Internals(t *testing.T) {
 				ReferencedBy: ids("added"),
 				Children: map[string]map[parser.NodeType]node{
 					"spec": {
-						unknown: node{
+						Unknown: node{
 							ReferencedBy: ids("added"),
 						},
 					},
@@ -389,7 +448,7 @@ func TestNode_Add_Internals(t *testing.T) {
 				ReferencedBy: ids("0", "added"),
 				Children: map[string]map[parser.NodeType]node{
 					"spec": {
-						unknown: node{
+						Unknown: node{
 							ReferencedBy: ids("0", "added"),
 						},
 					},
@@ -407,7 +466,7 @@ func TestNode_Add_Internals(t *testing.T) {
 							ReferencedBy: ids("added"),
 							Children: map[string]map[parser.NodeType]node{
 								"name": {
-									unknown: node{
+									Unknown: node{
 										ReferencedBy: ids("added"),
 									},
 								},
@@ -428,7 +487,29 @@ func TestNode_Add_Internals(t *testing.T) {
 							ReferencedBy: ids("added"),
 							Children: map[string]map[parser.NodeType]node{
 								"name": {
-									unknown: node{
+									Unknown: node{
+										ReferencedBy: ids("added"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:         "set node",
+			toAdd:        "spec.containers",
+			terminalType: Set,
+			want: node{
+				ReferencedBy: ids("added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						parser.ObjectNode: node{
+							ReferencedBy: ids("added"),
+							Children: map[string]map[parser.NodeType]node{
+								"containers": {
+									Set: node{
 										ReferencedBy: ids("added"),
 									},
 								},
@@ -452,7 +533,7 @@ func TestNode_Add_Internals(t *testing.T) {
 							ReferencedBy: ids("0"),
 							Children: map[string]map[parser.NodeType]node{
 								"name": {
-									unknown: node{
+									Unknown: node{
 										ReferencedBy: ids("0"),
 									},
 								},
@@ -462,7 +543,7 @@ func TestNode_Add_Internals(t *testing.T) {
 							ReferencedBy: ids("added"),
 							Children: map[string]map[parser.NodeType]node{
 								"name": {
-									unknown: node{
+									Unknown: node{
 										ReferencedBy: ids("added"),
 									},
 								},
@@ -483,7 +564,7 @@ func TestNode_Add_Internals(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(id(fmt.Sprint(i)), p.Nodes)
+				root.Add(id(fmt.Sprint(i)), p.Nodes, Unknown)
 			}
 			rootBefore := *root.DeepCopy()
 
@@ -492,13 +573,16 @@ func TestNode_Add_Internals(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			root.Add(id("added"), p.Nodes)
+			if tc.terminalType == parser.NodeType("") {
+				tc.terminalType = Unknown
+			}
+			root.Add(id("added"), p.Nodes, tc.terminalType)
 
 			if diff := cmp.Diff(tc.want, root, cmpopts.EquateEmpty()); diff != "" {
 				t.Error(diff)
 			}
 
-			root.Remove(id("added"), p.Nodes)
+			root.Remove(id("added"), p.Nodes, tc.terminalType)
 
 			// We expect that adding and then removing the path causes no change.
 			if diff := cmp.Diff(rootBefore, root, cmpopts.EquateEmpty()); diff != "" {
