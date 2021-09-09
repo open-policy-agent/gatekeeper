@@ -36,6 +36,7 @@ podCountLimit: 100
 secretAnnotations: {}
 controllerManager:
   exemptNamespaces: []
+  exemptNamespacePrefixes: []
   hostNetwork: false
   port: 8443
   metricsPort: 8888
