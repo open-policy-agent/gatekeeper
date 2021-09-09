@@ -112,186 +112,6 @@ func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
 	return m.GVKs
 }
 
-func initMutators() []types.Mutator {
-	return []types.Mutator{
-		&fakeMutator{
-			MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-		},
-		&fakeMutator{
-			MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"},
-		},
-		&fakeMutator{
-			MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"},
-		},
-		&fakeMutator{
-			MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"},
-		},
-		&fakeMutator{
-			MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-		},
-		&fakeMutator{
-			MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-		},
-	}
-}
-
-func TestSorting(t *testing.T) {
-	table := []struct {
-		name    string
-		initial []types.Mutator
-		want    []types.Mutator
-		action  func(*System) error
-	}{
-		{
-			name:    "sort",
-			initial: initMutators(),
-			want: []types.Mutator{
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-			},
-			action: func(s *System) error { return nil },
-		},
-		{
-			name:    "remove",
-			initial: initMutators(),
-			want: []types.Mutator{
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-			},
-			action: func(s *System) error {
-				return s.Remove(types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"})
-			},
-		},
-		{
-			name:    "add same",
-			initial: initMutators(),
-			want: []types.Mutator{
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-			},
-			action: func(s *System) error {
-				return s.Upsert(&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-				})
-			},
-		},
-		{
-			name:    "add different",
-			initial: initMutators(),
-			want: []types.Mutator{
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "aaa", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "aaa", Name: "aaa"},
-				},
-				&fakeMutator{
-					MID:   types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-					MPath: mustParse("relevant-value"),
-					GVKs:  []schema.GroupVersionKind{{Kind: "foo"}},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "ddd"},
-				},
-				&fakeMutator{
-					MID: types.ID{Group: "bbb", Kind: "aaa", Namespace: "aaa", Name: "aaa"},
-				},
-			},
-			action: func(s *System) error {
-				return s.Upsert(&fakeMutator{
-					MID:   types.ID{Group: "aaa", Kind: "bbb", Namespace: "ccc", Name: "aaa"},
-					MPath: mustParse("relevant-value"),
-					GVKs:  []schema.GroupVersionKind{{Kind: "foo"}},
-				})
-			},
-		},
-	}
-
-	for _, tc := range table {
-		t.Run(tc.name, func(t *testing.T) {
-			c := NewSystem(SystemOpts{})
-
-			for i, m := range tc.initial {
-				err := c.Upsert(m)
-				if err != nil {
-					t.Errorf("Failed inserting %dth object", i)
-				}
-			}
-
-			err := tc.action(c)
-			if err != nil {
-				t.Errorf("test action failed %v", err)
-			}
-
-			if len(c.orderedMutators.mutators) != len(tc.want) {
-				t.Errorf("want %d object from the operator, found %d",
-					len(c.orderedMutators.mutators), len(tc.want))
-			}
-
-			if diff := cmp.Diff(tc.want, c.orderedMutators.mutators, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf("Cache content is not consistent: %s", diff)
-			}
-
-			wantMap := make(map[types.ID]types.Mutator)
-			for _, m := range tc.want {
-				wantMap[m.ID()] = m
-			}
-
-			if diff := cmp.Diff(wantMap, c.mutatorsMap, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf("Cache content (map) is not consistent: %s", diff)
-			}
-		})
-	}
-}
-
 func TestMutation(t *testing.T) {
 	table := []struct {
 		name           string
@@ -410,9 +230,10 @@ func TestMutation(t *testing.T) {
 			}
 
 			// Fetch a mock mutator to check the number of iterations.
-			probe, ok := c.orderedMutators.mutators[0].(*fakeMutator)
+			mID := c.orderedMutators.ids[0]
+			probe, ok := c.mutatorsMap[mID].(*fakeMutator)
 			if !ok {
-				t.Fatalf("mutator type %T, want %T", c.orderedMutators.mutators[0], &fakeMutator{})
+				t.Fatalf("mutator type %T, want %T", c.orderedMutators.ids[0], &fakeMutator{})
 			}
 
 			if probe.MutationCount != tc.wantIterations {
@@ -717,5 +538,32 @@ func TestSystem_Mutate_InverseMutations(t *testing.T) {
 
 	if err != nil {
 		t.Errorf("got Mutate() error = %v, want %v", err, nil)
+	}
+}
+
+func TestSystem_Upsert_ReplaceMutator(t *testing.T) {
+	idFoo := types.ID{Name: "foo"}
+	m := &fakeMutator{MID: idFoo}
+
+	s := NewSystem(SystemOpts{})
+
+	err := s.Upsert(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m2 := &fakeMutator{MID: idFoo, MPath: mustParse("foo")}
+
+	if diff := cmp.Diff(m2, s.mutatorsMap[idFoo], cmpopts.EquateEmpty()); diff == "" {
+		t.Fatal("mutators are indistinguishable")
+	}
+
+	err = s.Upsert(m2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(m2, s.mutatorsMap[idFoo], cmpopts.EquateEmpty()); diff != "" {
+		t.Error(diff)
 	}
 }

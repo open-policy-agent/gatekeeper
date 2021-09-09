@@ -16,6 +16,10 @@ import (
 // ErrNotConverging reports that applying all Mutators isn't converging.
 var ErrNotConverging = errors.New("mutation not converging")
 
+// ErrNotRemoved reports that we were unable to remove a Mutator properly as
+// System was in an inconsistent state.
+var ErrNotRemoved = errors.New("failed to find mutator on sorted list")
+
 // System keeps the list of mutators and provides an interface to apply mutations.
 type System struct {
 	schemaDB        schema.DB
@@ -83,7 +87,7 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	s.mutatorsMap[id] = toAdd
 
-	s.orderedMutators.insert(toAdd)
+	s.orderedMutators.insert(id)
 	return nil
 }
 
@@ -102,7 +106,7 @@ func (s *System) Remove(id types.ID) error {
 
 	removed := s.orderedMutators.remove(id)
 	if !removed {
-		return fmt.Errorf("failed to find mutator with ID %v on sorted list", id)
+		return fmt.Errorf("%w: ID %v", ErrNotRemoved, id)
 	}
 	return nil
 }
@@ -137,18 +141,19 @@ func (s *System) mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (i
 	mutationUUID := s.newUUID()
 	original := obj.DeepCopy()
 	var allAppliedMutations [][]types.Mutator
-	maxIterations := len(s.orderedMutators.mutators) + 1
+	maxIterations := len(s.orderedMutators.ids) + 1
 
 	for iteration := 1; iteration <= maxIterations; iteration++ {
 		var appliedMutations []types.Mutator
 		old := obj.DeepCopy()
 
-		for _, m := range s.orderedMutators.mutators {
-			if s.schemaDB.HasConflicts(m.ID()) {
+		for _, id := range s.orderedMutators.ids {
+			if s.schemaDB.HasConflicts(id) {
 				// Don't try to apply Mutators which have conflicts.
 				continue
 			}
 
+			m := s.mutatorsMap[id]
 			if m.Matches(obj, ns) {
 				mutated, err := m.Mutate(obj)
 				if mutated {

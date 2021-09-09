@@ -14,7 +14,7 @@ const (
 )
 
 // SystemConvergenceStatus defines the outcomes of the attempted mutation of an object by the
-// mutation System.  The System is meant to converge on a fully mutated object.
+// mutation System. The System is meant to converge on a fully mutated object.
 type SystemConvergenceStatus string
 
 const (
