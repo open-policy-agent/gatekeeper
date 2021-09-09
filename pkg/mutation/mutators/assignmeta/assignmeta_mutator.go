@@ -71,7 +71,7 @@ func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	// function instead of using a generic function. AssignMetadata only ever
 	// mutates metadata.annotations or metadata.labels, and we spend ~70% of
 	// compute covering cases that aren't valid for this Mutator.
-	return core.Mutate(m.path, m.tester, nil, core.NewDefaultSetter(m), obj)
+	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(m), obj)
 }
 
 func (m *Mutator) ID() types.ID {

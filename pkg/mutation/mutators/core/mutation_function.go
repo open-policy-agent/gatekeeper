@@ -72,7 +72,6 @@ func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
 func Mutate(
 	path parser.Path,
 	tester *path.Tester,
-	valueTest func(interface{}, bool) bool,
 	setter Setter,
 	obj *unstructured.Unstructured,
 ) (bool, error) {
@@ -80,10 +79,9 @@ func Mutate(
 		return false, errors.New("setter must not be nil")
 	}
 	s := &mutatorState{
-		path:      path,
-		tester:    tester,
-		valueTest: valueTest,
-		setter:    setter,
+		path:   path,
+		tester: tester,
+		setter: setter,
 	}
 	if len(path.Nodes) == 0 {
 		return false, errors.New("attempting to mutate an empty target location")
@@ -98,10 +96,7 @@ func Mutate(
 type mutatorState struct {
 	path   parser.Path
 	tester *path.Tester
-	// valueTest takes the input value and whether that value already existed.
-	// It returns true if the value should be mutated
-	valueTest func(interface{}, bool) bool
-	setter    Setter
+	setter Setter
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
@@ -126,9 +121,6 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		}
 		// we have hit the end of our path, this is the base case
 		if len(s.path.Nodes)-1 == depth {
-			if s.valueTest != nil && !s.valueTest(next, exists) {
-				return false, nil, nil
-			}
 			if err := s.setter.SetValue(currentAsObject, castPathEntry.Reference); err != nil {
 				return false, nil, err
 			}

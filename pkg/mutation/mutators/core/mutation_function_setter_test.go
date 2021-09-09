@@ -26,7 +26,7 @@ func TestKeyedListIncompatible(t *testing.T) {
 		t.Fatal(err)
 	}
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
-	m, err := Mutate(path, &tester.Tester{}, nil, &notKeyedSetter{}, obj)
+	m, err := Mutate(path, &tester.Tester{}, &notKeyedSetter{}, obj)
 	if err != ErrNonKeyedSetter {
 		t.Errorf("wanted err = %+v, got %+v", ErrNonKeyedSetter, err)
 	}

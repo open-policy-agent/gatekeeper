@@ -79,8 +79,7 @@ func TestReconcile(t *testing.T) {
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
 			Location: "spec.test",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign:   runtime.RawExtension{Raw: []byte(`{"value": "works"}`)},
-				AssignIf: runtime.RawExtension{Raw: []byte(`{}`)},
+				Assign: runtime.RawExtension{Raw: []byte(`{"value": "works"}`)},
 			},
 		},
 	}

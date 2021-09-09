@@ -53,7 +53,7 @@ func (d *DummyMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 
 func (d *DummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, _ := path.New(parser.Path{}, nil)
-	return core.Mutate(d.Path(), t, func(_ interface{}, _ bool) bool { return true }, core.NewDefaultSetter(d), obj)
+	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d), obj)
 }
 
 func (d *DummyMutator) String() string {

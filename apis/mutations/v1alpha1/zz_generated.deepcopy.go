@@ -378,7 +378,6 @@ func (in *Parameters) DeepCopyInto(out *Parameters) {
 		*out = make([]PathTest, len(*in))
 		copy(*out, *in)
 	}
-	in.AssignIf.DeepCopyInto(&out.AssignIf)
 	in.Assign.DeepCopyInto(&out.Assign)
 }
 

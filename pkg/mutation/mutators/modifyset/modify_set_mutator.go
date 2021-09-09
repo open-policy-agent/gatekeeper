@@ -61,7 +61,6 @@ func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	return core.Mutate(
 		m.Path(),
 		m.tester,
-		nil,
 		setter{
 			op:     m.modifySet.Spec.Parameters.Operation,
 			values: runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{}),
