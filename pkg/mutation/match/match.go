@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,14 +47,14 @@ func (a ApplyTo) Flatten() []schema.GroupVersionKind {
 type Match struct {
 	Kinds              []Kinds                       `json:"kinds,omitempty"`
 	Scope              apiextensionsv1.ResourceScope `json:"scope,omitempty"`
-	Namespaces         []string                      `json:"namespaces,omitempty"`
-	ExcludedNamespaces []string                      `json:"excludedNamespaces,omitempty"`
+	Namespaces         []util.PrefixWildcard         `json:"namespaces,omitempty"`
+	ExcludedNamespaces []util.PrefixWildcard         `json:"excludedNamespaces,omitempty"`
 	LabelSelector      *metav1.LabelSelector         `json:"labelSelector,omitempty"`
 	NamespaceSelector  *metav1.LabelSelector         `json:"namespaceSelector,omitempty"`
 	// Name is the name of an object.  If defined, it will match against objects with the specified
 	// name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both
 	// `pod-a` and `pod-b`.
-	Name string `json:"name,omitempty"`
+	Name util.PrefixWildcard `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields
@@ -147,7 +148,7 @@ func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespa
 	}
 
 	for _, n := range match.ExcludedNamespaces {
-		if ns.Name == n || prefixMatch(n, ns.Name) {
+		if n.Matches(ns.Name) {
 			return false, nil
 		}
 	}
@@ -162,7 +163,7 @@ func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (boo
 	}
 
 	for _, n := range match.Namespaces {
-		if ns.Name == n || prefixMatch(n, ns.Name) {
+		if n.Matches(ns.Name) {
 			return true, nil
 		}
 	}
@@ -219,7 +220,7 @@ func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 		return true, nil
 	}
 
-	return match.Name == obj.GetName() || prefixMatch(match.Name, obj.GetName()), nil
+	return match.Name.Matches(obj.GetName()), nil
 }
 
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {

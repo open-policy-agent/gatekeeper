@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -166,7 +167,7 @@ func TestMatch(t *testing.T) {
 			tname:   "namespace matches",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
-				Namespaces: []string{"nonmatching", "namespace"},
+				Namespaces: []util.PrefixWildcard{"nonmatching", "namespace"},
 			},
 			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
 			shouldMatch: true,
@@ -176,7 +177,7 @@ func TestMatch(t *testing.T) {
 			tname:   "namespaces configured, but cluster scoped",
 			toMatch: makeObject("kind", "group", "", "name"),
 			match: Match{
-				Namespaces: []string{"nonmatching", "namespace"},
+				Namespaces: []util.PrefixWildcard{"nonmatching", "namespace"},
 			},
 			namespace:   nil,
 			shouldMatch: true,
@@ -185,7 +186,7 @@ func TestMatch(t *testing.T) {
 			tname:   "namespace prefix matches",
 			toMatch: makeObject("kind", "group", "kube-system", "name"),
 			match: Match{
-				Namespaces: []string{"nonmatching", "kube-*"},
+				Namespaces: []util.PrefixWildcard{"nonmatching", "kube-*"},
 			},
 			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			shouldMatch: true,
@@ -194,7 +195,7 @@ func TestMatch(t *testing.T) {
 			tname:   "namespace is not in the matches list",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
-				Namespaces: []string{"nonmatching", "notmatchingeither"},
+				Namespaces: []util.PrefixWildcard{"nonmatching", "notmatchingeither"},
 			},
 			namespace:   &corev1.Namespace{},
 			shouldMatch: false,
@@ -203,7 +204,7 @@ func TestMatch(t *testing.T) {
 			tname:   "namespace fails if clusterscoped",
 			toMatch: makeObject("kind", "group", "namespace", "name"),
 			match: Match{
-				Namespaces: []string{"nonmatching", "namespace"},
+				Namespaces: []util.PrefixWildcard{"nonmatching", "namespace"},
 				Scope:      apiextensionsv1.ClusterScoped,
 			},
 			namespace:   &corev1.Namespace{},
@@ -219,8 +220,8 @@ func TestMatch(t *testing.T) {
 						APIGroups: []string{"group"},
 					},
 				},
-				Namespaces:         []string{"nonmatching", "namespace"},
-				ExcludedNamespaces: []string{"namespace"},
+				Namespaces:         []util.PrefixWildcard{"nonmatching", "namespace"},
+				ExcludedNamespaces: []util.PrefixWildcard{"namespace"},
 			},
 			namespace:   &corev1.Namespace{},
 			shouldMatch: false,
@@ -236,8 +237,8 @@ func TestMatch(t *testing.T) {
 						APIGroups: []string{"group"},
 					},
 				},
-				Namespaces:         []string{"nonmatching", "namespace"},
-				ExcludedNamespaces: []string{"namespace"},
+				Namespaces:         []util.PrefixWildcard{"nonmatching", "namespace"},
+				ExcludedNamespaces: []util.PrefixWildcard{"namespace"},
 			},
 			namespace:   nil,
 			shouldMatch: true,
@@ -252,8 +253,8 @@ func TestMatch(t *testing.T) {
 						APIGroups: []string{"group"},
 					},
 				},
-				Namespaces:         []string{"nonmatching", "kube-*"},
-				ExcludedNamespaces: []string{"kube-*"},
+				Namespaces:         []util.PrefixWildcard{"nonmatching", "kube-*"},
+				ExcludedNamespaces: []util.PrefixWildcard{"kube-*"},
 			},
 			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			shouldMatch: false,
@@ -472,7 +473,7 @@ func TestMatch(t *testing.T) {
 			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
 			match: Match{
 				Name:       "name-foo",
-				Namespaces: []string{"other-namespace"},
+				Namespaces: []util.PrefixWildcard{"other-namespace"},
 			},
 			namespace:   &corev1.Namespace{},
 			shouldMatch: false,

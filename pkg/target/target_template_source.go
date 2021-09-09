@@ -178,7 +178,7 @@ matches_name(match) {
 }
 
 # oldObject covers Updates and Deletes.  The name of an object can't be changed, so there's no
-# need to worry about a difference between object and oldObject
+# need to worry about a difference between object and oldObject.
 matches_name(match) {
   has_field(match, "name")
   input.review.oldObject.metadata.name == match.name
