@@ -7,25 +7,25 @@ import (
 )
 
 type orderedMutators struct {
-	mutators []types.Mutator
+	ids []types.ID
 }
 
-func (ms *orderedMutators) insert(toAdd types.Mutator) {
-	i, found := ms.find(toAdd.ID())
-	if i == len(ms.mutators) {
+func (ms *orderedMutators) insert(id types.ID) {
+	i, found := ms.find(id)
+	if i == len(ms.ids) {
 		// Add to the end of the list.
-		ms.mutators = append(ms.mutators, toAdd)
+		ms.ids = append(ms.ids, id)
 		return
 	}
 
 	if found {
-		ms.mutators[i] = toAdd
+		ms.ids[i] = id
 		return
 	}
 
-	ms.mutators = append(ms.mutators, nil)
-	copy(ms.mutators[i+1:], ms.mutators[i:])
-	ms.mutators[i] = toAdd
+	ms.ids = append(ms.ids, types.ID{})
+	copy(ms.ids[i+1:], ms.ids[i:])
+	ms.ids[i] = id
 }
 
 // remove removes the Mutator with id. Returns true if the Mutator was removed,
@@ -38,23 +38,23 @@ func (ms *orderedMutators) remove(id types.ID) bool {
 		return false
 	}
 
-	copy(ms.mutators[i:], ms.mutators[i+1:])
-	ms.mutators[len(ms.mutators)-1] = nil
-	ms.mutators = ms.mutators[:len(ms.mutators)-1]
+	copy(ms.ids[i:], ms.ids[i+1:])
+	ms.ids[len(ms.ids)-1] = types.ID{}
+	ms.ids = ms.ids[:len(ms.ids)-1]
 
 	return true
 }
 
 func (ms *orderedMutators) find(id types.ID) (int, bool) {
-	idx := sort.Search(len(ms.mutators), func(i int) bool {
-		return greaterOrEqual(ms.mutators[i].ID(), id)
+	idx := sort.Search(len(ms.ids), func(i int) bool {
+		return greaterOrEqual(ms.ids[i], id)
 	})
 
-	if idx == len(ms.mutators) {
+	if idx == len(ms.ids) {
 		return idx, false
 	}
 
-	return idx, ms.mutators[idx].ID() == id
+	return idx, ms.ids[idx] == id
 }
 
 func greaterOrEqual(id1, id2 types.ID) bool {
