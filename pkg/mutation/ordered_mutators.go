@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -11,51 +10,51 @@ type orderedMutators struct {
 	mutators []types.Mutator
 }
 
-func (ms *orderedMutators) insert(toAdd types.Mutator) error {
-	i := ms.find(toAdd.ID())
+func (ms *orderedMutators) insert(toAdd types.Mutator) {
+	i, found := ms.find(toAdd.ID())
 	if i == len(ms.mutators) {
 		// Add to the end of the list.
 		ms.mutators = append(ms.mutators, toAdd)
-		return nil
+		return
 	}
 
-	found := ms.mutators[i].ID() == toAdd.ID()
 	if found {
 		ms.mutators[i] = toAdd
-		return nil
+		return
 	}
 
 	ms.mutators = append(ms.mutators, nil)
 	copy(ms.mutators[i+1:], ms.mutators[i:])
 	ms.mutators[i] = toAdd
-
-	return nil
 }
 
-func (ms *orderedMutators) remove(id types.ID) error {
-	i := ms.find(id)
-	if i >= len(ms.mutators) {
-		return fmt.Errorf("failed to find mutator with ID %v on sorted list", id)
-	}
-
+// remove removes the Mutator with id. Returns true if the Mutator was removed,
+// or false if the Mutator was not found.
+func (ms *orderedMutators) remove(id types.ID) bool {
+	i, found := ms.find(id)
 	// The map is expected to be in sync with the list, so if we don't find it
 	// we return an error.
-	found := ms.mutators[i].ID() == id
 	if !found {
-		return fmt.Errorf("failed to find mutator with ID %v on sorted list", id)
+		return false
 	}
 
 	copy(ms.mutators[i:], ms.mutators[i+1:])
 	ms.mutators[len(ms.mutators)-1] = nil
 	ms.mutators = ms.mutators[:len(ms.mutators)-1]
 
-	return nil
+	return true
 }
 
-func (ms *orderedMutators) find(id types.ID) int {
-	return sort.Search(len(ms.mutators), func(i int) bool {
+func (ms *orderedMutators) find(id types.ID) (int, bool) {
+	idx := sort.Search(len(ms.mutators), func(i int) bool {
 		return greaterOrEqual(ms.mutators[i].ID(), id)
 	})
+
+	if idx == len(ms.mutators) {
+		return idx, false
+	}
+
+	return idx, ms.mutators[idx].ID() == id
 }
 
 func greaterOrEqual(id1, id2 types.ID) bool {
