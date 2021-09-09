@@ -23,7 +23,7 @@ var ErrNotRemoved = errors.New("failed to find mutator on sorted list")
 // System keeps the list of mutators and provides an interface to apply mutations.
 type System struct {
 	schemaDB        schema.DB
-	orderedMutators orderedMutators
+	orderedMutators orderedIDs
 	mutatorsMap     map[types.ID]types.Mutator
 	mux             sync.RWMutex
 	reporter        StatsReporter
@@ -44,7 +44,7 @@ func NewSystem(options SystemOpts) *System {
 
 	return &System{
 		schemaDB:        *schema.New(),
-		orderedMutators: orderedMutators{},
+		orderedMutators: orderedIDs{},
 		mutatorsMap:     make(map[types.ID]types.Mutator),
 		reporter:        options.Reporter,
 		newUUID:         options.NewUUID,

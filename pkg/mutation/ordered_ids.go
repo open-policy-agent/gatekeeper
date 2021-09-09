@@ -6,55 +6,55 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 )
 
-type orderedMutators struct {
+type orderedIDs struct {
 	ids []types.ID
 }
 
-func (ms *orderedMutators) insert(id types.ID) {
-	i, found := ms.find(id)
-	if i == len(ms.ids) {
+func (o *orderedIDs) insert(id types.ID) {
+	i, found := o.find(id)
+	if i == len(o.ids) {
 		// Add to the end of the list.
-		ms.ids = append(ms.ids, id)
+		o.ids = append(o.ids, id)
 		return
 	}
 
 	if found {
-		ms.ids[i] = id
+		o.ids[i] = id
 		return
 	}
 
-	ms.ids = append(ms.ids, types.ID{})
-	copy(ms.ids[i+1:], ms.ids[i:])
-	ms.ids[i] = id
+	o.ids = append(o.ids, types.ID{})
+	copy(o.ids[i+1:], o.ids[i:])
+	o.ids[i] = id
 }
 
 // remove removes the Mutator with id. Returns true if the Mutator was removed,
 // or false if the Mutator was not found.
-func (ms *orderedMutators) remove(id types.ID) bool {
-	i, found := ms.find(id)
+func (o *orderedIDs) remove(id types.ID) bool {
+	i, found := o.find(id)
 	// The map is expected to be in sync with the list, so if we don't find it
 	// we return an error.
 	if !found {
 		return false
 	}
 
-	copy(ms.ids[i:], ms.ids[i+1:])
-	ms.ids[len(ms.ids)-1] = types.ID{}
-	ms.ids = ms.ids[:len(ms.ids)-1]
+	copy(o.ids[i:], o.ids[i+1:])
+	o.ids[len(o.ids)-1] = types.ID{}
+	o.ids = o.ids[:len(o.ids)-1]
 
 	return true
 }
 
-func (ms *orderedMutators) find(id types.ID) (int, bool) {
-	idx := sort.Search(len(ms.ids), func(i int) bool {
-		return greaterOrEqual(ms.ids[i], id)
+func (o *orderedIDs) find(id types.ID) (int, bool) {
+	idx := sort.Search(len(o.ids), func(i int) bool {
+		return greaterOrEqual(o.ids[i], id)
 	})
 
-	if idx == len(ms.ids) {
+	if idx == len(o.ids) {
 		return idx, false
 	}
 
-	return idx, ms.ids[idx] == id
+	return idx, o.ids[idx] == id
 }
 
 func greaterOrEqual(id1, id2 types.ID) bool {
