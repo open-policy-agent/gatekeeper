@@ -107,6 +107,7 @@ spec:
                         type: object
                     type: object
                   name:
+                    description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.'
                     type: string
                   namespaceSelector:
                     description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.

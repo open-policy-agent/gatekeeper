@@ -50,7 +50,10 @@ type Match struct {
 	ExcludedNamespaces []string                      `json:"excludedNamespaces,omitempty"`
 	LabelSelector      *metav1.LabelSelector         `json:"labelSelector,omitempty"`
 	NamespaceSelector  *metav1.LabelSelector         `json:"namespaceSelector,omitempty"`
-	Name               string                        `json:"name,omitempty"`
+	// Name is the name of an object.  If defined, it will match against objects with the specified
+	// name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both
+	// `pod-a` and `pod-b`.
+	Name string `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields
