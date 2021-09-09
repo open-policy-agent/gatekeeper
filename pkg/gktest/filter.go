@@ -33,7 +33,7 @@ type Filter interface {
 // - Test: "forbid-missing-label", Case: "with-foo-label"
 // - Test: "required-labels", Case: "missing-label"
 //
-// 3) NewFilter("^require-foo-label//")
+// 3) NewFilter("^require-foo-label$//")
 // Matches tests which exactly match "require-foo-label". Matches the following:
 // - Test: "require-foo-label", Case: "with-foo-label"
 // - Test: "require-foo-label", Case: "no-labels"
