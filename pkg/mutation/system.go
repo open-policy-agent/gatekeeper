@@ -29,7 +29,7 @@ type System struct {
 // SystemOpts allows for optional dependencies to be passed into the mutation System.
 type SystemOpts struct {
 	Reporter StatsReporter
-	NewUUID     func() uuid.UUID
+	NewUUID  func() uuid.UUID
 }
 
 // NewSystem initializes an empty mutation system.
@@ -65,8 +65,8 @@ func (s *System) Upsert(m types.Mutator) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	current, ok := s.mutatorsMap[m.ID()]
-	if ok && !m.HasDiff(current) {
+	id := m.ID()
+	if current, ok := s.mutatorsMap[id]; ok && !m.HasDiff(current) {
 		return nil
 	}
 
@@ -76,13 +76,15 @@ func (s *System) Upsert(m types.Mutator) error {
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
-			s.schemaDB.Remove(withSchema.ID())
+			s.schemaDB.Remove(id)
 			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
 		}
 	}
 
-	s.mutatorsMap[toAdd.ID()] = toAdd
-	return s.orderedMutators.insert(toAdd)
+	s.mutatorsMap[id] = toAdd
+
+	s.orderedMutators.insert(toAdd)
+	return nil
 }
 
 // Remove removes the mutator from the mutation system.
@@ -97,7 +99,12 @@ func (s *System) Remove(id types.ID) error {
 	s.schemaDB.Remove(id)
 
 	delete(s.mutatorsMap, id)
-	return s.orderedMutators.remove(id)
+
+	removed := s.orderedMutators.remove(id)
+	if !removed {
+		return fmt.Errorf("failed to find mutator with ID %v on sorted list", id)
+	}
+	return nil
 }
 
 // Mutate applies the mutation in place to the given object. Returns
@@ -148,13 +155,7 @@ func (s *System) mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (i
 					appliedMutations = append(appliedMutations, m)
 				}
 				if err != nil {
-					return iteration, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
-						mutationUUID,
-						m.ID(),
-						obj.GroupVersionKind().Group,
-						obj.GroupVersionKind().Kind,
-						obj.GetNamespace(),
-						obj.GetName())
+					return iteration, mutateErr(err, mutationUUID, m.ID(), obj)
 				}
 			}
 		}
@@ -189,6 +190,16 @@ func (s *System) mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (i
 	return maxIterations, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
 		ErrNotConverging,
 		mutationUUID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
+}
+
+func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {
+	return errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
+		uid,
+		mID,
 		obj.GroupVersionKind().Group,
 		obj.GroupVersionKind().Kind,
 		obj.GetNamespace(),

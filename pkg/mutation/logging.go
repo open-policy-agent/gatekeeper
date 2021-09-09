@@ -39,4 +39,3 @@ func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructur
 		log.Info(message, logDetails...)
 	}
 }
-
