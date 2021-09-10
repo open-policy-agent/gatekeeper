@@ -168,16 +168,35 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 		return nil, nil
 	}
 
-	// We must pass through JSON as IntOrStr does not unmarshal from YAML properly.
-	jsn, err := json.Marshal(u.Object)
+	suite := Suite{}
+
+	err = parseYAML(bytes, &suite)
 	if err != nil {
-		return nil, fmt.Errorf("%w: marshaling yaml to json: %v", ErrInvalidYAML, err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
 	}
 
-	suite := Suite{}
-	err = json.Unmarshal(jsn, &suite)
-	if err != nil {
-		return nil, fmt.Errorf("%w: parsing Test %q into Suite: %v", ErrInvalidYAML, path, err)
-	}
 	return &suite, nil
+}
+
+func parseYAML(yamlBytes []byte, v interface{}) error {
+	// Pass through JSON since k8s parsing logic doesn't fully handle objects
+	// parsed directly from YAML. Without passing through JSON, the OPA client
+	// panics when handed scalar types it doesn't recognize.
+	obj := make(map[string]interface{})
+
+	err := yaml.Unmarshal(yamlBytes, obj)
+	if err != nil {
+		return err
+	}
+
+	jsonBytes, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+
+	return parseJSON(jsonBytes, v)
+}
+
+func parseJSON(jsonBytes []byte, v interface{}) error {
+	return json.Unmarshal(jsonBytes, v)
 }
