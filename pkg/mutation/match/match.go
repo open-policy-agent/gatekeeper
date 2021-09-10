@@ -2,7 +2,6 @@ package match
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -237,17 +236,6 @@ func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	}
 
 	return true, nil
-}
-
-// prefixMatch matches checks if the candidate contains the prefix defined in the source.
-// The source is expected to end with a "*", which acts as a glob.  It is removed when
-// performing the prefix-based match.
-func prefixMatch(source, candidate string) bool {
-	if !strings.HasSuffix(source, "*") {
-		return false
-	}
-
-	return strings.HasPrefix(candidate, strings.TrimSuffix(source, "*"))
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
