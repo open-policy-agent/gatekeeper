@@ -16,8 +16,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"encoding/json"
-
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
@@ -52,10 +50,6 @@ type AssignSpec struct {
 
 type Parameters struct {
 	PathTests []PathTest `json:"pathTests,omitempty"`
-
-	// once https://github.com/kubernetes-sigs/controller-tools/pull/528
-	// is merged, we can use an actual object
-	AssignIf runtime.RawExtension `json:"assignIf,omitempty"`
 
 	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
@@ -112,41 +106,4 @@ func init() {
 	SchemeBuilder.Register(&Assign{}, &AssignList{})
 }
 
-// ValueTests returns tests that the mutator is expected
-// to run against the value.
-func (a *Assign) ValueTests() (AssignIf, error) {
-	raw := a.Spec.Parameters.AssignIf
-	out := AssignIf{}
-	if len(raw.Raw) == 0 {
-		return out, nil
-	}
-	if err := json.Unmarshal(raw.Raw, &out); err != nil {
-		return AssignIf{}, err
-	}
-	return out, nil
-}
-
 // +kubebuilder:object:generate=false
-
-// AssignIf describes tests against the pre-existing value.
-// The object will be mutated only if assertions pass.
-type AssignIf struct {
-	// In Asserts that the value is a member of the provided list before mutating
-	In []interface{} `json:"in,omitempty"`
-
-	// NotIn Asserts that the value is not a member of the provided list before mutating
-	NotIn []interface{} `json:"notIn,omitempty"`
-}
-
-func (a *AssignIf) DeepCopy() *AssignIf {
-	if a == nil {
-		return nil
-	}
-	in := runtime.DeepCopyJSONValue(a.In)
-	notIn := runtime.DeepCopyJSONValue(a.NotIn)
-
-	return &AssignIf{
-		In:    in.([]interface{}),
-		NotIn: notIn.([]interface{}),
-	}
-}

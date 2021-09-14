@@ -36,9 +36,8 @@ type Mutator struct {
 	path parser.Path
 
 	// bindings are the set of GVKs this Mutator applies to.
-	bindings  []runtimeschema.GroupVersionKind
-	tester    *patht.Tester
-	valueTest *mutationsv1alpha1.AssignIf
+	bindings []runtimeschema.GroupVersionKind
+	tester   *patht.Tester
 }
 
 // Mutator implements mutatorWithSchema.
@@ -61,39 +60,7 @@ func (m *Mutator) TerminalType() parser.NodeType {
 }
 
 func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	return core.Mutate(m.Path(), m.tester, m.testValue, core.NewDefaultSetter(m), obj)
-}
-
-// valueTest returns true if it is okay for the mutation func to override the value.
-func (m *Mutator) testValue(v interface{}, exists bool) bool {
-	if len(m.valueTest.In) != 0 {
-		ifInMatched := false
-		if !exists {
-			// a missing value cannot satisfy the "In" test
-			return false
-		}
-		for _, obj := range m.valueTest.In {
-			if cmp.Equal(v, obj) {
-				ifInMatched = true
-				break
-			}
-		}
-		if !ifInMatched {
-			return false
-		}
-	}
-
-	if !exists {
-		// a missing value cannot violate NotIn
-		return true
-	}
-
-	for _, obj := range m.valueTest.NotIn {
-		if cmp.Equal(v, obj) {
-			return false
-		}
-	}
-	return true
+	return core.Mutate(m.Path(), m.tester, core.NewDefaultSetter(m), obj)
 }
 
 func (m *Mutator) ID() types.ID {
@@ -150,7 +117,6 @@ func (m *Mutator) DeepCopy() types.Mutator {
 	copy(res.path.Nodes, m.path.Nodes)
 	copy(res.bindings, m.bindings)
 	res.tester = m.tester.DeepCopy()
-	res.valueTest = m.valueTest.DeepCopy()
 	return res
 }
 
@@ -201,10 +167,6 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 	if err != nil {
 		return nil, err
 	}
-	valueTests, err := assign.ValueTests()
-	if err != nil {
-		return nil, err
-	}
 	for _, applyTo := range assign.Spec.ApplyTo {
 		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
 			return nil, fmt.Errorf("invalid applyTo for Assign mutator %s, all of group, version and kind must be specified", assign.GetName())
@@ -223,7 +185,6 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 		bindings:    gvks,
 		path:        path,
 		tester:      tester,
-		valueTest:   &valueTests,
 	}, nil
 }
 

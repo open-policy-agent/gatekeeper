@@ -150,13 +150,6 @@ func TestAssignHasDiff(t *testing.T) {
 			},
 			true,
 		},
-		{
-			"differentParameters",
-			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.AssignIf = runtime.RawExtension{Raw: []byte(`{"in": ["Foo","Bar"]}`)}
-			},
-			true,
-		},
 	}
 
 	for _, tc := range table {
