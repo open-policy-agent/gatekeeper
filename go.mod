@@ -4,19 +4,16 @@ go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
-	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.4.0
 	github.com/go-logr/zapr v0.4.0
-	github.com/go-openapi/spec v0.20.3 // indirect
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.1.2
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.16.0
 	github.com/open-policy-agent/cert-controller v0.2.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210701194838-1dbe2618668d
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76
 	github.com/open-policy-agent/opa v0.29.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
