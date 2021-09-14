@@ -193,10 +193,11 @@ metadata:
 
 func TestRunner_Run(t *testing.T) {
 	testCases := []struct {
-		name  string
-		suite Suite
-		f     fs.FS
-		want  SuiteResult
+		name   string
+		filter string
+		suite  Suite
+		f      fs.FS
+		want   SuiteResult
 	}{
 		{
 			name: "Suite missing Template",
@@ -562,6 +563,64 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name:   "valid Suite with filter",
+			filter: "allowed-2",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "allow",
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Name:   "allowed-1",
+						Object: "object.yaml",
+					}, {
+						Name:   "allowed-2",
+						Object: "object.yaml",
+					}},
+				}, {
+					Name:       "deny",
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []Case{{
+						Name:   "denied",
+						Object: "object.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(templateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "allow",
+					CaseResults: []CaseResult{{
+						Name: "allowed-1", Skipped: true,
+					}, {
+						Name: "allowed-2",
+					}},
+				}, {
+					Name: "deny", Skipped: true,
+				}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -573,7 +632,12 @@ func TestRunner_Run(t *testing.T) {
 				NewClient: NewOPAClient,
 			}
 
-			got := runner.Run(ctx, Filter{}, "", &tc.suite)
+			filter, err := NewFilter(tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := runner.Run(ctx, filter, "", &tc.suite)
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
@@ -601,7 +665,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 	suite := &Suite{
 		Tests: []Test{{}},
 	}
-	got := runner.Run(ctx, Filter{}, "", suite)
+	got := runner.Run(ctx, &nilFilter{}, "", suite)
 
 	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
@@ -934,7 +998,7 @@ func TestRunner_RunCase(t *testing.T) {
 				NewClient: NewOPAClient,
 			}
 
-			got := runner.Run(ctx, Filter{}, "", suite)
+			got := runner.Run(ctx, &nilFilter{}, "", suite)
 
 			want := SuiteResult{
 				TestResults: []TestResult{{
