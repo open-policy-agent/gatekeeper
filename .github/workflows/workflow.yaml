@@ -65,7 +65,7 @@ jobs:
           KUBEBUILDER_VERSION: 2.3.1
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@v2.0.3
+        uses: codecov/codecov-action@v2.1.0
         with:
           flags: unittests
           file: ./cover.out
