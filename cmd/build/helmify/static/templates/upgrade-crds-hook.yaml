@@ -75,6 +75,10 @@ spec:
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}
       containers:
       - name: crds-upgrade
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
