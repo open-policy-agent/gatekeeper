@@ -42,12 +42,19 @@ func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, 
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		if filter.MatchesTest(t) {
-			results[i] = r.runTest(ctx, suiteDir, filter, t)
+		if !filter.MatchesTest(t) {
+			results[i] = r.skipTest(t)
+			continue
 		}
+
+		results[i] = r.runTest(ctx, suiteDir, filter, t)
 	}
 
 	return results, nil
+}
+
+func (r *Runner) skipTest(t Test) TestResult {
+	return TestResult{Name: t.Name, Skipped: true}
 }
 
 // runTest runs an individual Test.
@@ -73,8 +80,10 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 	}
 
 	results := make([]CaseResult, len(t.Cases))
+
 	for i, c := range t.Cases {
-		if !filter.MatchesCase(c) {
+		if !filter.MatchesCase(t.Name, c.Name) {
+			results[i] = r.skipCase(c)
 			continue
 		}
 
@@ -82,6 +91,10 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 	}
 
 	return results, nil
+}
+
+func (r *Runner) skipCase(c Case) CaseResult {
+	return CaseResult{Name: c.Name, Skipped: true}
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
