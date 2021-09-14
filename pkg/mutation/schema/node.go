@@ -21,6 +21,22 @@ func (c idSet) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(keys, ","))
 }
 
+func (c idSet) ToList() []types.ID {
+	result := make([]types.ID, len(c))
+
+	idx := 0
+	for id := range c {
+		result[idx] = id
+		idx++
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].String() < result[j].String()
+	})
+
+	return result
+}
+
 // node is an element of an implicit schema.
 // Allows for the definition of overlapping schemas. See Add.
 type node struct {

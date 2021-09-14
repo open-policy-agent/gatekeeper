@@ -109,14 +109,13 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 		conflicts = merge(conflicts, newConflicts)
 	}
 
-	for c := range conflicts {
-		db.conflicts[c] = true
-	}
+	db.conflicts = merge(db.conflicts, conflicts)
+
 	if len(conflicts) > 0 {
 		// Adding this mutator had schema conflicts with another, so return an error.
-		return fmt.Errorf("%w: the following Mutators have conflicting schemas: %s",
-			ErrConflictingSchema, conflicts.String())
+		return NewErrConflictingSchema(conflicts.ToList())
 	}
+
 	return nil
 }
 

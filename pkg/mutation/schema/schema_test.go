@@ -130,7 +130,7 @@ func TestDB_Upsert(t *testing.T) {
 			},
 			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image",
 				gvk("", "v1", "Pod")),
-			wantErr: ErrConflictingSchema,
+			wantErr: NewErrConflictingSchema([]types.ID{{Name: "bar"}, {Name: "foo"}}),
 		},
 		{
 			name: "add conflicting mutator of different type",
