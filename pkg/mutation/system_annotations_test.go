@@ -43,7 +43,7 @@ func TestSystem_Mutate_Annotations(t *testing.T) {
 	want := &unstructured.Unstructured{}
 	want.SetLabels(map[string]string{"foo": "bar"})
 	want.SetAnnotations(map[string]string{
-		annotationMutations:  " /mutation-1",
+		annotationMutations:  toAnnotationMutationsValue([][]types.Mutator{{m}}),
 		annotationMutationID: mid.String(),
 	})
 

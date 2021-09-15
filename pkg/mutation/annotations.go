@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,6 +15,16 @@ const (
 )
 
 func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, mutationUUID uuid.UUID) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[annotationMutations] = toAnnotationMutationsValue(allAppliedMutations)
+	annotations[annotationMutationID] = mutationUUID.String()
+	obj.SetAnnotations(annotations)
+}
+
+func toAnnotationMutationsValue(allAppliedMutations [][]types.Mutator) string {
 	mutatorStringSet := make(map[string]struct{})
 	for _, mutationsForIteration := range allAppliedMutations {
 		for _, mutator := range mutationsForIteration {
@@ -25,12 +36,7 @@ func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][
 	for mutatorString := range mutatorStringSet {
 		mutatorStrings = append(mutatorStrings, mutatorString)
 	}
+	sort.Strings(mutatorStrings)
 
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations[annotationMutations] = strings.Join(mutatorStrings, ", ")
-	annotations[annotationMutationID] = mutationUUID.String()
-	obj.SetAnnotations(annotations)
+	return strings.Join(mutatorStrings, ", ")
 }
