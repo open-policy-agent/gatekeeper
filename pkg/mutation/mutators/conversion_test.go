@@ -154,7 +154,7 @@ func TestAssignHasDiff(t *testing.T) {
 		{
 			"differentParameters",
 			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.PathTests = []mutationsv1alpha1.PathTest{{SubPath: "spec", Condition: tester.MustExist}} // runtime.RawExtension{Raw: []byte(`{"in": ["Foo","Bar"]}`)}
+				a.Spec.Parameters.PathTests = []mutationsv1alpha1.PathTest{{SubPath: "spec", Condition: tester.MustExist}}
 			},
 			true,
 		},
