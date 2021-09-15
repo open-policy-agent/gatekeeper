@@ -276,7 +276,6 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				reason = "FailedAdmission"
 			}
 			ref := getViolationRef(
-				h.gkNamespace,
 				req.AdmissionRequest.Kind.Kind,
 				resourceName,
 				req.AdmissionRequest.Namespace,
@@ -465,11 +464,11 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	return resp, err
 }
 
-func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
+func getViolationRef(rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
 	return &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
 		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
-		Namespace: gkNamespace,
+		Namespace: rnamespace,
 	}
 }
