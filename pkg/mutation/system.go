@@ -77,9 +77,11 @@ func (s *System) Upsert(m types.Mutator) error {
 	toAdd := m.DeepCopy()
 
 	// Check schema consistency only if the mutator has schema.
+	var err error
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
-		err := s.schemaDB.Upsert(withSchema)
-		if err != nil {
+		err = s.schemaDB.Upsert(withSchema)
+
+		if err != nil && !errors.As(err, &schema.ErrConflictingSchema{}) {
 			s.schemaDB.Remove(id)
 			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
 		}
@@ -88,7 +90,7 @@ func (s *System) Upsert(m types.Mutator) error {
 	s.mutatorsMap[id] = toAdd
 
 	s.orderedMutators.insert(id)
-	return nil
+	return err
 }
 
 // Remove removes the mutator from the mutation system.

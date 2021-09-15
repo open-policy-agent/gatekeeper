@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,51 +27,22 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	ctrlmutators "github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
-
-type Adder struct {
-	// MutationSystem holds a reference to the mutation system to which
-	// mutators will be registered/deregistered
-	MutationSystem *mutation.System
-	// Tracker accepts a handle for the readiness tracker
-	Tracker *readiness.Tracker
-	// GetPod returns an instance of the currently running Gatekeeper pod
-	GetPod func(context.Context) (*corev1.Pod, error)
-	// Kind for the mutation object that is being reconciled
-	Kind string
-	// NewMutationObj creates a new instance of a mutation struct that can
-	// be fed to the API server client for Get/Delete/Update requests
-	NewMutationObj func() client.Object
-	// MutatorFor takes the object returned by NewMutationObject and
-	// turns it into a mutator. The contents of the mutation object
-	// are set by the API server.
-	MutatorFor func(client.Object) (types.Mutator, error)
-}
-
-// Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
-	return add(mgr, r)
-}
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
@@ -99,36 +71,6 @@ func newReconciler(
 		r.getPod = r.defaultGetPod
 	}
 	return r
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler.
-func add(mgr manager.Manager, r *Reconciler) error {
-	if !*mutation.MutationEnabled {
-		return nil
-	}
-
-	// Create a new controller
-	c, err := controller.New(fmt.Sprintf("%s-controller", strings.ToLower(r.kind)), mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to the mutator
-	if err = c.Watch(
-		&source.Kind{Type: r.newMutationObj()},
-		&handler.EnqueueRequestForObject{}); err != nil {
-		return err
-	}
-
-	// Watch for changes to MutatorPodStatus
-	err = c.Watch(
-		&source.Kind{Type: &statusv1beta1.MutatorPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.kind, util.EventPackerMapFunc())),
-	)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // Reconciler reconciles mutator objects.
@@ -177,21 +119,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
 		r.getTracker().TryCancelExpect(mutationObj)
 
-		err = r.updateStatus(ctx, mutationObj, false, err)
-		return reconcile.Result{}, err
+		return r.updateError(ctx, mutationObj, err)
 	}
 
 	if err = r.system.Upsert(mutator); err != nil {
 		r.log.Error(err, "Insert failed", "resource", request.NamespacedName)
 		r.getTracker().TryCancelExpect(mutationObj)
 
-		err = r.updateStatus(ctx, mutationObj, false, err)
-		return reconcile.Result{}, err
+		return r.upsertError(ctx, mutationObj, err)
 	}
 
 	r.getTracker().Observe(mutationObj)
 
-	err = r.updateStatus(ctx, mutationObj, true, nil)
+	err = r.updateStatus(ctx, types.MakeID(mutationObj),
+		setID(mutationObj.GetUID()), setGeneration(mutationObj.GetGeneration()),
+		setEnforced(true), setErrors(nil))
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -209,7 +151,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 
 	key := apiTypes.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.Get(ctx, key, statusObj); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 	} else {
@@ -271,7 +213,7 @@ func (r *Reconciler) getOrDefault(ctx context.Context, namespacedName apiTypes.N
 		// Treat objects with a DeletionTimestamp as if they are deleted.
 		deleted := !obj.GetDeletionTimestamp().IsZero()
 		return obj, deleted, nil
-	case errors.IsNotFound(err):
+	case apierrors.IsNotFound(err):
 		obj = r.newMutationObj()
 		obj.SetName(namespacedName.Name)
 		obj.SetNamespace(namespacedName.Namespace)
@@ -306,7 +248,7 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (r
 	status := &statusv1beta1.MutatorPodStatus{}
 	status.SetName(sName)
 	status.SetNamespace(util.GetNamespace())
-	if err = r.Delete(ctx, status); !errors.IsNotFound(err) {
+	if err = r.Delete(ctx, status); !apierrors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
 
@@ -315,25 +257,15 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (r
 
 // updateStatus updates the PodStatus corresponding to the passed Mutator with whether the Mutator is enforced, and
 // whether there is an error instantiating the Mutator within the controller.
-func (r *Reconciler) updateStatus(ctx context.Context, obj client.Object, enforced bool, statusErr error) error {
-	mID := types.MakeID(obj)
-
-	status, err := r.getOrCreatePodStatus(ctx, mID)
+func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...statusUpdate) error {
+	status, err := r.getOrCreatePodStatus(ctx, id)
 	if err != nil {
 		r.log.Info("could not get/create pod status object", "error", err)
 		return err
 	}
 
-	status.Status.MutatorUID = obj.GetUID()
-	status.Status.ObservedGeneration = obj.GetGeneration()
-	if statusErr != nil {
-		status.Status.Errors = []statusv1beta1.MutatorError{{Message: statusErr.Error()}}
-	} else {
-		status.Status.Errors = nil
-	}
-
-	if enforced {
-		status.Status.Enforced = true
+	for _, update := range updates {
+		update(status)
 	}
 
 	if err = r.Update(ctx, status); err != nil {
@@ -341,4 +273,34 @@ func (r *Reconciler) updateStatus(ctx context.Context, obj client.Object, enforc
 	}
 
 	return nil
+}
+
+func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err error) (reconcile.Result, error) {
+	id := types.MakeID(obj)
+
+	updateStatusErr := r.updateStatus(ctx, id,
+		setID(obj.GetUID()), setGeneration(obj.GetGeneration()),
+		setEnforced(false), setErrors(err))
+	return reconcile.Result{}, updateStatusErr
+}
+
+func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, err error) (reconcile.Result, error) {
+	schemaErr := &mutationschema.ErrConflictingSchema{}
+
+	result, updateErr := r.updateError(ctx, obj, err)
+	if !errors.As(err, schemaErr) {
+		return result, updateErr
+	}
+
+	objID := types.MakeID(obj)
+
+	ids := schemaErr.Conflicts
+	for _, id := range ids {
+		if id == objID {
+			continue
+		}
+		_ = r.updateStatus(ctx, id, setEnforced(false), setErrors(err))
+	}
+
+	return result, updateErr
 }
