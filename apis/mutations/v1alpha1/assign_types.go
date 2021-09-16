@@ -51,8 +51,8 @@ type AssignSpec struct {
 type Parameters struct {
 	PathTests []PathTest `json:"pathTests,omitempty"`
 
-	// once https://github.com/kubernetes-sigs/controller-tools/pull/528
-	// is merged, we can use an actual object
+	// TODO(maxsmythe): Now that https://github.com/kubernetes-sigs/controller-tools/pull/528
+	// is merged, we can use an actual object for `Assign`
 
 	// Assign.value holds the value to be assigned
 	// +kubebuilder:validation:XPreserveUnknownFields
