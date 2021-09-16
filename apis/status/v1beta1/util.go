@@ -73,7 +73,7 @@ func dashPacker(vals ...string) (string, error) {
 			return "", fmt.Errorf("dashPacker cannot pack strings that begin or end with a dash: %+v", vals)
 		}
 		if len(val) == 0 {
-			return "", fmt.Errorf("dashPacker cannot pack empty strings")
+			panic(strings.Join(vals, "+"))
 		}
 		if i != 0 {
 			b.WriteString("-")

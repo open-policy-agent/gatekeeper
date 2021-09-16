@@ -66,6 +66,8 @@ func newReconciler(
 		newMutationObj: newMutationObj,
 		mutatorFor:     mutatorFor,
 		log:            logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
+		podName:        util.GetPodName(),
+		podNamespace:   util.GetNamespace(),
 	}
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
@@ -87,6 +89,11 @@ type Reconciler struct {
 	reporter ctrlmutators.StatsReporter
 	cache    *ctrlmutators.Cache
 	log      logr.Logger
+
+	// podName is the name of the Pod running this Reconciler.
+	podName string
+	// podNamespace is the Namespace of the Pod running this Reconciler.
+	podNamespace string
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -144,12 +151,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
 	statusObj := &statusv1beta1.MutatorPodStatus{}
-	sName, err := statusv1beta1.KeyForMutatorID(util.GetPodName(), mutatorID)
+	sName, err := statusv1beta1.KeyForMutatorID(r.podName, mutatorID)
 	if err != nil {
 		return nil, err
 	}
 
-	key := apiTypes.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
+	key := apiTypes.NamespacedName{Name: sName, Namespace: r.podNamespace}
 	if err := r.Get(ctx, key, statusObj); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, err
@@ -240,14 +247,14 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (r
 		return reconcile.Result{}, err
 	}
 
-	sName, err := statusv1beta1.KeyForMutatorID(util.GetPodName(), mID)
+	sName, err := statusv1beta1.KeyForMutatorID(r.podName, mID)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	status := &statusv1beta1.MutatorPodStatus{}
 	status.SetName(sName)
-	status.SetNamespace(util.GetNamespace())
+	status.SetNamespace(r.podNamespace)
 	if err = r.Delete(ctx, status); !apierrors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
