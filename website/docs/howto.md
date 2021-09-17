@@ -76,8 +76,8 @@ Note the `match` field, which defines the scope of objects to which a given cons
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
    * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to `*`)
-   * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.
-   * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace.
+   * `namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` would match both `kube-system` and `kube-public`.
+   * `excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` would match both `kube-system` and `kube-public`.
    * `labelSelector` is a standard Kubernetes label selector.
    * `namespaceSelector` is a standard Kubernetes namespace selector. If defined, make sure to add `Namespaces` to your `configs.config.gatekeeper.sh` object to ensure namespaces are synced into OPA. Refer to the [Replicating Data section](sync.md) for more details.
    * `name` is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.
