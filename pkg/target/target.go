@@ -333,11 +333,11 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"kinds": {
-				Type:        "array",
-				Description: "kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.",
+				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
-						Type: "object",
+						Type:        "object",
+						Description: "The Group and Kind of objects that should be matched.  If multiple groups/kinds combinations are specified, an incoming resource need only match one to be in scope.",
 						Properties: map[string]apiextensions.JSONSchemaProps{
 							"apiGroups": nullableStringList,
 							"kinds":     nullableStringList,
