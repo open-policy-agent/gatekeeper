@@ -7,6 +7,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -153,7 +155,7 @@ func TestAssignHasDiff(t *testing.T) {
 		{
 			"differentParameters",
 			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.AssignIf = runtime.RawExtension{Raw: []byte(`{"in": ["Foo","Bar"]}`)}
+				a.Spec.Parameters.PathTests = []mutationsv1alpha1.PathTest{{SubPath: "spec", Condition: tester.MustExist}}
 			},
 			true,
 		},
@@ -235,7 +237,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		{
 			"differentMatch",
 			func(a *mutationsv1alpha1.AssignMetadata) {
-				a.Spec.Match.Namespaces = []string{"foo", "bar"}
+				a.Spec.Match.Namespaces = []util.PrefixWildcard{"foo", "bar"}
 			},
 			true,
 		},

@@ -24,10 +24,17 @@ import (
 )
 
 func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
-	if in.OpenAPIV3Schema != nil {
-		inSchemaCopy := in.OpenAPIV3Schema.DeepCopy()
+	inSchema := in.OpenAPIV3Schema
 
-		if in.LegacySchema {
+	// legacySchema should allow for users to provide arbitrary parameters, regardless of whether the user specified them
+	if in.LegacySchema != nil && *in.LegacySchema && inSchema == nil {
+		inSchema = &apiextensionsv1.JSONSchemaProps{}
+	}
+
+	if inSchema != nil {
+		inSchemaCopy := inSchema.DeepCopy()
+
+		if in.LegacySchema != nil && *in.LegacySchema {
 			if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
 				return err
 			}
@@ -40,5 +47,17 @@ func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *cor
 	} else {
 		out.OpenAPIV3Schema = nil
 	}
+
+	// As LegacySchema is a pointer, we have to explicitly copy the value.  Doing a simple copy of
+	// out.LegacySchema = in.LegacySchema yields a duplicate pointer to the same value.  This links
+	// the value of LegacySchema in the out object to that of the in object, potentially creating
+	// a bug where both change when only one is meant to.
+	if in.LegacySchema == nil {
+		out.LegacySchema = nil
+	} else {
+		inVal := *in.LegacySchema
+		out.LegacySchema = &inVal
+	}
+
 	return nil
 }

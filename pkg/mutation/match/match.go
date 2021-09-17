@@ -2,8 +2,8 @@ package match
 
 import (
 	"errors"
-	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,10 +46,14 @@ func (a ApplyTo) Flatten() []schema.GroupVersionKind {
 type Match struct {
 	Kinds              []Kinds                       `json:"kinds,omitempty"`
 	Scope              apiextensionsv1.ResourceScope `json:"scope,omitempty"`
-	Namespaces         []string                      `json:"namespaces,omitempty"`
-	ExcludedNamespaces []string                      `json:"excludedNamespaces,omitempty"`
+	Namespaces         []util.PrefixWildcard         `json:"namespaces,omitempty"`
+	ExcludedNamespaces []util.PrefixWildcard         `json:"excludedNamespaces,omitempty"`
 	LabelSelector      *metav1.LabelSelector         `json:"labelSelector,omitempty"`
 	NamespaceSelector  *metav1.LabelSelector         `json:"namespaceSelector,omitempty"`
+	// Name is the name of an object.  If defined, it will match against objects with the specified
+	// name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both
+	// `pod-a` and `pod-b`.
+	Name util.PrefixWildcard `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields
@@ -79,6 +83,7 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 		excludedNamespacesMatch,
 		labelSelectorMatch,
 		namespaceSelectorMatch,
+		namesMatch,
 	}
 
 	for _, fn := range topLevelMatchers {
@@ -142,7 +147,7 @@ func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespa
 	}
 
 	for _, n := range match.ExcludedNamespaces {
-		if ns.Name == n || prefixMatch(n, ns.Name) {
+		if n.Matches(ns.Name) {
 			return false, nil
 		}
 	}
@@ -157,7 +162,7 @@ func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (boo
 	}
 
 	for _, n := range match.Namespaces {
-		if ns.Name == n || prefixMatch(n, ns.Name) {
+		if n.Matches(ns.Name) {
 			return true, nil
 		}
 	}
@@ -206,6 +211,17 @@ func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	return false, nil
 }
 
+func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+	// A blank string could be undefined or an intentional blank string by the user.  Either way,
+	// we will assume this means "any name".  This goes with the undefined == match everything
+	// pattern that we've already got going in the Match.
+	if match.Name == "" {
+		return true, nil
+	}
+
+	return match.Name.Matches(obj.GetName()), nil
+}
+
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	clusterScoped := ns == nil || isNamespace(obj)
 
@@ -220,17 +236,6 @@ func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	}
 
 	return true, nil
-}
-
-// prefixMatch matches checks if the candidate contains the prefix defined in the source.
-// The source is expected to end with a "*", which acts as a glob.  It is removed when
-// performing the prefix-based match.
-func prefixMatch(source, candidate string) bool {
-	if !strings.HasSuffix(source, "*") {
-		return false
-	}
-
-	return strings.HasPrefix(candidate, strings.TrimSuffix(source, "*"))
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.

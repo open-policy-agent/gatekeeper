@@ -34,6 +34,8 @@ matching_constraints[constraint] {
 
   matches_scope(match)
 
+  matches_name(match)
+
   label_selector := get_default(match, "labelSelector", {})
   any_labelselector_match(label_selector)
 }
@@ -150,6 +152,51 @@ kind_matches(ks) {
 
 kind_matches(ks) {
   ks.kinds[_] == input.review.kind.kind
+}
+
+#######################
+# Name Selector Logic #
+#######################
+
+matches_name(match) {
+  not has_field(match, "name")
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  input.review.name == match.name
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  input.review.object.metadata.name == match.name
+}
+
+# oldObject covers Updates and Deletes.  The name of an object can't be changed, so there's no
+# need to worry about a difference between object and oldObject.
+matches_name(match) {
+  has_field(match, "name")
+  input.review.oldObject.metadata.name == match.name
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  wildcard_name_match(match.name, input.review.name)
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  wildcard_name_match(match.name, input.review.object.metadata.name)
+}
+
+matches_name(match) {
+  has_field(match, "name")
+  wildcard_name_match(match.name, input.review.oldObject.metadata.name)
+}
+
+wildcard_name_match(wildcard, subject) {
+  endswith(wildcard, "*")
+  glob.match(wildcard, [], subject)
 }
 
 ########################
@@ -337,17 +384,17 @@ matches_namespaces(match) {
   has_field(match, "namespaces")
   not always_match_ns_selectors
   get_ns_name[ns]
-  wild_nss := wildcard_namespaces(match.namespaces)
+  wild_nss := wildcard_tokens(match.namespaces)
   prefix_glob_match(wild_nss, ns)
 }
 
-wildcard_namespaces(ns_array) = out {
-  out := [ nss | endswith(ns_array[i], "*")
-                         nss := ns_array[i] ]
+wildcard_tokens(token_array) = out {
+  out := [ wld_tokens | endswith(token_array[i], "*")
+                         wld_tokens := token_array[i] ]
 }
 
-prefix_glob_match(match_nss, object_ns) {
-  glob.match(match_nss[_], [], object_ns)
+prefix_glob_match(matchables, subject) {
+  glob.match(matchables[_], [], subject)
 }
 
 does_not_match_excludednamespaces(match) {
@@ -369,7 +416,7 @@ does_not_match_excludednamespaces(match) {
   not nss[ns]
 
   # Check for prefix matches
-  wild_ex_nss := wildcard_namespaces(match.excludedNamespaces)
+  wild_ex_nss := wildcard_tokens(match.excludedNamespaces)
   not prefix_glob_match(wild_ex_nss, ns)
 }
 
