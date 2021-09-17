@@ -264,10 +264,10 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	return nil
 }
 
-func propsWithDescription(props apiextensions.JSONSchemaProps, description string) apiextensions.JSONSchemaProps {
+func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
 	propCopy := props.DeepCopy()
 	propCopy.Description = description
-	return *propCopy
+	return propCopy
 }
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
@@ -345,10 +345,10 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					},
 				},
 			},
-			"namespaces":         propsWithDescription(wildcardNSList, "namespaces is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace."),
-			"excludedNamespaces": propsWithDescription(wildcardNSList, "excludedNamespaces is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace."),
-			"labelSelector":      propsWithDescription(labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
-			"namespaceSelector":  propsWithDescription(labelSelectorSchema, "namespaceSelector is a standard Kubernetes namespace selector. If defined, make sure to add Namespaces to your configs.config.gatekeeper.sh object to ensure namespaces are synced into OPA."),
+			"namespaces":         *propsWithDescription(&wildcardNSList, "namespaces is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace."),
+			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "excludedNamespaces is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
+			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "namespaceSelector is a standard Kubernetes namespace selector. If defined, make sure to add Namespaces to your configs.config.gatekeeper.sh object to ensure namespaces are synced into OPA."),
 			"scope": {
 				Type:        "string",
 				Description: "scope accepts *, Cluster, or Namespaced which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to *)",
