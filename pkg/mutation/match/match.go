@@ -43,8 +43,6 @@ func (a ApplyTo) Flatten() []schema.GroupVersionKind {
 
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
-// TODO (julianKatz): Once we've decided on final descriptions for these fields elsewhere,
-// copy them here as well.
 type Match struct {
 	Kinds              []Kinds                       `json:"kinds,omitempty"`
 	Scope              apiextensionsv1.ResourceScope `json:"scope,omitempty"`

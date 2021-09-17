@@ -351,7 +351,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace, or against namespace objects themselves."),
 			"scope": {
 				Type:        "string",
-				Description: "scope accepts *, Cluster, or Namespaced which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to *)",
+				Description: "scope accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespaced-scoped resources are matched. (defaults to `*`)",
 				Enum: []apiextensions.JSON{
 					"*",
 					"Cluster",
