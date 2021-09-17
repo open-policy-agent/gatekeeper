@@ -6,9 +6,20 @@ import (
 	"sync"
 )
 
+type PodOwnershipMode bool
+
+const (
+	// PodOwnershipDisabled indicates that owner references should not be put on
+	// dependent resources.
+	PodOwnershipDisabled PodOwnershipMode = false
+	// PodOwnershipEnabled indicates that owner references should be put on
+	// dependent resources.
+	PodOwnershipEnabled PodOwnershipMode = true
+)
+
 var (
-	podOwnershipEnabled = true
-	ownerMutex          = sync.RWMutex{}
+	podOwnershipMode = PodOwnershipEnabled
+	ownerMutex       = sync.RWMutex{}
 )
 
 // DisablePodOwnership disables setting the owner reference for Status resource.
@@ -16,13 +27,13 @@ var (
 func DisablePodOwnership() {
 	ownerMutex.Lock()
 	defer ownerMutex.Unlock()
-	podOwnershipEnabled = false
+	podOwnershipMode = PodOwnershipDisabled
 }
 
-func PodOwnershipEnabled() bool {
+func GetPodOwnershipMode() PodOwnershipMode {
 	ownerMutex.RLock()
 	defer ownerMutex.RUnlock()
-	return podOwnershipEnabled
+	return podOwnershipMode == PodOwnershipEnabled
 }
 
 // dashExtractor unpacks the status resource name, unescaping `-`.

@@ -32,7 +32,6 @@ import (
 	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,19 +54,18 @@ func newReconciler(
 	mutatorFor func(client.Object) (types.Mutator, error),
 ) *Reconciler {
 	r := &Reconciler{
-		system:         mutationSystem,
-		Client:         mgr.GetClient(),
-		tracker:        tracker,
-		getPod:         getPod,
-		scheme:         mgr.GetScheme(),
-		reporter:       ctrlmutators.NewStatsReporter(),
-		cache:          ctrlmutators.NewMutationCache(),
-		kind:           kind,
-		newMutationObj: newMutationObj,
-		mutatorFor:     mutatorFor,
-		log:            logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
-		podName:        util.GetPodName(),
-		podNamespace:   util.GetNamespace(),
+		system:           mutationSystem,
+		Client:           mgr.GetClient(),
+		tracker:          tracker,
+		getPod:           getPod,
+		scheme:           mgr.GetScheme(),
+		reporter:         ctrlmutators.NewStatsReporter(),
+		cache:            ctrlmutators.NewMutationCache(),
+		kind:             kind,
+		newMutationObj:   newMutationObj,
+		mutatorFor:       mutatorFor,
+		log:              logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
+		podOwnershipMode: statusv1beta1.GetPodOwnershipMode(),
 	}
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
@@ -90,10 +88,7 @@ type Reconciler struct {
 	cache    *ctrlmutators.Cache
 	log      logr.Logger
 
-	// podName is the name of the Pod running this Reconciler.
-	podName string
-	// podNamespace is the Namespace of the Pod running this Reconciler.
-	podNamespace string
+	podOwnershipMode statusv1beta1.PodOwnershipMode
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -127,7 +122,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return result, err
 	}
 
-
 	ingestionStatus = ctrlmutators.MutatorStatusActive
 	return reconcile.Result{}, nil
 }
@@ -158,13 +152,18 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, mutationO
 }
 
 func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
-	statusObj := &statusv1beta1.MutatorPodStatus{}
-	sName, err := statusv1beta1.KeyForMutatorID(r.podName, mutatorID)
+	pod, err := r.getPod(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	key := apiTypes.NamespacedName{Name: sName, Namespace: r.podNamespace}
+	statusObj := &statusv1beta1.MutatorPodStatus{}
+	sName, err := statusv1beta1.KeyForMutatorID(pod.Name, mutatorID)
+	if err != nil {
+		return nil, err
+	}
+
+	key := apiTypes.NamespacedName{Name: sName, Namespace: pod.Namespace}
 	if err := r.Get(ctx, key, statusObj); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, err
@@ -172,12 +171,8 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 	} else {
 		return statusObj, nil
 	}
-	pod, err := r.getPod(ctx)
-	if err != nil {
-		return nil, err
-	}
 
-	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, mutatorID, r.scheme)
+	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, r.podOwnershipMode, mutatorID, r.scheme)
 	if err != nil {
 		return nil, err
 	}
@@ -255,14 +250,19 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) (reconc
 		return reconcile.Result{}, err
 	}
 
-	sName, err := statusv1beta1.KeyForMutatorID(r.podName, mID)
+	pod, err := r.getPod(ctx)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	sName, err := statusv1beta1.KeyForMutatorID(pod.Name, mID)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	status := &statusv1beta1.MutatorPodStatus{}
 	status.SetName(sName)
-	status.SetNamespace(r.podNamespace)
+	status.SetNamespace(pod.Namespace)
 	if err = r.Delete(ctx, status); err != nil && !apierrors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}

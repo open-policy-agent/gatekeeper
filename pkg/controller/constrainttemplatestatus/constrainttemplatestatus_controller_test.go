@@ -171,7 +171,7 @@ violation[{"msg": "denied!"}] {
 	fakePod := pod.DeepCopy()
 	fakePod.SetName("fake-pod")
 	t.Run("Multiple constraint template statuses are reported", func(t *testing.T) {
-		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, podstatus.PodOwnershipDisabled, "denyall", mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).To(gomega.BeNil()) }()
@@ -182,7 +182,7 @@ violation[{"msg": "denied!"}] {
 	})
 
 	t.Run("Multiple constraint statuses are reported", func(t *testing.T) {
-		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
+		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, podstatus.PodOwnershipDisabled, newDenyAllConstraint(), mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(err).To(gomega.BeNil())
@@ -222,13 +222,13 @@ violation[{"msg": "denied!"}] {
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 
-		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, podstatus.PodOwnershipDisabled, "denyall", mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).NotTo(gomega.HaveOccurred()) }()
 
-		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
+		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, podstatus.PodOwnershipDisabled, newDenyAllConstraint(), mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())

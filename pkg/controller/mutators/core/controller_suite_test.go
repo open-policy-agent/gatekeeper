@@ -17,43 +17,50 @@ package core
 
 import (
 	"context"
+	stdlog "log"
+	"os"
+	"path/filepath"
 	"sync"
+	"testing"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/apis"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var cfg *rest.Config
 
-//func TestMain(m *testing.M) {
-//	t := &envtest.Environment{
-//		CRDDirectoryPaths: []string{
-//			filepath.Join("..", "..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
-//			filepath.Join("..", "..", "..", "..", "config", "crd", "bases"),
-//		},
-//		ErrorIfCRDPathMissing: true,
-//	}
-//	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-//		stdlog.Fatal(err)
-//	}
-//
-//	var err error
-//	if cfg, err = t.Start(); err != nil {
-//		stdlog.Fatal(err)
-//	}
-//
-//	code := m.Run()
-//	if err = t.Stop(); err != nil {
-//		stdlog.Printf("error while trying to stop server: %v", err)
-//	}
-//	os.Exit(code)
-//}
+func TestMain(m *testing.M) {
+	t := &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
+			filepath.Join("..", "..", "..", "..", "config", "crd", "bases"),
+		},
+		ErrorIfCRDPathMissing: true,
+	}
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		stdlog.Fatal(err)
+	}
+
+	var err error
+	if cfg, err = t.Start(); err != nil {
+		stdlog.Fatal(err)
+	}
+
+	code := m.Run()
+	if err = t.Stop(); err != nil {
+		stdlog.Printf("error while trying to stop server: %v", err)
+	}
+	os.Exit(code)
+}
 
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
 // writes the request to requests after Reconcile is finished.

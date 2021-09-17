@@ -50,7 +50,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
+	status, err := NewMutatorStatusForPod(pod, PodOwnershipEnabled, mutator.ID(), scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())
