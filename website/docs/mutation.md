@@ -119,11 +119,11 @@ Wildcards can be used for list element values: `spec.containers[name:*].imagePul
 ##### Conditionals
 
 The conditions for updating the resource.
-Two types of conditions exist:
-- path tests - a resource will only be updated when a specified path exists or not
-- value tests - a resource will only be updated when the existing value is/is not contained in a list of values
 
-An example of the conditionals: 
+Mutation has path tests, which make it so the resource will only be mutated if the specified path exists/does not exist.
+This can be useful for things like setting a default value if a field is undeclared, or for avoiding creating a field
+when a parent is missing, such as accidentally creating an empty sidecar named "foo" in the example below:
+
 ```yaml
 parameters:
   pathTests:
@@ -131,11 +131,6 @@ parameters:
     condition: MustExist
   - subPath: spec.containers[name:foo].securityContext.capabilities
     condition: MustNotExist
-
-  assignIf:
-    in: [<value 1>, <value 2>, <value 3>, ...]
-    notIn: [<value 1>, <value 2>, <value 3>, ...]
-
 ```
 
 

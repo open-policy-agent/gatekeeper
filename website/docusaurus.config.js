@@ -22,6 +22,7 @@ module.exports = {
       logo: {
         alt: 'Gatekeeper logo',
         src: 'img/logo.svg',
+        href: 'https://open-policy-agent.github.io/gatekeeper/website/docs/',
       },
       items: [
         {

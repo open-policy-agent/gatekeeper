@@ -159,9 +159,6 @@ spec:
                     description: Assign.value holds the value to be assigned
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
-                  assignIf:
-                    description: once https://github.com/kubernetes-sigs/controller-tools/pull/528 is merged, we can use an actual object
-                    type: object
                   pathTests:
                     items:
                       description: "PathTest allows the user to customize how the mutation works if parent paths are missing. It traverses the list in order. All sub paths are tested against the provided condition, if the test fails, the mutation is not applied. All `subPath` entries must be a prefix of `location`. Any glob characters will take on the same value as was used to expand the matching glob in `location`. \n Available Tests: * MustExist    - the path must exist or do not mutate * MustNotExist - the path must not exist or do not mutate."
