@@ -175,33 +175,45 @@ func (n *node) conflicts(childKey string) idSet {
 	return conflicts
 }
 
-// HasConflicts returns true if there are any schema type conflicts along the
-// passed path.
+// GetConflicts returns all conflicts along the passed path.
 //
 // Returns an error if the path does not exist.
-func (n *node) HasConflicts(path []parser.Node, terminalType parser.NodeType) (bool, error) {
+func (n *node) GetConflicts(path []parser.Node, terminalType parser.NodeType) []types.ID {
+	conflictsMap := n.getConflicts(path, terminalType)
+	return conflictsMap.ToList()
+}
+
+func (n *node) getConflicts(path []parser.Node, terminalType parser.NodeType) idSet {
 	if len(path) == 0 {
-		return false, nil
+		return nil
 	}
 
 	childKey := key(path[0])
 	childType := headType(path, terminalType)
 	if _, found := n.Children[childKey]; !found {
 		// Path has not been added, so there can be no conflicts.
-		return false, ErrNotFound
-	}
-
-	// Count the number of distinct types with this key.
-	if len(n.conflicts(childKey)) > 0 {
-		return true, nil
+		return nil
 	}
 
 	if _, found := n.Children[childKey][childType]; !found {
 		// Path has not been added, so there can be no conflicts.
-		return false, ErrNotFound
+		return nil
 	}
 	child := n.Children[childKey][childType]
-	return child.HasConflicts(path[1:], terminalType)
+
+	childConflicts := child.getConflicts(path[1:], terminalType)
+
+	// Count the number of distinct types with this key.
+	conflictsMap := n.conflicts(childKey)
+
+	if childConflicts == nil {
+		childConflicts = make(idSet)
+	}
+	for conflict := range childConflicts {
+		conflictsMap[conflict] = true
+	}
+
+	return conflictsMap
 }
 
 // merge inserts elements from `from` into `into`. Returns `into`, or a

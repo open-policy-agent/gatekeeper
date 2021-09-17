@@ -254,8 +254,8 @@ func TestNode_Remove(t *testing.T) {
 		toRemove           []idPath
 		toCheck            string
 		terminalType       parser.NodeType
-		wantConflictBefore bool
-		wantConflictAfter  bool
+		wantConflictBefore []types.ID
+		wantConflictAfter  []types.ID
 	}{
 		{
 			name: "remove object conflict same key",
@@ -265,8 +265,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("object", "spec.name")},
 			toCheck:            "spec[name: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "list"}, {Name: "object"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "remove set conflict same key",
@@ -276,8 +276,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ipt("set", "spec.containers", Set)},
 			toCheck:            "spec.containers.hello",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "object"}, {Name: "set"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "remove object conflict different key",
@@ -287,8 +287,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("object", "spec.name")},
 			toCheck:            "spec[container: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "list"}, {Name: "object"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "remove list conflict",
@@ -298,8 +298,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("list", "spec[name: foo]")},
 			toCheck:            "spec.name.id",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "list"}, {Name: "object"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "remove list-set conflict",
@@ -309,8 +309,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ipt("set", "spec.containers", Set)},
 			toCheck:            "spec.containers[name: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "list"}, {Name: "set"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "multiple conflicts",
@@ -321,8 +321,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("list-object", "spec[container: foo].name")},
 			toCheck:            "spec.container[name: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  true,
+			wantConflictBefore: []types.ID{{Name: "list-object"}, {Name: "object-list"}, {Name: "object-object"}},
+			wantConflictAfter:  []types.ID{{Name: "object-list"}, {Name: "object-object"}},
 		},
 		{
 			name: "sublist conflict with different list keys",
@@ -332,8 +332,8 @@ func TestNode_Remove(t *testing.T) {
 			},
 			toRemove:           []idPath{ip("list 2", "containers[id: bar]")},
 			toCheck:            "containers[name: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  false,
+			wantConflictBefore: []types.ID{{Name: "list 1"}, {Name: "list 2"}},
+			wantConflictAfter:  nil,
 		},
 		{
 			name: "preserve subpath when deleting longer schema path",
@@ -348,8 +348,8 @@ func TestNode_Remove(t *testing.T) {
 				ip("long 2", "spec.containers.name.image"),
 			},
 			toCheck:            "spec.containers[name: foo]",
-			wantConflictBefore: true,
-			wantConflictAfter:  true,
+			wantConflictBefore: []types.ID{{Name: "long 1"}, {Name: "long 2"}, {Name: "short 1"}, {Name: "short 2"}},
+			wantConflictAfter:  []types.ID{{Name: "short 1"}, {Name: "short 2"}},
 		},
 		{
 			name: "remove identical path",
@@ -361,8 +361,8 @@ func TestNode_Remove(t *testing.T) {
 				ip("path 1", "spec.containers[name: foo]"),
 			},
 			toCheck:            "spec.containers[name: foo]",
-			wantConflictBefore: false,
-			wantConflictAfter:  false,
+			wantConflictBefore: nil,
+			wantConflictAfter:  nil,
 		},
 	}
 
@@ -381,14 +381,9 @@ func TestNode_Remove(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotConflictBefore, gotConflictBeforeErr := root.HasConflicts(pCheck.Nodes, Unknown)
-			if gotConflictBefore != tc.wantConflictBefore {
-				t.Errorf("before remove got HasConflicts(%q) = %t, want %t",
-					tc.toCheck, gotConflictBefore, tc.wantConflictBefore)
-			}
-			if gotConflictBeforeErr != nil {
-				t.Errorf("before remove got HasConflicts(%q) error = %v, want <nil>",
-					tc.toCheck, gotConflictBeforeErr)
+			gotConflictBefore := root.GetConflicts(pCheck.Nodes, Unknown)
+			if diff := cmp.Diff(tc.wantConflictBefore, gotConflictBefore, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf(diff)
 			}
 
 			for _, toRemove := range tc.toRemove {
@@ -399,14 +394,9 @@ func TestNode_Remove(t *testing.T) {
 				root.Remove(toRemove.ID, pRemove.Nodes, toRemove.terminalType)
 			}
 
-			gotConflictAfter, gotConflictAfterErr := root.HasConflicts(pCheck.Nodes, Unknown)
-			if gotConflictAfter != tc.wantConflictAfter {
-				t.Errorf("after remove got HasConflicts(%q) = %t, want %t",
-					tc.toCheck, gotConflictAfter, tc.wantConflictAfter)
-			}
-			if gotConflictAfterErr != nil {
-				t.Errorf("before remove got HasConflicts(%q) error = %v, want <nil>",
-					tc.toCheck, gotConflictAfterErr)
+			gotConflictAfter := root.GetConflicts(pCheck.Nodes, Unknown)
+			if diff := cmp.Diff(tc.wantConflictAfter, gotConflictAfter, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf(diff)
 			}
 		})
 	}

@@ -76,8 +76,8 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
 	}
 
-	if err := got.err; err != nil {
-		return err
+	if got.err != nil {
+		return got.err
 	}
 
 	switch o := obj.(type) {
@@ -117,8 +117,7 @@ func (c *fakeClient) Update(_ context.Context, obj client.Object, _ ...client.Up
 }
 
 func (c *fakeClient) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
-	key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
-	delete(c.objects, key)
+	delete(c.objects, key(obj))
 
 	return nil
 }
@@ -185,7 +184,11 @@ func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
-	return m.terminal
+	n := len(m.path.Nodes)-1
+	if n < 0 {
+		return ""
+	}
+	return m.path.Nodes[n].Type()
 }
 
 func (m *fakeMutator) Path() parser.Path {
@@ -235,6 +238,7 @@ func newFakeReconciler(c client.Client) *Reconciler {
 				return nil, fake.err
 			}
 
+			fake.mutator.id = mutationtypes.MakeID(object)
 			return fake.mutator, nil
 		},
 		system: mutation.NewSystem(mutation.SystemOpts{}),
@@ -269,9 +273,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
 				ObjectMeta: metav1.ObjectMeta{
@@ -298,16 +300,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
 				ObjectMeta: metav1.ObjectMeta{
@@ -334,16 +332,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar", DeletionTimestamp: now()},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			}),
 			want:    nil,
 			wantErr: nil,
@@ -354,9 +348,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar", DeletionTimestamp: now()},
-				mutator: &fakeMutator{
-					id: mutationtypes.ID{Kind: "fake", Name: "bar"},
-				},
+				mutator: &fakeMutator{},
 			}),
 			want:    nil,
 			wantErr: nil,
@@ -398,12 +390,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 		{
 			name: "error updating Mutator status",
 			before: []objectOrErr{
-				orErr(client.ObjectKey{Namespace: "gatekeeper-system", Name: "pod-fake-bar"}, errSome),
+				orErr(client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"}, errSome),
 			},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
-				err:        errSome,
+				mutator: &fakeMutator{},
 			}),
 			wantErr: errSome,
 		},
@@ -413,7 +405,6 @@ func TestReconciler_Reconcile(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-1"},
 				mutator: &fakeMutator{
-					id:   mutationtypes.ID{Kind: "fake", Name: "bar-1"},
 					path: mustParse("spec[name: foo].bar"),
 				},
 			})},
@@ -421,7 +412,6 @@ func TestReconciler_Reconcile(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-2"},
 				mutator: &fakeMutator{
-					id:   mutationtypes.ID{Kind: "fake", Name: "bar-2"},
 					path: mustParse("spec.bar"),
 				},
 			}),
@@ -441,8 +431,8 @@ func TestReconciler_Reconcile(t *testing.T) {
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Name: "bar-1"},
-						{Kind: "fake", Name: "bar-2"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
 					}}.Error()}},
 				},
 			}, {
@@ -461,8 +451,79 @@ func TestReconciler_Reconcile(t *testing.T) {
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Name: "bar-1"},
-						{Kind: "fake", Name: "bar-2"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
+					}}.Error()}},
+				},
+			}},
+			wantErr: nil,
+		},
+		{
+			name: "keep errors on deleted conflicting mutator",
+			before: []objectOrErr{orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-1"},
+				mutator: &fakeMutator{
+					path: mustParse("spec[name: foo].bar"),
+				},
+			}), orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-2"},
+				mutator: &fakeMutator{
+					path: mustParse("spec.bar.qux"),
+				},
+			}), orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-3"},
+				mutator: &fakeMutator{
+					path: mustParse("spec.bar[name: foo].qux"),
+				},
+			})},
+			request: orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-3", DeletionTimestamp: now()},
+				mutator: &fakeMutator{
+					path: mustParse("spec.bar[name: foo].qux"),
+				},
+			}),
+			want: []*statusv1beta1.MutatorPodStatus{{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "pod-fake-bar--1",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar-1",
+						"internal.gatekeeper.sh/pod":          "pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   false,
+					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
+					}}.Error()}},
+				},
+			}, {
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "pod-fake-bar--2",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar-2",
+						"internal.gatekeeper.sh/pod":          "pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   false,
+					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
+						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
 					}}.Error()}},
 				},
 			}},

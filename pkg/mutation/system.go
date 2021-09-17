@@ -113,6 +113,10 @@ func (s *System) Remove(id types.ID) error {
 	return nil
 }
 
+func (s *System) GetConflicts(id types.ID) []types.ID {
+	return s.schemaDB.GetConflicts(id)
+}
+
 // Mutate applies the mutation in place to the given object. Returns
 // true if applying Mutators caused any changes to the object.
 func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {

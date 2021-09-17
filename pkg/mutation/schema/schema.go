@@ -164,7 +164,7 @@ func (db *DB) remove(id types.ID) {
 		mutator := db.cachedMutators[conflictID]
 		hasConflict := false
 		for _, gvk := range mutator.SchemaBindings() {
-			if isConflict, _ := db.schemas[gvk].HasConflicts(mutator.Path().Nodes, mutator.TerminalType()); isConflict {
+			if conflicts := db.schemas[gvk].GetConflicts(mutator.Path().Nodes, mutator.TerminalType()); len(conflicts) > 0 {
 				hasConflict = true
 				break
 			}
@@ -183,5 +183,21 @@ func (db *DB) remove(id types.ID) {
 func (db *DB) HasConflicts(id types.ID) bool {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	return db.conflicts[id]
+	return len(db.GetConflicts(id)) > 0
+}
+
+func (db *DB) GetConflicts(id types.ID) []types.ID {
+	db.mutex.RLock()
+	mutator, ok := db.cachedMutators[id]
+	db.mutex.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	conflicts := make(idSet)
+	for _, gvk := range mutator.SchemaBindings() {
+		conflicts = merge(conflicts, db.schemas[gvk].getConflicts(mutator.Path().Nodes, mutator.TerminalType()))
+	}
+
+	return conflicts.ToList()
 }

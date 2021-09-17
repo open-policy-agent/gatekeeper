@@ -108,29 +108,43 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	ingestionStatus := ctrlmutators.MutatorStatusError
+	// Encasing this call in a function prevents the arguments from being evaluated early.
+	id := types.MakeID(mutationObj)
+	defer func() {
+		r.reportMutator(id, ingestionStatus, startTime)
+	}()
+
 	if deleted {
 		// Either the mutator was deleted before we were able to process this request, or it has been marked for
 		// deletion.
-		return r.reconcileDeleted(ctx, mutationObj)
+		r.getTracker().CancelExpect(mutationObj)
+		return r.reconcileDeleted(ctx, id)
 	}
 
-	ingestionStatus := ctrlmutators.MutatorStatusError
-	// encasing this call in a function prevents the arguments from being evaluated early
+	result, err := r.reconcileUpsert(ctx, id, mutationObj)
+	if err != nil {
+		return result, err
+	}
 
-	defer func() {
-		r.reportMutator(types.MakeID(mutationObj), ingestionStatus, startTime)
-	}()
 
+	ingestionStatus = ctrlmutators.MutatorStatusActive
+	return reconcile.Result{}, nil
+}
+
+func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, mutationObj client.Object) (reconcile.Result, error) {
 	mutator, err := r.mutatorFor(mutationObj)
 	if err != nil {
-		r.log.Error(err, "Creating mutator for resource failed", "resource", request.NamespacedName)
+		r.log.Error(err, "Creating mutator for resource failed", "resource",
+			client.ObjectKey{Namespace: mutationObj.GetNamespace(), Name: mutationObj.GetName()})
 		r.getTracker().TryCancelExpect(mutationObj)
 
 		return r.updateError(ctx, mutationObj, err)
 	}
 
 	if err = r.system.Upsert(mutator); err != nil {
-		r.log.Error(err, "Insert failed", "resource", request.NamespacedName)
+		r.log.Error(err, "Insert failed", "resource",
+			client.ObjectKey{Namespace: mutationObj.GetNamespace(), Name: mutationObj.GetName()})
 		r.getTracker().TryCancelExpect(mutationObj)
 
 		return r.upsertError(ctx, mutationObj, err)
@@ -138,15 +152,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	r.getTracker().Observe(mutationObj)
 
-	err = r.updateStatus(ctx, types.MakeID(mutationObj),
+	return r.updateStatus(ctx, id,
 		setID(mutationObj.GetUID()), setGeneration(mutationObj.GetGeneration()),
 		setEnforced(true), setErrors(nil))
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	ingestionStatus = ctrlmutators.MutatorStatusActive
-	return reconcile.Result{}, nil
 }
 
 func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.ID) (*statusv1beta1.MutatorPodStatus, error) {
@@ -236,14 +244,14 @@ func (r *Reconciler) getTracker() readiness.Expectations {
 }
 
 // reconcileDeleted removes the Mutator from the controller and deletes the corresponding PodStatus.
-func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (reconcile.Result, error) {
-	mID := types.MakeID(obj)
-	r.getTracker().CancelExpect(obj)
+func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) (reconcile.Result, error) {
 	r.cache.Remove(mID)
+
+	conflicts := r.system.GetConflicts(mID)
 
 	if err := r.system.Remove(mID); err != nil {
 		r.log.Error(err, "Remove failed", "resource",
-			apiTypes.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()})
+			apiTypes.NamespacedName{Name: mID.Name, Namespace: mID.Namespace})
 		return reconcile.Result{}, err
 	}
 
@@ -255,8 +263,17 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (r
 	status := &statusv1beta1.MutatorPodStatus{}
 	status.SetName(sName)
 	status.SetNamespace(r.podNamespace)
-	if err = r.Delete(ctx, status); !apierrors.IsNotFound(err) {
+	if err = r.Delete(ctx, status); err != nil && !apierrors.IsNotFound(err) {
 		return reconcile.Result{}, err
+	}
+
+	for _, conflict := range conflicts {
+		idConflicts := r.system.GetConflicts(conflict)
+		if len(idConflicts) == 0 {
+			_, _ = r.updateStatus(ctx, conflict, setErrors(nil))
+		} else {
+			_, _ = r.updateStatus(ctx, conflict, setErrors(mutationschema.NewErrConflictingSchema(idConflicts)))
+		}
 	}
 
 	return reconcile.Result{}, nil
@@ -264,11 +281,11 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, obj client.Object) (r
 
 // updateStatus updates the PodStatus corresponding to the passed Mutator with whether the Mutator is enforced, and
 // whether there is an error instantiating the Mutator within the controller.
-func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...statusUpdate) error {
+func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...statusUpdate) (reconcile.Result, error) {
 	status, err := r.getOrCreatePodStatus(ctx, id)
 	if err != nil {
 		r.log.Info("could not get/create pod status object", "error", err)
-		return err
+		return reconcile.Result{}, err
 	}
 
 	for _, update := range updates {
@@ -279,16 +296,15 @@ func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...s
 		r.log.Error(err, "could not update mutator status")
 	}
 
-	return nil
+	return reconcile.Result{}, nil
 }
 
 func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err error) (reconcile.Result, error) {
 	id := types.MakeID(obj)
 
-	updateStatusErr := r.updateStatus(ctx, id,
+	return r.updateStatus(ctx, id,
 		setID(obj.GetUID()), setGeneration(obj.GetGeneration()),
 		setEnforced(false), setErrors(err))
-	return reconcile.Result{}, updateStatusErr
 }
 
 func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, err error) (reconcile.Result, error) {
@@ -306,7 +322,7 @@ func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, err err
 		if id == objID {
 			continue
 		}
-		_ = r.updateStatus(ctx, id, setEnforced(false), setErrors(err))
+		_, _ = r.updateStatus(ctx, id, setEnforced(false), setErrors(err))
 	}
 
 	return result, updateErr
