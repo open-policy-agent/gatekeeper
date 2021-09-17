@@ -345,8 +345,8 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					},
 				},
 			},
-			"namespaces":         *propsWithDescription(&wildcardNSList, "namespaces is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace."),
-			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "excludedNamespaces is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace."),
+			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
+			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
 			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
 			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "namespaceSelector is a standard Kubernetes namespace selector. If defined, make sure to add Namespaces to your configs.config.gatekeeper.sh object to ensure namespaces are synced into OPA."),
 			"scope": {
@@ -360,7 +360,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"name": {
 				Type:        "string",
-				Description: "Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.",
+				Description: "`name` is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.",
 				Pattern:     wildcardNSPattern,
 			},
 		},
