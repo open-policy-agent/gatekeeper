@@ -247,7 +247,7 @@ func newFakeReconciler(c client.Client) *Reconciler {
 		getPod: func(ctx context.Context) (*corev1.Pod, error) {
 			return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: "gatekeeper-system"}}, nil
 		},
-		scheme: s,
+		scheme:           s,
 		podOwnershipMode: statusv1beta1.PodOwnershipEnabled,
 	}
 }
@@ -273,7 +273,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			before: nil,
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
@@ -300,12 +300,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 			name: "replace Mutator",
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
@@ -332,12 +332,12 @@ func TestReconciler_Reconcile(t *testing.T) {
 			name: "delete Mutator",
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar", DeletionTimestamp: now()},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar", DeletionTimestamp: now()},
 				mutator:    &fakeMutator{},
 			}),
 			want:    nil,
@@ -348,7 +348,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			before: nil,
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar", DeletionTimestamp: now()},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar", DeletionTimestamp: now()},
 				mutator:    &fakeMutator{},
 			}),
 			want:    nil,
@@ -357,7 +357,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 		{
 			name:    "error getting Mutator",
 			before:  nil,
-			request: orErr(client.ObjectKey{Namespace: "foo", Name: "bar"}, errSome),
+			request: orErr(client.ObjectKey{Name: "bar"}, errSome),
 			wantErr: errSome,
 		},
 		{
@@ -365,7 +365,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			before: nil,
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				err:        errSome,
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
@@ -395,7 +395,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			}),
 			wantErr: errSome,
@@ -404,14 +404,14 @@ func TestReconciler_Reconcile(t *testing.T) {
 			name: "errors on inserted conflicting mutator",
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
 				mutator: &fakeMutator{
 					path: mustParse("spec[name: foo].bar"),
 				},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-2"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-2"},
 				mutator: &fakeMutator{
 					path: mustParse("spec.bar"),
 				},
@@ -431,10 +431,13 @@ func TestReconciler_Reconcile(t *testing.T) {
 					ID:         "no-pod",
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
-					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
-						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
-					}}.Error()}},
+					Errors: []statusv1beta1.MutatorError{{
+						Type: mutationschema.ErrConflictingSchemaType,
+						Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+							{Kind: "fake", Name: "bar-1"},
+							{Kind: "fake", Name: "bar-2"},
+						}}.Error(),
+					}},
 				},
 			}, {
 				ObjectMeta: metav1.ObjectMeta{
@@ -451,10 +454,13 @@ func TestReconciler_Reconcile(t *testing.T) {
 					ID:         "no-pod",
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
-					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
-						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
-					}}.Error()}},
+					Errors: []statusv1beta1.MutatorError{{
+						Type: mutationschema.ErrConflictingSchemaType,
+						Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+							{Kind: "fake", Name: "bar-1"},
+							{Kind: "fake", Name: "bar-2"},
+						}}.Error(),
+					}},
 				},
 			}},
 			wantErr: nil,
@@ -463,37 +469,37 @@ func TestReconciler_Reconcile(t *testing.T) {
 			name: "keep errors on deleted conflicting mutator",
 			before: []objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
 				mutator: &fakeMutator{
 					path: mustParse("spec[name: foo].bar"),
 				},
 			}), orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-2"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-2"},
 				mutator: &fakeMutator{
 					path: mustParse("spec.bar.qux"),
 				},
 			}), orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-3"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-3"},
 				mutator: &fakeMutator{
 					path: mustParse("spec.bar[name: foo].qux"),
 				},
 			})},
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
-				ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar-3", DeletionTimestamp: now()},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-1", DeletionTimestamp: now()},
 				mutator: &fakeMutator{
-					path: mustParse("spec.bar[name: foo].qux"),
+					path: mustParse("spec[name: foo].bar"),
 				},
 			}),
 			want: []*statusv1beta1.MutatorPodStatus{{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "gatekeeper-system",
-					Name:      "no--pod-fake-bar--1",
+					Name:      "no--pod-fake-bar--2",
 					Labels: map[string]string{
 						"internal.gatekeeper.sh/mutator-kind": "fake",
-						"internal.gatekeeper.sh/mutator-name": "bar-1",
+						"internal.gatekeeper.sh/mutator-name": "bar-2",
 						"internal.gatekeeper.sh/pod":          "no-pod",
 					},
 					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
@@ -502,10 +508,13 @@ func TestReconciler_Reconcile(t *testing.T) {
 					ID:         "no-pod",
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
-					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
-						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
-					}}.Error()}},
+					Errors: []statusv1beta1.MutatorError{{
+						Type: mutationschema.ErrConflictingSchemaType,
+						Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+							{Kind: "fake", Name: "bar-2"},
+							{Kind: "fake", Name: "bar-3"},
+						}}.Error(),
+					}},
 				},
 			}, {
 				ObjectMeta: metav1.ObjectMeta{
@@ -522,10 +531,13 @@ func TestReconciler_Reconcile(t *testing.T) {
 					ID:         "no-pod",
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
-					Errors: []statusv1beta1.MutatorError{{Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
-						{Kind: "fake", Namespace: "foo", Name: "bar-1"},
-						{Kind: "fake", Namespace: "foo", Name: "bar-2"},
-					}}.Error()}},
+					Errors: []statusv1beta1.MutatorError{{
+						Type: mutationschema.ErrConflictingSchemaType,
+						Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+							{Kind: "fake", Name: "bar-2"},
+							{Kind: "fake", Name: "bar-3"},
+						}}.Error(),
+					}},
 				},
 			}},
 			wantErr: nil,
@@ -574,5 +586,194 @@ func TestReconciler_Reconcile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReconciler_Reconcile_DeletePodStatus(t *testing.T) {
+	c := newFakeClient()
+	r := newFakeReconciler(c)
+
+	ctx := context.Background()
+
+	m := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+		mutator:    &fakeMutator{},
+	}
+	c.objects[key(m)] = orObject(m)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statusKey := client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"}
+	gotStatus, ok := c.objects[statusKey]
+	if !ok {
+		t.Fatalf("could not find %v", statusKey)
+	}
+
+	wantStatus := &statusv1beta1.MutatorPodStatus{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "gatekeeper-system",
+			Name:      "no--pod-fake-bar",
+			Labels: map[string]string{
+				"internal.gatekeeper.sh/mutator-kind": "fake",
+				"internal.gatekeeper.sh/mutator-name": "bar",
+				"internal.gatekeeper.sh/pod":          "no-pod",
+			},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+		},
+		Status: statusv1beta1.MutatorPodStatusStatus{
+			ID:         "no-pod",
+			Operations: []string{"audit", "mutation-status", "status", "webhook"},
+			Enforced:   true,
+		},
+	}
+	if diff := cmp.Diff(wantStatus, gotStatus.object); diff != "" {
+		t.Fatal(diff)
+	}
+
+	m.DeletionTimestamp = now()
+
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, ok = c.objects[statusKey]
+	if ok {
+		t.Fatalf("got %v exists, want not exists", statusKey)
+	}
+}
+
+func TestReconciler_Reconcile_PreserveError(t *testing.T) {
+	c := newFakeClient()
+	r := newFakeReconciler(c)
+
+	ctx := context.Background()
+
+	// Introduce two conflicting mutators.
+	m1 := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
+		mutator: &fakeMutator{
+			path: mustParse("spec.foo"),
+		},
+	}
+	c.objects[key(m1)] = orObject(m1)
+
+	m2 := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar-2"},
+		mutator: &fakeMutator{
+			path: mustParse("spec[name: bar].foo"),
+		},
+	}
+	c.objects[key(m2)] = orObject(m2)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify m2 to have an error.
+	m2b := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar-2"},
+		err:        errSome,
+	}
+	c.objects[key(m2)] = orObject(m2b)
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statusKey1 := client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar--1"}
+	gotStatus1, ok := c.objects[statusKey1]
+	if !ok {
+		t.Fatalf("could not find %v", statusKey1)
+	}
+
+	// Ensure the Pod Statuses look like we want.
+	wantStatus1 := &statusv1beta1.MutatorPodStatus{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "gatekeeper-system",
+			Name:      "no--pod-fake-bar--1",
+			Labels: map[string]string{
+				"internal.gatekeeper.sh/mutator-kind": "fake",
+				"internal.gatekeeper.sh/mutator-name": "bar-1",
+				"internal.gatekeeper.sh/pod":          "no-pod",
+			},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+		},
+		Status: statusv1beta1.MutatorPodStatusStatus{
+			ID:         "no-pod",
+			Operations: []string{"audit", "mutation-status", "status", "webhook"},
+			Errors: []statusv1beta1.MutatorError{{
+				Type: mutationschema.ErrConflictingSchemaType,
+				Message: mutationschema.ErrConflictingSchema{Conflicts: []mutationtypes.ID{
+					{Kind: "fake", Name: "bar-1"},
+					{Kind: "fake", Name: "bar-2"},
+				}}.Error(),
+			}},
+			Enforced: false,
+		},
+	}
+	if diff := cmp.Diff(wantStatus1, gotStatus1.object); diff != "" {
+		t.Fatal(diff)
+	}
+
+	wantStatus2 := &statusv1beta1.MutatorPodStatus{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "gatekeeper-system",
+			Name:      "no--pod-fake-bar--2",
+			Labels: map[string]string{
+				"internal.gatekeeper.sh/mutator-kind": "fake",
+				"internal.gatekeeper.sh/mutator-name": "bar-2",
+				"internal.gatekeeper.sh/pod":          "no-pod",
+			},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+		},
+		Status: statusv1beta1.MutatorPodStatusStatus{
+			ID:         "no-pod",
+			Operations: []string{"audit", "mutation-status", "status", "webhook"},
+			Errors:     []statusv1beta1.MutatorError{{Message: errSome.Error()}},
+			Enforced:   false,
+		},
+	}
+
+	statusKey2 := client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar--2"}
+	gotStatus2, ok := c.objects[statusKey2]
+	if !ok {
+		t.Fatalf("could not find %v", statusKey2)
+	}
+	if diff := cmp.Diff(wantStatus2, gotStatus2.object); diff != "" {
+		t.Fatal(diff)
+	}
+
+	// Remove m1. We expect m2 to still show an error.
+	m1.DeletionTimestamp = now()
+	c.objects[key(m1)] = orObject(m1)
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, ok = c.objects[statusKey1]
+	if ok {
+		t.Fatalf("got PodStatus for first mutator: %v", statusKey1)
+	}
+
+	gotStatus2, ok = c.objects[statusKey2]
+	if !ok {
+		t.Fatalf("could not find %v", statusKey2)
+	}
+	if diff := cmp.Diff(wantStatus2, gotStatus2.object); diff != "" {
+		t.Fatal(diff)
 	}
 }

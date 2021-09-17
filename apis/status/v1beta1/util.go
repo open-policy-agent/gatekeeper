@@ -83,9 +83,6 @@ func dashPacker(vals ...string) (string, error) {
 		if strings.HasPrefix(val, "-") || strings.HasSuffix(val, "-") {
 			return "", fmt.Errorf("dashPacker cannot pack strings that begin or end with a dash: %+v", vals)
 		}
-		if len(val) == 0 {
-			panic(strings.Join(vals, "+"))
-		}
 		if i != 0 {
 			b.WriteString("-")
 		}

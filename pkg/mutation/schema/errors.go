@@ -20,7 +20,7 @@ func NewErrConflictingSchema(ids []types.ID) error {
 	return ErrConflictingSchema{Conflicts: ids}
 }
 
-const MessageConflictingSchema = "the following mutators have conflicting schemas"
+const ErrConflictingSchemaType = "ErrConflictingSchema"
 
 // ErrConflictingSchema reports that adding a Mutator to the DB resulted in
 // conflicting implicit schemas.
@@ -29,8 +29,8 @@ type ErrConflictingSchema struct {
 }
 
 func (e ErrConflictingSchema) Error() string {
-	return fmt.Sprintf("%s: %v",
-		MessageConflictingSchema, e.Conflicts)
+	return fmt.Sprintf("the following mutators have conflicting schemas: %v",
+		e.Conflicts)
 }
 
 func (e ErrConflictingSchema) Is(other error) bool {

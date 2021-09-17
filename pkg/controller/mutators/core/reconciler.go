@@ -268,11 +268,15 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) (reconc
 	}
 
 	for _, conflict := range conflicts {
+		if conflict == mID {
+			continue
+		}
+
 		idConflicts := r.system.GetConflicts(conflict)
 		if len(idConflicts) == 0 {
-			_, _ = r.updateStatus(ctx, conflict, setErrors(nil))
+			_, _ = r.updateStatus(ctx, conflict, replaceErrorIfConflictingSchema(nil))
 		} else {
-			_, _ = r.updateStatus(ctx, conflict, setErrors(mutationschema.NewErrConflictingSchema(idConflicts)))
+			_, _ = r.updateStatus(ctx, conflict, replaceErrorIfConflictingSchema(mutationschema.NewErrConflictingSchema(idConflicts)))
 		}
 	}
 

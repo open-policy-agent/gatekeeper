@@ -48,6 +48,9 @@ type MutatorPodStatusStatus struct {
 
 // MutatorError represents a single error caught while adding a mutator to a system.
 type MutatorError struct {
+	// Type indicates a specific class of error for use by controller code.
+	// If not present, the error should be treated as not matching any known type.
+	Type    string `json:"type,omitempty"`
 	Message string `json:"message"`
 }
 
