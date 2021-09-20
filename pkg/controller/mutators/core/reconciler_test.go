@@ -37,34 +37,48 @@ func mustParse(p string) parser.Path {
 type objectOrErr struct {
 	key    client.ObjectKey
 	object client.Object
-	err    error
+	errs   []error
 }
 
-func orObject(obj client.Object) objectOrErr {
-	return objectOrErr{
+func orObject(obj client.Object) *objectOrErr {
+	return &objectOrErr{
 		key:    client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()},
 		object: obj,
-		err:    nil,
+		errs:   nil,
 	}
 }
 
-func orErr(key client.ObjectKey, err error) objectOrErr {
-	return objectOrErr{
+func orErr(key client.ObjectKey, errs ...error) *objectOrErr {
+	return &objectOrErr{
 		key:    key,
 		object: nil,
-		err:    err,
+		errs:   errs,
+	}
+}
+
+func (oe *objectOrErr) error() error {
+	fmt.Println(oe.key, len(oe.errs))
+	switch len(oe.errs) {
+	case 0:
+		return nil
+	case 1:
+		return oe.errs[0]
+	default:
+		err := oe.errs[0]
+		oe.errs = oe.errs[1:]
+		return err
 	}
 }
 
 type fakeClient struct {
 	client.Client
 
-	objects map[types.NamespacedName]objectOrErr
+	objects map[types.NamespacedName]*objectOrErr
 }
 
 func newFakeClient() *fakeClient {
 	return &fakeClient{
-		objects: make(map[types.NamespacedName]objectOrErr),
+		objects: make(map[types.NamespacedName]*objectOrErr),
 	}
 }
 
@@ -76,8 +90,9 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
 	}
 
-	if got.err != nil {
-		return got.err
+	err := got.error()
+	if err != nil {
+		return err
 	}
 
 	switch o := obj.(type) {
@@ -93,30 +108,48 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 }
 
 func (c *fakeClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
-	if original, exists := c.objects[key(obj)]; exists {
-		if original.err != nil {
-			return original.err
+	original, originalExists := c.objects[key(obj)]
+	if originalExists {
+		err := original.error()
+		if err != nil {
+			return err
 		}
 	}
 
 	c.objects[key(obj)] = orObject(obj)
+	if originalExists {
+		c.objects[key(obj)].errs = original.errs
+	}
 
 	return nil
 }
 
 func (c *fakeClient) Update(_ context.Context, obj client.Object, _ ...client.UpdateOption) error {
-	if original, exists := c.objects[key(obj)]; exists {
-		if original.err != nil {
-			return original.err
+	original, originalExists := c.objects[key(obj)]
+	if originalExists {
+		err := original.error()
+		if err != nil {
+			return err
 		}
 	}
 
 	c.objects[key(obj)] = orObject(obj)
+	if originalExists {
+		c.objects[key(obj)].errs = original.errs
+	}
 
 	return nil
 }
 
 func (c *fakeClient) Delete(_ context.Context, obj client.Object, _ ...client.DeleteOption) error {
+	original, exists := c.objects[key(obj)]
+	if exists {
+		err := original.error()
+		if err != nil {
+			return err
+		}
+	}
+
 	delete(c.objects, key(obj))
 
 	return nil
@@ -202,8 +235,8 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 	}
 
 	return m.id != other.id ||
-			m.terminal != other.terminal ||
-			m.path.String() != other.path.String()
+		m.terminal != other.terminal ||
+		m.path.String() != other.path.String()
 }
 
 type fakeLogger struct {
@@ -249,6 +282,7 @@ func newFakeReconciler(c client.Client) *Reconciler {
 		},
 		scheme:           s,
 		podOwnershipMode: statusv1beta1.PodOwnershipEnabled,
+		kind:             "fake",
 	}
 }
 
@@ -262,8 +296,8 @@ func TestReconciler_Reconcile(t *testing.T) {
 		name string
 		// before are added to the Client and Reconciler before the test begins. The
 		// outcomes of adding these are not evaluated.
-		before  []objectOrErr
-		request objectOrErr
+		before  []*objectOrErr
+		request *objectOrErr
 
 		want    []*statusv1beta1.MutatorPodStatus
 		wantErr error
@@ -298,7 +332,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "replace Mutator",
-			before: []objectOrErr{orObject(&fakeMutatorObject{
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
@@ -330,7 +364,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "delete Mutator",
-			before: []objectOrErr{orObject(&fakeMutatorObject{
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
@@ -389,8 +423,21 @@ func TestReconciler_Reconcile(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "error updating Mutator status",
-			before: []objectOrErr{
+			name: "error creating Mutator status",
+			before: []*objectOrErr{
+				orErr(client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"},
+					apierrors.NewNotFound(schema.GroupResource{}, "no--pod-fake-bar"), errSome),
+			},
+			request: orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator:    &fakeMutator{},
+			}),
+			wantErr: errSome,
+		},
+		{
+			name: "error getting Mutator status",
+			before: []*objectOrErr{
 				orErr(client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"}, errSome),
 			},
 			request: orObject(&fakeMutatorObject{
@@ -401,8 +448,22 @@ func TestReconciler_Reconcile(t *testing.T) {
 			wantErr: errSome,
 		},
 		{
+			name: "error updating Mutator status",
+			before: []*objectOrErr{
+				orErr(client.ObjectKey{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"},
+					apierrors.NewNotFound(schema.GroupResource{}, "no--pod-fake-bar"), nil, errSome),
+			},
+			request: orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator:    &fakeMutator{},
+			}),
+			// We don't return an error if updating the Mutator's status fails.
+			wantErr: nil,
+		},
+		{
 			name: "errors on inserted conflicting mutator",
-			before: []objectOrErr{orObject(&fakeMutatorObject{
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
 				mutator: &fakeMutator{
@@ -467,7 +528,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "fix conflicting mutator",
-			before: []objectOrErr{orObject(&fakeMutatorObject{
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
 				mutator: &fakeMutator{
@@ -526,7 +587,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "keep errors on deleted conflicting mutator",
-			before: []objectOrErr{orObject(&fakeMutatorObject{
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
 				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
 				mutator: &fakeMutator{
@@ -613,7 +674,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			for _, m := range tc.before {
 				c.objects[m.key] = m
 
-				if m.err != nil {
+				if len(m.errs) > 0 {
 					continue
 				}
 
@@ -841,11 +902,6 @@ func TestReconcile_AlreadyDeleting(t *testing.T) {
 	c := newFakeClient()
 	r := newFakeReconciler(c)
 
-	status := &statusv1beta1.MutatorPodStatus{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "gatekeeper-system", Name: "no--pod--bar"},
-	}
-	c.objects[key(status)] = orObject(status)
-
 	ctx := context.Background()
 
 	m := &fakeMutatorObject{
@@ -853,6 +909,12 @@ func TestReconcile_AlreadyDeleting(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "bar", DeletionTimestamp: now()},
 		mutator:    &fakeMutator{},
 	}
+	c.objects[key(m)] = orObject(m)
+
+	status := &statusv1beta1.MutatorPodStatus{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"},
+	}
+	c.objects[key(status)] = orObject(status)
 
 	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m)})
 	if err != nil {
@@ -863,5 +925,74 @@ func TestReconcile_AlreadyDeleting(t *testing.T) {
 	if gotFound {
 		t.Errorf("got %v still exists after Mutator deleted, want not found",
 			key(status))
+	}
+}
+
+func TestReconcile_AlreadyDeleted(t *testing.T) {
+	c := newFakeClient()
+	r := newFakeReconciler(c)
+
+	ctx := context.Background()
+
+	status := &statusv1beta1.MutatorPodStatus{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "gatekeeper-system", Name: "no--pod-fake-bar"},
+	}
+	c.objects[key(status)] = orObject(status)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "bar"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, gotFound := c.objects[key(status)]
+	if gotFound {
+		t.Errorf("got %v still exists after Mutator deleted, want not found",
+			key(status))
+	}
+}
+
+func TestReconcile_ReconcileUpsert_GetPodError(t *testing.T) {
+	c := newFakeClient()
+	r := newFakeReconciler(c)
+
+	ctx := context.Background()
+
+	r.getPod = func(ctx context.Context) (*corev1.Pod, error) {
+		return nil, errSome
+	}
+
+	m := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+		mutator:    &fakeMutator{},
+	}
+	c.objects[key(m)] = orObject(m)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m)})
+	if !errors.Is(err, errSome) {
+		t.Errorf("got Reconcile() error = %v, want %v", err, errSome)
+	}
+}
+
+func TestReconcile_ReconcileDeleted_GetPodError(t *testing.T) {
+	c := newFakeClient()
+	r := newFakeReconciler(c)
+
+	ctx := context.Background()
+
+	r.getPod = func(ctx context.Context) (*corev1.Pod, error) {
+		return nil, errSome
+	}
+
+	m := &fakeMutatorObject{
+		TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bar", DeletionTimestamp: now()},
+		mutator:    &fakeMutator{},
+	}
+	c.objects[key(m)] = orObject(m)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key(m)})
+	if !errors.Is(err, errSome) {
+		t.Errorf("got Reconcile() error = %v, want %v", err, errSome)
 	}
 }

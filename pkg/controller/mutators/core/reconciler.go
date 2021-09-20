@@ -315,12 +315,12 @@ func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err err
 		setEnforced(false), setErrors(err))
 }
 
-func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, err error) error {
+func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, errToUpsert error) error {
 	schemaErr := &mutationschema.ErrConflictingSchema{}
 
-	updateErr := r.updateError(ctx, obj, err)
-	if !errors.As(err, schemaErr) {
-		return updateErr
+	err := r.updateError(ctx, obj, errToUpsert)
+	if !errors.As(errToUpsert, schemaErr) {
+		return err
 	}
 
 	objID := types.MakeID(obj)
@@ -330,8 +330,8 @@ func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, err err
 		if id == objID {
 			continue
 		}
-		_ = r.updateStatus(ctx, id, setEnforced(false), setErrors(err))
+		_ = r.updateStatus(ctx, id, setEnforced(false), setErrors(errToUpsert))
 	}
 
-	return updateErr
+	return err
 }
