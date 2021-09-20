@@ -37,16 +37,21 @@ func setErrors(err error) statusUpdate {
 	}
 }
 
-func replaceErrorIfConflictingSchema(err error) statusUpdate {
+func updateConflictStatus(err error) statusUpdate {
 	return func(status *statusv1beta1.MutatorPodStatus) {
-		for _, err := range status.Status.Errors {
+		for _, existingErr := range status.Status.Errors {
 			// Don't replace non-ErrConflictingSchema errors.
-			if err.Type != schema.ErrConflictingSchemaType {
+			if existingErr.Type != schema.ErrConflictingSchemaType {
 				return
 			}
 		}
 
 		setErrors(err)(status)
+		if err == nil {
+			setEnforced(true)(status)
+		} else {
+			setEnforced(false)(status)
+		}
 	}
 }
 
