@@ -34,7 +34,7 @@ type Mutator interface {
 	Mutate(obj *unstructured.Unstructured) (bool, error)
 	// ID returns the id of the current mutator.
 	ID() ID
-	// Has diff tells if the mutator has meaningful differences
+	// HasDiff tells if the mutator has meaningful differences
 	// with the provided mutator
 	HasDiff(mutator Mutator) bool
 	// DeepCopy returns a copy of the current object

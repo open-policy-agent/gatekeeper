@@ -19,63 +19,78 @@ func TestReportIterationConvergence(t *testing.T) {
 
 	err := r.ReportIterationConvergence(SystemConvergenceTrue, successMax)
 	if err != nil {
-		t.Errorf("ReportIterationConvergence error: %v", err)
+		t.Fatalf("ReportIterationConvergence error: %v", err)
 	}
+
 	err = r.ReportIterationConvergence(SystemConvergenceFalse, failureMax)
 	if err != nil {
-		t.Errorf("ReportIterationConvergence error: %v", err)
+		t.Fatalf("ReportIterationConvergence error: %v", err)
 	}
+
 	err = r.ReportIterationConvergence(SystemConvergenceTrue, successMin)
 	if err != nil {
-		t.Errorf("ReportIterationConvergence error: %v", err)
+		t.Fatalf("ReportIterationConvergence error: %v", err)
 	}
 
 	rows, err := view.RetrieveData(mutationSystemIterationsMetricName)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, mutationSystemIterationsMetricName)
+		t.Fatalf("Error when retrieving data: %v from %v", err, mutationSystemIterationsMetricName)
 	}
 
-	validConvergenceStatuses := 2
-	l := len(rows)
-	if l != validConvergenceStatuses {
-		t.Errorf("got '%v' view length %v, want %v", mutationSystemIterationsMetricName, l, validConvergenceStatuses)
+	wantIterations := 2
+
+	if gotIterations := len(rows); gotIterations != wantIterations {
+		t.Errorf("got %q iterations %v, want %v",
+			mutationSystemIterationsMetricName, gotIterations, wantIterations)
 	}
 
 	err = verifyDistributionRow(rows, SystemConvergenceTrue, 2, successMin, successMax)
 	if err != nil {
 		t.Error(err)
 	}
+
 	err = verifyDistributionRow(rows, SystemConvergenceFalse, 1, failureMin, failureMax)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func verifyDistributionRow(rows []*view.Row, tag SystemConvergenceStatus, count, min, max int) error {
-	for _, r := range rows {
-		if !hasTag(r, systemConvergenceKey.Name(), string(tag)) {
+func getRow(rows []*view.Row, tag SystemConvergenceStatus) *view.Row {
+	for _, row := range rows {
+		if !hasTag(row, systemConvergenceKey.Name(), string(tag)) {
 			continue
 		}
 
-		distData, ok := r.Data.(*view.DistributionData)
-		if !ok {
-			return fmt.Errorf("Data is not of type *view.DistributionData")
-		}
-
-		if int(distData.Count) != count {
-			return fmt.Errorf("got tag '%v' count %v, want %v", tag, distData.Count, count)
-		}
-		if int(distData.Min) != min {
-			return fmt.Errorf("got tag '%v' min %v, want %v", tag, distData.Min, min)
-		}
-		if int(distData.Max) != max {
-			return fmt.Errorf("got tag '%v' max %v, want %v", tag, distData.Max, max)
-		}
-
-		return nil
+		return row
 	}
 
-	return fmt.Errorf("Expected to find row with tag '%v' but none were found", tag)
+	return nil
+}
+
+func verifyDistributionRow(rows []*view.Row, tag SystemConvergenceStatus, count int64, min, max float64) error {
+	row := getRow(rows, tag)
+	if row == nil {
+		return fmt.Errorf("got no rows with tag %q", tag)
+	}
+
+	distData, ok := row.Data.(*view.DistributionData)
+	if !ok {
+		return fmt.Errorf("got row Data type %T, want type %T", row.Data, &view.DistributionData{})
+	}
+
+	if distData.Count != count {
+		return fmt.Errorf("got tag %q count %v, want %v", tag, distData.Count, count)
+	}
+
+	if distData.Min != min {
+		return fmt.Errorf("got tag %q min %v, want %v", tag, distData.Min, min)
+	}
+
+	if distData.Max != max {
+		return fmt.Errorf("got tag %q max %v, want %v", tag, distData.Max, max)
+	}
+
+	return nil
 }
 
 func hasTag(row *view.Row, key, value string) bool {
