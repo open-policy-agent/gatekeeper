@@ -14,16 +14,18 @@ const (
 )
 
 // SystemConvergenceStatus defines the outcomes of the attempted mutation of an object by the
-// mutation System.  The System is meant to converge on a fully mutated object.
+// mutation System. The System is meant to converge on a fully mutated object.
 type SystemConvergenceStatus string
 
-var (
-	systemConvergenceKey = tag.MustNewKey("success")
-
+const (
 	// SystemConvergenceTrue denotes a successfully converged mutation system request.
 	SystemConvergenceTrue SystemConvergenceStatus = "true"
 	// SystemConvergenceFalse denotes an unsuccessfully converged mutation system request.
 	SystemConvergenceFalse SystemConvergenceStatus = "false"
+)
+
+var (
+	systemConvergenceKey = tag.MustNewKey("success")
 
 	systemIterationsM = stats.Int64(
 		mutationSystemIterationsMetricName,
@@ -55,7 +57,7 @@ type StatsReporter interface {
 // reporter implements StatsReporter interface.
 type reporter struct{}
 
-// NewStatsReporter creaters a reporter for webhook metrics.
+// NewStatsReporter creates a reporter for webhook metrics.
 func NewStatsReporter() StatsReporter {
 	return &reporter{}
 }

@@ -2,13 +2,10 @@ package mutation
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
@@ -16,224 +13,82 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// ErrNotConverging reports that applying all Mutators isn't converging.
+var ErrNotConverging = errors.New("mutation not converging")
+
+// ErrNotRemoved reports that we were unable to remove a Mutator properly as
+// System was in an inconsistent state.
+var ErrNotRemoved = errors.New("failed to find mutator on sorted list")
+
 // System keeps the list of mutators and provides an interface to apply mutations.
 type System struct {
 	schemaDB        schema.DB
-	orderedMutators []types.Mutator
+	orderedMutators orderedIDs
 	mutatorsMap     map[types.ID]types.Mutator
 	mux             sync.RWMutex
 	reporter        StatsReporter
+	newUUID         func() uuid.UUID
 }
 
 // SystemOpts allows for optional dependencies to be passed into the mutation System.
 type SystemOpts struct {
 	Reporter StatsReporter
+	NewUUID  func() uuid.UUID
 }
 
 // NewSystem initializes an empty mutation system.
 func NewSystem(options SystemOpts) *System {
+	if options.NewUUID == nil {
+		options.NewUUID = uuid.New
+	}
+
 	return &System{
 		schemaDB:        *schema.New(),
-		orderedMutators: make([]types.Mutator, 0),
+		orderedMutators: orderedIDs{},
 		mutatorsMap:     make(map[types.ID]types.Mutator),
 		reporter:        options.Reporter,
+		newUUID:         options.NewUUID,
 	}
 }
 
-// Upsert updates or insert the given object, and returns
-// an error in case of conflicts.
+// Get mutator for given id.
+func (s *System) Get(id types.ID) types.Mutator {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	mutator, found := s.mutatorsMap[id]
+	if !found {
+		return nil
+	}
+	return mutator.DeepCopy()
+}
+
+// Upsert updates or inserts the given object. Returns an error in case of
+// schema conflicts.
 func (s *System) Upsert(m types.Mutator) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	current, ok := s.mutatorsMap[m.ID()]
-	if ok && !m.HasDiff(current) {
+	id := m.ID()
+	if current, ok := s.mutatorsMap[id]; ok && !m.HasDiff(current) {
 		return nil
 	}
 
 	toAdd := m.DeepCopy()
 
-	// Checking schema consistency only if the mutator has schema
-	var err error
+	// Check schema consistency only if the mutator has schema.
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
 		err := s.schemaDB.Upsert(withSchema)
 		if err != nil {
-			s.schemaDB.Remove(withSchema.ID())
+			s.schemaDB.Remove(id)
 			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
 		}
 	}
 
-	s.mutatorsMap[toAdd.ID()] = toAdd
+	s.mutatorsMap[id] = toAdd
 
-	i := sort.Search(len(s.orderedMutators), func(i int) bool {
-		return greaterOrEqual(s.orderedMutators[i].ID(), toAdd.ID())
-	})
-
-	if i == len(s.orderedMutators) { // Adding to the bottom of the list
-		s.orderedMutators = append(s.orderedMutators, toAdd)
-		return err
-	}
-
-	found := equal(s.orderedMutators[i].ID(), toAdd.ID())
-	if found {
-		s.orderedMutators[i] = toAdd
-		return err
-	}
-
-	s.orderedMutators = append(s.orderedMutators, nil)
-	copy(s.orderedMutators[i+1:], s.orderedMutators[i:])
-	s.orderedMutators[i] = toAdd
-	return err
-}
-
-// Mutate applies the mutation in place to the given object. Returns
-// true if a mutation was performed.
-func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
-	s.mux.RLock()
-	defer s.mux.RUnlock()
-	mutationUUID := uuid.New()
-	original := obj.DeepCopy()
-	maxIterations := len(s.orderedMutators) + 1
-
-	var allAppliedMutations [][]types.Mutator
-	if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
-		allAppliedMutations = [][]types.Mutator{}
-	}
-
-	iterations := 0
-	convergence := SystemConvergenceFalse
-	defer func() {
-		if s.reporter == nil {
-			return
-		}
-
-		err := s.reporter.ReportIterationConvergence(convergence, iterations)
-		if err != nil {
-			log.Error(err, "failed to report mutator ingestion request")
-		}
-	}()
-
-	for i := 0; i < maxIterations; i++ {
-		iterations++
-		var appliedMutations []types.Mutator
-		old := obj.DeepCopy()
-
-		for _, m := range s.orderedMutators {
-			if s.schemaDB.HasConflicts(m.ID()) {
-				// Don't try to apply Mutators which have conflicts.
-				continue
-			}
-
-			if m.Matches(obj, ns) {
-				mutated, err := m.Mutate(obj)
-				if mutated {
-					appliedMutations = append(appliedMutations, m)
-				}
-				if err != nil {
-					return false, errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
-						mutationUUID,
-						m.ID(),
-						obj.GroupVersionKind().Group,
-						obj.GroupVersionKind().Kind,
-						obj.GetNamespace(),
-						obj.GetName())
-				}
-			}
-		}
-
-		if len(appliedMutations) == 0 {
-			// If no mutations were applied, we can safely assume the object is
-			// identical to before.
-			return i > 0, nil
-		}
-
-		if cmp.Equal(old, obj) {
-			if i == 0 {
-				convergence = SystemConvergenceTrue
-				return false, nil
-			}
-			if *MutationLoggingEnabled {
-				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
-			}
-
-			if *MutationAnnotationsEnabled {
-				err := mutationAnnotations(obj, allAppliedMutations, mutationUUID)
-				if err != nil {
-					log.Error(err, "Error applying mutation annotations", "mutation id", mutationUUID)
-				}
-			}
-
-			convergence = SystemConvergenceTrue
-			return true, nil
-		}
-
-		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
-			allAppliedMutations = append(allAppliedMutations, appliedMutations)
-		}
-	}
-
-	if *MutationLoggingEnabled {
-		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
-	}
-
-	return false, fmt.Errorf("mutation %s not converging for %s %s %s %s",
-		mutationUUID,
-		obj.GroupVersionKind().Group,
-		obj.GroupVersionKind().Kind,
-		obj.GetNamespace(),
-		obj.GetName())
-}
-
-func mutationAnnotations(obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator, mutationUUID uuid.UUID) error {
-	mutatorStringSet := make(map[string]struct{})
-	for _, mutationsForIteration := range allAppliedMutations {
-		for _, mutator := range mutationsForIteration {
-			mutatorStringSet[mutator.String()] = struct{}{}
-		}
-	}
-	mutatorStrings := []string{}
-	for mutatorString := range mutatorStringSet {
-		mutatorStrings = append(mutatorStrings, mutatorString)
-	}
-
-	metadata, ok := obj.Object["metadata"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("Incorrect metadata type")
-	}
-	annotations, ok := metadata["annotations"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("Incorrect metadata type")
-	}
-	annotations["gatekeeper.sh/mutations"] = strings.Join(mutatorStrings, ", ")
-	annotations["gatekeeper.sh/mutation-id"] = mutationUUID
+	s.orderedMutators.insert(id)
 	return nil
-}
-
-func logAppliedMutations(message string, mutationUUID uuid.UUID, obj *unstructured.Unstructured, allAppliedMutations [][]types.Mutator) {
-	iterations := []interface{}{}
-	for i, appliedMutations := range allAppliedMutations {
-		if len(appliedMutations) == 0 {
-			continue
-		}
-		var appliedMutationsText []string
-		for _, mutator := range appliedMutations {
-			appliedMutationsText = append(appliedMutationsText, mutator.String())
-		}
-		iterations = append(iterations, fmt.Sprintf("iteration_%d", i), strings.Join(appliedMutationsText, ", "))
-	}
-	if len(iterations) > 0 {
-		logDetails := []interface{}{
-			"Mutation Id", mutationUUID,
-			logging.EventType, logging.MutationApplied,
-			logging.ResourceGroup, obj.GroupVersionKind().Group,
-			logging.ResourceKind, obj.GroupVersionKind().Kind,
-			logging.ResourceAPIVersion, obj.GroupVersionKind().Version,
-			logging.ResourceNamespace, obj.GetNamespace(),
-			logging.ResourceName, obj.GetName(),
-		}
-		logDetails = append(logDetails, iterations...)
-		log.Info(message, logDetails...)
-	}
 }
 
 // Remove removes the mutator from the mutation system.
@@ -247,72 +102,111 @@ func (s *System) Remove(id types.ID) error {
 
 	s.schemaDB.Remove(id)
 
-	i := sort.Search(len(s.orderedMutators), func(i int) bool {
-		res := equal(s.orderedMutators[i].ID(), id)
-		if res {
-			return true
-		}
-		return greaterOrEqual(s.orderedMutators[i].ID(), id)
-	})
-
 	delete(s.mutatorsMap, id)
 
-	found := equal(s.orderedMutators[i].ID(), id)
-
-	// The map is expected to be in sync with the list, so if we don't find it
-	// we return an error.
-	if !found {
-		return fmt.Errorf("Failed to find mutator with ID %v on sorted list", id)
+	removed := s.orderedMutators.remove(id)
+	if !removed {
+		return fmt.Errorf("%w: ID %v", ErrNotRemoved, id)
 	}
-	copy(s.orderedMutators[i:], s.orderedMutators[i+1:])
-	s.orderedMutators[len(s.orderedMutators)-1] = nil
-	s.orderedMutators = s.orderedMutators[:len(s.orderedMutators)-1]
 	return nil
 }
 
-// Get mutator for given id.
-func (s *System) Get(id types.ID) types.Mutator {
-	mutator, found := s.mutatorsMap[id]
-	if !found {
-		return nil
+// Mutate applies the mutation in place to the given object. Returns
+// true if applying Mutators caused any changes to the object.
+func (s *System) Mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (bool, error) {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+
+	convergence := SystemConvergenceFalse
+
+	iterations, err := s.mutate(obj, ns)
+	if err == nil {
+		convergence = SystemConvergenceTrue
 	}
-	return mutator.DeepCopy()
+
+	if s.reporter != nil {
+		err = s.reporter.ReportIterationConvergence(convergence, iterations)
+		if err != nil {
+			log.Error(err, "failed to report mutator ingestion request")
+		}
+	}
+
+	mutated := iterations != 0 && err == nil
+	return mutated, err
 }
 
-func greaterOrEqual(id1, id2 types.ID) bool {
-	if id1.Group > id2.Group {
-		return true
+// mutate runs all Mutators on obj. Returns the number of iterations required
+// to converge, and any error encountered attempting to run Mutators.
+func (s *System) mutate(obj *unstructured.Unstructured, ns *corev1.Namespace) (int, error) {
+	mutationUUID := s.newUUID()
+	original := obj.DeepCopy()
+	var allAppliedMutations [][]types.Mutator
+	maxIterations := len(s.orderedMutators.ids) + 1
+
+	for iteration := 1; iteration <= maxIterations; iteration++ {
+		var appliedMutations []types.Mutator
+		old := obj.DeepCopy()
+
+		for _, id := range s.orderedMutators.ids {
+			if s.schemaDB.HasConflicts(id) {
+				// Don't try to apply Mutators which have conflicts.
+				continue
+			}
+
+			m := s.mutatorsMap[id]
+			if m.Matches(obj, ns) {
+				mutated, err := m.Mutate(obj)
+				if mutated {
+					appliedMutations = append(appliedMutations, m)
+				}
+				if err != nil {
+					return iteration, mutateErr(err, mutationUUID, m.ID(), obj)
+				}
+			}
+		}
+
+		if len(appliedMutations) == 0 || cmp.Equal(old, obj) {
+			// If no mutations were applied, we can safely assume the object is
+			// identical to before.
+			if iteration == 1 {
+				return 0, nil
+			}
+
+			if *MutationLoggingEnabled {
+				logAppliedMutations("Mutation applied", mutationUUID, original, allAppliedMutations)
+			}
+
+			if *MutationAnnotationsEnabled {
+				mutationAnnotations(obj, allAppliedMutations, mutationUUID)
+			}
+
+			return iteration, nil
+		}
+
+		if *MutationLoggingEnabled || *MutationAnnotationsEnabled {
+			allAppliedMutations = append(allAppliedMutations, appliedMutations)
+		}
 	}
-	if id1.Group < id2.Group {
-		return false
+
+	if *MutationLoggingEnabled {
+		logAppliedMutations("Mutation not converging", mutationUUID, original, allAppliedMutations)
 	}
-	if id1.Kind > id2.Kind {
-		return true
-	}
-	if id1.Kind < id2.Kind {
-		return false
-	}
-	if id1.Namespace > id2.Namespace {
-		return true
-	}
-	if id1.Namespace < id2.Namespace {
-		return false
-	}
-	if id1.Name > id2.Name {
-		return true
-	}
-	if id1.Name < id2.Name {
-		return false
-	}
-	return true
+
+	return maxIterations, fmt.Errorf("%w: mutation %s not converging for %s %s %s %s",
+		ErrNotConverging,
+		mutationUUID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
 }
 
-func equal(id1, id2 types.ID) bool {
-	if id1.Group == id2.Group &&
-		id1.Kind == id2.Kind &&
-		id1.Namespace == id2.Namespace &&
-		id1.Name == id2.Name {
-		return true
-	}
-	return false
+func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstructured) error {
+	return errors.Wrapf(err, "mutation %s for mutator %v failed for %s %s %s %s",
+		uid,
+		mID,
+		obj.GroupVersionKind().Group,
+		obj.GroupVersionKind().Kind,
+		obj.GetNamespace(),
+		obj.GetName())
 }
