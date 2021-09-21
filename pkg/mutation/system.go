@@ -71,7 +71,13 @@ func (s *System) Upsert(m types.Mutator) error {
 
 	id := m.ID()
 	if current, ok := s.mutatorsMap[id]; ok && !m.HasDiff(current) {
-		return nil
+		// Handle the case where a previous reconcile successfully updated System,
+		// but the update to PodStatus failed.
+		conflicts := s.schemaDB.GetConflicts(id)
+		if len(conflicts) == 0 {
+			return nil
+		}
+		return schema.NewErrConflictingSchema(conflicts)
 	}
 
 	toAdd := m.DeepCopy()
@@ -82,8 +88,10 @@ func (s *System) Upsert(m types.Mutator) error {
 		err = s.schemaDB.Upsert(withSchema)
 
 		if err != nil && !errors.As(err, &schema.ErrConflictingSchema{}) {
+			// This means the error is not due to a schema conflict, and is most likely
+			// a bug.
 			s.schemaDB.Remove(id)
-			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
+			return errors.Wrapf(err, "Schema upsert caused non-conflict error: %v", m.ID())
 		}
 	}
 

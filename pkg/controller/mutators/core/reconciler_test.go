@@ -719,6 +719,71 @@ func TestReconciler_Reconcile(t *testing.T) {
 			}},
 			wantErr: nil,
 		},
+		{
+			name: "add mutator error",
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator: &fakeMutator{
+					path: mustParse("spec[name: foo].bar"),
+				},
+			}), orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar-1"},
+				mutator: &fakeMutator{
+					path: mustParse("spec.foo.bar"),
+				},
+			}), orObject(&statusv1beta1.MutatorPodStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "no--pod-fake-bar",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar",
+						"internal.gatekeeper.sh/pod":          "no-pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "no-pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   true,
+					Errors:     nil,
+				},
+			})},
+			request: orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator: &fakeMutator{
+					path: mustParse("spec[name: foo].bar"),
+				},
+			}),
+			want: []*statusv1beta1.MutatorPodStatus{{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "no--pod-fake-bar",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar",
+						"internal.gatekeeper.sh/pod":          "no-pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "no-pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   false,
+					Errors:     []statusv1beta1.MutatorError{{
+						Type: mutationschema.ErrConflictingSchemaType,
+						Message: mutationschema.NewErrConflictingSchema([]mutationtypes.ID{
+							{Kind: "fake", Name: "bar"},
+							{Kind: "fake", Name: "bar-1"},
+						}).Error(),
+					}},
+				},
+			}},
+			wantErr: nil,
+		},
 	}
 
 	for _, tc := range testCases {
