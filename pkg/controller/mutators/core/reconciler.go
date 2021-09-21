@@ -142,7 +142,7 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, mutationO
 			client.ObjectKey{Namespace: mutationObj.GetNamespace(), Name: mutationObj.GetName()})
 		r.getTracker().TryCancelExpect(mutationObj)
 
-		return r.updateError(ctx, mutationObj, err)
+		return r.updateStatusWithError(ctx, mutationObj, err)
 	}
 
 	if err = r.system.Upsert(mutator); err != nil {
@@ -314,7 +314,9 @@ func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...s
 	return err
 }
 
-func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err error) error {
+// updateStatusWithError unconditionally updates the PodStatus corresponding
+// to obj with error.
+func (r *Reconciler) updateStatusWithError(ctx context.Context, obj client.Object, err error) error {
 	id := types.MakeID(obj)
 
 	return r.updateStatus(ctx, id,
@@ -322,23 +324,19 @@ func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err err
 		setEnforced(false), setErrors(err))
 }
 
+// upsertError handles the case where there was an error upserting obj.
 func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, errToUpsert error) error {
 	schemaErr := &mutationschema.ErrConflictingSchema{}
 
-	err := r.updateError(ctx, obj, errToUpsert)
+	// Since we got an error upserting obj, update its PodStatus first.
+	err := r.updateStatusWithError(ctx, obj, errToUpsert)
 	if !errors.As(errToUpsert, schemaErr) {
 		return err
 	}
 
 	objID := types.MakeID(obj)
 
-	ids := schemaErr.Conflicts
-	for _, id := range ids {
-		if id == objID {
-			continue
-		}
-		_ = r.updateStatus(ctx, id, setEnforced(false), setErrors(errToUpsert))
-	}
+	r.updateConflicts(ctx, objID, schemaErr.Conflicts)
 
-	return err
+	return nil
 }
