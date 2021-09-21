@@ -40,6 +40,9 @@ spec:
                   properties:
                     message:
                       type: string
+                    type:
+                      description: Type indicates a specific class of error for use by controller code. If not present, the error should be treated as not matching any known type.
+                      type: string
                   required:
                   - message
                   type: object

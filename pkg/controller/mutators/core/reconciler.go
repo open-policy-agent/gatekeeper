@@ -110,7 +110,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.reportMutator(id, ingestionStatus, startTime)
 	}()
 
-	conflicts := r.system.GetConflicts(id)
+	// previousConflicts records the conflicts this Mutator has with other mutators
+	// before making any changes.
+	previousConflicts := r.system.GetConflicts(id)
 
 	if deleted {
 		// Either the mutator was deleted before we were able to process this request, or it has been marked for
@@ -125,7 +127,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	r.updateConflicts(ctx, id, conflicts)
+	// Now that we've made changes to the recorded Mutator schemas, we can re-check
+	// for conflicts.
+	r.updateConflicts(ctx, id, previousConflicts)
 
 	ingestionStatus = ctrlmutators.MutatorStatusActive
 	return reconcile.Result{}, nil
@@ -271,12 +275,15 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 // Ignores errors which occur while trying to update the PodStatus for other
 // Mutators. Updating each of these statuses automatically triggers Reconcile
 // for each of the corresponding Mutators.
-func (r *Reconciler) updateConflicts(ctx context.Context, id types.ID, conflicts []types.ID) {
-	for _, conflict := range conflicts {
+func (r *Reconciler) updateConflicts(ctx context.Context, id types.ID, previousConflicts []types.ID) {
+	for _, conflict := range previousConflicts {
 		if conflict == id {
 			continue
 		}
 
+		// This ensures the reported conflicts for each Mutator is complete. Even
+		// if there is no longer a conflict with id, we will still fill in conflicts
+		// with other Mutators.
 		idConflicts := r.system.GetConflicts(conflict)
 		if len(idConflicts) == 0 {
 			_ = r.updateStatus(ctx, conflict, updateConflictStatus(nil))
