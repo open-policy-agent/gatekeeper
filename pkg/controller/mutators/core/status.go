@@ -37,6 +37,8 @@ func setErrors(err error) statusUpdate {
 	}
 }
 
+// updateConflictStatus updates PodStatus with err if the PodStatus's
+// only existing errors are of type ErrConflictingSchemaType.
 func updateConflictStatus(err error) statusUpdate {
 	return func(status *statusv1beta1.MutatorPodStatus) {
 		for _, existingErr := range status.Status.Errors {
