@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -57,13 +58,15 @@ func orErr(key client.ObjectKey, errs ...error) *objectOrErr {
 }
 
 func (oe *objectOrErr) error() error {
-	fmt.Println(oe.key, len(oe.errs))
 	switch len(oe.errs) {
 	case 0:
 		return nil
 	case 1:
+		// Always return the final error
 		return oe.errs[0]
 	default:
+		// Since there is a list of errors to return, we require different errors
+		// each call. Pop the error off from the front.
 		err := oe.errs[0]
 		oe.errs = oe.errs[1:]
 		return err
@@ -101,7 +104,7 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 	case *statusv1beta1.MutatorPodStatus:
 		*o = *got.object.(*statusv1beta1.MutatorPodStatus)
 	default:
-		panic(fmt.Errorf("unrecognized type %T", obj))
+		return fmt.Errorf("unrecognized type %T", obj)
 	}
 
 	return nil
@@ -208,8 +211,11 @@ func (m *fakeMutator) ID() mutationtypes.ID {
 }
 
 func (m *fakeMutator) DeepCopy() mutationtypes.Mutator {
-	x := *m
-	return &x
+	return &fakeMutator{
+		terminal: m.terminal,
+		id:       m.id,
+		path:     m.path.DeepCopy(),
+	}
 }
 
 func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
@@ -217,11 +223,7 @@ func (m *fakeMutator) SchemaBindings() []schema.GroupVersionKind {
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
-	n := len(m.path.Nodes) - 1
-	if n < 0 {
-		return ""
-	}
-	return m.path.Nodes[n].Type()
+	return mutationschema.Unknown
 }
 
 func (m *fakeMutator) Path() parser.Path {
@@ -239,34 +241,35 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 		m.path.String() != other.path.String()
 }
 
-type fakeLogger struct {
+type noOpLogger struct {
 	logr.Logger
 }
 
-func (l fakeLogger) Info(string, ...interface{}) {}
+func (l noOpLogger) Info(string, ...interface{}) {}
 
-func (l fakeLogger) Error(error, string, ...interface{}) {}
+func (l noOpLogger) Error(error, string, ...interface{}) {}
 
 var errSome = errors.New("some error")
 
-func newFakeReconciler(c client.Client) *Reconciler {
+func newFakeReconciler(t *testing.T, c client.Client) *Reconciler {
 	s := runtime.NewScheme()
 	err := corev1.AddToScheme(s)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	const podName = "no-pod"
 
 	return &Reconciler{
 		Client:         c,
-		log:            fakeLogger{},
+		log:            noOpLogger{},
 		newMutationObj: func() client.Object { return &fakeMutatorObject{} },
 		cache:          mutators.NewMutationCache(),
 		mutatorFor: func(object client.Object) (mutationtypes.Mutator, error) {
 			fake, ok := object.(*fakeMutatorObject)
 			if !ok {
-				return nil, fmt.Errorf("called mutatorFor(%T), want mutatorFor(%T)", object, &fakeMutatorObject{})
+				return nil, fmt.Errorf("called mutatorFor(%T), want mutatorFor(%T)",
+					object, &fakeMutatorObject{})
 			}
 
 			if fake.err != nil {
@@ -282,7 +285,7 @@ func newFakeReconciler(c client.Client) *Reconciler {
 		},
 		scheme:           s,
 		podOwnershipMode: statusv1beta1.PodOwnershipEnabled,
-		kind:             "fake",
+		gvk:              mutationsv1alpha1.GroupVersion.WithKind("fake"),
 	}
 }
 
@@ -458,8 +461,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 				mutator:    &fakeMutator{},
 			}),
-			// We don't return an error if updating the Mutator's status fails.
-			wantErr: nil,
+			wantErr: errSome,
 		},
 		{
 			name: "errors on inserted conflicting mutator",
@@ -667,7 +669,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := newFakeClient()
-			r := newFakeReconciler(c)
+			r := newFakeReconciler(t, c)
 
 			ctx := context.Background()
 
@@ -711,7 +713,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 
 func TestReconciler_Reconcile_DeletePodStatus(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 
@@ -769,7 +771,7 @@ func TestReconciler_Reconcile_DeletePodStatus(t *testing.T) {
 
 func TestReconciler_Reconcile_PreserveError(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 
@@ -900,7 +902,7 @@ func TestReconciler_Reconcile_PreserveError(t *testing.T) {
 
 func TestReconcile_AlreadyDeleting(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 
@@ -930,7 +932,7 @@ func TestReconcile_AlreadyDeleting(t *testing.T) {
 
 func TestReconcile_AlreadyDeleted(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 
@@ -953,7 +955,7 @@ func TestReconcile_AlreadyDeleted(t *testing.T) {
 
 func TestReconcile_ReconcileUpsert_GetPodError(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 
@@ -976,7 +978,7 @@ func TestReconcile_ReconcileUpsert_GetPodError(t *testing.T) {
 
 func TestReconcile_ReconcileDeleted_GetPodError(t *testing.T) {
 	c := newFakeClient()
-	r := newFakeReconciler(c)
+	r := newFakeReconciler(t, c)
 
 	ctx := context.Background()
 

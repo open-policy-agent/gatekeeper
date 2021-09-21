@@ -61,7 +61,7 @@ func newReconciler(
 		scheme:           mgr.GetScheme(),
 		reporter:         ctrlmutators.NewStatsReporter(),
 		cache:            ctrlmutators.NewMutationCache(),
-		kind:             kind,
+		gvk:              mutationsv1alpha1.GroupVersion.WithKind(kind),
 		newMutationObj:   newMutationObj,
 		mutatorFor:       mutatorFor,
 		log:              logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
@@ -76,7 +76,7 @@ func newReconciler(
 // Reconciler reconciles mutator objects.
 type Reconciler struct {
 	client.Client
-	kind           string
+	gvk            schema.GroupVersionKind
 	newMutationObj func() client.Object
 	mutatorFor     func(client.Object) (types.Mutator, error)
 
@@ -210,14 +210,6 @@ func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.Mu
 	}
 }
 
-func (r *Reconciler) gvk() schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   mutationsv1alpha1.GroupVersion.Group,
-		Version: mutationsv1alpha1.GroupVersion.Version,
-		Kind:    r.kind,
-	}
-}
-
 // getOrDefault attempts to get the Mutator from the cluster, or returns a default-instantiated Mutator if one does not
 // exist.
 func (r *Reconciler) getOrDefault(ctx context.Context, namespacedName apiTypes.NamespacedName) (client.Object, bool, error) {
@@ -232,7 +224,7 @@ func (r *Reconciler) getOrDefault(ctx context.Context, namespacedName apiTypes.N
 		obj = r.newMutationObj()
 		obj.SetName(namespacedName.Name)
 		obj.SetNamespace(namespacedName.Namespace)
-		obj.GetObjectKind().SetGroupVersionKind(r.gvk())
+		obj.GetObjectKind().SetGroupVersionKind(r.gvk)
 		return obj, true, nil
 	default:
 		return nil, false, err
@@ -240,7 +232,7 @@ func (r *Reconciler) getOrDefault(ctx context.Context, namespacedName apiTypes.N
 }
 
 func (r *Reconciler) getTracker() readiness.Expectations {
-	return r.tracker.For(r.gvk())
+	return r.tracker.For(r.gvk)
 }
 
 // reconcileDeleted removes the Mutator from the controller and deletes the corresponding PodStatus.
@@ -273,12 +265,19 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 	return nil
 }
 
+// updateConflicts updates the PodStatuses for all Mutators that id had a conflict
+// with.
+//
+// Ignores errors which occur while trying to update the PodStatus for other
+// Mutators. Updating each of these statuses automatically triggers Reconcile
+// for each of the corresponding Mutators.
 func (r *Reconciler) updateConflicts(ctx context.Context, id types.ID, conflicts []types.ID) {
 	for _, conflict := range conflicts {
-		idConflicts := r.system.GetConflicts(conflict)
 		if conflict == id {
 			continue
 		}
+
+		idConflicts := r.system.GetConflicts(conflict)
 		if len(idConflicts) == 0 {
 			_ = r.updateStatus(ctx, conflict, updateConflictStatus(nil))
 		} else {
@@ -300,11 +299,12 @@ func (r *Reconciler) updateStatus(ctx context.Context, id types.ID, updates ...s
 		update(status)
 	}
 
-	if err = r.Update(ctx, status); err != nil {
+	err = r.Update(ctx, status)
+	if err != nil {
 		r.log.Error(err, "could not update mutator status")
 	}
 
-	return nil
+	return err
 }
 
 func (r *Reconciler) updateError(ctx context.Context, obj client.Object, err error) error {

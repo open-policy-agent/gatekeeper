@@ -52,7 +52,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	}
 
 	// Create a new controller
-	c, err := controller.New(fmt.Sprintf("%s-controller", strings.ToLower(r.kind)), mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(fmt.Sprintf("%s-controller", strings.ToLower(r.gvk.Kind)), mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to MutatorPodStatus
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.MutatorPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.kind, util.EventPackerMapFunc())),
+		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, util.EventPackerMapFunc())),
 	)
 	if err != nil {
 		return err
