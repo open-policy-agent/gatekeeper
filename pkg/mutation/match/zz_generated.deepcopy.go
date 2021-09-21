@@ -20,6 +20,7 @@ limitations under the License.
 package match
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -90,12 +91,12 @@ func (in *Match) DeepCopyInto(out *Match) {
 	}
 	if in.Namespaces != nil {
 		in, out := &in.Namespaces, &out.Namespaces
-		*out = make([]string, len(*in))
+		*out = make([]util.PrefixWildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
-		*out = make([]string, len(*in))
+		*out = make([]util.PrefixWildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.LabelSelector != nil {
