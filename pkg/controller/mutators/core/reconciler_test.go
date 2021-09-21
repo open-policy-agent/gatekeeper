@@ -664,6 +664,61 @@ func TestReconciler_Reconcile(t *testing.T) {
 			}},
 			wantErr: nil,
 		},
+		{
+			name: "fix mutator error",
+			before: []*objectOrErr{orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator: &fakeMutator{
+					path: mustParse("spec[name: foo].bar"),
+				},
+			}), orObject(&statusv1beta1.MutatorPodStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "no--pod-fake-bar",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar",
+						"internal.gatekeeper.sh/pod":          "no-pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "no-pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   false,
+					Errors: []statusv1beta1.MutatorError{
+						{Type: mutationschema.ErrConflictingSchemaType},
+					},
+				},
+			})},
+			request: orObject(&fakeMutatorObject{
+				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
+				ObjectMeta: metav1.ObjectMeta{Name: "bar"},
+				mutator: &fakeMutator{
+					path: mustParse("spec[name: foo].bar"),
+				},
+			}),
+			want: []*statusv1beta1.MutatorPodStatus{{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "gatekeeper-system",
+					Name:      "no--pod-fake-bar",
+					Labels: map[string]string{
+						"internal.gatekeeper.sh/mutator-kind": "fake",
+						"internal.gatekeeper.sh/mutator-name": "bar",
+						"internal.gatekeeper.sh/pod":          "no-pod",
+					},
+					OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Pod", Name: "no-pod"}},
+				},
+				Status: statusv1beta1.MutatorPodStatusStatus{
+					ID:         "no-pod",
+					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Enforced:   true,
+					Errors:     nil,
+				},
+			}},
+			wantErr: nil,
+		},
 	}
 
 	for _, tc := range testCases {
