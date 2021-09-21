@@ -96,9 +96,8 @@ func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "config",
-			Namespace:  "gatekeeper-system",
-			Finalizers: []string{finalizerName},
+			Name:      "config",
+			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{
 			Sync: configv1alpha1.Sync{
@@ -222,8 +221,6 @@ func TestReconcile(t *testing.T) {
 	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
 	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
-
-	// Test finalizer removal
 
 	testMgrStopped()
 	cs.Stop()
