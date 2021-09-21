@@ -773,7 +773,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 					ID:         "no-pod",
 					Operations: []string{"audit", "mutation-status", "status", "webhook"},
 					Enforced:   false,
-					Errors:     []statusv1beta1.MutatorError{{
+					Errors: []statusv1beta1.MutatorError{{
 						Type: mutationschema.ErrConflictingSchemaType,
 						Message: mutationschema.NewErrConflictingSchema([]mutationtypes.ID{
 							{Kind: "fake", Name: "bar"},
