@@ -9,6 +9,8 @@ validatingWebhookFailurePolicy: Ignore
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 experimentalEnableMutation: false
+mutatingWebhookFailurePolicy: Ignore
+mutatingWebhookTimeoutSeconds: 3
 auditChunkSize: 0
 logLevel: INFO
 logDenies: false
