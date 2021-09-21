@@ -87,7 +87,7 @@ func readTemplate(f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 	return template, nil
 }
 
-func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
+func readObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
@@ -96,6 +96,15 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	u, err := readUnstructured(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing Constraint from %q: %v", ErrAddingConstraint, path, err)
+	}
+
+	return u, nil
+}
+
+func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
+	u, err := readObject(f, path)
+	if err != nil {
+		return nil, err
 	}
 
 	gvk := u.GroupVersionKind()

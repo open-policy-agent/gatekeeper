@@ -164,9 +164,31 @@ func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c 
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, c Case) error {
+func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, c Case) (err error) {
 	if c.Object == "" {
 		return fmt.Errorf("%w: must define object", ErrInvalidCase)
+	}
+
+	for _, path := range c.Inventory {
+		var obj *unstructured.Unstructured
+		obj, err = readObject(r.FS, path)
+		if err != nil {
+			return err
+		}
+
+		_, err = client.AddData(ctx, obj)
+		if err != nil {
+			return err
+		}
+
+		// Can't use the loop iteration variable.
+		p := path
+		defer func() {
+			_, removeErr := client.RemoveData(ctx, obj)
+			if removeErr != nil {
+				panic(fmt.Sprintf("unable to remove %q from OPA Client Data: %v", p, removeErr))
+			}
+		}()
 	}
 
 	objectPath := filepath.Join(suiteDir, c.Object)
