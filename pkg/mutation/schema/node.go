@@ -176,8 +176,6 @@ func (n *node) conflicts(childKey string) idSet {
 }
 
 // GetConflicts returns all conflicts along the passed path.
-//
-// Returns an error if the path does not exist.
 func (n *node) GetConflicts(path []parser.Node, terminalType parser.NodeType) []types.ID {
 	conflictsMap := n.getConflicts(path, terminalType)
 	return conflictsMap.ToList()
