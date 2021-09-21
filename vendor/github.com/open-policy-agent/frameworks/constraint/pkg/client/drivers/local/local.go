@@ -5,16 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
+	opatypes "github.com/open-policy-agent/opa/types"
 	"github.com/pkg/errors"
 )
 
@@ -65,6 +70,12 @@ func DisableBuiltins(builtins ...string) Arg {
 	}
 }
 
+func AddExternalDataProviderCache(providerCache *externaldata.ProviderCache) Arg {
+	return func(d *driver) {
+		d.providerCache = providerCache
+	}
+}
+
 func New(args ...Arg) drivers.Driver {
 	d := &driver{
 		compiler:     ast.NewCompiler(),
@@ -75,6 +86,15 @@ func New(args ...Arg) drivers.Driver {
 	for _, arg := range args {
 		arg(d)
 	}
+
+	// adding externaldata builtin otherwise capabilities get overridden
+	// if a capability, like http.send, is disabled
+	if d.providerCache != nil {
+		d.capabilities.Builtins = append(d.capabilities.Builtins, &ast.Builtin{
+			Name: "external_data",
+			Decl: opatypes.NewFunction(opatypes.Args(opatypes.A), opatypes.A),
+		})
+	}
 	d.compiler.WithCapabilities(d.capabilities)
 	return d
 }
@@ -82,15 +102,88 @@ func New(args ...Arg) drivers.Driver {
 var _ drivers.Driver = &driver{}
 
 type driver struct {
-	modulesMux   sync.RWMutex
-	compiler     *ast.Compiler
-	modules      map[string]*ast.Module
-	storage      storage.Store
-	capabilities *ast.Capabilities
-	traceEnabled bool
+	modulesMux    sync.RWMutex
+	compiler      *ast.Compiler
+	modules       map[string]*ast.Module
+	storage       storage.Store
+	capabilities  *ast.Capabilities
+	traceEnabled  bool
+	providerCache *externaldata.ProviderCache
 }
 
 func (d *driver) Init(ctx context.Context) error {
+	if d.providerCache != nil {
+		rego.RegisterBuiltin1(
+			&rego.Function{
+				Name:    "external_data",
+				Decl:    opatypes.NewFunction(opatypes.Args(opatypes.A), opatypes.A),
+				Memoize: true,
+			},
+			func(bctx rego.BuiltinContext, regorequest *ast.Term) (*ast.Term, error) {
+				var regoReq externaldata.RegoRequest
+				if err := ast.As(regorequest.Value, &regoReq); err != nil {
+					return nil, err
+				}
+				// only primitive types are allowed for keys
+				for _, key := range regoReq.Keys {
+					switch v := key.(type) {
+					case int:
+					case string:
+					case float64:
+					case float32:
+						break
+					default:
+						return nil, fmt.Errorf("type %v is not supported in external_data", v)
+					}
+				}
+
+				provider, err := d.providerCache.Get(regoReq.ProviderName)
+				if err != nil {
+					return nil, fmt.Errorf("unable to retrieve provider %v from cache", regoReq.ProviderName)
+				}
+
+				externaldataRequest := externaldata.NewProviderRequest(regoReq.Keys)
+				reqBody, err := json.Marshal(externaldataRequest)
+				if err != nil {
+					return nil, err
+				}
+
+				req, err := http.NewRequest("POST", provider.Spec.ProxyURL, bytes.NewBuffer(reqBody))
+				if err != nil {
+					return nil, err
+				}
+
+				ctx, cancel := context.WithDeadline(bctx.Context, time.Now().Add(time.Duration(provider.Spec.Timeout)*time.Second))
+				defer cancel()
+
+				resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+				if err != nil {
+					return nil, err
+				}
+				defer resp.Body.Close()
+				respBody, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return nil, err
+				}
+
+				var externaldataResponse externaldata.ProviderResponse
+				if err := json.Unmarshal(respBody, &externaldataResponse); err != nil {
+					return nil, err
+				}
+
+				regoResponse := externaldata.NewRegoResponse(resp.StatusCode, externaldataResponse)
+				rr, err := json.Marshal(regoResponse)
+				if err != nil {
+					return nil, err
+				}
+				v, err := ast.ValueFromReader(bytes.NewReader(rr))
+				if err != nil {
+					return nil, err
+				}
+				return ast.NewTerm(v), nil
+			},
+		)
+	}
 	return nil
 }
 
@@ -257,7 +350,7 @@ func (d *driver) listModuleSet(namePrefix string) []string {
 func parsePath(path string) ([]string, error) {
 	p, ok := storage.ParsePathEscaped(path)
 	if !ok {
-		return nil, fmt.Errorf("Bad data path: %s", path)
+		return nil, fmt.Errorf("bad data path: %s", path)
 	}
 	return p, nil
 }

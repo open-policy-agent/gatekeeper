@@ -25,8 +25,8 @@ import (
 // SetupTracker sets up a readiness tracker and registers it to run under control of the
 // provided Manager object.
 // NOTE: Must be called _before_ the manager is started.
-func SetupTracker(mgr manager.Manager, mutationEnabled bool) (*Tracker, error) {
-	tracker := NewTracker(mgr.GetAPIReader(), mutationEnabled)
+func SetupTracker(mgr manager.Manager, mutationEnabled bool, externalDataEnabled bool) (*Tracker, error) {
+	tracker := NewTracker(mgr.GetAPIReader(), mutationEnabled, externalDataEnabled)
 
 	err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return tracker.Run(ctx)

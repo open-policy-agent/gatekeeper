@@ -4,15 +4,12 @@ go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
-	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.4.0
 	github.com/go-logr/zapr v0.4.0
-	github.com/go-openapi/spec v0.20.3 // indirect
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.1.2
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.16.0
 	github.com/open-policy-agent/cert-controller v0.2.0
@@ -41,3 +38,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.8.3
 	sigs.k8s.io/yaml v1.2.0
 )
+
+// TODO(sertac): replace this before merging
+// replace github.com/open-policy-agent/frameworks/constraint => /home/sozercan/go/src/github.com/open-policy-agent/frameworks/constraint
+replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210923005650-dc746bb01f6e

@@ -36,9 +36,9 @@ func Targets(ts ...TargetHandler) Opt {
 		handlers := make(map[string]TargetHandler, len(ts))
 		for _, t := range ts {
 			if t.GetName() == "" {
-				errs = append(errs, errors.New("Invalid target: a target is returning an empty string for GetName()"))
+				errs = append(errs, errors.New("invalid target: a target is returning an empty string for GetName()"))
 			} else if !targetNameRegex.MatchString(t.GetName()) {
-				errs = append(errs, fmt.Errorf("Target name \"%s\" is not of the form %s", t.GetName(), targetNameRegex.String()))
+				errs = append(errs, fmt.Errorf("target name \"%s\" is not of the form %s", t.GetName(), targetNameRegex.String()))
 			} else {
 				handlers[t.GetName()] = t
 			}
@@ -243,7 +243,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 		return nil, err
 	}
 	if templ.ObjectMeta.Name != strings.ToLower(templ.Spec.CRD.Spec.Names.Kind) {
-		return nil, fmt.Errorf("Template's name %s is not equal to the lowercase of CRD's Kind: %s", templ.ObjectMeta.Name, strings.ToLower(templ.Spec.CRD.Spec.Names.Kind))
+		return nil, fmt.Errorf("template's name %s is not equal to the lowercase of CRD's Kind: %s", templ.ObjectMeta.Name, strings.ToLower(templ.Spec.CRD.Spec.Names.Kind))
 	}
 
 	targetSpec, targetHandler, err := c.validateTargets(templ)
@@ -312,7 +312,7 @@ func (c *Client) createTemplateArtifacts(templ *templates.ConstraintTemplate) (*
 	req := map[string]struct{}{"violation": {}}
 
 	if err := requireRulesModule(entryPoint, req); err != nil {
-		return nil, fmt.Errorf("Invalid rego: %s", err)
+		return nil, fmt.Errorf("invalid rego: %s", err)
 	}
 
 	rr.AddEntryPointModule(artifacts.namePrefix, entryPoint)
@@ -476,10 +476,10 @@ func createConstraintSubPath(constraint *unstructured.Unstructured) (string, err
 	}
 	gvk := constraint.GroupVersionKind()
 	if gvk.Group == "" {
-		return "", fmt.Errorf("Empty group for the constrant named %s", constraint.GetName())
+		return "", fmt.Errorf("empty group for the constrant named %s", constraint.GetName())
 	}
 	if gvk.Kind == "" {
-		return "", fmt.Errorf("Empty kind for the constraint named %s", constraint.GetName())
+		return "", fmt.Errorf("empty kind for the constraint named %s", constraint.GetName())
 	}
 	return path.Join(createConstraintGKSubPath(gvk.GroupKind()), constraint.GetName()), nil
 }
@@ -513,10 +513,10 @@ func constraintPathMerge(target, subpath string) string {
 func (c *Client) getTemplateEntry(constraint *unstructured.Unstructured, lock bool) (*templateEntry, error) {
 	kind := constraint.GetKind()
 	if kind == "" {
-		return nil, fmt.Errorf("Constraint %s has no kind", constraint.GetName())
+		return nil, fmt.Errorf("constraint %s has no kind", constraint.GetName())
 	}
 	if constraint.GroupVersionKind().Group != constraintGroup {
-		return nil, fmt.Errorf("Constraint %s has the wrong group", constraint.GetName())
+		return nil, fmt.Errorf("constraint %s has the wrong group", constraint.GetName())
 	}
 	if lock {
 		c.constraintsMux.RLock()
@@ -682,7 +682,7 @@ func (c *Client) init() error {
 
 		libTempl := t.Library()
 		if libTempl == nil {
-			return fmt.Errorf("Target %s has no Rego library template", t.GetName())
+			return fmt.Errorf("target %s has no Rego library template", t.GetName())
 		}
 		libBuf := &bytes.Buffer{}
 		if err := libTempl.Execute(libBuf, map[string]string{
@@ -703,7 +703,7 @@ func (c *Client) init() error {
 			return errors.Wrapf(err, "failed to parse module")
 		}
 		if err := requireRulesModule(libModule, req); err != nil {
-			return fmt.Errorf("Problem with the below Rego for %s target:\n\n====%s\n====\n%s", t.GetName(), lib, err)
+			return fmt.Errorf("problem with the below Rego for %s target:\n\n====%s\n====\n%s", t.GetName(), lib, err)
 		}
 		err = rewriteModulePackage(path, libModule)
 		if err != nil {
@@ -711,7 +711,7 @@ func (c *Client) init() error {
 		}
 		src, err := format.Ast(libModule)
 		if err != nil {
-			return fmt.Errorf("Could not re-format Rego source: %v", err)
+			return fmt.Errorf("could not re-format Rego source: %v", err)
 		}
 		if err := c.backend.driver.PutModule(context.Background(), path, string(src)); err != nil {
 			return fmt.Errorf("Error %s from compiled source:\n%s", err, src)

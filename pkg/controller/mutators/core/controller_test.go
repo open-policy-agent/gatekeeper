@@ -99,7 +99,7 @@ func TestReconcile(t *testing.T) {
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
 
-	tracker, err := readiness.SetupTracker(mgr, true)
+	tracker, err := readiness.SetupTracker(mgr, true, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	os.Setenv("POD_NAME", "no-pod")
 	podstatus.DisablePodOwnership()
