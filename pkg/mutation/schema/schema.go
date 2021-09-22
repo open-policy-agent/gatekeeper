@@ -98,7 +98,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 		panic(fmt.Sprintf("got mutator.DeepCopy() type %T, want %T", mutatorCopy, MutatorWithSchema(nil)))
 	}
 
-	var conflicts idSet
+	var conflicts IDSet
 	for _, gvk := range bindings {
 		s, ok := db.schemas[gvk]
 		if !ok {
@@ -113,7 +113,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 
 	if len(conflicts) > 0 {
 		// Adding this mutator had schema conflicts with another, so return an error.
-		return NewErrConflictingSchema(conflicts.ToList())
+		return NewErrConflictingSchema(conflicts)
 	}
 
 	return nil
@@ -186,7 +186,7 @@ func (db *DB) HasConflicts(id types.ID) bool {
 	return len(db.GetConflicts(id)) > 0
 }
 
-func (db *DB) GetConflicts(id types.ID) []types.ID {
+func (db *DB) GetConflicts(id types.ID) map[types.ID]bool {
 	db.mutex.RLock()
 	mutator, ok := db.cachedMutators[id]
 	db.mutex.RUnlock()
@@ -194,10 +194,10 @@ func (db *DB) GetConflicts(id types.ID) []types.ID {
 		return nil
 	}
 
-	conflicts := make(idSet)
+	conflicts := make(IDSet)
 	for _, gvk := range mutator.SchemaBindings() {
 		conflicts = merge(conflicts, db.schemas[gvk].getConflicts(mutator.Path().Nodes, mutator.TerminalType()))
 	}
 
-	return conflicts.ToList()
+	return conflicts
 }

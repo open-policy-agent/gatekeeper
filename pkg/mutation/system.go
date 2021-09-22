@@ -121,7 +121,7 @@ func (s *System) Remove(id types.ID) error {
 	return nil
 }
 
-func (s *System) GetConflicts(id types.ID) []types.ID {
+func (s *System) GetConflicts(id types.ID) map[types.ID]bool {
 	return s.schemaDB.GetConflicts(id)
 }
 

@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -36,12 +37,14 @@ type Adder struct {
 	// turns it into a mutator. The contents of the mutation object
 	// are set by the API server.
 	MutatorFor func(client.Object) (types.Mutator, error)
+	// Events enables queueing other Mutators for updates.
+	Events chan event.GenericEvent
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
-	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor)
+	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events)
 	return add(mgr, r)
 }
 
@@ -57,14 +60,15 @@ func add(mgr manager.Manager, r *Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to the mutator
-	if err = c.Watch(
+	// Watch for changes to Mutators.
+	err = c.Watch(
 		&source.Kind{Type: r.newMutationObj()},
-		&handler.EnqueueRequestForObject{}); err != nil {
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
 		return err
 	}
 
-	// Watch for changes to MutatorPodStatus
+	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.MutatorPodStatus{}},
 		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, util.EventPackerMapFunc())),
@@ -72,5 +76,14 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	if err != nil {
 		return err
 	}
-	return nil
+
+	if r.events != nil {
+		// Watch for enqueued events.
+		err = c.Watch(
+			&source.Channel{Source: r.events},
+			&handler.EnqueueRequestForObject{},
+		)
+	}
+
+	return err
 }

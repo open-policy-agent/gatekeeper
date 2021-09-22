@@ -155,6 +155,7 @@ violation[{"msg": "denied!"}] {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
@@ -478,6 +479,7 @@ violation[{"msg": "denied!"}] {
 	cs := watch.NewSwitch()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })

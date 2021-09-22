@@ -127,6 +127,7 @@ violation[{"msg": "denied!"}] {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 	adder := constrainttemplate.Adder{
 		Opa:              opaClient,
 		WatchManager:     wm,

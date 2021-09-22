@@ -16,7 +16,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -150,8 +149,8 @@ func TestWebhookAssign_Conflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = sys.Upsert(m2b)
-	wantErr := schema.NewErrConflictingSchema([]types.ID{
-		{Name: "2a"}, {Name: "2b"},
+	wantErr := schema.NewErrConflictingSchema(schema.IDSet{
+		{Name: "2a"}: true, {Name: "2b"}: true,
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("got error %v, want %v", err, wantErr)

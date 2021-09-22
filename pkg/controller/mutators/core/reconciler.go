@@ -34,10 +34,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -52,6 +54,7 @@ func newReconciler(
 	kind string,
 	newMutationObj func() client.Object,
 	mutatorFor func(client.Object) (types.Mutator, error),
+	events chan event.GenericEvent,
 ) *Reconciler {
 	r := &Reconciler{
 		system:           mutationSystem,
@@ -66,6 +69,7 @@ func newReconciler(
 		mutatorFor:       mutatorFor,
 		log:              logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
 		podOwnershipMode: statusv1beta1.GetPodOwnershipMode(),
+		events:           events,
 	}
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
@@ -87,6 +91,8 @@ type Reconciler struct {
 	reporter ctrlmutators.StatsReporter
 	cache    *ctrlmutators.Cache
 	log      logr.Logger
+
+	events chan event.GenericEvent
 
 	podOwnershipMode statusv1beta1.PodOwnershipMode
 }
@@ -113,6 +119,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// previousConflicts records the conflicts this Mutator has with other mutators
 	// before making any changes.
 	previousConflicts := r.system.GetConflicts(id)
+	delete(previousConflicts, id)
 
 	if deleted {
 		// Either the mutator was deleted before we were able to process this request, or it has been marked for
@@ -127,36 +134,48 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	newConflicts := r.system.GetConflicts(id)
+	delete(newConflicts, id)
+
+	diff := symmetricDifference(previousConflicts, newConflicts)
+
 	// Now that we've made changes to the recorded Mutator schemas, we can re-check
 	// for conflicts.
-	r.updateConflicts(ctx, id, previousConflicts)
+	r.queueConflicts(diff)
 
 	ingestionStatus = ctrlmutators.MutatorStatusActive
 	return reconcile.Result{}, nil
 }
 
-func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, mutationObj client.Object) error {
-	mutator, err := r.mutatorFor(mutationObj)
+func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, obj client.Object) error {
+	mutator, err := r.mutatorFor(obj)
 	if err != nil {
 		r.log.Error(err, "Creating mutator for resource failed", "resource",
-			client.ObjectKey{Namespace: mutationObj.GetNamespace(), Name: mutationObj.GetName()})
-		r.getTracker().TryCancelExpect(mutationObj)
+			client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+		r.getTracker().TryCancelExpect(obj)
 
-		return r.updateStatusWithError(ctx, mutationObj, err)
+		return r.updateStatusWithError(ctx, obj, err)
 	}
 
-	if err = r.system.Upsert(mutator); err != nil {
+	if errToUpsert := r.system.Upsert(mutator); errToUpsert != nil {
 		r.log.Error(err, "Insert failed", "resource",
-			client.ObjectKey{Namespace: mutationObj.GetNamespace(), Name: mutationObj.GetName()})
-		r.getTracker().TryCancelExpect(mutationObj)
+			client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+		r.getTracker().TryCancelExpect(obj)
+		schemaErr := &mutationschema.ErrConflictingSchema{}
 
-		return r.upsertError(ctx, mutationObj, err)
+		// Since we got an error upserting obj, update its PodStatus first.
+		err = r.updateStatusWithError(ctx, obj, errToUpsert)
+		if !errors.As(errToUpsert, schemaErr) {
+			return err
+		}
+
+		return nil
 	}
 
-	r.getTracker().Observe(mutationObj)
+	r.getTracker().Observe(obj)
 
 	return r.updateStatus(ctx, id,
-		setID(mutationObj.GetUID()), setGeneration(mutationObj.GetGeneration()),
+		setID(obj.GetUID()), setGeneration(obj.GetGeneration()),
 		setEnforced(true), setErrors(nil))
 }
 
@@ -269,27 +288,19 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 	return nil
 }
 
-// updateConflicts updates the PodStatuses for all Mutators that id had a conflict
-// with.
-//
-// Ignores errors which occur while trying to update the PodStatus for other
-// Mutators. Updating each of these statuses automatically triggers Reconcile
-// for each of the corresponding Mutators.
-func (r *Reconciler) updateConflicts(ctx context.Context, id types.ID, previousConflicts []types.ID) {
-	for _, conflict := range previousConflicts {
-		if conflict == id {
-			continue
-		}
+// queueConflicts queues updates for Mutators in ids except for ignore.
+func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
+	if r.events == nil {
+		return
+	}
 
-		// This ensures the reported conflicts for each Mutator is complete. Even
-		// if there is no longer a conflict with id, we will still fill in conflicts
-		// with other Mutators.
-		idConflicts := r.system.GetConflicts(conflict)
-		if len(idConflicts) == 0 {
-			_ = r.updateStatus(ctx, conflict, updateConflictStatus(nil))
-		} else {
-			_ = r.updateStatus(ctx, conflict, updateConflictStatus(mutationschema.NewErrConflictingSchema(idConflicts)))
-		}
+	for id := range ids {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(r.gvk)
+		u.SetNamespace(id.Namespace)
+		u.SetName(id.Name)
+
+		r.events <- event.GenericEvent{Object: u}
 	}
 }
 
@@ -324,19 +335,19 @@ func (r *Reconciler) updateStatusWithError(ctx context.Context, obj client.Objec
 		setEnforced(false), setErrors(err))
 }
 
-// upsertError handles the case where there was an error upserting obj.
-func (r *Reconciler) upsertError(ctx context.Context, obj client.Object, errToUpsert error) error {
-	schemaErr := &mutationschema.ErrConflictingSchema{}
+func symmetricDifference(left, right mutationschema.IDSet) mutationschema.IDSet {
+	result := make(mutationschema.IDSet)
 
-	// Since we got an error upserting obj, update its PodStatus first.
-	err := r.updateStatusWithError(ctx, obj, errToUpsert)
-	if !errors.As(errToUpsert, schemaErr) {
-		return err
+	for id := range left {
+		if !right[id] {
+			result[id] = true
+		}
+	}
+	for id := range right {
+		if !left[id] {
+			result[id] = true
+		}
 	}
 
-	objID := types.MakeID(obj)
-
-	r.updateConflicts(ctx, objID, schemaErr.Conflicts)
-
-	return nil
+	return result
 }

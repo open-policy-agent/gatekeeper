@@ -21,8 +21,8 @@ func id(name string) types.ID {
 	return types.ID{Name: name}
 }
 
-func ids(names ...string) idSet {
-	result := make(idSet)
+func ids(names ...string) IDSet {
+	result := make(IDSet)
 	for _, n := range names {
 		result[id(n)] = true
 	}
@@ -46,7 +46,7 @@ func TestNode_Add(t *testing.T) {
 		name   string
 		before []idPath
 		add    idPath
-		want   idSet
+		want   IDSet
 	}{
 		{
 			name:   "no conflict on first add",

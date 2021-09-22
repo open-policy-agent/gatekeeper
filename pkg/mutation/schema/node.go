@@ -2,46 +2,17 @@ package schema
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
-type idSet map[types.ID]bool
-
-func (c idSet) String() string {
-	var keys []string
-	for k := range c {
-		keys = append(keys, fmt.Sprintf("%q", k.String()))
-	}
-	sort.Strings(keys)
-	return fmt.Sprintf("[%s]", strings.Join(keys, ","))
-}
-
-func (c idSet) ToList() []types.ID {
-	result := make([]types.ID, len(c))
-
-	idx := 0
-	for id := range c {
-		result[idx] = id
-		idx++
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].String() < result[j].String()
-	})
-
-	return result
-}
-
 // node is an element of an implicit schema.
 // Allows for the definition of overlapping schemas. See Add.
 type node struct {
 	// ReferencedBy tracks the Mutations which reference this part of the schema tree.
-	ReferencedBy idSet
+	ReferencedBy IDSet
 
 	// Children is the set of child Nodes a this location in the schema.
 	// Each node defines a distinct child definition. If multiple Nodes are defined
@@ -59,7 +30,7 @@ type node struct {
 //
 // If the returned references is non-nil it contains at least two elements, one
 // of which is the passed id.
-func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType) idSet {
+func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType) IDSet {
 	if n.ReferencedBy == nil {
 		n.ReferencedBy = make(map[types.ID]bool)
 	}
@@ -146,8 +117,8 @@ func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeT
 	}
 }
 
-func (n *node) conflicts(childKey string) idSet {
-	conflicts := make(idSet)
+func (n *node) conflicts(childKey string) IDSet {
+	conflicts := make(IDSet)
 
 	// Count the number of distinct types with this key.
 	nTypes := len(n.Children[childKey])
@@ -181,7 +152,7 @@ func (n *node) GetConflicts(path []parser.Node, terminalType parser.NodeType) []
 	return conflictsMap.ToList()
 }
 
-func (n *node) getConflicts(path []parser.Node, terminalType parser.NodeType) idSet {
+func (n *node) getConflicts(path []parser.Node, terminalType parser.NodeType) IDSet {
 	if len(path) == 0 {
 		return nil
 	}
@@ -205,7 +176,7 @@ func (n *node) getConflicts(path []parser.Node, terminalType parser.NodeType) id
 	conflictsMap := n.conflicts(childKey)
 
 	if childConflicts == nil {
-		childConflicts = make(idSet)
+		childConflicts = make(IDSet)
 	}
 	for conflict := range childConflicts {
 		conflictsMap[conflict] = true
@@ -216,12 +187,12 @@ func (n *node) getConflicts(path []parser.Node, terminalType parser.NodeType) id
 
 // merge inserts elements from `from` into `into`. Returns `into`, or a
 // reference to a new map if `into` is nil.
-func merge(into, from idSet) idSet {
+func merge(into, from IDSet) IDSet {
 	if len(into) == 0 && len(from) == 0 {
 		return nil
 	}
 	if into == nil {
-		into = make(idSet)
+		into = make(IDSet)
 	}
 	for k := range from {
 		into[k] = true
@@ -246,7 +217,7 @@ func (n *node) DeepCopy() *node {
 	}
 
 	result := &node{
-		ReferencedBy: make(idSet),
+		ReferencedBy: make(IDSet),
 		Children:     make(map[string]map[parser.NodeType]node),
 	}
 	for id := range n.ReferencedBy {

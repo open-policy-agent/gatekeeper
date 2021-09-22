@@ -2,9 +2,7 @@ package schema
 
 import (
 	"fmt"
-	"sort"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
@@ -12,11 +10,7 @@ import (
 // a nil pointer.
 const ErrNilMutator = util.Error("attempted to add nil mutator")
 
-func NewErrConflictingSchema(ids []types.ID) error {
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i].String() < ids[j].String()
-	})
-
+func NewErrConflictingSchema(ids IDSet) error {
 	return ErrConflictingSchema{Conflicts: ids}
 }
 
@@ -25,12 +19,12 @@ const ErrConflictingSchemaType = "ErrConflictingSchema"
 // ErrConflictingSchema reports that adding a Mutator to the DB resulted in
 // conflicting implicit schemas.
 type ErrConflictingSchema struct {
-	Conflicts []types.ID
+	Conflicts IDSet
 }
 
 func (e ErrConflictingSchema) Error() string {
 	return fmt.Sprintf("the following mutators have conflicting schemas: %v",
-		e.Conflicts)
+		e.Conflicts.String())
 }
 
 func (e ErrConflictingSchema) Is(other error) bool {
@@ -43,8 +37,8 @@ func (e ErrConflictingSchema) Is(other error) bool {
 		return false
 	}
 
-	for i, id := range e.Conflicts {
-		if o.Conflicts[i] != id {
+	for id := range e.Conflicts {
+		if !o.Conflicts[id] {
 			return false
 		}
 	}
