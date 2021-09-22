@@ -52,6 +52,9 @@ type TestResult struct {
 	// Name is the name given to the Template/Constraint pair under test.
 	Name string
 
+	// Skipped is whether this Test was skipped while running its parent Suite.
+	Skipped bool
+
 	// Error is the error which prevented running tests for this Constraint.
 	// If defined, CaseResults is empty.
 	Error error
@@ -83,6 +86,9 @@ func (r *TestResult) IsFailure() bool {
 type CaseResult struct {
 	// Name is the name given to this test for the Constraint under test.
 	Name string
+
+	// Skipped is whether this Case was skipped while running its parent Test.
+	Skipped bool
 
 	// Error is the either:
 	// 1) why this case failed, or

@@ -26,4 +26,6 @@ var (
 	// ErrInvalidRegex indicates a Case specified a Violation regex that could not
 	// be compiled.
 	ErrInvalidRegex = errors.New("message contains invalid regular expression")
+	// ErrInvalidFilter indicates that Filter construction failed.
+	ErrInvalidFilter = errors.New("invalid test filter")
 )

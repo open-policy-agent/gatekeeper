@@ -328,6 +328,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		},
 	}
 
+	// Make sure to copy description changes into pkg/mutation/match/match.go's `Match` struct.
 	return apiextensions.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
@@ -356,6 +357,11 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					"Cluster",
 					"Namespaced",
 				},
+			},
+			"name": {
+				Type:        "string",
+				Description: "Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.",
+				Pattern:     wildcardNSPattern,
 			},
 		},
 	}

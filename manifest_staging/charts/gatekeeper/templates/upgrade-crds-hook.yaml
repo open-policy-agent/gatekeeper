@@ -1,3 +1,4 @@
+{{- if .Values.upgradeCRDs.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -13,11 +14,6 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "create", "update", "patch"]
-  - apiGroups: ['policy']
-    resources: ['podsecuritypolicies']
-    verbs:     ['use']
-    resourceNames:
-    - gatekeeper-admin-upgrade-crds
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -75,6 +71,10 @@ spec:
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}
       containers:
       - name: crds-upgrade
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
@@ -83,24 +83,16 @@ spec:
         - apply
         - -f
         - crds/
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          readOnlyRootFilesystem: true
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
       nodeSelector:
         kubernetes.io/os: linux
----
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: gatekeeper-admin-upgrade-crds
-  annotations:
-    seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
-spec:
-  spec:
-  fsGroup:
-    rule: RunAsAny
-  runAsUser:
-    rule: RunAsAny
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    rule: RunAsAny
-  volumes:
-  - secret
+
+{{- end }}

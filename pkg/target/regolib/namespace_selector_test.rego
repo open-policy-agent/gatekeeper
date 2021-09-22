@@ -1,24 +1,24 @@
 package target
 
-test_name_match {
+test_namespace_match {
   matches_namespaces({"namespaces": ["kube-system", "gatekeeper-system"]})
     with input.review.kind as pod_kind
     with input.review.namespace as "gatekeeper-system"
 }
 
-test_name_no_match {
+test_namespace_no_match {
   not matches_namespaces({"namespaces": ["kube-system", "gatekeeper-system"]})
     with input.review.kind as pod_kind
     with input.review.namespace as "burrito"
 }
 
-test_name_match_is_ns {
+test_namespace_match_is_ns {
   matches_namespaces({"namespaces": ["kube-system", "gatekeeper-system"]})
     with input.review.kind as ns_kind
     with input.review.object.metadata.name as "gatekeeper-system"
 }
 
-test_name_no_match_is_ns {
+test_namespace_no_match_is_ns {
   not matches_namespaces({"namespaces": ["kube-system", "gatekeeper-system"]})
     with input.review.kind as ns_kind
     with input.review.object.metadata.name as "front-end"
