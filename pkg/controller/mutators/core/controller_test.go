@@ -78,7 +78,7 @@ func newAssign(name, location, value string) *mutationsv1alpha1.Assign {
 	return &mutationsv1alpha1.Assign{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: mutationsv1alpha1.GroupVersion.String(),
-			Kind: "Assign",
+			Kind:       "Assign",
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: mutationsv1alpha1.AssignSpec{

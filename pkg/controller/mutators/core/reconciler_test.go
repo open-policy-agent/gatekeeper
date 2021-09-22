@@ -545,7 +545,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			wantEvents: map[mutationtypes.ID]bool{{Kind: "fake", Group: statusv1beta1.MutationsGroup, Name: "bar-1"}: true},
-			wantErr: nil,
+			wantErr:    nil,
 		},
 		{
 			name: "fix conflicting mutator",
@@ -588,7 +588,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			wantEvents: map[mutationtypes.ID]bool{{Kind: "fake", Group: statusv1beta1.MutationsGroup, Name: "bar-1"}: true},
-			wantErr: nil,
+			wantErr:    nil,
 		},
 		{
 			name: "keep errors on deleted conflicting mutator",
@@ -744,7 +744,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 					}},
 				},
 			},
-			wantErr: nil,
+			wantErr:    nil,
 			wantEvents: map[mutationtypes.ID]bool{{Kind: "fake", Group: statusv1beta1.MutationsGroup, Name: "bar"}: true},
 		},
 	}
