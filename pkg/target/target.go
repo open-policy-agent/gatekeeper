@@ -347,8 +347,8 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
 			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
-			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
-			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace, or against namespace objects themselves."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is a standard Kubernetes label selector."),
+			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace or the object itself, if the object is a namespace."),
 			"scope": {
 				Type:        "string",
 				Description: "scope accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespaced-scoped resources are matched. (defaults to `*`)",
