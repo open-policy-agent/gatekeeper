@@ -264,10 +264,10 @@ func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
 	return nil
 }
 
-func propsWithDescription(props apiextensions.JSONSchemaProps, description string) apiextensions.JSONSchemaProps {
+func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
 	propCopy := props.DeepCopy()
 	propCopy.Description = description
-	return *propCopy
+	return propCopy
 }
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
@@ -333,11 +333,11 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"kinds": {
-				Type:        "array",
-				Description: "kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.",
+				Type: "array",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
-						Type: "object",
+						Type:        "object",
+						Description: "The Group and Kind of objects that should be matched.  If multiple groups/kinds combinations are specified, an incoming resource need only match one to be in scope.",
 						Properties: map[string]apiextensions.JSONSchemaProps{
 							"apiGroups": nullableStringList,
 							"kinds":     nullableStringList,
@@ -345,13 +345,13 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 					},
 				},
 			},
-			"namespaces":         propsWithDescription(wildcardNSList, "namespaces is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace."),
-			"excludedNamespaces": propsWithDescription(wildcardNSList, "excludedNamespaces is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace."),
-			"labelSelector":      propsWithDescription(labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
-			"namespaceSelector":  propsWithDescription(labelSelectorSchema, "namespaceSelector is a standard Kubernetes namespace selector. If defined, make sure to add Namespaces to your configs.config.gatekeeper.sh object to ensure namespaces are synced into OPA."),
+			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint will only apply to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
+			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint will only apply to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` would match both `kube-system` and `kube-public`."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "labelSelector is a standard Kubernetes label selector."),
+			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace, or against namespace objects themselves."),
 			"scope": {
 				Type:        "string",
-				Description: "scope accepts *, Cluster, or Namespaced which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to *)",
+				Description: "scope accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespaced-scoped resources are matched. (defaults to `*`)",
 				Enum: []apiextensions.JSON{
 					"*",
 					"Cluster",
@@ -360,7 +360,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"name": {
 				Type:        "string",
-				Description: "Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.",
+				Description: "`name` is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.",
 				Pattern:     wildcardNSPattern,
 			},
 		},
