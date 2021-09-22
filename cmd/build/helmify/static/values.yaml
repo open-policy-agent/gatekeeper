@@ -85,3 +85,7 @@ pdb:
     minAvailable: 1
 service: {}
 disabledBuiltins:
+psp:
+  enabled: true
+upgradeCRDs:
+  enabled: true
