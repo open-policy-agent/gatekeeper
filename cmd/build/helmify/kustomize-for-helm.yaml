@@ -177,6 +177,28 @@ metadata:
   namespace: gatekeeper-system
 ---
 apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-mutating-webhook-configuration
+webhooks:
+- clientConfig:
+    service:
+      name: gatekeeper-webhook-service
+      namespace: gatekeeper-system
+      path: /v1/mutate
+  failurePolicy: HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY
+  matchPolicy: Exact
+  name: mutation.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
+  sideEffects: None
+  timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
+---
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   labels:

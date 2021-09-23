@@ -2,6 +2,7 @@ apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sHttpsOnly
 metadata:
   name: ingress-https-only
+  namespace: gatekeeper-system
 spec:
   match:
     kinds:

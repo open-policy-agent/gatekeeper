@@ -24,7 +24,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -250,9 +249,6 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	var providerCache *frameworksexternaldata.ProviderCache
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
-
-		spew.Dump(providerCache)
-
 		driver = local.New(local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...), local.AddExternalDataProviderCache(providerCache))
 	} else {
 		// initialize OPA

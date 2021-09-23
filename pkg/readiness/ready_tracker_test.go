@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -410,7 +411,16 @@ func Test_CollectDeleted(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	mgr, _ := setupManager(t)
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+
+	// Setup tracker with namespaced client to avoid "noise" (control-plane-managed configmaps) from kube-system
+	lister := namespacedLister{
+		lister:    mgr.GetAPIReader(),
+		namespace: "gatekeeper-system",
+	}
+	tracker := readiness.NewTracker(lister, false, false)
+	err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return tracker.Run(ctx)
+	}))
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -465,7 +475,7 @@ func Test_CollectDeleted(t *testing.T) {
 
 		ul := &unstructured.UnstructuredList{}
 		ul.SetGroupVersionKind(tc.gvk)
-		err = client.List(ctx, ul)
+		err = lister.List(ctx, ul)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
 		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
 
@@ -497,4 +507,17 @@ func probeIsReady(ctx context.Context) (bool, error) {
 	}
 
 	return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
+}
+
+// namespacedLister scopes a lister to a particular namespace.
+type namespacedLister struct {
+	namespace string
+	lister    readiness.Lister
+}
+
+func (n namespacedLister) List(ctx context.Context, list ctrlclient.ObjectList, opts ...ctrlclient.ListOption) error {
+	if n.namespace != "" {
+		opts = append(opts, ctrlclient.InNamespace(n.namespace))
+	}
+	return n.lister.List(ctx, list, opts...)
 }
