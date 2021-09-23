@@ -224,6 +224,8 @@ spec:
 `
 
 func TestRunner_Run_Integer(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		template   string
@@ -247,7 +249,12 @@ func TestRunner_Run_Integer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := context.Background()
 
 			f := &fstest.MapFS{
@@ -265,9 +272,9 @@ func TestRunner_Run_Integer(t *testing.T) {
 				},
 			}
 
-			runner := Runner{
-				FS:        f,
-				NewClient: NewOPAClient,
+			runner, err := NewRunner(f, NewOPAClient)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			suite := &Suite{

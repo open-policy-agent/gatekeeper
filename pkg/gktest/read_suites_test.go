@@ -12,6 +12,8 @@ import (
 )
 
 func TestReadSuites(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		target     string
@@ -367,7 +369,12 @@ tests: {}
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, gotErr := ReadSuites(tc.fileSystem, tc.target, tc.recursive)
 			if !errors.Is(gotErr, tc.wantErr) {
 				t.Fatalf("got error %v, want error %v",

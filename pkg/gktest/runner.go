@@ -8,18 +8,36 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Runner defines logic independent of how tests are run and the results are
 // printed.
 type Runner struct {
-	// FS is the filesystem the Runner interacts with to read Suites and objects.
-	FS fs.FS
+	// filesystem is the filesystem the Runner interacts with to read Suites and objects.
+	filesystem fs.FS
 
-	// NewClient instantiates a Client for compiling Templates/Constraints, and
+	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	NewClient func() (Client, error)
+	newClient func() (Client, error)
+
+	scheme *runtime.Scheme
+}
+
+func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, error) {
+	s := runtime.NewScheme()
+	err := apis.AddToScheme(s)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Runner{
+		filesystem: filesystem,
+		newClient:  newClient,
+		scheme:     s,
+	}, nil
 }
 
 // Run executes all Tests in the Suite and returns the results.
@@ -107,7 +125,7 @@ func (r *Runner) skipCase(c Case) CaseResult {
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
-	client, err := r.NewClient()
+	client, err := r.newClient()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCreatingClient, err)
 	}
@@ -130,7 +148,7 @@ func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath str
 		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
 	}
 
-	cObj, err := readConstraint(r.FS, filepath.Join(suiteDir, constraintPath))
+	cObj, err := readConstraint(r.filesystem, filepath.Join(suiteDir, constraintPath))
 	if err != nil {
 		return err
 	}
@@ -147,7 +165,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
 	}
 
-	template, err := readTemplate(r.FS, filepath.Join(suiteDir, templatePath))
+	template, err := readTemplate(r.scheme, r.filesystem, filepath.Join(suiteDir, templatePath))
 	if err != nil {
 		return err
 	}
@@ -208,7 +226,7 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 		return nil, err
 	}
 
-	toReview, inventory, err := readCaseObjects(r.FS, path)
+	toReview, inventory, err := readCaseObjects(r.filesystem, path)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +234,8 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 	for _, obj := range inventory {
 		_, err = c.AddData(ctx, obj)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v %v/%v: %v",
+				ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
 

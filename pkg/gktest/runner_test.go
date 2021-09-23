@@ -316,6 +316,8 @@ spec:
 )
 
 func TestRunner_Run(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -587,7 +589,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrNoObjects,
+						Error: ErrAddInventory,
 					}},
 				}},
 			},
@@ -882,12 +884,17 @@ func TestRunner_Run(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := context.Background()
 
-			runner := Runner{
-				FS:        tc.f,
-				NewClient: NewOPAClient,
+			runner, err := NewRunner(tc.f, NewOPAClient)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			filter, err := NewFilter(tc.filter)
@@ -907,15 +914,17 @@ func TestRunner_Run(t *testing.T) {
 }
 
 func TestRunner_Run_ClientError(t *testing.T) {
+	t.Parallel()
+
 	want := SuiteResult{
 		TestResults: []TestResult{{Error: ErrCreatingClient}},
 	}
 
-	runner := Runner{
-		FS: fstest.MapFS{},
-		NewClient: func() (Client, error) {
-			return nil, errors.New("error")
-		},
+	runner, err := NewRunner(fstest.MapFS{}, func() (Client, error) {
+		return nil, errors.New("error")
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	ctx := context.Background()
@@ -933,6 +942,8 @@ func TestRunner_Run_ClientError(t *testing.T) {
 }
 
 func TestRunner_RunCase(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		template   string
@@ -1233,7 +1244,12 @@ func TestRunner_RunCase(t *testing.T) {
 	)
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			suite := &Suite{
 				Tests: []Test{{
 					Template:   templateFile,
@@ -1247,13 +1263,16 @@ func TestRunner_RunCase(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner := Runner{
-				FS: fstest.MapFS{
+			runner, err := NewRunner(
+				fstest.MapFS{
 					templateFile:   &fstest.MapFile{Data: []byte(tc.template)},
 					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
-				NewClient: NewOPAClient,
+				NewOPAClient,
+			)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			got := runner.Run(ctx, &nilFilter{}, "", suite)

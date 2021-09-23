@@ -6,6 +6,8 @@ import (
 )
 
 func TestFilter_Error(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -49,7 +51,12 @@ func TestFilter_Error(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := NewFilter(tc.filter)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf(`got NewFilter("(") error = %v, want %v`, err, ErrInvalidFilter)
@@ -59,6 +66,8 @@ func TestFilter_Error(t *testing.T) {
 }
 
 func TestFilter_MatchesTest(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -146,7 +155,12 @@ func TestFilter_MatchesTest(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter, err := NewFilter(tc.filter)
 			if err != nil {
 				t.Fatal(err)
@@ -161,6 +175,8 @@ func TestFilter_MatchesTest(t *testing.T) {
 }
 
 func TestFilter_MatchesCase(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name      string
 		filter    string
@@ -225,7 +241,12 @@ func TestFilter_MatchesCase(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter, err := NewFilter(tc.filter)
 			if err != nil {
 				t.Fatal(err)

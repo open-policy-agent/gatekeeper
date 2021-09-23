@@ -5,20 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"sync"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
-
-// scheme stores the k8s resource types we can instantiate as Templates.
-var scheme = runtime.NewScheme()
-
-func init() {
-	_ = apis.AddToScheme(scheme)
-}
 
 type versionless interface {
 	ToVersionless() (*templates.ConstraintTemplate, error)
@@ -79,10 +72,13 @@ func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
+// TODO(willbeason): Remove once ToVersionless() is threadsafe.
+var versionlessMtx sync.Mutex
+
 // readTemplate reads the contents of the path and returns the
 // ConstraintTemplate it defines. Returns an error if the file does not define
 // a ConstraintTemplate.
-func readTemplate(f fs.FS, path string) (*templates.ConstraintTemplate, error) {
+func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading ConstraintTemplate from %q: %w", path, err)
@@ -119,14 +115,17 @@ func readTemplate(f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 
 	v, isVersionless := t.(versionless)
 	if !isVersionless {
-		return nil, fmt.Errorf("%w: %T", nil, t)
+		// This likely means a
+		return nil, fmt.Errorf("%w: %T", ErrConvertingTemplate, t)
 	}
 
+	versionlessMtx.Lock()
 	template, err := v.ToVersionless()
+	versionlessMtx.Unlock()
 	if err != nil {
 		// This shouldn't happen unless there's a bug in the conversion functions.
 		// Most likely it means the conversion functions weren't generated.
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrConvertingTemplate, err)
 	}
 
 	return template, nil

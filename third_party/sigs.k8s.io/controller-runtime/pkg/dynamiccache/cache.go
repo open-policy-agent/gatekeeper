@@ -75,7 +75,7 @@ func BuilderWithOptions(options cache.Options) cache.NewCacheFunc {
 }
 
 func defaultOpts(config *rest.Config, opts cache.Options) (cache.Options, error) {
-	// Use the default Kubernetes Scheme if unset
+	// Use the default Kubernetes scheme if unset
 	if opts.Scheme == nil {
 		opts.Scheme = scheme.Scheme
 	}
