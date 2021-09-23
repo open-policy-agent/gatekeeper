@@ -496,7 +496,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 			wantErr: newErrSome(1),
 		},
 		{
-			name: "error upserting Mutator into system",
+			name:   "error upserting Mutator into system",
 			before: nil,
 			request: orObject(&fakeMutatorObject{
 				TypeMeta:   metav1.TypeMeta{Kind: "fake"},
