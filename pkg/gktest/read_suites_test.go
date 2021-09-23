@@ -309,6 +309,8 @@ tests:
   - object: deny.yaml
     assertions:
     - violations: "yes"
+  - object: referential.yaml
+    inventory: [inventory.yaml]
 `),
 				},
 			},
@@ -323,6 +325,9 @@ tests:
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
 						}},
+					}, {
+						Object: "referential.yaml",
+						Inventory: []string{"inventory.yaml"},
 					}},
 				}},
 			}},

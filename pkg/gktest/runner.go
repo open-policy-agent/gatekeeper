@@ -179,39 +179,38 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, c Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) CaseResult {
 	start := time.Now()
 
-	err := r.checkCase(ctx, newClient, suiteDir, c)
+	err := r.checkCase(ctx, newClient, suiteDir, tc)
 
 	return CaseResult{
-		Name:    c.Name,
+		Name:    tc.Name,
 		Error:   err,
 		Runtime: Duration(time.Since(start)),
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, c Case) (err error) {
-	if c.Object == "" {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) (err error) {
+	if tc.Object == "" {
 		return fmt.Errorf("%w: must define object", ErrInvalidCase)
 	}
 
-	objectPath := filepath.Join(suiteDir, c.Object)
-	review, err := r.runReview(ctx, newClient, objectPath)
+	review, err := r.runReview(ctx, newClient, suiteDir, tc)
 	if err != nil {
 		return err
 	}
 
 	results := review.Results()
 
-	if len(c.Assertions) == 0 {
+	if len(tc.Assertions) == 0 {
 		// Default to assuming the object passes validation if no Assertions are
 		// defined.
-		c.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
+		tc.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
 	}
 
-	for i := range c.Assertions {
-		err = c.Assertions[i].Run(results)
+	for i := range tc.Assertions {
+		err = tc.Assertions[i].Run(results)
 		if err != nil {
 			return err
 		}
@@ -220,26 +219,50 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error)
 	return nil
 }
 
-func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), path string) (*types.Responses, error) {
+func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) (*types.Responses, error) {
 	c, err := newClient()
 	if err != nil {
 		return nil, err
 	}
 
-	toReview, inventory, err := readCaseObjects(r.filesystem, path)
+	toReviewPath := filepath.Join(suiteDir, tc.Object)
+	toReviewObjs, err := readObjects(r.filesystem, toReviewPath)
 	if err != nil {
 		return nil, err
+	}
+	if len(toReviewObjs) != 1 {
+		return nil, fmt.Errorf("%w: %q defines %d objects",
+			ErrMultipleObjects, toReviewPath, len(toReviewObjs))
+	}
+	toReview := toReviewObjs[0]
+
+	for _, path := range tc.Inventory {
+		err = r.addInventory(ctx, c, suiteDir, path)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return c.Review(ctx, toReview)
+}
+
+func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {
+	path := filepath.Join(suiteDir, inventoryPath)
+
+	inventory, err := readObjects(r.filesystem, path)
+	if err != nil {
+		return err
 	}
 
 	for _, obj := range inventory {
 		_, err = c.AddData(ctx, obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v %v/%v: %v",
+			return fmt.Errorf("%w: %v %v/%v: %v",
 				ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
 
-	return c.Review(ctx, toReview)
+	return nil
 }
 
 // readCaseObjects reads objects at path in filesystem f. Returns:
@@ -248,25 +271,22 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 // 3) Any errors encountered parsing the objects
 //
 // The final object in path is the object to review.
-func readCaseObjects(f fs.FS, path string) (*unstructured.Unstructured, []*unstructured.Unstructured, error) {
+func readObjects(f fs.FS, path string) ([]*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	objs, err := readUnstructureds(bytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading %q: %w", path, err)
+		return nil, fmt.Errorf("reading %q: %w", path, err)
 	}
 
 	nObjs := len(objs)
 
 	if nObjs == 0 {
-		return nil, nil, fmt.Errorf("%w: path %q defines no YAML objects", ErrNoObjects, path)
+		return nil, fmt.Errorf("%w: path %q defines no YAML objects", ErrNoObjects, path)
 	}
 
-	toReview := objs[nObjs-1]
-	inventory := objs[:nObjs-1]
-
-	return toReview, inventory, nil
+	return objs, nil
 }

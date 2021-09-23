@@ -188,7 +188,19 @@ metadata:
 kind: Object
 apiVersion: v1
 metadata:
-  name: object`
+  name: object
+`
+	objectMultiple = `
+kind: Object
+apiVersion: v1
+metadata:
+  name: object
+---
+kind: Object
+apiVersion: v1
+metadata:
+  name: object-2
+`
 
 	objectInvalid = `
 kind Object
@@ -266,7 +278,7 @@ metadata:
     owner: admin.agilebank.demo
 `
 
-	objectsReferentialAllow = `
+	objectReferentialInventory = `
 apiVersion: v1
 kind: Service
 metadata:
@@ -277,8 +289,9 @@ spec:
     - port: 443
   selector:
     key: value
+`
 
----
+	objectReferentialAllow = `
 apiVersion: v1
 kind: Service
 metadata:
@@ -288,21 +301,10 @@ spec:
   ports:
     - port: 443
   selector:
-    key: other-value`
+    key: other-value
+`
 
-	objectsReferentialDeny = `
-apiVersion: v1
-kind: Service
-metadata:
-  name: gatekeeper-test-service-example
-  namespace: default
-spec:
-  ports:
-    - port: 443
-  selector:
-    key: value
-
----
+	objectReferentialDeny = `
 apiVersion: v1
 kind: Service
 metadata:
@@ -312,7 +314,8 @@ spec:
   ports:
     - port: 443
   selector:
-    key: value`
+    key: value
+`
 )
 
 func TestRunner_Run(t *testing.T) {
@@ -535,6 +538,70 @@ func TestRunner_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "empty inventory",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Object: "object.yaml",
+						Inventory: []string{"inventory.yaml"},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(""),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrNoObjects,
+					}},
+				}},
+			},
+		},
+		{
+			name: "multiple objects",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectMultiple),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrMultipleObjects,
+					}},
+				}},
+			},
+		},
+		{
 			name: "no object",
 			suite: Suite{
 				Tests: []Test{{
@@ -571,7 +638,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []Case{{
-						Object: "object.yaml",
+						Object:    "object.yaml",
+						Inventory: []string{"inventory.yaml"},
 					}},
 				}},
 			},
@@ -583,6 +651,9 @@ func TestRunner_Run(t *testing.T) {
 					Data: []byte(constraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+				"inventory.yaml": &fstest.MapFile{
 					Data: []byte(objectInvalidInventory),
 				},
 			},
@@ -847,9 +918,11 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []Case{{
 						Name:   "allow",
 						Object: "allow.yaml",
+						Inventory: []string{"inventory.yaml"},
 					}, {
 						Name:   "deny",
 						Object: "deny.yaml",
+						Inventory: []string{"inventory.yaml"},
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
 						}},
@@ -864,10 +937,13 @@ func TestRunner_Run(t *testing.T) {
 					Data: []byte(constraintReferential),
 				},
 				"allow.yaml": &fstest.MapFile{
-					Data: []byte(objectsReferentialAllow),
+					Data: []byte(objectReferentialAllow),
 				},
 				"deny.yaml": &fstest.MapFile{
-					Data: []byte(objectsReferentialDeny),
+					Data: []byte(objectReferentialDeny),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(objectReferentialInventory),
 				},
 			},
 			want: SuiteResult{
