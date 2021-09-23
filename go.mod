@@ -4,19 +4,16 @@ go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
-	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.4.0
 	github.com/go-logr/zapr v0.4.0
-	github.com/go-openapi/spec v0.20.3 // indirect
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.1.2
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.16.0
 	github.com/open-policy-agent/cert-controller v0.2.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210701194838-1dbe2618668d
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76
 	github.com/open-policy-agent/opa v0.29.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
@@ -32,12 +29,12 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-	k8s.io/api v0.20.10
-	k8s.io/apiextensions-apiserver v0.20.10
-	k8s.io/apimachinery v0.20.10
-	k8s.io/client-go v0.20.10
+	k8s.io/api v0.21.2
+	k8s.io/apiextensions-apiserver v0.21.2
+	k8s.io/apimachinery v0.21.2
+	k8s.io/client-go v0.21.2
 	k8s.io/klog/v2 v2.9.0
 	k8s.io/utils v0.0.0-20210802155522-efc7438f0176
-	sigs.k8s.io/controller-runtime v0.8.3
+	sigs.k8s.io/controller-runtime v0.9.2
 	sigs.k8s.io/yaml v1.2.0
 )

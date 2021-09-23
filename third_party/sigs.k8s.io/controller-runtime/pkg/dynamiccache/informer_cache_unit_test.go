@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.8.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
 
 package dynamiccache
 
