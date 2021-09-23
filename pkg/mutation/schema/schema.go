@@ -183,7 +183,7 @@ func (db *DB) remove(id types.ID) {
 func (db *DB) HasConflicts(id types.ID) bool {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	return len(db.GetConflicts(id)) > 0
+	return db.conflicts[id]
 }
 
 func (db *DB) GetConflicts(id types.ID) map[types.ID]bool {

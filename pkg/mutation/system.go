@@ -66,6 +66,10 @@ func (s *System) Get(id types.ID) types.Mutator {
 // Upsert updates or inserts the given object. Returns an error in case of
 // schema conflicts.
 func (s *System) Upsert(m types.Mutator) error {
+	if m == nil {
+		return schema.ErrNilMutator
+	}
+
 	s.mux.Lock()
 	defer s.mux.Unlock()
 

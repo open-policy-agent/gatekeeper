@@ -228,7 +228,7 @@ func TestReconcile(t *testing.T) {
 		}, timeout).Should(gomega.Succeed())
 	})
 
-	t.Run("Conflicting mutators are not applied", func(t *testing.T) {
+	t.Run("Conflicting mutators are marked not enforced and conflicts can be resolved", func(t *testing.T) {
 		mFoo := newAssign("foo", "spec.foo", "value-1")
 		mFooID := types.MakeID(mFoo)
 		mBar1 := newAssign("bar-1", "spec.bar[name: bar].qux", "value-2")

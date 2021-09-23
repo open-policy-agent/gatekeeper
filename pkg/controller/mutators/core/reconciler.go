@@ -18,7 +18,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -137,6 +136,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	newConflicts := r.system.GetConflicts(id)
 	delete(newConflicts, id)
 
+	// diff is the set of mutators which either:
+	// 1) previously conflicted with mutationObj but do not after this change, or
+	// 2) now conflict with mutationObj but did not before this change.
 	diff := symmetricDifference(previousConflicts, newConflicts)
 
 	// Now that we've made changes to the recorded Mutator schemas, we can re-check
@@ -161,15 +163,9 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, obj clien
 		r.log.Error(err, "Insert failed", "resource",
 			client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
 		r.getTracker().TryCancelExpect(obj)
-		schemaErr := &mutationschema.ErrConflictingSchema{}
 
 		// Since we got an error upserting obj, update its PodStatus first.
-		err = r.updateStatusWithError(ctx, obj, errToUpsert)
-		if !errors.As(errToUpsert, schemaErr) {
-			return err
-		}
-
-		return nil
+		return r.updateStatusWithError(ctx, obj, errToUpsert)
 	}
 
 	r.getTracker().Observe(obj)
@@ -216,8 +212,8 @@ func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(mID types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
-	r.cache.Upsert(mID, ingestionStatus)
+func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
+	r.cache.Upsert(id, ingestionStatus)
 	if r.reporter == nil {
 		return
 	}
@@ -259,12 +255,12 @@ func (r *Reconciler) getTracker() readiness.Expectations {
 }
 
 // reconcileDeleted removes the Mutator from the controller and deletes the corresponding PodStatus.
-func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
-	r.cache.Remove(mID)
+func (r *Reconciler) reconcileDeleted(ctx context.Context, id types.ID) error {
+	r.cache.Remove(id)
 
-	if err := r.system.Remove(mID); err != nil {
+	if err := r.system.Remove(id); err != nil {
 		r.log.Error(err, "Remove failed", "resource",
-			apiTypes.NamespacedName{Name: mID.Name, Namespace: mID.Namespace})
+			apiTypes.NamespacedName{Name: id.Name, Namespace: id.Namespace})
 		return err
 	}
 
@@ -273,7 +269,7 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 		return err
 	}
 
-	sName, err := statusv1beta1.KeyForMutatorID(pod.Name, mID)
+	sName, err := statusv1beta1.KeyForMutatorID(pod.Name, id)
 	if err != nil {
 		return err
 	}
@@ -289,6 +285,8 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 }
 
 // queueConflicts queues updates for Mutators in ids.
+// We send events to the handler's event queue rather than attempting the update
+// ourselves to delegate handling failures to the existing controller logic.
 func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
 	if r.events == nil {
 		return
