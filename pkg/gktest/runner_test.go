@@ -468,13 +468,13 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
@@ -513,7 +513,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}},
@@ -543,8 +543,8 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
-						Object: "object.yaml",
+					Cases: []*Case{{
+						Object:    "object.yaml",
 						Inventory: []string{"inventory.yaml"},
 					}},
 				}},
@@ -577,7 +577,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}},
@@ -607,7 +607,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}},
@@ -637,7 +637,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object:    "object.yaml",
 						Inventory: []string{"inventory.yaml"},
 					}},
@@ -776,7 +776,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}},
@@ -803,7 +803,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
@@ -833,7 +833,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases:      []Case{{}},
+					Cases:      []*Case{{}},
 				}},
 			},
 			f: fstest.MapFS{
@@ -858,7 +858,7 @@ func TestRunner_Run(t *testing.T) {
 					Name:       "allow",
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Name:   "allowed-1",
 						Object: "object.yaml",
 					}, {
@@ -869,7 +869,7 @@ func TestRunner_Run(t *testing.T) {
 					Name:       "deny",
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Name:   "denied",
 						Object: "object.yaml",
 						Assertions: []Assertion{{
@@ -915,13 +915,13 @@ func TestRunner_Run(t *testing.T) {
 					Name:       "referential constraint",
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
-						Name:   "allow",
-						Object: "allow.yaml",
+					Cases: []*Case{{
+						Name:      "allow",
+						Object:    "allow.yaml",
 						Inventory: []string{"inventory.yaml"},
 					}, {
-						Name:   "deny",
-						Object: "deny.yaml",
+						Name:      "deny",
+						Object:    "deny.yaml",
 						Inventory: []string{"inventory.yaml"},
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
@@ -1330,7 +1330,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Tests: []Test{{
 					Template:   templateFile,
 					Constraint: constraintFile,
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object:     objectFile,
 						Assertions: tc.assertions,
 					}},

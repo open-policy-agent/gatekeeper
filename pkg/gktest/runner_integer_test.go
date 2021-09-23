@@ -281,7 +281,7 @@ func TestRunner_Run_Integer(t *testing.T) {
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "allow.yaml",
 					}, {
 						Object:     "disallow.yaml",

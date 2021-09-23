@@ -27,7 +27,7 @@ type Test struct {
 	Constraint string `json:"constraint"`
 
 	// Cases are the test cases to run on the instantiated Constraint.
-	Cases []Case `json:"cases,omitempty"`
+	Cases []*Case `json:"cases,omitempty"`
 }
 
 // Case runs Constraint against a YAML object.

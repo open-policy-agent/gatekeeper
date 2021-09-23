@@ -120,8 +120,8 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 	return results, nil
 }
 
-func (r *Runner) skipCase(c Case) CaseResult {
-	return CaseResult{Name: c.Name, Skipped: true}
+func (r *Runner) skipCase(tc *Case) CaseResult {
+	return CaseResult{Name: tc.Name, Skipped: true}
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
@@ -179,7 +179,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
 
 	err := r.checkCase(ctx, newClient, suiteDir, tc)
@@ -191,7 +191,7 @@ func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), 
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) (err error) {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (err error) {
 	if tc.Object == "" {
 		return fmt.Errorf("%w: must define object", ErrInvalidCase)
 	}
@@ -219,7 +219,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error)
 	return nil
 }
 
-func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc Case) (*types.Responses, error) {
+func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (*types.Responses, error) {
 	c, err := newClient()
 	if err != nil {
 		return nil, err
@@ -283,7 +283,6 @@ func readObjects(f fs.FS, path string) ([]*unstructured.Unstructured, error) {
 	}
 
 	nObjs := len(objs)
-
 	if nObjs == 0 {
 		return nil, fmt.Errorf("%w: path %q defines no YAML objects", ErrNoObjects, path)
 	}

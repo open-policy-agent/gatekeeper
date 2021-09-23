@@ -279,7 +279,7 @@ tests:
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "allow.yaml",
 					}, {
 						Object: "deny.yaml",
@@ -318,7 +318,7 @@ tests:
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "allow.yaml",
 					}, {
 						Object: "deny.yaml",
@@ -326,7 +326,7 @@ tests:
 							Violations: intStrFromStr("yes"),
 						}},
 					}, {
-						Object: "referential.yaml",
+						Object:    "referential.yaml",
 						Inventory: []string{"inventory.yaml"},
 					}},
 				}},
