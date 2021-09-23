@@ -189,6 +189,130 @@ kind: Object
 apiVersion: v1
 metadata:
   name: object`
+
+	objectInvalid = `
+kind Object
+apiVersion: v1
+metadata:
+  name: object`
+
+	objectEmpty = ``
+
+	objectInvalidInventory = `
+kind: Object
+metadata:
+  name: object
+---
+kind: Object
+apiVersion: v1
+metadata:
+  name: object`
+
+	templateReferential = `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueserviceselector
+  annotations:
+    description: Requires Services to have unique selectors within a namespace.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueServiceSelector
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueserviceselector
+        make_apiversion(kind) = apiVersion {
+          g := kind.group
+          v := kind.version
+          g != ""
+          apiVersion = sprintf("%v/%v", [g, v])
+        }
+        make_apiversion(kind) = apiVersion {
+          kind.group == ""
+          apiVersion = kind.version
+        }
+        identical(obj, review) {
+          obj.metadata.namespace == review.namespace
+          obj.metadata.name == review.name
+          obj.kind == review.kind.kind
+          obj.apiVersion == make_apiversion(review.kind)
+        }
+        flatten_selector(obj) = flattened {
+          selectors := [s | s = concat(":", [key, val]); val = obj.spec.selector[key]]
+          flattened := concat(",", sort(selectors))
+        }
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.kind.version == "v1"
+          input.review.kind.group == ""
+          input_selector := flatten_selector(input.review.object)
+          other := data.inventory.namespace[namespace][_]["Service"][name]
+          not identical(other, input.review)
+          other_selector := flatten_selector(other)
+          input_selector == other_selector
+          msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
+        }
+`
+
+	constraintReferential = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sUniqueServiceSelector
+metadata:
+  name: unique-service-selector
+  labels:
+    owner: admin.agilebank.demo
+`
+
+	objectsReferentialAllow = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-example
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: value
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-allowed
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: other-value`
+
+	objectsReferentialDeny = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-example
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: value
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-disallowed
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: value`
 )
 
 func TestRunner_Run(t *testing.T) {
@@ -375,6 +499,96 @@ func TestRunner_Run(t *testing.T) {
 					CaseResults: []CaseResult{{}},
 				}, {
 					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "invalid object",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectInvalid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrInvalidYAML,
+					}},
+				}},
+			},
+		},
+		{
+			name: "no object",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectEmpty),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrNoObjects,
+					}},
+				}},
+			},
+		},
+		{
+			name: "invalid inventory",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectInvalidInventory),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrNoObjects,
+					}},
 				}},
 			},
 		},
@@ -618,6 +832,50 @@ func TestRunner_Run(t *testing.T) {
 					}},
 				}, {
 					Name: "deny", Skipped: true,
+				}},
+			},
+		},
+		{
+			name: "referential constraints",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "referential constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []Case{{
+						Name:   "allow",
+						Object: "allow.yaml",
+					}, {
+						Name:   "deny",
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(templateReferential),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintReferential),
+				},
+				"allow.yaml": &fstest.MapFile{
+					Data: []byte(objectsReferentialAllow),
+				},
+				"deny.yaml": &fstest.MapFile{
+					Data: []byte(objectsReferentialDeny),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "referential constraint",
+					CaseResults: []CaseResult{{
+						Name: "allow",
+					}, {
+						Name: "deny",
+					}},
 				}},
 			},
 		},

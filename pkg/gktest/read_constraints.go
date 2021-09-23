@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -21,6 +22,50 @@ func init() {
 
 type versionless interface {
 	ToVersionless() (*templates.ConstraintTemplate, error)
+}
+
+// clean removes the following from yaml:
+// 1) Empty lines
+// 2) Lines with only space characters
+// 3) Lines which are only comments
+//
+// This prevents us from attempting to parse an empty yaml document and failing.
+func clean(yaml string) string {
+	lines := strings.Split(yaml, "\n")
+	result := strings.Builder{}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) == 0 || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		result.WriteString(line)
+		result.WriteString("\n")
+	}
+
+	return result.String()
+}
+
+func readUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
+	splits := strings.Split(string(bytes), "\n---")
+	var result []*unstructured.Unstructured
+
+	for _, split := range splits {
+		split = clean(split)
+		if len(split) == 0 {
+			continue
+		}
+
+		u, err := readUnstructured([]byte(split))
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
+		}
+
+		result = append(result, u)
+	}
+
+	return result, nil
 }
 
 func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {

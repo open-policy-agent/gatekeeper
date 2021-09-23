@@ -37,10 +37,6 @@ type Case struct {
 	// Object is the path to the file containing a Kubernetes object to test.
 	Object string `json:"object"`
 
-	// Inventory is the path to objects containing objects for referential
-	// constraints.
-	Inventory []string `json:"inventory"`
-
 	// Assertions are statements which must be true about the result of running
 	// Review with the Test's Constraint on the Case's Object.
 	//

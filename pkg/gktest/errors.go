@@ -28,4 +28,6 @@ var (
 	ErrInvalidRegex = errors.New("message contains invalid regular expression")
 	// ErrInvalidFilter indicates that Filter construction failed.
 	ErrInvalidFilter = errors.New("invalid test filter")
+	// ErrNoObjects indicates that a test Case's object file has no YAML documents
+	ErrNoObjects = errors.New("missing objects")
 )
