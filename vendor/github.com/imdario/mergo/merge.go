@@ -95,18 +95,13 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 				}
 			}
 		} else {
-			if dst.CanSet() && (isReflectNil(dst) || overwrite) && (!isEmptyValue(src) || overwriteWithEmptySrc) {
+			if (isReflectNil(dst) || overwrite) && (!isEmptyValue(src) || overwriteWithEmptySrc) {
 				dst.Set(src)
 			}
 		}
 	case reflect.Map:
 		if dst.IsNil() && !src.IsNil() {
-			if dst.CanSet() {
-				dst.Set(reflect.MakeMap(dst.Type()))
-			} else {
-				dst = src
-				return
-			}
+			dst.Set(reflect.MakeMap(dst.Type()))
 		}
 
 		if src.Kind() != reflect.Map {
@@ -276,6 +271,11 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 		}
 	default:
 		mustSet := (isEmptyValue(dst) || overwrite) && (!isEmptyValue(src) || overwriteWithEmptySrc)
+		v := fmt.Sprintf("%v", src)
+		if v == "TestIssue106" {
+			fmt.Println(mustSet)
+			fmt.Println(dst.CanSet())
+		}
 		if mustSet {
 			if dst.CanSet() {
 				dst.Set(src)

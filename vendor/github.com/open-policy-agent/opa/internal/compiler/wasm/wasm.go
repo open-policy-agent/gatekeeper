@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package wasm contains an IR->WASM compiler backend.
-// nolint: deadcode,varcheck // Package in development (2021).
 package wasm
 
 import (
@@ -28,10 +27,11 @@ import (
 const (
 	opaWasmABIVersionVal      = 1
 	opaWasmABIVersionVar      = "opa_wasm_abi_version"
-	opaWasmABIMinorVersionVal = 1
+	opaWasmABIMinorVersionVal = 2
 	opaWasmABIMinorVersionVar = "opa_wasm_abi_minor_version"
 )
 
+// nolint: deadcode,varcheck
 const (
 	opaTypeNull int32 = iota + 1
 	opaTypeBoolean
@@ -45,10 +45,8 @@ const (
 )
 
 const (
-	opaFuncPrefix        = "opa_"
 	opaAbort             = "opa_abort"
 	opaRuntimeError      = "opa_runtime_error"
-	opaJSONParse         = "opa_json_parse"
 	opaNull              = "opa_null"
 	opaBoolean           = "opa_boolean"
 	opaNumberInt         = "opa_number_int"
@@ -78,6 +76,7 @@ const (
 	opaMappingInit       = "opa_mapping_init"
 	opaMappingLookup     = "opa_mapping_lookup"
 	opaMPDInit           = "opa_mpd_init"
+	opaMallocInit        = "opa_malloc_init"
 )
 
 var builtinsFunctions = map[string]string{
@@ -639,7 +638,7 @@ func (c *Compiler) compileFuncs() error {
 		}
 	}
 
-	if err := c.emitMapping(); err != nil {
+	if err := c.emitMappingAndStartFunc(); err != nil {
 		return fmt.Errorf("writing mapping: %w", err)
 	}
 
@@ -817,7 +816,7 @@ func mapFunc(mapping ast.Object, fn *ir.Func, index int) (ast.Object, bool) {
 	return mapping.Merge(curr)
 }
 
-func (c *Compiler) emitMapping() error {
+func (c *Compiler) emitMappingAndStartFunc() error {
 	var indices []uint32
 	var ok bool
 	mapping := ast.NewObject()
@@ -873,10 +872,17 @@ func (c *Compiler) emitMapping() error {
 	c.module.Table.Tables[0].Lim.Min = min
 	c.module.Table.Tables[0].Lim.Max = &max
 
+	heapBase, err := getLowestFreeDataSegmentOffset(c.module)
+	if err != nil {
+		return err
+	}
+
 	// create function that calls `void opa_mapping_initialize(const char *s, const int l)`
 	// with s being the offset of the data segment just written, and l its length
 	fName := "_initialize"
 	c.code = &module.CodeEntry{}
+	c.appendInstr(instruction.I32Const{Value: heapBase})
+	c.appendInstr(instruction.Call{Index: c.function(opaMallocInit)})
 	c.appendInstr(instruction.Call{Index: c.function(opaMPDInit)})
 	c.appendInstr(instruction.I32Const{Value: dataOffset})
 	c.appendInstr(instruction.I32Const{Value: int32(len(jsonMap))})
@@ -901,20 +907,7 @@ func (c *Compiler) replaceBooleanFunc() error {
 	c.appendInstr(instruction.GetLocal{Index: 0})
 	c.appendInstr(instruction.Select{})
 
-	// replace the code segment
-	var idx uint32
-	for _, fn := range c.module.Names.Functions {
-		if fn.Name == opaBoolean {
-			idx = fn.Index - uint32(c.functionImportCount())
-		}
-	}
-	var buf bytes.Buffer
-	if err := encoding.WriteCodeEntry(&buf, c.code); err != nil {
-		return err
-	}
-
-	c.module.Code.Segments[idx].Code = buf.Bytes()
-	return nil
+	return c.storeFunc(opaBoolean, c.code)
 }
 
 func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, error) {
@@ -1489,11 +1482,17 @@ func (c *Compiler) compileExternalCall(stmt *ir.CallStmt, id int32, result *[]in
 
 func (c *Compiler) emitFunctionDecl(name string, tpe module.FunctionType, export bool) {
 
-	typeIndex := c.emitFunctionType(tpe)
-	c.module.Function.TypeIndices = append(c.module.Function.TypeIndices, typeIndex)
-	c.module.Code.Segments = append(c.module.Code.Segments, module.RawCodeSegment{})
-	idx := uint32((len(c.module.Function.TypeIndices) - 1) + c.functionImportCount())
-	c.funcs[name] = idx
+	var idx uint32
+	if old, ok := c.funcs[name]; ok {
+		c.debug.Printf("function declaration for %v is being emitted multiple times (overwriting old index %d)", name, old)
+		idx = old
+	} else {
+		typeIndex := c.emitFunctionType(tpe)
+		c.module.Function.TypeIndices = append(c.module.Function.TypeIndices, typeIndex)
+		c.module.Code.Segments = append(c.module.Code.Segments, module.RawCodeSegment{})
+		idx = uint32((len(c.module.Function.TypeIndices) - 1) + c.functionImportCount())
+		c.funcs[name] = idx
+	}
 
 	if export {
 		c.module.Export.Exports = append(c.module.Export.Exports, module.Export{

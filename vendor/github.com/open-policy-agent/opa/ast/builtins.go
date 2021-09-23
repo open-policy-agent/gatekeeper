@@ -126,6 +126,7 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Numbers
 	NumbersRange,
+	RandIntn,
 
 	// Encoding
 	JSONMarshal,
@@ -189,6 +190,7 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Crypto
 	CryptoX509ParseCertificates,
+	CryptoX509ParseAndVerifyCertificates,
 	CryptoMd5,
 	CryptoSha1,
 	CryptoSha256,
@@ -257,6 +259,7 @@ var IgnoreDuringPartialEval = []*Builtin{
 	NowNanos,
 	HTTPSend,
 	UUIDRFC4122,
+	RandIntn,
 }
 
 /**
@@ -1038,6 +1041,18 @@ var Sprintf = &Builtin{
  * Numbers
  */
 
+// RandIntn returns a random number 0 - n
+var RandIntn = &Builtin{
+	Name: "rand.intn",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.N,
+		),
+		types.N,
+	),
+}
+
 // NumbersRange returns an array of numbers in the given inclusive range.
 var NumbersRange = &Builtin{
 	Name: "numbers.range",
@@ -1752,6 +1767,23 @@ var CryptoX509ParseCertificates = &Builtin{
 	Decl: types.NewFunction(
 		types.Args(types.S),
 		types.NewArray(nil, types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))),
+	),
+}
+
+// CryptoX509ParseAndVerifyCertificates returns one or more certificates from the given
+// string containing PEM or base64 encoded DER certificates after verifying the supplied
+// certificates form a complete certificate chain back to a trusted root.
+//
+// The first certificate is treated as the root and the last is treated as the leaf,
+// with all others being treated as intermediates
+var CryptoX509ParseAndVerifyCertificates = &Builtin{
+	Name: "crypto.x509.parse_and_verify_certificates",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewArray([]types.Type{
+			types.B,
+			types.NewArray(nil, types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))),
+		}, nil),
 	),
 }
 

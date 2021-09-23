@@ -28,6 +28,7 @@ type typeChecker struct {
 	exprCheckers map[string]exprChecker
 	varRewriter  rewriteVars
 	ss           *SchemaSet
+	allowNet     []string
 	input        types.Type
 }
 
@@ -55,11 +56,17 @@ func (tc *typeChecker) copy() *typeChecker {
 	return newTypeChecker().
 		WithVarRewriter(tc.varRewriter).
 		WithSchemaSet(tc.ss).
+		WithAllowNet(tc.allowNet).
 		WithInputType(tc.input)
 }
 
 func (tc *typeChecker) WithSchemaSet(ss *SchemaSet) *typeChecker {
 	tc.ss = ss
+	return tc
+}
+
+func (tc *typeChecker) WithAllowNet(hosts []string) *typeChecker {
+	tc.allowNet = hosts
 	return tc
 }
 
@@ -180,7 +187,7 @@ func (tc *typeChecker) checkRule(env *TypeEnv, as *annotationSet, rule *Rule) {
 
 	if schemaAnnots := getRuleAnnotation(as, rule); schemaAnnots != nil {
 		for _, schemaAnnot := range schemaAnnots {
-			ref, refType, err := processAnnotation(tc.ss, schemaAnnot, rule)
+			ref, refType, err := processAnnotation(tc.ss, schemaAnnot, rule, tc.allowNet)
 			if err != nil {
 				tc.err([]*Error{err})
 				continue
@@ -1024,7 +1031,15 @@ func getOneOfForType(tpe types.Type) (result []Value) {
 			}
 			result = append(result, v)
 		}
+
+	case types.Any:
+		for _, object := range tpe {
+			objRes := getOneOfForType(object)
+			result = append(result, objRes...)
+		}
 	}
+
+	result = removeDuplicate(result)
 	sortValueSlice(result)
 	return result
 }
@@ -1033,6 +1048,18 @@ func sortValueSlice(sl []Value) {
 	sort.Slice(sl, func(i, j int) bool {
 		return sl[i].Compare(sl[j]) < 0
 	})
+}
+
+func removeDuplicate(list []Value) []Value {
+	seen := make(map[Value]bool)
+	var newResult []Value
+	for _, item := range list {
+		if !seen[item] {
+			newResult = append(newResult, item)
+			seen[item] = true
+		}
+	}
+	return newResult
 }
 
 func getArgTypes(env *TypeEnv, args []*Term) []types.Type {
@@ -1158,7 +1185,7 @@ func getRuleAnnotation(as *annotationSet, rule *Rule) (result []*SchemaAnnotatio
 	return result
 }
 
-func processAnnotation(ss *SchemaSet, annot *SchemaAnnotation, rule *Rule) (Ref, types.Type, *Error) {
+func processAnnotation(ss *SchemaSet, annot *SchemaAnnotation, rule *Rule, allowNet []string) (Ref, types.Type, *Error) {
 
 	var schema interface{}
 
@@ -1171,7 +1198,7 @@ func processAnnotation(ss *SchemaSet, annot *SchemaAnnotation, rule *Rule) (Ref,
 		schema = *annot.Definition
 	}
 
-	tpe, err := loadSchema(schema)
+	tpe, err := loadSchema(schema, allowNet)
 	if err != nil {
 		return nil, nil, NewError(TypeErr, rule.Location, err.Error())
 	}

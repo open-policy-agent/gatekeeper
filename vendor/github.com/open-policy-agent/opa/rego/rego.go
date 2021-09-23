@@ -35,8 +35,13 @@ import (
 
 const (
 	defaultPartialNamespace = "partial"
-	targetWasm              = "wasm"
 	wasmVarPrefix           = "^"
+)
+
+// nolint: deadcode,varcheck
+const (
+	targetWasm = "wasm"
+	targetRego = "rego"
 )
 
 // CompileResult represents the result of compiling a Rego query, zero or more
@@ -91,6 +96,7 @@ type preparedQuery struct {
 type EvalContext struct {
 	hasInput               bool
 	time                   time.Time
+	seed                   io.Reader
 	rawInput               *interface{}
 	parsedInput            ast.Value
 	metrics                metrics.Metrics
@@ -217,6 +223,14 @@ func EvalTime(x time.Time) EvalOption {
 	}
 }
 
+// EvalSeed sets a reader that will seed randomization required by built-in functions.
+// If a seed is not provided crypto/rand.Reader is used.
+func EvalSeed(r io.Reader) EvalOption {
+	return func(e *EvalContext) {
+		e.seed = r
+	}
+}
+
 // EvalInterQueryBuiltinCache sets the inter-query cache that built-in functions can utilize
 // during evaluation.
 func EvalInterQueryBuiltinCache(c cache.InterQueryCache) EvalOption {
@@ -321,9 +335,11 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 			// Note that it could still be nil
 			ectx.rawInput = pq.r.rawInput
 		}
-		ectx.parsedInput, err = pq.r.parseRawInput(ectx.rawInput, ectx.metrics)
-		if err != nil {
-			return nil, finishFunc, err
+		if pq.r.target != targetWasm {
+			ectx.parsedInput, err = pq.r.parseRawInput(ectx.rawInput, ectx.metrics)
+			if err != nil {
+				return nil, finishFunc, err
+			}
 		}
 	}
 
@@ -372,69 +388,6 @@ func (pq PreparedPartialQuery) Partial(ctx context.Context, options ...EvalOptio
 	ectx.compiledQuery = pq.r.compiledQueries[partialQueryType]
 
 	return pq.r.partial(ctx, ectx)
-}
-
-// Result defines the output of Rego evaluation.
-type Result struct {
-	Expressions []*ExpressionValue `json:"expressions"`
-	Bindings    Vars               `json:"bindings,omitempty"`
-}
-
-func newResult() Result {
-	return Result{
-		Bindings: Vars{},
-	}
-}
-
-// Location defines a position in a Rego query or module.
-type Location struct {
-	Row int `json:"row"`
-	Col int `json:"col"`
-}
-
-// ExpressionValue defines the value of an expression in a Rego query.
-type ExpressionValue struct {
-	Value    interface{} `json:"value"`
-	Text     string      `json:"text"`
-	Location *Location   `json:"location"`
-}
-
-func newExpressionValue(expr *ast.Expr, value interface{}) *ExpressionValue {
-	result := &ExpressionValue{
-		Value: value,
-	}
-	if expr.Location != nil {
-		result.Text = string(expr.Location.Text)
-		result.Location = &Location{
-			Row: expr.Location.Row,
-			Col: expr.Location.Col,
-		}
-	}
-	return result
-}
-
-func (ev *ExpressionValue) String() string {
-	return fmt.Sprint(ev.Value)
-}
-
-// ResultSet represents a collection of output from Rego evaluation. An empty
-// result set represents an undefined query.
-type ResultSet []Result
-
-// Vars represents a collection of variable bindings. The keys are the variable
-// names and the values are the binding values.
-type Vars map[string]interface{}
-
-// WithoutWildcards returns a copy of v with wildcard variables removed.
-func (v Vars) WithoutWildcards() Vars {
-	n := Vars{}
-	for k, v := range v {
-		if ast.Var(k).IsWildcard() || ast.Var(k).IsGenerated() {
-			continue
-		}
-		n[k] = v
-	}
-	return n
 }
 
 // Errors represents a collection of errors returned when evaluating Rego.
@@ -521,6 +474,8 @@ type Rego struct {
 	dump                   io.Writer
 	runtime                *ast.Term
 	time                   time.Time
+	seed                   io.Reader
+	capabilities           *ast.Capabilities
 	builtinDecls           map[string]*ast.Builtin
 	builtinFuncs           map[string]*topdown.Builtin
 	unsafeBuiltins         map[string]struct{}
@@ -533,7 +488,8 @@ type Rego struct {
 	resolvers              []refResolver
 	schemaSet              *ast.SchemaSet
 	target                 string // target type (wasm, rego, etc.)
-	opa                    *opa.OPA
+	opa                    opa.EvalEngine
+	generateJSON           func(*ast.Term, *EvalContext) (interface{}, error)
 }
 
 // Function represents a built-in function that is callable in Rego.
@@ -981,6 +937,14 @@ func Time(x time.Time) func(r *Rego) {
 	}
 }
 
+// Seed sets a reader that will seed randomization required by built-in functions.
+// If a seed is not provided crypto/rand.Reader is used.
+func Seed(r io.Reader) func(*Rego) {
+	return func(e *Rego) {
+		e.seed = r
+	}
+}
+
 // PrintTrace is a helper function to write a human-readable version of the
 // trace to the writer w.
 func PrintTrace(w io.Writer, r *Rego) {
@@ -1045,10 +1009,26 @@ func Schemas(x *ast.SchemaSet) func(r *Rego) {
 	}
 }
 
+// Capabilities configures the underlying compiler's capabilities.
+// This option is ignored for module compilation if the caller supplies the
+// compiler.
+func Capabilities(c *ast.Capabilities) func(r *Rego) {
+	return func(r *Rego) {
+		r.capabilities = c
+	}
+}
+
 // Target sets the runtime to exercise.
 func Target(t string) func(r *Rego) {
 	return func(r *Rego) {
 		r.target = t
+	}
+}
+
+// GenerateJSON sets the AST to JSON converter for the results.
+func GenerateJSON(f func(*ast.Term, *EvalContext) (interface{}, error)) func(r *Rego) {
+	return func(r *Rego) {
+		r.generateJSON = f
 	}
 }
 
@@ -1072,10 +1052,9 @@ func New(options ...func(r *Rego)) *Rego {
 		r.compiler = ast.NewCompiler().
 			WithUnsafeBuiltins(r.unsafeBuiltins).
 			WithBuiltins(r.builtinDecls).
-			WithDebug(r.dump)
-		if r.schemaSet != nil {
-			r.compiler.WithSchemas(r.schemaSet)
-		}
+			WithDebug(r.dump).
+			WithSchemas(r.schemaSet).
+			WithCapabilities(r.capabilities)
 	}
 
 	if r.store == nil {
@@ -1103,6 +1082,10 @@ func New(options ...func(r *Rego)) *Rego {
 		r.partialNamespace = defaultPartialNamespace
 	}
 
+	if r.generateJSON == nil {
+		r.generateJSON = generateJSON
+	}
+
 	return r
 }
 
@@ -1127,6 +1110,7 @@ func (r *Rego) Eval(ctx context.Context) (ResultSet, error) {
 		EvalInstrument(r.instrument),
 		EvalTime(r.time),
 		EvalInterQueryBuiltinCache(r.interQueryBuiltinCache),
+		EvalSeed(r.seed),
 	}
 
 	for _, qt := range r.queryTracers {
@@ -1475,7 +1459,12 @@ func (r *Rego) PrepareForEval(ctx context.Context, opts ...PrepareOption) (Prepa
 			return PreparedEvalQuery{}, err
 		}
 
-		o, err := opa.New().WithPolicyBytes(cr.Bytes).WithDataJSON(data).Init()
+		e, err := opa.LookupEngine(targetWasm)
+		if err != nil {
+			return PreparedEvalQuery{}, err
+		}
+
+		o, err := e.New().WithPolicyBytes(cr.Bytes).WithDataJSON(data).Init()
 		if err != nil {
 			_ = txnClose(ctx, err) // Ignore error
 			return PreparedEvalQuery{}, err
@@ -1538,11 +1527,6 @@ func (r *Rego) prepare(ctx context.Context, qType queryType, extras []extraStage
 	var err error
 
 	r.parsedInput, err = r.parseInput()
-	if err != nil {
-		return err
-	}
-
-	r.schemaSet, err = r.schemas()
 	if err != nil {
 		return err
 	}
@@ -1690,13 +1674,6 @@ func (r *Rego) parseInput() (ast.Value, error) {
 		return r.parsedInput, nil
 	}
 	return r.parseRawInput(r.rawInput, r.metrics)
-}
-
-func (r *Rego) schemas() (*ast.SchemaSet, error) {
-	if r.schemaSet != nil {
-		return r.schemaSet, nil
-	}
-	return nil, nil
 }
 
 func (r *Rego) parseRawInput(rawInput *interface{}, m metrics.Metrics) (ast.Value, error) {
@@ -1856,7 +1833,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithRuntime(r.runtime).
 		WithIndexing(ectx.indexing).
 		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache).
-		WithStrictBuiltinErrors(r.strictBuiltinErrors)
+		WithStrictBuiltinErrors(r.strictBuiltinErrors).
+		WithSeed(ectx.seed)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -1906,16 +1884,18 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
 func (r *Rego) evalWasm(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 
-	var input *interface{}
+	input := ectx.rawInput
 	if ectx.parsedInput != nil {
-		i, err := ast.JSON(ectx.parsedInput)
-		if err != nil {
-			return nil, err
-		}
+		i := interface{}(ectx.parsedInput)
 		input = &i
 	}
-
-	result, err := r.opa.Eval(ctx, opa.EvalOpts{Metrics: r.metrics, Input: input, Time: ectx.time})
+	result, err := r.opa.Eval(ctx, opa.EvalOpts{
+		Metrics:                r.metrics,
+		Input:                  input,
+		Time:                   ectx.time,
+		Seed:                   ectx.seed,
+		InterQueryBuiltinCache: ectx.interQueryBuiltinCache,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1962,7 +1942,7 @@ func (r *Rego) generateResult(qr topdown.QueryResult, ectx *EvalContext) (Result
 
 	result := newResult()
 	for k, term := range qr {
-		v, err := ast.JSONWithOpt(term.Value, ast.JSONOpt{SortSets: ectx.sortSets})
+		v, err := r.generateJSON(term, ectx)
 		if err != nil {
 			return result, err
 		}
@@ -1982,7 +1962,7 @@ func (r *Rego) generateResult(qr topdown.QueryResult, ectx *EvalContext) (Result
 		}
 
 		if k, ok := r.capture[expr]; ok {
-			v, err := ast.JSONWithOpt(qr[k].Value, ast.JSONOpt{SortSets: ectx.sortSets})
+			v, err := r.generateJSON(qr[k], ectx)
 			if err != nil {
 				return result, err
 			}
@@ -2121,7 +2101,8 @@ func (r *Rego) partial(ctx context.Context, ectx *EvalContext) (*PartialQueries,
 		WithSkipPartialNamespace(r.skipPartialNamespace).
 		WithShallowInlining(r.shallowInlining).
 		WithInterQueryBuiltinCache(ectx.interQueryBuiltinCache).
-		WithStrictBuiltinErrors(r.strictBuiltinErrors)
+		WithStrictBuiltinErrors(r.strictBuiltinErrors).
+		WithSeed(ectx.seed)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -2433,6 +2414,14 @@ func parseStringsToRefs(s []string) ([]ast.Ref, error) {
 // was defined.
 func finishFunction(name string, bctx topdown.BuiltinContext, result *ast.Term, err error, iter func(*ast.Term) error) error {
 	if err != nil {
+		var e *HaltError
+		if errors.As(err, &e) {
+			return topdown.Halt{Err: &topdown.Error{
+				Code:     topdown.BuiltinErr,
+				Message:  fmt.Sprintf("%v: %v", name, e.Error()),
+				Location: bctx.Location,
+			}}
+		}
 		return &topdown.Error{
 			Code:     topdown.BuiltinErr,
 			Message:  fmt.Sprintf("%v: %v", name, err.Error()),
@@ -2457,4 +2446,8 @@ func newFunction(decl *Function, f topdown.BuiltinFunc) func(*Rego) {
 			Func: f,
 		}
 	}
+}
+
+func generateJSON(term *ast.Term, ectx *EvalContext) (interface{}, error) {
+	return ast.JSONWithOpt(term.Value, ast.JSONOpt{SortSets: ectx.sortSets})
 }
