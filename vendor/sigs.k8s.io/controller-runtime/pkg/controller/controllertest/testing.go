@@ -29,10 +29,10 @@ var _ runtime.Object = &ErrorType{}
 // ErrorType implements runtime.Object but isn't registered in any scheme and should cause errors in tests as a result.
 type ErrorType struct{}
 
-// GetObjectKind implements runtime.Object
+// GetObjectKind implements runtime.Object.
 func (ErrorType) GetObjectKind() schema.ObjectKind { return nil }
 
-// DeepCopyObject implements runtime.Object
+// DeepCopyObject implements runtime.Object.
 func (ErrorType) DeepCopyObject() runtime.Object { return nil }
 
 var _ workqueue.RateLimitingInterface = Queue{}
