@@ -288,7 +288,7 @@ func (r *Reconciler) reconcileDeleted(ctx context.Context, mID types.ID) error {
 	return nil
 }
 
-// queueConflicts queues updates for Mutators in ids except for ignore.
+// queueConflicts queues updates for Mutators in ids.
 func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
 	if r.events == nil {
 		return
