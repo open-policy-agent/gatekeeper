@@ -115,7 +115,6 @@ func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 
 	v, isVersionless := t.(versionless)
 	if !isVersionless {
-		// This likely means a
 		return nil, fmt.Errorf("%w: %T", ErrConvertingTemplate, t)
 	}
 
