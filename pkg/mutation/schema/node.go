@@ -32,7 +32,7 @@ type node struct {
 // of which is the passed id.
 func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType) IDSet {
 	if n.ReferencedBy == nil {
-		n.ReferencedBy = make(map[types.ID]bool)
+		n.ReferencedBy = make(IDSet)
 	}
 	// This node is referenced by the passed ID.
 	n.ReferencedBy[id] = true

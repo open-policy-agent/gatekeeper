@@ -118,7 +118,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// previousConflicts records the conflicts this Mutator has with other mutators
 	// before making any changes.
 	previousConflicts := r.system.GetConflicts(id)
-	delete(previousConflicts, id)
 
 	if deleted {
 		// Either the mutator was deleted before we were able to process this request, or it has been marked for
@@ -134,12 +133,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	newConflicts := r.system.GetConflicts(id)
-	delete(newConflicts, id)
 
 	// diff is the set of mutators which either:
 	// 1) previously conflicted with mutationObj but do not after this change, or
 	// 2) now conflict with mutationObj but did not before this change.
 	diff := symmetricDifference(previousConflicts, newConflicts)
+	delete(diff, id)
 
 	// Now that we've made changes to the recorded Mutator schemas, we can re-check
 	// for conflicts.

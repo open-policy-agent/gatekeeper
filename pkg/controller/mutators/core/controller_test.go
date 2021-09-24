@@ -238,6 +238,16 @@ func TestReconcile(t *testing.T) {
 
 		g.Expect(c.Create(ctx, mFoo.DeepCopy())).NotTo(gomega.HaveOccurred())
 		g.Expect(c.Create(ctx, mBar1.DeepCopy())).NotTo(gomega.HaveOccurred())
+
+		g.Eventually(func() error {
+			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
+			if err != nil {
+				return err
+			}
+
+			return podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors(nil))
+		})
+
 		g.Expect(c.Create(ctx, mBar2.DeepCopy())).NotTo(gomega.HaveOccurred())
 
 		g.Eventually(func() error {

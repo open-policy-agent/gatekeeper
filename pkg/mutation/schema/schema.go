@@ -29,7 +29,7 @@ func New() *DB {
 	return &DB{
 		cachedMutators: make(map[types.ID]MutatorWithSchema),
 		schemas:        make(map[schema.GroupVersionKind]*node),
-		conflicts:      make(map[types.ID]bool),
+		conflicts:      make(IDSet),
 	}
 }
 
@@ -59,7 +59,7 @@ type DB struct {
 	// schemas are the per-GVK implicit schemas.
 	schemas map[schema.GroupVersionKind]*node
 
-	conflicts map[types.ID]bool
+	conflicts IDSet
 }
 
 // Upsert inserts or updates the given mutator.
@@ -186,7 +186,7 @@ func (db *DB) HasConflicts(id types.ID) bool {
 	return db.conflicts[id]
 }
 
-func (db *DB) GetConflicts(id types.ID) map[types.ID]bool {
+func (db *DB) GetConflicts(id types.ID) IDSet {
 	db.mutex.RLock()
 	mutator, ok := db.cachedMutators[id]
 	db.mutex.RUnlock()

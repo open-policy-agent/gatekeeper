@@ -68,7 +68,7 @@ func TestNode_Add(t *testing.T) {
 				ip("object", "spec.name"),
 			},
 			add: ip("list", "spec[list: foo]"),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("object"): true,
 				id("list"):   true,
 			},
@@ -103,7 +103,7 @@ func TestNode_Add(t *testing.T) {
 				ip("object", "spec.name"),
 			},
 			add: ip("list", "spec[name: foo]"),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("object"): true,
 				id("list"):   true,
 			},
@@ -114,7 +114,7 @@ func TestNode_Add(t *testing.T) {
 				ip("list", "spec.containers[name: foo]"),
 			},
 			add: ipt("set", "spec.containers", Set),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("list"): true,
 				id("set"):  true,
 			},
@@ -125,7 +125,7 @@ func TestNode_Add(t *testing.T) {
 				ip("object", "spec.containers.name"),
 			},
 			add: ipt("set", "spec.containers", Set),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("object"): true,
 				id("set"):    true,
 			},
@@ -136,7 +136,7 @@ func TestNode_Add(t *testing.T) {
 				ip("list image", "spec[image: bar]"),
 			},
 			add: ip("list name", "spec[name: foo]"),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("list image"): true,
 				id("list name"):  true,
 			},
@@ -148,7 +148,7 @@ func TestNode_Add(t *testing.T) {
 				ip("object-list", "spec.container[name: foo]"),
 			},
 			add: ip("list-object", "spec[container: foo].name"),
-			want: map[types.ID]bool{
+			want: IDSet{
 				id("object-object"): true,
 				id("object-list"):   true,
 				id("list-object"):   true,
