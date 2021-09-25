@@ -1,7 +1,6 @@
 package assignmeta
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -47,7 +46,6 @@ var (
 type Mutator struct {
 	id             types.ID
 	assignMetadata *mutationsv1alpha1.AssignMetadata
-	assignValue    string
 
 	path parser.Path
 
@@ -103,15 +101,14 @@ func (m *Mutator) DeepCopy() types.Mutator {
 	res := &Mutator{
 		id:             m.id,
 		assignMetadata: m.assignMetadata.DeepCopy(),
-		assignValue:    m.assignValue,
 		path:           m.path.DeepCopy(),
 		tester:         m.tester.DeepCopy(),
 	}
 	return res
 }
 
-func (m *Mutator) Value() (interface{}, error) {
-	return m.assignValue, nil
+func (m *Mutator) Value(metadata types.MetadataGetter) (interface{}, error) {
+	return m.assignMetadata.Spec.Parameters.Assign.GetValue(metadata)
 }
 
 func (m *Mutator) String() string {
@@ -128,18 +125,15 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*Mu
 		return nil, fmt.Errorf("invalid location for assignmetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
 	}
 
-	assign := make(map[string]interface{})
-	err = json.Unmarshal([]byte(assignMeta.Spec.Parameters.Assign.Raw), &assign)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid format for parameters.assign")
+	potentialValue := assignMeta.Spec.Parameters.Assign
+	if err := potentialValue.Validate(); err != nil {
+		return nil, err
 	}
-	value, ok := assign["value"]
-	if !ok {
-		return nil, errors.New("spec.parameters.assign must have a string value field for AssignMetadata " + assignMeta.GetName())
-	}
-	valueString, isString := value.(string)
-	if !isString {
-		return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
+
+	if potentialValue.Value != nil {
+		if _, ok := potentialValue.Value.Value.(string); !ok {
+			return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
+		}
 	}
 
 	t, err := tester.New(path, []tester.Test{
@@ -152,7 +146,6 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*Mu
 	return &Mutator{
 		id:             types.MakeID(assignMeta),
 		assignMetadata: assignMeta.DeepCopy(),
-		assignValue:    valueString,
 		path:           path,
 		tester:         t,
 	}, nil

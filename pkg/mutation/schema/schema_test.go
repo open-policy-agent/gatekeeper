@@ -43,7 +43,7 @@ func (m *fakeMutator) Mutate(_ *unstructured.Unstructured) (bool, error) {
 	panic("should not be called")
 }
 
-func (m *fakeMutator) Value() (interface{}, error) {
+func (m *fakeMutator) Value(_ types.MetadataGetter) (interface{}, error) {
 	panic("should not be called")
 }
 

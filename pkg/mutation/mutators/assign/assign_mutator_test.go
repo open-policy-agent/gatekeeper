@@ -1,7 +1,6 @@
 package assign
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -20,21 +19,14 @@ import (
 )
 
 type assignTestCfg struct {
-	value     runtime.RawExtension
+	value     mutationsv1alpha1.AssignField
 	path      string
 	pathTests []mutationsv1alpha1.PathTest
 	applyTo   []match.ApplyTo
 }
 
-func makeValue(v interface{}) runtime.RawExtension {
-	v2 := map[string]interface{}{
-		"value": v,
-	}
-	j, err := json.Marshal(v2)
-	if err != nil {
-		panic(err)
-	}
-	return runtime.RawExtension{Raw: j}
+func makeValue(v interface{}) mutationsv1alpha1.AssignField {
+	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
 }
 
 func newAssignMutator(cfg *assignTestCfg) *Mutator {
@@ -826,6 +818,28 @@ func TestAssign(t *testing.T) {
 		cfg  *assignTestCfg
 		fn   func(*unstructured.Unstructured) error
 	}{
+		{
+			name: "metadata value",
+			cfg: &assignTestCfg{
+				applyTo: []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				path:    `spec.value`,
+				value:   mutationsv1alpha1.AssignField{FromMetadata: &mutationsv1alpha1.FromMetadata{Field: mutationsv1alpha1.ObjName}},
+			},
+			obj: newFoo(map[string]interface{}{}),
+			fn: func(u *unstructured.Unstructured) error {
+				v, exists, err := unstructured.NestedString(u.Object, "spec", "value")
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return errors.New("spec.value does not exist, wanted creation")
+				}
+				if v != "my-foo" {
+					return fmt.Errorf("spec.value = %v; wanted %v", v, "my-foo")
+				}
+				return nil
+			},
+		},
 		{
 			name: "integer key value",
 			cfg: &assignTestCfg{

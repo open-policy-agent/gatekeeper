@@ -72,7 +72,7 @@ func TestSetterMerge(t *testing.T) {
 			if tc.existing != nil {
 				obj["field"] = tc.existing
 			}
-			err := s.SetValue(obj, "field")
+			err := s.SetValue(nil, obj, "field")
 			if err != nil != tc.errExpected {
 				t.Errorf("err = %+v, wanted %v", err, tc.errExpected)
 			}
@@ -156,7 +156,7 @@ func TestSetterPrune(t *testing.T) {
 			if tc.existing != nil {
 				obj["field"] = tc.existing
 			}
-			err := s.SetValue(obj, "field")
+			err := s.SetValue(nil, obj, "field")
 			if err != nil != tc.errExpected {
 				t.Errorf("err = %+v, wanted %v", err, tc.errExpected)
 			}

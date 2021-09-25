@@ -20,7 +20,7 @@ type Setter interface {
 	// SetValue takes the object that needs mutating and the key of the
 	// field on that object that should be mutated. It is up to the
 	// implementor to actually mutate the object.
-	SetValue(obj map[string]interface{}, key string) error
+	SetValue(metadata types.MetadataGetter, obj map[string]interface{}, key string) error
 
 	// KeyedListOkay returns whether this setter can handle keyed lists.
 	// If it can't, an attempt to mutate a keyed-list-type field will
@@ -30,7 +30,7 @@ type Setter interface {
 	// KeyedListValue is the value that will be assigned to the
 	// targeted keyed list entry. Unline SetValue(), this does
 	// not do mutation directly.
-	KeyedListValue() (map[string]interface{}, error)
+	KeyedListValue(metadata types.MetadataGetter) (map[string]interface{}, error)
 }
 
 var _ Setter = &DefaultSetter{}
@@ -47,8 +47,8 @@ type DefaultSetter struct {
 
 func (s *DefaultSetter) KeyedListOkay() bool { return true }
 
-func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
-	value, err := s.mutator.Value()
+func (s *DefaultSetter) KeyedListValue(metadata types.MetadataGetter) (map[string]interface{}, error) {
+	value, err := s.mutator.Value(metadata)
 	if err != nil {
 		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
 		return nil, err
@@ -60,13 +60,28 @@ func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
 	return valueAsObject, nil
 }
 
-func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
-	value, err := s.mutator.Value()
+func (s *DefaultSetter) SetValue(metadata types.MetadataGetter, obj map[string]interface{}, key string) error {
+	value, err := s.mutator.Value(metadata)
 	if err != nil {
 		return err
 	}
 	obj[key] = value
 	return nil
+}
+
+var _ types.MetadataGetter = &metadata{}
+
+type metadata struct {
+	name      string
+	namespace string
+}
+
+func (m *metadata) GetName() string {
+	return m.name
+}
+
+func (m *metadata) GetNamespace() string {
+	return m.namespace
 }
 
 func Mutate(
@@ -79,9 +94,10 @@ func Mutate(
 		return false, errors.New("setter must not be nil")
 	}
 	s := &mutatorState{
-		path:   path,
-		tester: tester,
-		setter: setter,
+		path:     path,
+		tester:   tester,
+		setter:   setter,
+		metadata: &metadata{name: obj.GetName(), namespace: obj.GetNamespace()},
 	}
 	if len(path.Nodes) == 0 {
 		return false, errors.New("attempting to mutate an empty target location")
@@ -94,9 +110,10 @@ func Mutate(
 }
 
 type mutatorState struct {
-	path   parser.Path
-	tester *path.Tester
-	setter Setter
+	path     parser.Path
+	tester   *path.Tester
+	setter   Setter
+	metadata *metadata
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change
@@ -121,7 +138,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		}
 		// we have hit the end of our path, this is the base case
 		if len(s.path.Nodes)-1 == depth {
-			if err := s.setter.SetValue(currentAsObject, castPathEntry.Reference); err != nil {
+			if err := s.setter.SetValue(s.metadata, currentAsObject, castPathEntry.Reference); err != nil {
 				return false, nil, err
 			}
 			return true, currentAsObject, nil
@@ -215,7 +232,7 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 		return false, nil, fmt.Errorf("last path entry can not be globbed")
 	}
 
-	newValueAsObject, err := s.setter.KeyedListValue()
+	newValueAsObject, err := s.setter.KeyedListValue(s.metadata)
 	if err != nil {
 		return false, nil, err
 	}

@@ -1,7 +1,6 @@
 package assign
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -18,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,9 +27,8 @@ var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation", 
 // Mutator is a mutator object built out of an
 // Assign instance.
 type Mutator struct {
-	id          types.ID
-	assign      *mutationsv1alpha1.Assign
-	assignValue interface{}
+	id     types.ID
+	assign *mutationsv1alpha1.Assign
 
 	path parser.Path
 
@@ -71,8 +68,8 @@ func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
 }
 
-func (m *Mutator) Value() (interface{}, error) {
-	return runtime.DeepCopyJSONValue(m.assignValue), nil
+func (m *Mutator) Value(metadata types.MetadataGetter) (interface{}, error) {
+	return m.assign.Spec.Parameters.Assign.GetValue(metadata)
 }
 
 func (m *Mutator) HasDiff(mutator types.Mutator) bool {
@@ -105,9 +102,8 @@ func (m *Mutator) Path() parser.Path {
 
 func (m *Mutator) DeepCopy() types.Mutator {
 	res := &Mutator{
-		id:          m.id,
-		assign:      m.assign.DeepCopy(),
-		assignValue: runtime.DeepCopyJSONValue(m.assignValue),
+		id:     m.id,
+		assign: m.assign.DeepCopy(),
 		path: parser.Path{
 			Nodes: make([]parser.Node, len(m.path.Nodes)),
 		},
@@ -136,25 +132,24 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 		return nil, fmt.Errorf("assign %s can't change metadata", assign.GetName())
 	}
 
-	err = checkKeyNotChanged(path, assign.GetName())
+	err = checkKeyNotChanged(path)
 	if err != nil {
 		return nil, err
 	}
 
-	toAssign := make(map[string]interface{})
-	err = json.Unmarshal(assign.Spec.Parameters.Assign.Raw, &toAssign)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid format for parameters.assign %s for Assign %s", assign.Spec.Parameters.Assign.Raw, assign.GetName())
-	}
-
-	value, ok := toAssign["value"]
-	if !ok {
-		return nil, fmt.Errorf("spec.parameters.assign for Assign %s must have a value field", assign.GetName())
-	}
-
-	err = validateObjectAssignedToList(path, value, assign.GetName())
-	if err != nil {
+	potentialValues := assign.Spec.Parameters.Assign
+	if err := potentialValues.Validate(); err != nil {
 		return nil, err
+	}
+
+	if potentialValues.Value != nil {
+		if err = validateObjectAssignedToList(path, potentialValues.Value.Value); err != nil {
+			return nil, err
+		}
+	}
+
+	if potentialValues.FromMetadata != nil && path.Nodes[len(path.Nodes)-1].Type() == parser.ListNode {
+		return nil, errors.New("cannot assign a metadata field to a list")
 	}
 
 	id := types.MakeID(assign)
@@ -179,12 +174,11 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 	}
 
 	return &Mutator{
-		id:          id,
-		assign:      assign.DeepCopy(),
-		assignValue: value,
-		bindings:    gvks,
-		path:        path,
-		tester:      tester,
+		id:       id,
+		assign:   assign.DeepCopy(),
+		bindings: gvks,
+		path:     path,
+		tester:   tester,
 	}, nil
 }
 
@@ -223,7 +217,7 @@ func hasMetadataRoot(path parser.Path) bool {
 
 // checkKeyNotChanged does not allow to change the key field of
 // a list element. A path like foo[name: bar].name is rejected.
-func checkKeyNotChanged(p parser.Path, assignName string) error {
+func checkKeyNotChanged(p parser.Path) error {
 	if len(p.Nodes) == 0 {
 		return errors.New("empty path")
 	}
@@ -237,24 +231,24 @@ func checkKeyNotChanged(p parser.Path, assignName string) error {
 		return nil
 	}
 	if lastNode.Type() != parser.ObjectNode {
-		return fmt.Errorf("invalid path format in Assign %s: child of a list can't be a list", assignName)
+		return fmt.Errorf("invalid path format: child of a list can't be a list")
 	}
 	addedObject, ok := lastNode.(*parser.Object)
 	if !ok {
-		return errors.New("failed converting an ObjectNodeType to Object in Assign " + assignName)
+		return errors.New("failed converting an ObjectNodeType to Object")
 	}
 	listNode, ok := secondLastNode.(*parser.List)
 	if !ok {
-		return errors.New("failed converting a ListNodeType to List in Assign " + assignName)
+		return errors.New("failed converting a ListNodeType to List")
 	}
 
 	if addedObject.Reference == listNode.KeyField {
-		return fmt.Errorf("invalid path format in Assign %s: changing the item key is not allowed", assignName)
+		return fmt.Errorf("invalid path format: changing the item key is not allowed")
 	}
 	return nil
 }
 
-func validateObjectAssignedToList(p parser.Path, value interface{}, assignName string) error {
+func validateObjectAssignedToList(p parser.Path, value interface{}) error {
 	if len(p.Nodes) == 0 {
 		return errors.New("empty path")
 	}
@@ -263,20 +257,20 @@ func validateObjectAssignedToList(p parser.Path, value interface{}, assignName s
 	}
 	listNode, ok := p.Nodes[len(p.Nodes)-1].(*parser.List)
 	if !ok {
-		return errors.New("failed converting a ListNodeType to List, Assign: " + assignName)
+		return errors.New("failed converting a ListNodeType to List")
 	}
 	if listNode.Glob {
-		return errors.New("can't append to a globbed list, Assign: " + assignName)
+		return errors.New("can't append to a globbed list")
 	}
 	if listNode.KeyValue == nil {
-		return errors.New("invalid key value for a non globbed object, Assign: " + assignName)
+		return errors.New("invalid key value for a non globbed object")
 	}
 	valueMap, ok := value.(map[string]interface{})
 	if !ok {
-		return errors.New("only full objects can be appended to lists, Assign: " + assignName)
+		return fmt.Errorf("invalid value: `%+v`,only objects can be added to keyed lists", value)
 	}
 	if listNode.KeyValue != valueMap[listNode.KeyField] {
-		return fmt.Errorf("adding object to list with different key %s: list key %v, object key %v, assign: %s", listNode.KeyField, listNode.KeyValue, valueMap[listNode.KeyField], assignName)
+		return fmt.Errorf("adding object to list with different key %s: list key %v, object key %v", listNode.KeyField, listNode.KeyValue, valueMap[listNode.KeyField])
 	}
 
 	return nil

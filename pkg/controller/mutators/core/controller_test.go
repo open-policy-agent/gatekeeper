@@ -42,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -56,6 +55,10 @@ import (
 )
 
 const timeout = time.Second * 15
+
+func makeValue(v interface{}) mutationsv1alpha1.AssignField {
+	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+}
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) manager.Manager {
@@ -86,7 +89,7 @@ func newAssign(name, location, value string) *mutationsv1alpha1.Assign {
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
 			Location: location,
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(fmt.Sprintf(`{"value": %q}`, value))},
+				Assign: makeValue(value),
 			},
 		},
 	}
@@ -102,7 +105,7 @@ func TestReconcile(t *testing.T) {
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
 			Location: "spec.test",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "works"}`)},
+				Assign: makeValue("works"),
 			},
 		},
 	}

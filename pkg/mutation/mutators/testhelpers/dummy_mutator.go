@@ -35,7 +35,7 @@ func (d *DummyMutator) ID() types.ID {
 	return types.ID{Group: "mutators.gatekeeper.sh", Kind: "DummyMutator", Name: d.name}
 }
 
-func (d *DummyMutator) Value() (interface{}, error) {
+func (d *DummyMutator) Value(_ types.MetadataGetter) (interface{}, error) {
 	return d.value, nil
 }
 
