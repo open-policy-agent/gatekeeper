@@ -101,7 +101,9 @@ func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *pro
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	mgr.GetWebhookServer().Register("/v1/admit", wh)
+	server := mgr.GetWebhookServer()
+	server.TLSMinVersion = *tlsMinVersion
+	server.Register("/v1/admit", wh)
 	return nil
 }
 
