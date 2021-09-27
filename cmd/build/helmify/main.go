@@ -134,8 +134,8 @@ func (ks *kindSet) Write() error {
 }
 
 func doReplacements(obj string) string {
-	for old, new := range replacements {
-		obj = strings.ReplaceAll(obj, old, new)
+	for old, replacement := range replacements {
+		obj = strings.ReplaceAll(obj, old, replacement)
 	}
 	return obj
 }
