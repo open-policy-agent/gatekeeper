@@ -1,4 +1,4 @@
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: k8sallowedrepos.constraints.gatekeeper.sh
@@ -9,90 +9,256 @@ spec:
   names:
     categories:
     - constraint
+    - constraints
     kind: K8sAllowedRepos
     listKind: K8sAllowedReposList
     plural: k8sallowedrepos
     singular: k8sallowedrepos
-  preserveUnknownFields: true
   scope: Cluster
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      properties:
-        spec:
-          properties:
-            enforcementAction:
-              type: string
-            match:
-              properties:
-                excludedNamespaces:
-                  items:
-                    type: string
-                  type: array
-                kinds:
-                  items:
-                    properties:
-                      apiGroups:
-                        items:
-                          type: string
-                      kinds:
-                        items:
-                          type: string
-                  type: array
-                labelSelector:
-                  properties:
-                    matchExpressions:
-                      items:
-                        properties:
-                          key:
-                            type: string
-                          operator:
-                            enum:
-                            - In
-                            - NotIn
-                            - Exists
-                            - DoesNotExist
-                            type: string
-                          values:
-                            items:
-                              type: string
-                            type: array
-                      type: array
-                namespaceSelector:
-                  properties:
-                    matchExpressions:
-                      items:
-                        properties:
-                          key:
-                            type: string
-                          operator:
-                            enum:
-                            - In
-                            - NotIn
-                            - Exists
-                            - DoesNotExist
-                            type: string
-                          values:
-                            items:
-                              type: string
-                            type: array
-                      type: array
-                namespaces:
-                  items:
-                    type: string
-                  type: array
-            parameters:
-              properties:
-                repos:
-                  items:
-                    type: string
-                  type: array
-  version: v1beta1
   versions:
   - name: v1beta1
+    schema:
+      openAPIV3Schema:
+        properties:
+          metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
+            type: object
+          spec:
+            properties:
+              enforcementAction:
+                type: string
+              match:
+                properties:
+                  excludedNamespaces:
+                    items:
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      type: string
+                    type: array
+                  kinds:
+                    items:
+                      properties:
+                        apiGroups:
+                          items:
+                            nullable: true
+                            type: string
+                          type: array
+                        kinds:
+                          items:
+                            nullable: true
+                            type: string
+                          type: array
+                      type: object
+                    type: array
+                  labelSelector:
+                    properties:
+                      matchExpressions:
+                        items:
+                          properties:
+                            key:
+                              type: string
+                            operator:
+                              enum:
+                              - In
+                              - NotIn
+                              - Exists
+                              - DoesNotExist
+                              type: string
+                            values:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  name:
+                    description: 'Name is the name of an object.  If defined, it will
+                      match against objects with the specified name.  Name also supports
+                      a prefix-based glob.  For example, `name: pod-*` would match
+                      both `pod-a` and `pod-b`.'
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    type: string
+                  namespaceSelector:
+                    properties:
+                      matchExpressions:
+                        items:
+                          properties:
+                            key:
+                              type: string
+                            operator:
+                              enum:
+                              - In
+                              - NotIn
+                              - Exists
+                              - DoesNotExist
+                              type: string
+                            values:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  namespaces:
+                    items:
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      type: string
+                    type: array
+                  scope:
+                    enum:
+                    - '*'
+                    - Cluster
+                    - Namespaced
+                    type: string
+                type: object
+              parameters:
+                properties:
+                  repos:
+                    items:
+                      type: string
+                    type: array
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            type: object
+          status:
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
     served: true
     storage: true
+    subresources:
+      status: {}
   - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
+            type: object
+          spec:
+            properties:
+              enforcementAction:
+                type: string
+              match:
+                properties:
+                  excludedNamespaces:
+                    items:
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      type: string
+                    type: array
+                  kinds:
+                    items:
+                      properties:
+                        apiGroups:
+                          items:
+                            nullable: true
+                            type: string
+                          type: array
+                        kinds:
+                          items:
+                            nullable: true
+                            type: string
+                          type: array
+                      type: object
+                    type: array
+                  labelSelector:
+                    properties:
+                      matchExpressions:
+                        items:
+                          properties:
+                            key:
+                              type: string
+                            operator:
+                              enum:
+                              - In
+                              - NotIn
+                              - Exists
+                              - DoesNotExist
+                              type: string
+                            values:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  name:
+                    description: 'Name is the name of an object.  If defined, it will
+                      match against objects with the specified name.  Name also supports
+                      a prefix-based glob.  For example, `name: pod-*` would match
+                      both `pod-a` and `pod-b`.'
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    type: string
+                  namespaceSelector:
+                    properties:
+                      matchExpressions:
+                        items:
+                          properties:
+                            key:
+                              type: string
+                            operator:
+                              enum:
+                              - In
+                              - NotIn
+                              - Exists
+                              - DoesNotExist
+                              type: string
+                            values:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  namespaces:
+                    items:
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      type: string
+                    type: array
+                  scope:
+                    enum:
+                    - '*'
+                    - Cluster
+                    - Namespaced
+                    type: string
+                type: object
+              parameters:
+                properties:
+                  repos:
+                    items:
+                      type: string
+                    type: array
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            type: object
+          status:
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
     served: true
     storage: false
+    subresources:
+      status: {}
