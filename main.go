@@ -27,7 +27,6 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/apis"
@@ -245,15 +244,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
-	var driver drivers.Driver
-	var providerCache *frameworksexternaldata.ProviderCache
+	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	if *externaldata.ExternalDataEnabled {
-		providerCache = frameworksexternaldata.NewCache()
-		driver = local.New(local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...), local.AddExternalDataProviderCache(providerCache))
-	} else {
-		// initialize OPA
-		driver = local.New(local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...))
+		providerCache := frameworksexternaldata.NewCache()
+		args = append(args, local.AddExternalDataProviderCache(providerCache))
 	}
+	// initialize OPA
+	driver := local.New(args...)
 
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {

@@ -128,29 +128,31 @@ func (d *driver) Init(ctx context.Context) error {
 				for _, key := range regoReq.Keys {
 					switch v := key.(type) {
 					case int:
+					case int32:
+					case int64:
 					case string:
 					case float64:
 					case float32:
 						break
 					default:
-						return nil, fmt.Errorf("type %v is not supported in external_data", v)
+						return externaldata.HandleError(http.StatusBadRequest, fmt.Errorf("type %v is not supported in external_data", v))
 					}
 				}
 
 				provider, err := d.providerCache.Get(regoReq.ProviderName)
 				if err != nil {
-					return nil, fmt.Errorf("unable to retrieve provider %v from cache", regoReq.ProviderName)
+					return externaldata.HandleError(http.StatusBadRequest, err)
 				}
 
 				externaldataRequest := externaldata.NewProviderRequest(regoReq.Keys)
 				reqBody, err := json.Marshal(externaldataRequest)
 				if err != nil {
-					return nil, err
+					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 
-				req, err := http.NewRequest("POST", provider.Spec.ProxyURL, bytes.NewBuffer(reqBody))
+				req, err := http.NewRequest("POST", provider.Spec.URL, bytes.NewBuffer(reqBody))
 				if err != nil {
-					return nil, err
+					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 
 				ctx, cancel := context.WithDeadline(bctx.Context, time.Now().Add(time.Duration(provider.Spec.Timeout)*time.Second))
@@ -158,29 +160,21 @@ func (d *driver) Init(ctx context.Context) error {
 
 				resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 				if err != nil {
-					return nil, err
+					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 				defer resp.Body.Close()
 				respBody, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					return nil, err
+					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 
 				var externaldataResponse externaldata.ProviderResponse
 				if err := json.Unmarshal(respBody, &externaldataResponse); err != nil {
-					return nil, err
+					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 
 				regoResponse := externaldata.NewRegoResponse(resp.StatusCode, externaldataResponse)
-				rr, err := json.Marshal(regoResponse)
-				if err != nil {
-					return nil, err
-				}
-				v, err := ast.ValueFromReader(bytes.NewReader(rr))
-				if err != nil {
-					return nil, err
-				}
-				return ast.NewTerm(v), nil
+				return externaldata.PrepareRegoResponse(regoResponse)
 			},
 		)
 	}
