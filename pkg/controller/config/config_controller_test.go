@@ -61,6 +61,8 @@ var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
 
 const timeout = time.Second * 20
 
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
+
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
@@ -271,6 +273,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testpod",
 			Namespace: "default",
+			UID:       podUID,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -330,6 +333,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testpod",
 			Namespace: "default",
+			UID:       podUID,
 		},
 	}
 

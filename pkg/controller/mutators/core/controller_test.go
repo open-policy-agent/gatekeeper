@@ -56,6 +56,8 @@ import (
 
 const timeout = time.Second * 15
 
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
+
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) manager.Manager {
 	t.Helper()
@@ -134,10 +136,10 @@ func TestReconcile(t *testing.T) {
 		}
 	}()
 
-	podstatus.DisablePodOwnership()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
 	pod.Namespace = "gatekeeper-system"
+	pod.UID = podUID
 
 	kind := "Assign"
 	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }

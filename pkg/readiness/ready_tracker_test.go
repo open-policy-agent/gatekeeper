@@ -27,7 +27,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -49,6 +48,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
+
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -109,6 +110,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
 	pod.Namespace = "gatekeeper-system"
+	pod.UID = podUID
 
 	processExcluder := process.Get()
 
@@ -140,11 +142,13 @@ func Test_AssignMetadata(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	os.Setenv("POD_NAME", "no-pod")
-	podstatus.DisablePodOwnership()
+	err := os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
+	err = applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -189,11 +193,13 @@ func Test_ModifySet(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	os.Setenv("POD_NAME", "no-pod")
-	podstatus.DisablePodOwnership()
+	err := os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
+	err = applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -238,11 +244,13 @@ func Test_Assign(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	os.Setenv("POD_NAME", "no-pod")
-	podstatus.DisablePodOwnership()
+	err := os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
+	err = applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -286,11 +294,13 @@ func Test_Assign(t *testing.T) {
 func Test_Tracker(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	os.Setenv("POD_NAME", "no-pod")
-	podstatus.DisablePodOwnership()
+	err := os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Apply fixtures *before* the controllers are setup.
-	err := applyFixtures("testdata")
+	err = applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.

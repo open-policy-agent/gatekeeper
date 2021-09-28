@@ -22,7 +22,6 @@ import (
 	"sync"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -136,10 +135,13 @@ func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) err
 		if err != nil {
 			return err
 		}
-		podstatus.DisablePodOwnership()
+
 		fakePodGetter := func(ctx context.Context) (*corev1.Pod, error) {
 			pod := &corev1.Pod{}
 			pod.Name = util.GetPodName()
+			pod.Namespace = util.GetNamespace()
+			pod.UID = "fake-uid"
+
 			return pod, nil
 		}
 		deps.GetPod = fakePodGetter

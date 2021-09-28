@@ -53,6 +53,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
+
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
@@ -148,7 +150,9 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	// via the registrar below.
 	errObj := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "error",
+			Name:      "error",
+			Namespace: "gatekeeper-system",
+			UID:       podUID,
 		},
 	}
 	events := make(chan event.GenericEvent, 1024)

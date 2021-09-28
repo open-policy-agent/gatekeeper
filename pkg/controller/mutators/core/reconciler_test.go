@@ -302,12 +302,16 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 		},
 		system: mutation.NewSystem(mutation.SystemOpts{}),
 		getPod: func(ctx context.Context) (*corev1.Pod, error) {
-			return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: "gatekeeper-system"}}, nil
+			return &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: "gatekeeper-system",
+				},
+			}, nil
 		},
-		scheme:           s,
-		podOwnershipMode: statusv1beta1.PodOwnershipEnabled,
-		gvk:              mutationsv1alpha1.GroupVersion.WithKind("fake"),
-		events:           events,
+		scheme: s,
+		gvk:    mutationsv1alpha1.GroupVersion.WithKind("fake"),
+		events: events,
 	}
 }
 

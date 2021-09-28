@@ -19,6 +19,7 @@ import (
 const (
 	TestValue          = "testValue"
 	ParameterTestValue = "\"testValue\""
+	podUID             = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 )
 
 func prepareTestPod(t *testing.T) *unstructured.Unstructured {
@@ -27,6 +28,7 @@ func prepareTestPod(t *testing.T) *unstructured.Unstructured {
 			Name:      "testpod1",
 			Namespace: "foo",
 			Labels:    map[string]string{"a": "b"},
+			UID:       podUID,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{

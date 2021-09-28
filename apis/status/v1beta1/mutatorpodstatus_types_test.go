@@ -36,6 +36,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	pod := &corev1.Pod{}
 	pod.SetName(podName)
 	pod.SetNamespace(podNS)
+	pod.SetUID(podUID)
 
 	expectedStatus := &MutatorPodStatus{}
 	expectedStatus.SetName("some--gk--pod--m-dummymutator-a--mutator")
@@ -50,7 +51,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewMutatorStatusForPod(pod, PodOwnershipEnabled, mutator.ID(), scheme)
+	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())

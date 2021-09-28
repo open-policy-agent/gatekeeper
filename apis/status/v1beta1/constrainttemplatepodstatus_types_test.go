@@ -26,6 +26,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	pod := &corev1.Pod{}
 	pod.SetName(podName)
 	pod.SetNamespace(podNS)
+	pod.SetUID(podUID)
 
 	expectedStatus := &ConstraintTemplatePodStatus{}
 	expectedStatus.SetName("some--gk--pod-a--template")
@@ -38,7 +39,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewConstraintTemplateStatusForPod(pod, PodOwnershipEnabled, templateName, scheme)
+	status, err := NewConstraintTemplateStatusForPod(pod, templateName, scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	n, err := KeyForConstraintTemplate(podName, templateName)

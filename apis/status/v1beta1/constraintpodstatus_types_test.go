@@ -14,6 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
+
 func TestNewConstraintStatusForPod(t *testing.T) {
 	g := NewGomegaWithT(t)
 	podName := "some-gk-pod"
@@ -30,6 +32,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	pod := &corev1.Pod{}
 	pod.SetName(podName)
 	pod.SetNamespace(podNS)
+	pod.SetUID(podUID)
 
 	cstr := &unstructured.Unstructured{}
 	cstr.SetGroupVersionKind(schema.GroupVersionKind{Group: ConstraintsGroup, Version: "v1beta1", Kind: cstrKind})
@@ -49,7 +52,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewConstraintStatusForPod(pod, PodOwnershipEnabled, cstr, scheme)
+	status, err := NewConstraintStatusForPod(pod, cstr, scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForConstraint(podName, cstr)

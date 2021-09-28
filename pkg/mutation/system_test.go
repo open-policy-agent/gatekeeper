@@ -18,6 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
+
 // Leverage existing resource types to create custom mutators to validate
 // the cache.
 type fakeMutator struct {
@@ -187,6 +189,7 @@ func TestMutation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "foo",
+					UID:       podUID,
 				},
 			}
 
@@ -476,6 +479,7 @@ func TestSystem_ReportingInjection(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
 			Namespace: "foo",
+			UID:       podUID,
 		},
 	}
 
