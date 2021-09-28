@@ -19,13 +19,15 @@ const (
 // MutatorIngestionStatus defines the outcomes of an attempt to add a Mutator to the mutation System.
 type MutatorIngestionStatus string
 
-var (
-	mutatorStatusKey = tag.MustNewKey("status")
-
+const (
 	// MutatorStatusActive denotes a successfully ingested mutator, ready to mutate objects.
 	MutatorStatusActive MutatorIngestionStatus = "active"
 	// MutatorStatusError denotes a mutator that failed to ingest.
 	MutatorStatusError MutatorIngestionStatus = "error"
+)
+
+var (
+	mutatorStatusKey = tag.MustNewKey("status")
 
 	responseTimeInSecM = stats.Float64(
 		mutatorIngestionDurationMetricName,

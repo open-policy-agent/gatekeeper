@@ -108,6 +108,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 
 	processExcluder := process.Get()
 

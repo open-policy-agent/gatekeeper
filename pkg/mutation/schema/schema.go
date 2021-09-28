@@ -29,7 +29,7 @@ func New() *DB {
 	return &DB{
 		cachedMutators: make(map[types.ID]MutatorWithSchema),
 		schemas:        make(map[schema.GroupVersionKind]*node),
-		conflicts:      make(map[types.ID]bool),
+		conflicts:      make(IDSet),
 	}
 }
 
@@ -59,7 +59,7 @@ type DB struct {
 	// schemas are the per-GVK implicit schemas.
 	schemas map[schema.GroupVersionKind]*node
 
-	conflicts map[types.ID]bool
+	conflicts IDSet
 }
 
 // Upsert inserts or updates the given mutator.
@@ -98,7 +98,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 		panic(fmt.Sprintf("got mutator.DeepCopy() type %T, want %T", mutatorCopy, MutatorWithSchema(nil)))
 	}
 
-	var conflicts idSet
+	var conflicts IDSet
 	for _, gvk := range bindings {
 		s, ok := db.schemas[gvk]
 		if !ok {
@@ -109,14 +109,13 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 		conflicts = merge(conflicts, newConflicts)
 	}
 
-	for c := range conflicts {
-		db.conflicts[c] = true
-	}
+	db.conflicts = merge(db.conflicts, conflicts)
+
 	if len(conflicts) > 0 {
 		// Adding this mutator had schema conflicts with another, so return an error.
-		return fmt.Errorf("%w: the following Mutators have conflicting schemas: %s",
-			ErrConflictingSchema, conflicts.String())
+		return NewErrConflictingSchema(conflicts)
 	}
+
 	return nil
 }
 
@@ -165,7 +164,7 @@ func (db *DB) remove(id types.ID) {
 		mutator := db.cachedMutators[conflictID]
 		hasConflict := false
 		for _, gvk := range mutator.SchemaBindings() {
-			if isConflict, _ := db.schemas[gvk].HasConflicts(mutator.Path().Nodes, mutator.TerminalType()); isConflict {
+			if conflicts := db.schemas[gvk].GetConflicts(mutator.Path().Nodes, mutator.TerminalType()); len(conflicts) > 0 {
 				hasConflict = true
 				break
 			}
@@ -185,4 +184,20 @@ func (db *DB) HasConflicts(id types.ID) bool {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	return db.conflicts[id]
+}
+
+func (db *DB) GetConflicts(id types.ID) IDSet {
+	db.mutex.RLock()
+	mutator, ok := db.cachedMutators[id]
+	db.mutex.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	conflicts := make(IDSet)
+	for _, gvk := range mutator.SchemaBindings() {
+		conflicts = merge(conflicts, db.schemas[gvk].getConflicts(mutator.Path().Nodes, mutator.TerminalType()))
+	}
+
+	return conflicts
 }

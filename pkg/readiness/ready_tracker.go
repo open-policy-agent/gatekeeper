@@ -107,6 +107,10 @@ func (t *Tracker) CheckSatisfied(_ *http.Request) error {
 
 // For returns Expectations for the requested resource kind.
 func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
+	if t == nil {
+		return noopExpectations{}
+	}
+
 	switch {
 	case gvk.GroupVersion() == v1beta1.SchemeGroupVersion && gvk.Kind == "ConstraintTemplate":
 		return t.templates
