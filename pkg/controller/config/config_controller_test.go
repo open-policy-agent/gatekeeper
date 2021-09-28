@@ -132,7 +132,7 @@ func TestReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
 	}
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
@@ -143,7 +143,7 @@ func TestReconcile(t *testing.T) {
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
@@ -355,7 +355,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 		return fmt.Errorf("unable to set up OPA backend: %w", err)
 	}
 
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		return fmt.Errorf("unable to set up OPA backend client: %w", err)
 	}
@@ -366,7 +366,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 
 	processExcluder := process.Get()
 
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, nil)
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		return fmt.Errorf("adding reconciler to manager: %w", err)
@@ -396,7 +396,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opa := &fakeOpa{}
+	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -404,7 +404,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -421,8 +421,16 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Create the Config object and expect the Reconcile to be created
 	ctx = context.Background()
-	err = c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	createInstance := func() client.Object {
+		return configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
+	}
+
+	// Since we're reusing instance between tests, we must wait for it to be fully
+	// deleted. We also can't reuse the same instance without introducing
+	// flakiness as client.Client methods modify their input.
+	g.Eventually(ensureCreated(ctx, c, createInstance), timeout).
+		ShouldNot(gomega.HaveOccurred())
 
 	t.Cleanup(func() {
 		err = c.Delete(ctx, instance)
@@ -455,11 +463,11 @@ func TestConfig_CacheContents(t *testing.T) {
 		// kube-system namespace is being excluded, it should not be in opa cache
 	}
 	g.Eventually(func() bool {
-		return opa.Contains(expected)
+		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Sanity
-	g.Expect(opa.HasGVK(nsGVK)).To(gomega.BeTrue())
+	g.Expect(opaClient.HasGVK(nsGVK)).To(gomega.BeTrue())
 
 	// Reconfigure to drop the namespace watches
 	instance = configFor([]schema.GroupVersionKind{configMapGVK})
@@ -472,7 +480,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	// Expect namespaces to go away from cache
 	g.Eventually(func() bool {
-		return opa.HasGVK(nsGVK)
+		return opaClient.HasGVK(nsGVK)
 	}, 10*time.Second).Should(gomega.BeFalse())
 
 	// Expect our configMap to return at some point
@@ -484,7 +492,7 @@ func TestConfig_CacheContents(t *testing.T) {
 		}: nil,
 	}
 	g.Eventually(func() bool {
-		return opa.Contains(expected)
+		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "waiting for ConfigMap to repopulate in cache")
 
 	expected = map[opaKey]interface{}{
@@ -494,17 +502,17 @@ func TestConfig_CacheContents(t *testing.T) {
 		}: nil,
 	}
 	g.Eventually(func() bool {
-		return !opa.Contains(expected)
+		return !opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "kube-system namespace is excluded. kube-system/config-test-2 should not be in opa cache")
 
 	// Delete the config resource - expect opa to empty out.
-	g.Expect(opa.Len()).ToNot(gomega.BeZero(), "sanity")
+	g.Expect(opaClient.Len()).ToNot(gomega.BeZero(), "sanity")
 	err = c.Delete(ctx, instance)
 	g.Expect(err).ToNot(gomega.HaveOccurred(), "deleting Config resource")
 
 	// The cache will be cleared out.
 	g.Eventually(func() int {
-		return opa.Len()
+		return opaClient.Len()
 	}, 10*time.Second).Should(gomega.BeZero(), "waiting for cache to empty")
 }
 
@@ -528,7 +536,7 @@ func TestConfig_Retries(t *testing.T) {
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
-	opa := &fakeOpa{}
+	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -536,7 +544,7 @@ func TestConfig_Retries(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, processExcluder, events, events)
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	// Use our special hookReader to inject controlled failures
@@ -602,13 +610,13 @@ func TestConfig_Retries(t *testing.T) {
 		{gvk: configMapGVK, key: "default/config-test-1"}: nil,
 	}
 	g.Eventually(func() bool {
-		return opa.Contains(expected)
+		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
-	_, err = opa.RemoveData(ctx, target.WipeData{})
+	_, err = opaClient.RemoveData(ctx, target.WipeData{})
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
-	g.Expect(opa.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
+	g.Expect(opaClient.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
 
 	// Make List fail once for ConfigMaps as the replay occurs following the reconfig below.
 	failPlease <- "ConfigMapList"
@@ -624,7 +632,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Despite the transient error, we expect the cache to eventually be repopulated.
 	g.Eventually(func() bool {
-		return opa.Contains(expected)
+		return opaClient.Contains(expected)
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking final opa cache contents")
 }
 
@@ -667,4 +675,36 @@ func unstructuredFor(gvk schema.GroupVersionKind, name string) *unstructured.Uns
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+func ensureCreated(ctx context.Context, c client.Client, toCreate func() client.Object) func() error {
+	return func() error {
+		instance := toCreate()
+		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
+		gvk := instance.GetObjectKind().GroupVersionKind()
+
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+
+		err := c.Get(ctx, key, u)
+		if err == nil {
+			if !u.GetDeletionTimestamp().IsZero() {
+				return fmt.Errorf("waiting for deletion: %v %v", gvk, key)
+			}
+
+			err = c.Delete(ctx, instance)
+			if err != nil {
+				return fmt.Errorf("deleting %v %v: %w", gvk, key, err)
+			}
+
+			return fmt.Errorf("queued %v %v for deletion", gvk, key)
+		}
+
+		err = c.Create(ctx, instance)
+		if err != nil {
+			return fmt.Errorf("creating %v %v", gvk, key)
+		}
+
+		return nil
+	}
 }
