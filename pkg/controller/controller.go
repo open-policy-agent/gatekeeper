@@ -140,7 +140,6 @@ func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) err
 			pod := &corev1.Pod{}
 			pod.Name = util.GetPodName()
 			pod.Namespace = util.GetNamespace()
-			pod.UID = "fake-uid"
 
 			return pod, nil
 		}
