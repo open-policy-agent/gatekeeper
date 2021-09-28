@@ -21,6 +21,8 @@ spec:
       processes: ["audit"]
     - excludedNamespaces: ["audit-webhook-sync-excluded-ns"]
       processes: ["audit", "webhook", "sync"]
+    - excludedNamespaces: ["mutation-excluded-ns"]
+      processes: ["mutation-webhook"]
 ...
 ```
 
@@ -28,6 +30,7 @@ Available processes:
 - `audit` process exclusion will exclude resources from specified namespace(s) in audit results.
 - `webhook` process exclusion will exclude resources from specified namespace(s) from the admission webhook.
 - `sync` process exclusion will exclude resources from specified namespace(s) from being synced into OPA.
+- `mutation-webhook` process exclusion will exclude resources from specified namespace(s) from the mutation webhook.
 - `*` includes all current processes above and includes any future processes.
 
 ## Exempting Namespaces from the Gatekeeper Admission Webhook using `--exempt-namespace` flag
