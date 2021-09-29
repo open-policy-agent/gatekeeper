@@ -27,7 +27,7 @@ Two ways of working around this:
 
 ## Running on OpenShift 4.x
 
-When running on OpenShift, the `nouid` scc must be used to keep a restricted profile but being able to set the UserID.
+When running on OpenShift, the `anyuid` scc must be used to keep a restricted profile but being able to set the UserID.
 
 In order to use it, the following section must be added to the gatekeeper-manager-role Role:
 
