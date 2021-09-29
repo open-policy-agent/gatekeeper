@@ -1,0 +1,34 @@
+{{- if .Values.controllerManager.autoscaling.enabled }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gatekeeper-controller-manager
+  minReplicas: {{ .Values.controllerManager.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.controllerManager.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.controllerManager.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: {{ .Values.controllerManager.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.controllerManager.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: {{ .Values.controllerManager.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
