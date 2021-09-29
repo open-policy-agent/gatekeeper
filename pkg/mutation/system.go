@@ -66,29 +66,43 @@ func (s *System) Get(id types.ID) types.Mutator {
 // Upsert updates or inserts the given object. Returns an error in case of
 // schema conflicts.
 func (s *System) Upsert(m types.Mutator) error {
+	if m == nil {
+		return schema.ErrNilMutator
+	}
+
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
 	id := m.ID()
 	if current, ok := s.mutatorsMap[id]; ok && !m.HasDiff(current) {
-		return nil
+		// Handle the case where a previous reconcile successfully updated System,
+		// but the update to PodStatus failed.
+		conflicts := s.schemaDB.GetConflicts(id)
+		if len(conflicts) == 0 {
+			return nil
+		}
+		return schema.NewErrConflictingSchema(conflicts)
 	}
 
 	toAdd := m.DeepCopy()
 
 	// Check schema consistency only if the mutator has schema.
+	var err error
 	if withSchema, ok := toAdd.(schema.MutatorWithSchema); ok {
-		err := s.schemaDB.Upsert(withSchema)
-		if err != nil {
+		err = s.schemaDB.Upsert(withSchema)
+
+		if err != nil && !errors.As(err, &schema.ErrConflictingSchema{}) {
+			// This means the error is not due to a schema conflict, and is most likely
+			// a bug.
 			s.schemaDB.Remove(id)
-			return errors.Wrapf(err, "Schema upsert caused conflict for %v", m.ID())
+			return errors.Wrapf(err, "Schema upsert caused non-conflict error: %v", m.ID())
 		}
 	}
 
 	s.mutatorsMap[id] = toAdd
 
 	s.orderedMutators.insert(id)
-	return nil
+	return err
 }
 
 // Remove removes the mutator from the mutation system.
@@ -109,6 +123,10 @@ func (s *System) Remove(id types.ID) error {
 		return fmt.Errorf("%w: ID %v", ErrNotRemoved, id)
 	}
 	return nil
+}
+
+func (s *System) GetConflicts(id types.ID) map[types.ID]bool {
+	return s.schemaDB.GetConflicts(id)
 }
 
 // Mutate applies the mutation in place to the given object. Returns

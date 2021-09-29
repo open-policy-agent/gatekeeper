@@ -17,7 +17,7 @@ package core
 
 import (
 	"context"
-	stdlog "log"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var cfg *rest.Config
@@ -47,33 +46,19 @@ func TestMain(m *testing.M) {
 		ErrorIfCRDPathMissing: true,
 	}
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		stdlog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	var err error
 	if cfg, err = t.Start(); err != nil {
-		stdlog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	code := m.Run()
 	if err = t.Stop(); err != nil {
-		stdlog.Printf("error while trying to stop server: %v", err)
+		log.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
-}
-
-// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
-// writes the request to requests after Reconcile is finished.
-func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
-	requests := make(chan reconcile.Request)
-	fn := reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-		result, err := inner.Reconcile(ctx, req)
-		// Disabling the below line so we don't need to drain the channel to wait for a sync,
-		// leaving `requests` so this follows the form of other tests.
-		// requests <- req
-		return result, err
-	})
-	return fn, requests
 }
 
 // StartTestManager adds recFn.

@@ -9,11 +9,11 @@ import (
 func TestOwnership(t *testing.T) {
 	g := NewGomegaWithT(t)
 	t.Run("Ownership defaults to enabled", func(t *testing.T) {
-		g.Expect(PodOwnershipEnabled()).Should(BeTrue())
+		g.Expect(GetPodOwnershipMode()).Should(Equal(PodOwnershipEnabled))
 	})
 	t.Run("Disabling is honored", func(t *testing.T) {
 		DisablePodOwnership()
-		g.Expect(PodOwnershipEnabled()).Should(BeFalse())
+		g.Expect(GetPodOwnershipMode()).Should(Equal(PodOwnershipDisabled))
 	})
 }
 

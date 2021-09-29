@@ -143,7 +143,7 @@ violation[{"msg": "denied!"}] {
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
 	}
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
@@ -155,9 +155,10 @@ violation[{"msg": "denied!"}] {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	cstr := newDenyAllCstr()
@@ -231,11 +232,11 @@ violation[{"msg": "denied!"}] {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := opa.Review(ctx, req)
+		resp, err := opaClient.Review(ctx, req)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		if len(resp.Results()) != 1 {
 			fmt.Println(resp.TraceDump())
-			fmt.Println(opa.Dump(ctx))
+			fmt.Println(opaClient.Dump(ctx))
 		}
 		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 	})
@@ -363,21 +364,21 @@ violation[{"msg": "denied!"}] {
 			Name:      "FooNamespace",
 			Object:    runtime.RawExtension{Object: ns},
 		}
-		resp, err := opa.Review(ctx, req)
+		resp, err := opaClient.Review(ctx, req)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		if len(resp.Results()) != 1 {
 			fmt.Println(resp.TraceDump())
-			fmt.Println(opa.Dump(ctx))
+			fmt.Println(opaClient.Dump(ctx))
 		}
 		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 		g.Expect(c.Delete(ctx, instance.DeepCopy())).Should(gomega.BeNil())
 		g.Eventually(func() error {
-			resp, err := opa.Review(ctx, req)
+			resp, err := opaClient.Review(ctx, req)
 			if err != nil {
 				return err
 			}
 			if len(resp.Results()) != 0 {
-				dump, _ := opa.Dump(ctx)
+				dump, _ := opaClient.Dump(ctx)
 				return fmt.Errorf("Results not yet zero\nOPA DUMP:\n%s", dump)
 			}
 			return nil
@@ -468,7 +469,7 @@ violation[{"msg": "denied!"}] {
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
 	}
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
@@ -478,9 +479,10 @@ violation[{"msg": "denied!"}] {
 	cs := watch.NewSwitch()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opa, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	// get the object tracker for the constraint
