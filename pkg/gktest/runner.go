@@ -8,18 +8,36 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // Runner defines logic independent of how tests are run and the results are
 // printed.
 type Runner struct {
-	// FS is the filesystem the Runner interacts with to read Suites and objects.
-	FS fs.FS
+	// filesystem is the filesystem the Runner interacts with to read Suites and objects.
+	filesystem fs.FS
 
-	// NewClient instantiates a Client for compiling Templates/Constraints, and
+	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	NewClient func() (Client, error)
+	newClient func() (Client, error)
+
+	scheme *runtime.Scheme
+}
+
+func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, error) {
+	s := runtime.NewScheme()
+	err := apis.AddToScheme(s)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Runner{
+		filesystem: filesystem,
+		newClient:  newClient,
+		scheme:     s,
+	}, nil
 }
 
 // Run executes all Tests in the Suite and returns the results.
@@ -74,7 +92,16 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
 func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t Test) ([]CaseResult, error) {
-	client, err := r.makeTestClient(ctx, suiteDir, t)
+	newClient := func() (Client, error) {
+		c, err := r.makeTestClient(ctx, suiteDir, t)
+		if err != nil {
+			return nil, err
+		}
+
+		return c, nil
+	}
+
+	_, err := newClient()
 	if err != nil {
 		return nil, err
 	}
@@ -87,18 +114,18 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 			continue
 		}
 
-		results[i] = r.runCase(ctx, client, suiteDir, c)
+		results[i] = r.runCase(ctx, newClient, suiteDir, c)
 	}
 
 	return results, nil
 }
 
-func (r *Runner) skipCase(c Case) CaseResult {
-	return CaseResult{Name: c.Name, Skipped: true}
+func (r *Runner) skipCase(tc *Case) CaseResult {
+	return CaseResult{Name: tc.Name, Skipped: true}
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
-	client, err := r.NewClient()
+	client, err := r.newClient()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCreatingClient, err)
 	}
@@ -121,7 +148,7 @@ func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath str
 		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
 	}
 
-	cObj, err := readConstraint(r.FS, filepath.Join(suiteDir, constraintPath))
+	cObj, err := readConstraint(r.filesystem, filepath.Join(suiteDir, constraintPath))
 	if err != nil {
 		return err
 	}
@@ -138,7 +165,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
 	}
 
-	template, err := readTemplate(r.FS, filepath.Join(suiteDir, templatePath))
+	template, err := readTemplate(r.scheme, r.filesystem, filepath.Join(suiteDir, templatePath))
 	if err != nil {
 		return err
 	}
@@ -152,39 +179,38 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, client Client, suiteDir string, c Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
 
-	err := r.checkCase(ctx, client, suiteDir, c)
+	err := r.checkCase(ctx, newClient, suiteDir, tc)
 
 	return CaseResult{
-		Name:    c.Name,
+		Name:    tc.Name,
 		Error:   err,
 		Runtime: Duration(time.Since(start)),
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, c Case) error {
-	if c.Object == "" {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (err error) {
+	if tc.Object == "" {
 		return fmt.Errorf("%w: must define object", ErrInvalidCase)
 	}
 
-	objectPath := filepath.Join(suiteDir, c.Object)
-	review, err := r.runReview(ctx, client, objectPath)
+	review, err := r.runReview(ctx, newClient, suiteDir, tc)
 	if err != nil {
 		return err
 	}
 
 	results := review.Results()
 
-	if len(c.Assertions) == 0 {
+	if len(tc.Assertions) == 0 {
 		// Default to assuming the object passes validation if no Assertions are
 		// defined.
-		c.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
+		tc.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
 	}
 
-	for i := range c.Assertions {
-		err = c.Assertions[i].Run(results)
+	for i := range tc.Assertions {
+		err = tc.Assertions[i].Run(results)
 		if err != nil {
 			return err
 		}
@@ -193,20 +219,73 @@ func (r *Runner) checkCase(ctx context.Context, client Client, suiteDir string, 
 	return nil
 }
 
-func (r *Runner) runReview(ctx context.Context, client Client, path string) (*types.Responses, error) {
-	u, err := readCase(r.FS, path)
+func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (*types.Responses, error) {
+	c, err := newClient()
 	if err != nil {
 		return nil, err
 	}
 
-	return client.Review(ctx, u)
+	toReviewPath := filepath.Join(suiteDir, tc.Object)
+	toReviewObjs, err := readObjects(r.filesystem, toReviewPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(toReviewObjs) != 1 {
+		return nil, fmt.Errorf("%w: %q defines %d objects",
+			ErrMultipleObjects, toReviewPath, len(toReviewObjs))
+	}
+	toReview := toReviewObjs[0]
+
+	for _, path := range tc.Inventory {
+		err = r.addInventory(ctx, c, suiteDir, path)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return c.Review(ctx, toReview)
 }
 
-func readCase(f fs.FS, path string) (*unstructured.Unstructured, error) {
+func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {
+	path := filepath.Join(suiteDir, inventoryPath)
+
+	inventory, err := readObjects(r.filesystem, path)
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range inventory {
+		_, err = c.AddData(ctx, obj)
+		if err != nil {
+			return fmt.Errorf("%w: %v %v/%v: %v",
+				ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
+		}
+	}
+
+	return nil
+}
+
+// readCaseObjects reads objects at path in filesystem f. Returns:
+// 1) The object to review for the test case
+// 2) The objects to add to data.inventory
+// 3) Any errors encountered parsing the objects
+//
+// The final object in path is the object to review.
+func readObjects(f fs.FS, path string) ([]*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, err
 	}
 
-	return readUnstructured(bytes)
+	objs, err := readUnstructureds(bytes)
+	if err != nil {
+		return nil, fmt.Errorf("reading %q: %w", path, err)
+	}
+
+	nObjs := len(objs)
+	if nObjs == 0 {
+		return nil, fmt.Errorf("%w: path %q defines no YAML objects", ErrNoObjects, path)
+	}
+
+	return objs, nil
 }

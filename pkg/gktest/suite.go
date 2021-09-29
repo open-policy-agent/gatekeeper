@@ -27,7 +27,7 @@ type Test struct {
 	Constraint string `json:"constraint"`
 
 	// Cases are the test cases to run on the instantiated Constraint.
-	Cases []Case `json:"cases,omitempty"`
+	Cases []*Case `json:"cases,omitempty"`
 }
 
 // Case runs Constraint against a YAML object.
@@ -36,6 +36,10 @@ type Case struct {
 
 	// Object is the path to the file containing a Kubernetes object to test.
 	Object string `json:"object"`
+
+	// Inventory is a list of paths to files containing Kubernetes objects to put
+	// in data.inventory for testing referential constraints.
+	Inventory []string `json:"inventory"`
 
 	// Assertions are statements which must be true about the result of running
 	// Review with the Test's Constraint on the Case's Object.
