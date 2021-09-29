@@ -17,8 +17,17 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	podName := "some-gk-pod-m"
 	podNS := "a-gk-namespace-m"
 	mutator := testhelpers.NewDummyMutator("a-mutator", "spec.value", nil)
-	os.Setenv("POD_NAMESPACE", podNS)
-	defer os.Unsetenv("POD_NAMESPACE")
+	err := os.Setenv("POD_NAMESPACE", podNS)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		err = os.Unsetenv("POD_NAMESPACE")
+		if err != nil {
+			t.Error(err)
+		}
+	})
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -41,7 +50,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
+	status, err := NewMutatorStatusForPod(pod, PodOwnershipEnabled, mutator.ID(), scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())

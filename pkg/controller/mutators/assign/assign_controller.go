@@ -29,8 +29,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
+
+// eventQueueSize is how many events to queue before blocking.
+const eventQueueSize = 1024
 
 type Adder struct {
 	MutationSystem *mutation.System
@@ -41,6 +45,8 @@ type Adder struct {
 // Add creates a new Assign Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	events := make(chan event.GenericEvent, eventQueueSize)
+
 	adder := core.Adder{
 		Tracker:        a.Tracker,
 		GetPod:         a.GetPod,
@@ -54,6 +60,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 			assign := obj.(*mutationsv1alpha1.Assign) // nolint:forcetypeassert
 			return mutators.MutatorForAssign(assign)
 		},
+		Events: events,
 	}
 	return adder.Add(mgr)
 }

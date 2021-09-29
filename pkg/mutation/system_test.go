@@ -292,13 +292,11 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	}
 
 	// Since foo and foo-conflict define conflicting schemas, neither is executed.
-	// TODO(willbeason): Fix once System is updated to properly report conflicts (#1216).
-	//  Should be "no mutation on inconsistent state".
-	t.Run("mutation on inconsistent state", func(t *testing.T) {
+	t.Run("no mutation on inconsistent state", func(t *testing.T) {
 		u2 := &unstructured.Unstructured{}
 		gotMutated, gotErr := s.Mutate(u2, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
-		if !gotMutated {
-			t.Errorf("got Mutate() = %t, want true", gotMutated)
+		if gotMutated {
+			t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
 		}
 
 		if gotErr != nil {
@@ -358,11 +356,11 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 
 	u := &unstructured.Unstructured{}
 	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
-	if gotMutated {
-		t.Errorf("got Mutate() = %t, want false", gotMutated)
+	if !gotMutated {
+		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
 	if gotErr != nil {
-		t.Fatalf("got Mutate() error = %v, want <nil>", gotErr)
+		t.Fatalf("got Mutate() error = %v, want %v", gotErr, nil)
 	}
 }
 
@@ -410,19 +408,19 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	u := &unstructured.Unstructured{}
 	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
 	if !gotMutated {
-		t.Errorf("got Mutate() = %t, want true", gotMutated)
+		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
 	if gotErr != nil {
 		t.Fatalf("got Mutate() error = %v, want <nil>", gotErr)
 	}
-	if s.Get(id("foo")).(*fakeMutator).MutationCount != 2 {
-		t.Errorf("got foo.MutationCount == %d, want 2", foo.MutationCount)
+	if s.Get(id("foo")).(*fakeMutator).MutationCount != 0 {
+		t.Errorf("got foo.MutationCount == %d, want %d", foo.MutationCount, 0)
 	}
-	if s.Get(id("foo-conflict")) != nil {
-		t.Errorf("got fooConflict.MutationCount == %d, want 0", fooConflict.MutationCount)
+	if s.Get(id("foo-conflict")).(*fakeMutator).MutationCount != 0 {
+		t.Errorf("got fooConflict.MutationCount == %d, want %d", fooConflict.MutationCount, 0)
 	}
 	if s.Get(id("bar")).(*fakeMutator).MutationCount != 2 {
-		t.Errorf("got bar.MutationCount == %d, want 2", bar.MutationCount)
+		t.Errorf("got bar.MutationCount == %d, want %d", bar.MutationCount, 2)
 	}
 }
 
