@@ -62,6 +62,13 @@ controllerManager:
     requests:
       cpu: 100m
       memory: 256Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+
 audit:
   hostNetwork: false
   metricsPort: 8888
