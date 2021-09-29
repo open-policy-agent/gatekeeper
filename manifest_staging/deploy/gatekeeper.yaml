@@ -1059,6 +1059,26 @@ spec:
       gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
 ---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: gatekeeper-gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  maxReplicas: 100
+  metrics:
+  - resource:
+      name: cpu
+      targetAverageUtilization: 80
+    type: Resource
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gatekeeper-controller-manager
+---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:

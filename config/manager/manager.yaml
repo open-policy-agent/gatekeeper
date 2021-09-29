@@ -193,3 +193,21 @@ spec:
       scopeName: PriorityClass
       values:
       - system-cluster-critical
+---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gatekeeper-controller-manager
+  minReplicas: 1
+  maxReplicas: 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: 80
