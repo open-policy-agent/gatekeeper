@@ -109,16 +109,16 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 	timeStart := time.Now()
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
-		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
+		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
 	if req.AdmissionRequest.Operation != admissionv1.Create &&
 		req.AdmissionRequest.Operation != admissionv1.Update {
-		return admission.ValidationResponse(true, "Mutating only on create or update")
+		return admission.Allowed("Mutating only on create or update")
 	}
 
 	if h.isGatekeeperResource(&req) {
-		return admission.ValidationResponse(true, "Not mutating gatekeeper resources")
+		return admission.Allowed("Not mutating gatekeeper resources")
 	}
 
 	requestResponse := unknownResponse
@@ -138,7 +138,7 @@ func (h *mutationHandler) Handle(ctx context.Context, req admission.Request) adm
 
 	if isExcludedNamespace {
 		requestResponse = skipResponse
-		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
+		return admission.Allowed("Namespace is set to be ignored by Gatekeeper config")
 	}
 
 	resp := h.mutateRequest(ctx, &req)
@@ -191,7 +191,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 	if !mutated {
-		return admission.ValidationResponse(true, "Resource was not mutated")
+		return admission.Allowed("Resource was not mutated")
 	}
 
 	newJSON, err := obj.MarshalJSON()
