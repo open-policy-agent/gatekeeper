@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -48,8 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
-
-const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -107,10 +106,10 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 	// avoiding conflicts in finalizer cleanup.
 	sw := watch.NewSwitch()
 
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-	pod.Namespace = "gatekeeper-system"
-	pod.UID = podUID
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
 
 	processExcluder := process.Get()
 

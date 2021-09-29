@@ -23,6 +23,7 @@ import (
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -96,10 +97,10 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 	if g.pod != nil {
 		return g.pod.DeepCopy(), nil
 	}
-	pod = &corev1.Pod{}
-	ns := util.GetNamespace()
-	name := util.GetPodName()
-	key := types.NamespacedName{Namespace: ns, Name: name}
+	pod = fakes.Pod(fakes.WithNamespace(util.GetNamespace()),
+		fakes.WithName(util.GetPodName()))
+	key := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
+
 	// use unstructured to avoid inadvertently creating a watch on pods
 	uPod := &unstructured.Unstructured{}
 	gvk, err := apiutil.GVKForObject(pod, g.scheme)
@@ -137,9 +138,10 @@ func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) err
 		}
 
 		fakePodGetter := func(ctx context.Context) (*corev1.Pod, error) {
-			pod := &corev1.Pod{}
-			pod.Name = util.GetPodName()
-			pod.Namespace = util.GetNamespace()
+			pod := fakes.Pod(
+				fakes.WithNamespace(util.GetNamespace()),
+				fakes.WithName(util.GetPodName()),
+			)
 
 			return pod, nil
 		}

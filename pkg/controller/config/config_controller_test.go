@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -60,8 +61,6 @@ var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
 }}
 
 const timeout = time.Second * 20
-
-const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -265,25 +264,19 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}()
 
 	// create the pod that is a sync only resource in config obj
-	pod := &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Pod",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testpod",
-			Namespace: "default",
-			UID:       podUID,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "nginx",
-					Image: "nginx",
-				},
+	pod := fakes.Pod(
+		fakes.WithNamespace("default"),
+		fakes.WithName("testpod"),
+	)
+	pod.Spec = corev1.PodSpec{
+		Containers: []corev1.Container{
+			{
+				Name:  "nginx",
+				Image: "nginx",
 			},
 		},
 	}
+
 	g.Expect(c.Create(ctx, pod)).NotTo(gomega.HaveOccurred())
 
 	// set up tracker
@@ -325,17 +318,10 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(c.Delete(ctx, pod)).NotTo(gomega.HaveOccurred())
 
 	// register events for the pod to go in the event channel
-	podObj := &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Pod",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testpod",
-			Namespace: "default",
-			UID:       podUID,
-		},
-	}
+	podObj := fakes.Pod(
+		fakes.WithNamespace("default"),
+		fakes.WithName("testpod"),
+	)
 
 	events <- event.GenericEvent{
 		Object: podObj,
@@ -422,14 +408,12 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Create the Config object and expect the Reconcile to be created
 	ctx = context.Background()
 
-	createInstance := func() client.Object {
-		return configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
-	}
+	instance = configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
 
 	// Since we're reusing instance between tests, we must wait for it to be fully
 	// deleted. We also can't reuse the same instance without introducing
 	// flakiness as client.Client methods modify their input.
-	g.Eventually(ensureCreated(ctx, c, createInstance), timeout).
+	g.Eventually(ensureCreated(ctx, c, instance), timeout).
 		ShouldNot(gomega.HaveOccurred())
 
 	t.Cleanup(func() {
@@ -677,9 +661,13 @@ type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
 
-func ensureCreated(ctx context.Context, c client.Client, toCreate func() client.Object) func() error {
+func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object) func() error {
 	return func() error {
-		instance := toCreate()
+		instance, ok := toCreate.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("instance was %T which is not a client.Object", instance)
+		}
+
 		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
 		gvk := instance.GetObjectKind().GroupVersionKind()
 

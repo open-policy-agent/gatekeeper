@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	corev1 "k8s.io/api/core/v1"
@@ -33,10 +34,10 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
-	pod := &corev1.Pod{}
-	pod.SetName(podName)
-	pod.SetNamespace(podNS)
-	pod.SetUID(podUID)
+	pod := fakes.Pod(
+		fakes.WithNamespace(podNS),
+		fakes.WithName(podName),
+	)
 
 	expectedStatus := &MutatorPodStatus{}
 	expectedStatus.SetName("some--gk--pod--m-dummymutator-a--mutator")

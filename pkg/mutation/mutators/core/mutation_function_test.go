@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
@@ -19,40 +20,38 @@ import (
 const (
 	TestValue          = "testValue"
 	ParameterTestValue = "\"testValue\""
-	podUID             = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 )
 
 func prepareTestPod(t *testing.T) *unstructured.Unstructured {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testpod1",
-			Namespace: "foo",
-			Labels:    map[string]string{"a": "b"},
-			UID:       podUID,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "testname1",
-					Image: "image",
-					Ports: []corev1.ContainerPort{{Name: "portName1"}},
+	pod := fakes.Pod(
+		fakes.WithNamespace("foo"),
+		fakes.WithName("test-pod"),
+		fakes.WithLabels(map[string]string{"a": "b"}),
+	)
+
+	pod.Spec = corev1.PodSpec{
+		Containers: []corev1.Container{
+			{
+				Name:  "testname1",
+				Image: "image",
+				Ports: []corev1.ContainerPort{{Name: "portName1"}},
+			},
+			{
+				Name:  "testname2",
+				Image: "image",
+				Ports: []corev1.ContainerPort{
+					{Name: "portName2A"},
+					{Name: "portName2B"},
 				},
-				{
-					Name:  "testname2",
-					Image: "image",
-					Ports: []corev1.ContainerPort{
-						{Name: "portName2A"},
-						{Name: "portName2B"},
-					},
-				},
-				{
-					Name:  "testname3",
-					Image: "image",
-					Ports: []corev1.ContainerPort{{Name: "portName3"}},
-				},
+			},
+			{
+				Name:  "testname3",
+				Image: "image",
+				Ports: []corev1.ContainerPort{{Name: "portName3"}},
 			},
 		},
 	}
+
 	podObject, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 	if err != nil {
 		t.Errorf("Failed to convert pod to unstructured %v", err)

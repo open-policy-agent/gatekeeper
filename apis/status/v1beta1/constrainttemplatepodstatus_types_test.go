@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,17 +17,27 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	podName := "some-gk-pod"
 	podNS := "a-gk-namespace"
 	templateName := "a-template"
-	os.Setenv("POD_NAMESPACE", podNS)
-	defer os.Unsetenv("POD_NAMESPACE")
+
+	err := os.Setenv("POD_NAMESPACE", podNS)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		err = os.Unsetenv("POD_NAMESPACE")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
-	pod := &corev1.Pod{}
-	pod.SetName(podName)
-	pod.SetNamespace(podNS)
-	pod.SetUID(podUID)
+	pod := fakes.Pod(
+		fakes.WithNamespace(podNS),
+		fakes.WithName(podName),
+	)
 
 	expectedStatus := &ConstraintTemplatePodStatus{}
 	expectedStatus.SetName("some--gk--pod-a--template")

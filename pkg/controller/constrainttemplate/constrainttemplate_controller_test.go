@@ -31,6 +31,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -62,8 +63,6 @@ import (
 )
 
 const timeout = time.Second * 15
-
-const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -158,10 +157,11 @@ violation[{"msg": "denied!"}] {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-	pod.Namespace = "gatekeeper-system"
-	pod.UID = podUID
+
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
@@ -487,10 +487,10 @@ violation[{"msg": "denied!"}] {
 	}
 
 	cs := watch.NewSwitch()
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-	pod.Namespace = "gatekeeper-system"
-	pod.UID = podUID
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)

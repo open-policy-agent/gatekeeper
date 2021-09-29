@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,8 +37,6 @@ import (
 )
 
 const timeout = time.Second * 15
-
-const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -130,10 +129,10 @@ violation[{"msg": "denied!"}] {
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-	pod.Namespace = "gatekeeper-system"
-	pod.UID = podUID
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
 
 	adder := constrainttemplate.Adder{
 		Opa:              opaClient,

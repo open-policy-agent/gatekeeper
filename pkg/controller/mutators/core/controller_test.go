@@ -28,6 +28,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
@@ -55,8 +56,6 @@ import (
 )
 
 const timeout = time.Second * 15
-
-const podUID = "ead351c9d-42bf-21d8-a674-3d8de271b701"
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) manager.Manager {
@@ -136,10 +135,10 @@ func TestReconcile(t *testing.T) {
 		}
 	}()
 
-	pod := &corev1.Pod{}
-	pod.Name = "no-pod"
-	pod.Namespace = "gatekeeper-system"
-	pod.UID = podUID
+	pod := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("no-pod"),
+	)
 
 	kind := "Assign"
 	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }
