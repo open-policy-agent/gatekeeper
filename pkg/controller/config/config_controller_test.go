@@ -413,6 +413,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Since we're reusing instance between tests, we must wait for it to be fully
 	// deleted. We also can't reuse the same instance without introducing
 	// flakiness as client.Client methods modify their input.
+	g.Eventually(ensureDeleted(ctx, c, instance), timeout).
+		ShouldNot(gomega.HaveOccurred())
 	g.Eventually(ensureCreated(ctx, c, instance), timeout).
 		ShouldNot(gomega.HaveOccurred())
 
@@ -630,6 +632,10 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 	}
 
 	return &configv1alpha1.Config{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: configv1alpha1.GroupVersion.String(),
+			Kind:       "Config",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "config",
 			Namespace: "gatekeeper-system",
@@ -661,6 +667,39 @@ type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
 
+func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object) func() error {
+	return func() error {
+		instance, ok := toDelete.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("instance was %T which is not a client.Object", instance)
+		}
+
+		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
+		gvk := instance.GetObjectKind().GroupVersionKind()
+
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
+
+		err := c.Get(ctx, key, u)
+		if apierrors.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		if !u.GetDeletionTimestamp().IsZero() {
+			return fmt.Errorf("waiting for deletion: %v %v", gvk, key)
+		}
+
+		err = c.Delete(ctx, instance)
+		if err != nil {
+			return fmt.Errorf("deleting %v %v: %w", gvk, key, err)
+		}
+
+		return fmt.Errorf("queued %v %v for deletion", gvk, key)
+	}
+}
+
 func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object) func() error {
 	return func() error {
 		instance, ok := toCreate.DeepCopyObject().(client.Object)
@@ -674,22 +713,11 @@ func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object)
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
 
-		err := c.Get(ctx, key, u)
-		if err == nil {
-			if !u.GetDeletionTimestamp().IsZero() {
-				return fmt.Errorf("waiting for deletion: %v %v", gvk, key)
-			}
-
-			err = c.Delete(ctx, instance)
-			if err != nil {
-				return fmt.Errorf("deleting %v %v: %w", gvk, key, err)
-			}
-
-			return fmt.Errorf("queued %v %v for deletion", gvk, key)
-		}
-
-		err = c.Create(ctx, instance)
-		if err != nil {
+		err := c.Create(ctx, instance)
+		if apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("a copy of %v %v already exists - run ensureDeleted to ensure a fresh copy exists for testing",
+				gvk, key)
+		} else if err != nil {
 			return fmt.Errorf("creating %v %v", gvk, key)
 		}
 
