@@ -84,4 +84,8 @@ var replacements = map[string]string{
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}`,
+
+        "HELMSUBST_HPA_CONTROLLER_MANAGER_MIN_REPLICAS": `{{ .Values.controllerManager.autoscaling.minReplicas }}`,
+        "HELMSUBST_HPA_CONTROLLER_MANAGER_MAX_REPLICAS": `{{ .Values.controllerManager.autoscaling.maxReplicas }}`,
+        "HELMSUBST_HPA_CONTROLLER_MANAGER_TARGET_CPU_UTILIZATION": `{{ .Values.controllerManager.autoscaling.targetCPUUtilizationPercentage }}`,
 }
