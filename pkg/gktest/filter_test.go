@@ -6,6 +6,8 @@ import (
 )
 
 func TestFilter_Error(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -49,7 +51,12 @@ func TestFilter_Error(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := NewFilter(tc.filter)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf(`got NewFilter("(") error = %v, want %v`, err, ErrInvalidFilter)
@@ -59,6 +66,8 @@ func TestFilter_Error(t *testing.T) {
 }
 
 func TestFilter_MatchesTest(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -92,13 +101,13 @@ func TestFilter_MatchesTest(t *testing.T) {
 		{
 			name:   "filter matches case",
 			filter: "foo",
-			test:   Test{Name: "bar", Cases: []Case{{Name: "foo"}}},
+			test:   Test{Name: "bar", Cases: []*Case{{Name: "foo"}}},
 			want:   true,
 		},
 		{
 			name:   "filter matches case submatch",
 			filter: "foo",
-			test:   Test{Name: "bar", Cases: []Case{{Name: "foo-bar"}}},
+			test:   Test{Name: "bar", Cases: []*Case{{Name: "foo-bar"}}},
 			want:   true,
 		},
 		{
@@ -110,43 +119,48 @@ func TestFilter_MatchesTest(t *testing.T) {
 		{
 			name:   "test name mismatch",
 			filter: "foo//",
-			test:   Test{Name: "bar", Cases: []Case{{Name: "foo"}}},
+			test:   Test{Name: "bar", Cases: []*Case{{Name: "foo"}}},
 			want:   false,
 		},
 		{
 			name:   "test and case match",
 			filter: "bar//qux",
-			test:   Test{Name: "bar", Cases: []Case{{Name: "qux"}}},
+			test:   Test{Name: "bar", Cases: []*Case{{Name: "qux"}}},
 			want:   true,
 		},
 		{
 			name:   "test and case submatch",
 			filter: "bar//qux",
-			test:   Test{Name: "foo-bar", Cases: []Case{{Name: "qux-corge"}}},
+			test:   Test{Name: "foo-bar", Cases: []*Case{{Name: "qux-corge"}}},
 			want:   true,
 		},
 		{
 			name:   "test mismatch",
 			filter: "bar-bar//qux",
-			test:   Test{Name: "bar-foo", Cases: []Case{{Name: "qux-corge"}}},
+			test:   Test{Name: "bar-foo", Cases: []*Case{{Name: "qux-corge"}}},
 			want:   false,
 		},
 		{
 			name:   "case mismatch",
 			filter: "bar//qux-qux",
-			test:   Test{Name: "foo", Cases: []Case{{Name: "corge-qux"}}},
+			test:   Test{Name: "foo", Cases: []*Case{{Name: "corge-qux"}}},
 			want:   false,
 		},
 		{
 			name:   "test match case mismatch",
 			filter: "bar-bar//qux-qux",
-			test:   Test{Name: "bar", Cases: []Case{{Name: "foo"}}},
+			test:   Test{Name: "bar", Cases: []*Case{{Name: "foo"}}},
 			want:   false,
 		},
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter, err := NewFilter(tc.filter)
 			if err != nil {
 				t.Fatal(err)
@@ -161,6 +175,8 @@ func TestFilter_MatchesTest(t *testing.T) {
 }
 
 func TestFilter_MatchesCase(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name      string
 		filter    string
@@ -225,7 +241,12 @@ func TestFilter_MatchesCase(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			filter, err := NewFilter(tc.filter)
 			if err != nil {
 				t.Fatal(err)
