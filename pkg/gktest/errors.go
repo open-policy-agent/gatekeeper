@@ -28,4 +28,14 @@ var (
 	ErrInvalidRegex = errors.New("message contains invalid regular expression")
 	// ErrInvalidFilter indicates that Filter construction failed.
 	ErrInvalidFilter = errors.New("invalid test filter")
+	// ErrNoObjects indicates that a specified YAML file contained no objects.
+	ErrNoObjects = errors.New("missing objects")
+	// ErrMultipleObjects indicates that a specified YAML file contained multiple objects.
+	ErrMultipleObjects = errors.New("object file must contain exactly one object")
+	// ErrAddInventory indicates that an object that was declared to be part of
+	// data.inventory was unable to be added.
+	ErrAddInventory = errors.New("unable to add object to data.inventory")
+	// ErrConvertingTemplate means we were able to parse a template, but not convert
+	// it into the version-independent format.
+	ErrConvertingTemplate = errors.New("unable to convert template")
 )

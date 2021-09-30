@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.8.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
 
 package dynamiccache_test
 
@@ -42,7 +42,7 @@ var testenv *envtest.Environment
 var cfg *rest.Config
 var clientset *kubernetes.Clientset
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	testenv = &envtest.Environment{}
@@ -53,8 +53,6 @@ var _ = BeforeSuite(func(done Done) {
 
 	clientset, err = kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
-
-	close(done)
 }, 60)
 
 var _ = AfterSuite(func() {

@@ -87,7 +87,9 @@ func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	mgr.GetWebhookServer().Register("/v1/mutate", wh)
+	server := mgr.GetWebhookServer()
+	server.TLSMinVersion = *tlsMinVersion
+	server.Register("/v1/mutate", wh)
 
 	return nil
 }

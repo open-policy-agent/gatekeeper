@@ -16,11 +16,14 @@ limitations under the License.
 package core
 
 import (
+	"fmt"
 	"os"
 	gosync "sync"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/gomega"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -28,6 +31,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
+	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/pkg/errors"
@@ -44,6 +48,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -67,6 +72,23 @@ func setupManager(t *testing.T) manager.Manager {
 		t.Fatalf("setting up controller manager: %s", err)
 	}
 	return mgr
+}
+
+func newAssign(name, location, value string) *mutationsv1alpha1.Assign {
+	return &mutationsv1alpha1.Assign{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: mutationsv1alpha1.GroupVersion.String(),
+			Kind:       "Assign",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: mutationsv1alpha1.AssignSpec{
+			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
+			Location: location,
+			Parameters: mutationsv1alpha1.Parameters{
+				Assign: runtime.RawExtension{Raw: []byte(fmt.Sprintf(`{"value": %q}`, value))},
+			},
+		},
+	}
 }
 
 func TestReconcile(t *testing.T) {
@@ -101,10 +123,21 @@ func TestReconcile(t *testing.T) {
 
 	tracker, err := readiness.SetupTracker(mgr, true, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	os.Setenv("POD_NAME", "no-pod")
+	err = os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err = os.Unsetenv("POD_NAME")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	podstatus.DisablePodOwnership()
 	pod := &corev1.Pod{}
 	pod.Name = "no-pod"
+	pod.Namespace = "gatekeeper-system"
 
 	kind := "Assign"
 	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }
@@ -112,8 +145,9 @@ func TestReconcile(t *testing.T) {
 		assign := obj.(*mutationsv1alpha1.Assign) // nolint:forcetypeassert
 		return mutators.MutatorForAssign(assign)
 	}
+	events := make(chan event.GenericEvent, 1024)
 
-	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator)
+	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
 
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}
@@ -194,5 +228,113 @@ func TestReconcile(t *testing.T) {
 		}, timeout).Should(gomega.Succeed())
 	})
 
+	t.Run("Conflicting mutators are marked not enforced and conflicts can be resolved", func(t *testing.T) {
+		mFoo := newAssign("foo", "spec.foo", "value-1")
+		mFooID := types.MakeID(mFoo)
+		mBar1 := newAssign("bar-1", "spec.bar[name: bar].qux", "value-2")
+		mBar1ID := types.MakeID(mBar1)
+		mBar2 := newAssign("bar-2", "spec.bar.qux", "value-3")
+		mBar2ID := types.MakeID(mBar2)
+
+		g.Expect(c.Create(ctx, mFoo.DeepCopy())).NotTo(gomega.HaveOccurred())
+		g.Expect(c.Create(ctx, mBar1.DeepCopy())).NotTo(gomega.HaveOccurred())
+
+		g.Eventually(func() error {
+			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
+			if err != nil {
+				return err
+			}
+
+			return podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors(nil))
+		})
+
+		g.Expect(c.Create(ctx, mBar2.DeepCopy())).NotTo(gomega.HaveOccurred())
+
+		g.Eventually(func() error {
+			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
+			if err != nil {
+				return err
+			}
+
+			err = podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors([]podstatus.MutatorError{{
+				Type: mutationschema.ErrConflictingSchemaType,
+				Message: mutationschema.NewErrConflictingSchema(mutationschema.IDSet{
+					mBar1ID: true, mBar2ID: true,
+				}).Error(),
+			}}))
+			if err != nil {
+				return err
+			}
+
+			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors([]podstatus.MutatorError{{
+				Type: mutationschema.ErrConflictingSchemaType,
+				Message: mutationschema.NewErrConflictingSchema(mutationschema.IDSet{
+					mBar1ID: true, mBar2ID: true,
+				}).Error(),
+			}}))
+		}, timeout).Should(gomega.Succeed())
+
+		g.Expect(c.Delete(ctx, mBar1.DeepCopy())).NotTo(gomega.HaveOccurred())
+
+		g.Eventually(func() error {
+			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
+			if err != nil {
+				return err
+			}
+
+			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors(nil))
+		})
+	})
+
 	testMgrStopped()
+}
+
+func podStatusMatches(ctx context.Context, c client.Client, pod *corev1.Pod, id types.ID, matchers ...PodStatusMatcher) error {
+	podStatus := &podstatus.MutatorPodStatus{}
+
+	podStatusName, err := podstatus.KeyForMutatorID(pod.Name, id)
+	if err != nil {
+		return err
+	}
+
+	key := client.ObjectKey{Namespace: pod.Namespace, Name: podStatusName}
+	err = c.Get(ctx, key, podStatus)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range matchers {
+		err = m(podStatus)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type PodStatusMatcher func(status *podstatus.MutatorPodStatus) error
+
+func hasStatusErrors(want []podstatus.MutatorError) PodStatusMatcher {
+	return func(status *podstatus.MutatorPodStatus) error {
+		got := status.Status.Errors
+		if diff := cmp.Diff(want, got, cmpopts.SortSlices(sortMutatorErrors), cmpopts.EquateEmpty()); diff != "" {
+			return fmt.Errorf("unexpected difference in .status.errors for %q:\n%s", status.Name, diff)
+		}
+		if len(want) == 0 {
+			if !status.Status.Enforced {
+				return fmt.Errorf("no errors in .status.errors but Mutator is not enforced")
+			}
+		} else {
+			if status.Status.Enforced {
+				return fmt.Errorf("errors in .status.errors but Mutator is enforced")
+			}
+		}
+
+		return nil
+	}
+}
+
+func sortMutatorErrors(left, right podstatus.MutatorError) bool {
+	return left.Message < right.Message
 }

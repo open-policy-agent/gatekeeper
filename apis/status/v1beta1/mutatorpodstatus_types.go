@@ -48,6 +48,9 @@ type MutatorPodStatusStatus struct {
 
 // MutatorError represents a single error caught while adding a mutator to a system.
 type MutatorError struct {
+	// Type indicates a specific class of error for use by controller code.
+	// If not present, the error should be treated as not matching any known type.
+	Type    string `json:"type,omitempty"`
 	Message string `json:"message"`
 }
 
@@ -78,7 +81,7 @@ func init() {
 // NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the mutator status controller.
-func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
+func NewMutatorStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwnershipMode, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
 	obj := &MutatorPodStatus{}
 	name, err := KeyForMutatorID(pod.Name, mutatorID)
 	if err != nil {
@@ -94,7 +97,7 @@ func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtim
 		MutatorKindLabel: mutatorID.Kind,
 		PodLabel:         pod.Name,
 	})
-	if PodOwnershipEnabled() {
+	if podOwnershipMode == PodOwnershipEnabled {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err
 		}
