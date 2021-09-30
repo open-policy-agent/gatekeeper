@@ -12,6 +12,8 @@ import (
 )
 
 func TestReadSuites(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		target     string
@@ -277,7 +279,7 @@ tests:
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "allow.yaml",
 					}, {
 						Object: "deny.yaml",
@@ -307,6 +309,8 @@ tests:
   - object: deny.yaml
     assertions:
     - violations: "yes"
+  - object: referential.yaml
+    inventory: [inventory.yaml]
 `),
 				},
 			},
@@ -314,13 +318,16 @@ tests:
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "allow.yaml",
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
 						}},
+					}, {
+						Object:    "referential.yaml",
+						Inventory: []string{"inventory.yaml"},
 					}},
 				}},
 			}},
@@ -367,7 +374,12 @@ tests: {}
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, gotErr := ReadSuites(tc.fileSystem, tc.target, tc.recursive)
 			if !errors.Is(gotErr, tc.wantErr) {
 				t.Fatalf("got error %v, want error %v",

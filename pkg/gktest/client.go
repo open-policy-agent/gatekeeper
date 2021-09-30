@@ -24,6 +24,10 @@ type Client interface {
 	// AddData adds the state of the cluster. For use in referential Constraints.
 	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
 
+	// RemoveData removes objects from the state of the cluster. For use in
+	// referential constraints.
+	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
+
 	// Review runs all Constraints against obj.
 	Review(ctx context.Context, obj interface{}, opts ...client.QueryOpt) (*types.Responses, error)
 }
