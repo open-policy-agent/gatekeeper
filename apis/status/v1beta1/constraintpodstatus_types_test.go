@@ -49,7 +49,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 		})
 	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewConstraintStatusForPod(pod, cstr, scheme)
+	status, err := NewConstraintStatusForPod(pod, PodOwnershipEnabled, cstr, scheme)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForConstraint(podName, cstr)

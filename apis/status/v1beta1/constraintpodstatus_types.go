@@ -80,7 +80,7 @@ func init() {
 // NewConstraintStatusForPod returns a constraint status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint status controller.
-func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstructured, scheme *runtime.Scheme) (*ConstraintPodStatus, error) {
+func NewConstraintStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwnershipMode, constraint *unstructured.Unstructured, scheme *runtime.Scheme) (*ConstraintPodStatus, error) {
 	obj := &ConstraintPodStatus{}
 	name, err := KeyForConstraint(pod.Name, constraint)
 	if err != nil {
@@ -97,7 +97,7 @@ func NewConstraintStatusForPod(pod *corev1.Pod, constraint *unstructured.Unstruc
 		// the template name is the lower-case of the constraint kind
 		ConstraintTemplateNameLabel: strings.ToLower(constraint.GetKind()),
 	})
-	if PodOwnershipEnabled() {
+	if podOwnershipMode == PodOwnershipEnabled {
 		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
 			return nil, err
 		}
