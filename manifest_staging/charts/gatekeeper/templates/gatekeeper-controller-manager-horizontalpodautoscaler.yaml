@@ -1,3 +1,4 @@
+{{- if .Values.controllerManager.autoscaling.enabled }}
 apiVersion: autoscaling/v2beta1
 kind: HorizontalPodAutoscaler
 metadata:
@@ -7,7 +8,7 @@ metadata:
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
-  name: gatekeeper-gatekeeper-controller-manager
+  name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
   maxReplicas: {{ .Values.controllerManager.autoscaling.maxReplicas }}
@@ -21,3 +22,4 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: gatekeeper-controller-manager
+{{- end }}

@@ -125,6 +125,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if .Values.psp.enabled }}\n" + obj + "{{- end }}\n"
 			}
 
+			if name == "gatekeeper-controller-manager" && kind == "HorizontalPodAutoscaler" {
+				obj = "{{- if .Values.controllerManager.autoscaling.enabled }}\n" + obj + "{{- end }}\n"
+			}
+
 			if err := os.WriteFile(destFile, []byte(obj), 0o600); err != nil {
 				return err
 			}
