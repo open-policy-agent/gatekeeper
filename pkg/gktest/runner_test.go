@@ -513,7 +513,7 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
@@ -544,8 +544,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object:    "object.yaml",
-						Inventory: []string{"inventory.yaml"},
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
@@ -579,7 +579,7 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
@@ -610,7 +610,7 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
@@ -641,8 +641,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object:    "object.yaml",
-						Inventory: []string{"inventory.yaml"},
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
@@ -781,7 +781,7 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
 						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
