@@ -94,9 +94,9 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter gktest.Filter) error {
 	isFailure := false
 
-	runner := gktest.Runner{
-		FS:        fileSystem,
-		NewClient: gktest.NewOPAClient,
+	runner, err := gktest.NewRunner(fileSystem, gktest.NewOPAClient)
+	if err != nil {
+		return err
 	}
 
 	results := make([]gktest.SuiteResult, len(suites))
@@ -120,7 +120,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 	}
 	w := &strings.Builder{}
 	printer := gktest.PrinterGo{}
-	err := printer.Print(w, results, verbose)
+	err = printer.Print(w, results, verbose)
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 
 func getFS(path string) fs.FS {
 	// TODO(#1397): Check that this produces the correct file system string on
-	//  Windows. We may need to add a trailing `/` for fs.FS to function properly.
+	//  Windows. We may need to add a trailing `/` for fs.filesystem to function properly.
 	root := filepath.VolumeName(path)
 	if root == "" {
 		// We are running on a unix-like filesystem without volume names, so the

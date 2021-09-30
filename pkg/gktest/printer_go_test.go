@@ -10,6 +10,8 @@ import (
 )
 
 func TestPrinterGo_Print(t *testing.T) {
+	t.Parallel()
+
 	// TODO(#1430): Not final. While this will eventually exactly match the output
 	//  of go test, this is a first pass.
 
@@ -226,7 +228,12 @@ PASS
 	printer := PrinterGo{}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			w := &strings.Builder{}
 			gotErr := printer.Print(w, tc.result, false)
 
@@ -241,6 +248,8 @@ PASS
 		})
 
 		t.Run(tc.name+" verbose", func(t *testing.T) {
+			t.Parallel()
+
 			w := &strings.Builder{}
 			gotErr := printer.Print(w, tc.result, true)
 

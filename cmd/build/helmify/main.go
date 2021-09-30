@@ -75,7 +75,7 @@ func (ks *kindSet) Write() error {
 			subPath = "crds"
 			parentDir := path.Join(*outputDir, subPath)
 			fmt.Printf("Making %s\n", parentDir)
-			if err := os.Mkdir(parentDir, 0750); err != nil {
+			if err := os.Mkdir(parentDir, 0o750); err != nil {
 				return err
 			}
 		}
@@ -125,7 +125,7 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if .Values.psp.enabled }}\n" + obj + "{{- end }}\n"
 			}
 
-			if err := os.WriteFile(destFile, []byte(obj), 0600); err != nil {
+			if err := os.WriteFile(destFile, []byte(obj), 0o600); err != nil {
 				return err
 			}
 		}
@@ -134,8 +134,8 @@ func (ks *kindSet) Write() error {
 }
 
 func doReplacements(obj string) string {
-	for old, new := range replacements {
-		obj = strings.ReplaceAll(obj, old, new)
+	for old, replacement := range replacements {
+		obj = strings.ReplaceAll(obj, old, replacement)
 	}
 	return obj
 }
@@ -152,7 +152,7 @@ func copyStaticFiles(root string, subdirs ...string) error {
 		destination := path.Join(append([]string{*outputDir}, newSubDirs...)...)
 		if f.IsDir() {
 			fmt.Printf("Making %s\n", destination)
-			if err := os.Mkdir(destination, 0750); err != nil {
+			if err := os.Mkdir(destination, 0o750); err != nil {
 				return err
 			}
 			if err := copyStaticFiles(root, newSubDirs...); err != nil {
@@ -164,7 +164,7 @@ func copyStaticFiles(root string, subdirs ...string) error {
 				return err
 			}
 			fmt.Printf("Writing %s\n", destination)
-			if err := os.WriteFile(destination, contents, 0600); err != nil {
+			if err := os.WriteFile(destination, contents, 0o600); err != nil {
 				return err
 			}
 		}
