@@ -4,12 +4,14 @@ import (
 	"context"
 	gosync "sync"
 	"testing"
+	"time"
 
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
@@ -17,13 +19,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+const timeout = time.Second * 20
+
+var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
+	Name: "my-provider",
+}}
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) manager.Manager {
@@ -46,13 +56,16 @@ func setupManager(t *testing.T) manager.Manager {
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &externaldatav1alpha1.Provider{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
+			Kind:       "Provider",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
+			Name: "my-provider",
 		},
 		Spec: externaldatav1alpha1.ProviderSpec{
-			ProxyURL:      "http://test",
-			Timeout:       10,
-			MaxRetry:      10,
+			URL:     "http://my-provider:8080",
+			Timeout: 10,
 		},
 	}
 
@@ -61,8 +74,13 @@ func TestReconcile(t *testing.T) {
 	mgr := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
+	// force external data to be enabled
+	*externaldata.ExternalDataEnabled = true
+	pc := frameworksexternaldata.NewCache()
+
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
+	driver := local.New(args...)
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA backend: %s", err)
@@ -76,10 +94,9 @@ func TestReconcile(t *testing.T) {
 	tracker, err := readiness.SetupTracker(mgr, false, true)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	pc := frameworksexternaldata.NewCache()
 	rec := newReconciler(mgr, opa, pc, tracker)
 
-	recFn, _ := SetupTestReconcile(rec)
+	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -96,10 +113,22 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("Can add a provider object", func(t *testing.T) {
 		g.Expect(c.Create(ctx, instance)).NotTo(gomega.HaveOccurred())
+		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+		entry, err := pc.Get("my-provider")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+			URL:     "http://my-provider:8080",
+			Timeout: 10,
+		}))
 	})
 
 	t.Run("Can delete a provider object", func(t *testing.T) {
 		g.Expect(c.Delete(ctx, instance)).NotTo(gomega.HaveOccurred())
+		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+		_, err := pc.Get("my-provider")
+		g.Expect(err.Error()).Should(gomega.Equal("key is not found in provider cache"))
 	})
 
 	testMgrStopped()

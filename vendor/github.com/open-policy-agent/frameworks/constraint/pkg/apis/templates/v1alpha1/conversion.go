@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
-func Convert_v1alpha1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
+func Convert_v1alpha1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { // nolint:revive // Required exact function name.
 	inSchema := in.OpenAPIV3Schema
 
 	// legacySchema should allow for users to provide arbitrary parameters, regardless of whether the user specified them
@@ -44,7 +44,6 @@ func Convert_v1alpha1_Validation_To_templates_Validation(in *Validation, out *co
 		if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(inSchemaCopy, out.OpenAPIV3Schema, s); err != nil {
 			return err
 		}
-
 	} else {
 		out.OpenAPIV3Schema = nil
 	}

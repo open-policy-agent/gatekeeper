@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -20,11 +21,12 @@ import (
 	"github.com/open-policy-agent/opa/storage/inmem"
 	"github.com/open-policy-agent/opa/topdown"
 	opatypes "github.com/open-policy-agent/opa/types"
-	"github.com/pkg/errors"
 )
 
-const moduleSetPrefix = "__modset_"
-const moduleSetSep = "_idx_"
+const (
+	moduleSetPrefix = "__modset_"
+	moduleSetSep    = "_idx_"
+)
 
 type module struct {
 	text   string
@@ -173,7 +175,7 @@ func (d *driver) Init(ctx context.Context) error {
 					return externaldata.HandleError(http.StatusInternalServerError, err)
 				}
 
-				regoResponse := externaldata.NewRegoResponse(resp.StatusCode, externaldataResponse)
+				regoResponse := externaldata.NewRegoResponse(resp.StatusCode, &externaldataResponse)
 				return externaldata.PrepareRegoResponse(regoResponse)
 			},
 		)
@@ -194,20 +196,20 @@ func copyModules(modules map[string]*ast.Module, filter string) map[string]*ast.
 
 func (d *driver) checkModuleName(name string) error {
 	if name == "" {
-		return errors.Errorf("Module name cannot be empty")
+		return fmt.Errorf("module name cannot be empty")
 	}
 	if strings.HasPrefix(name, moduleSetPrefix) {
-		return errors.Errorf("Single modules not allowed to use name prefix %s", moduleSetPrefix)
+		return fmt.Errorf("single modules not allowed to use name prefix %q", moduleSetPrefix)
 	}
 	return nil
 }
 
 func (d *driver) checkModuleSetName(name string) error {
 	if name == "" {
-		return errors.Errorf("Modules name prefix cannot be empty")
+		return fmt.Errorf("modules name prefix cannot be empty")
 	}
 	if strings.Contains(name, moduleSetSep) {
-		return errors.Errorf("Modules name prefix not allowed to contain the sequence n%s", moduleSetSep)
+		return fmt.Errorf("modules name prefix not allowed to contain the sequence n%s", moduleSetSep)
 	}
 	return nil
 }
@@ -230,7 +232,7 @@ func (d *driver) PutModule(ctx context.Context, name string, src string) error {
 	return err
 }
 
-// PutModules implements drivers.Driver
+// PutModules implements drivers.Driver.
 func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []string) error {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return err
@@ -258,7 +260,7 @@ func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []strin
 }
 
 // DeleteModule deletes a rule from OPA and returns true if a rule was found and deleted, false
-// if a rule was not found, and any errors
+// if a rule was not found, and any errors.
 func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
 	if err := d.checkModuleName(name); err != nil {
 		return false, err
@@ -317,7 +319,7 @@ func (d *driver) alterModules(ctx context.Context, insert insertParam, remove []
 	return len(remove), nil
 }
 
-// DeleteModules implements drivers.Driver
+// DeleteModules implements drivers.Driver.
 func (d *driver) DeleteModules(ctx context.Context, namePrefix string) (int, error) {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return 0, err
@@ -344,7 +346,7 @@ func (d *driver) listModuleSet(namePrefix string) []string {
 func parsePath(path string) ([]string, error) {
 	p, ok := storage.ParsePathEscaped(path)
 	if !ok {
-		return nil, fmt.Errorf("bad data path: %s", path)
+		return nil, fmt.Errorf("bad data path: %q", path)
 	}
 	return p, nil
 }
@@ -378,14 +380,12 @@ func (d *driver) PutData(ctx context.Context, path string, data interface{}) err
 		d.storage.Abort(ctx, txn)
 		return err
 	}
-	if err := d.storage.Commit(ctx, txn); err != nil {
-		return err
-	}
-	return nil
+
+	return d.storage.Commit(ctx, txn)
 }
 
 // DeleteData deletes data from OPA and returns true if data was found and deleted, false
-// if data was not found, and any errors
+// if data was not found, and any errors.
 func (d *driver) DeleteData(ctx context.Context, path string) (bool, error) {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
@@ -421,16 +421,17 @@ func (d *driver) eval(ctx context.Context, path string, input interface{}, cfg *
 	}
 	if d.traceEnabled || cfg.TracingEnabled {
 		buf := topdown.NewBufferTracer()
-		args = append(args, rego.Tracer(buf))
-		rego := rego.New(args...)
-		res, err := rego.Eval(ctx)
+		args = append(args, rego.QueryTracer(buf))
+		r := rego.New(args...)
+		res, err := r.Eval(ctx)
 		b := &bytes.Buffer{}
 		topdown.PrettyTrace(b, *buf)
 		t := b.String()
 		return res, &t, err
 	}
-	rego := rego.New(args...)
-	res, err := rego.Eval(ctx)
+
+	r := rego.New(args...)
+	res, err := r.Eval(ctx)
 	return res, nil, err
 }
 
@@ -483,11 +484,11 @@ func (d *driver) Dump(ctx context.Context) (string, error) {
 	var dt interface{}
 	// There should be only 1 or 0 expression values
 	if len(data) > 1 {
-		return "", errors.New("Too many dump results")
+		return "", errors.New("too many dump results")
 	}
 	for _, da := range data {
 		if len(data) > 1 {
-			return "", errors.New("Too many expressions results")
+			return "", errors.New("too many expressions results")
 		}
 		for _, e := range da.Expressions {
 			dt = e.Value

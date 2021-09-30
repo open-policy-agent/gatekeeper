@@ -14,17 +14,10 @@ package externaldata
 
 import (
 	"flag"
-
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	// ExternalDataEnabled indicates if the external data feature is enabled.
-	ExternalDataEnabled *bool
-
-	log = logf.Log.WithName("externaldata").WithValues(logging.Process, "externaldata")
-)
+// ExternalDataEnabled indicates if the external data feature is enabled.
+var ExternalDataEnabled *bool
 
 func init() {
 	ExternalDataEnabled = flag.Bool("enable-external-data", false, "(alpha) Enable external data feature")

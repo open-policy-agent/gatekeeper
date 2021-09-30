@@ -53,7 +53,7 @@ type Item struct {
 }
 
 // NewRegoResponse creates a new rego response from the given provider response.
-func NewRegoResponse(statusCode int, pr ProviderResponse) *RegoResponse {
+func NewRegoResponse(statusCode int, pr *ProviderResponse) *RegoResponse {
 	responses := make([][]interface{}, 0)
 	errors := make([][]interface{}, 0)
 

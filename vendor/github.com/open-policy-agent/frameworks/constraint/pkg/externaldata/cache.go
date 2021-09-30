@@ -38,7 +38,7 @@ func (c *ProviderCache) Upsert(provider *v1alpha1.Provider) error {
 		return fmt.Errorf("provider name can not be empty. value %s", provider.Name)
 	}
 	if !isValidURL(provider.Spec.URL) {
-		return fmt.Errorf("invalid provider proxy url. value: %s", provider.Spec.URL)
+		return fmt.Errorf("invalid provider url. value: %s", provider.Spec.URL)
 	}
 	if !isValidTimeout(provider.Spec.Timeout) {
 		return fmt.Errorf("provider timeout should be a positive integer. value: %d", provider.Spec.Timeout)

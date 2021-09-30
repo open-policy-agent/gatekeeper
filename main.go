@@ -244,6 +244,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
+	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	if *externaldata.ExternalDataEnabled {
 		providerCache := frameworksexternaldata.NewCache()

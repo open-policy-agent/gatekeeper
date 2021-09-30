@@ -17,12 +17,11 @@ package externaldata
 
 import (
 	"context"
+	stdlog "log"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
-
-	stdlog "log"
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/apis"

@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// Scheme is the global schema used for transforming Templates between API Versions.
 var Scheme *runtime.Scheme
 
 func initializeScheme() {

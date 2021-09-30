@@ -9,6 +9,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// ConstraintTemplateSchemas are the per-version structural schemas for
+// ConstraintTemplates.
 var ConstraintTemplateSchemas map[string]*schema.Structural
 
 func initializeCTSchemaMap() {

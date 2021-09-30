@@ -517,7 +517,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 		_ = t.constraintTrackers.Wait()
 	}()
 
-	if !t.mutationEnabled {
+	if !t.externalDataEnabled {
 		return nil
 	}
 

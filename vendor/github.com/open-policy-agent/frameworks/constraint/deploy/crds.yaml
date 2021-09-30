@@ -28,7 +28,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -71,7 +71,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -123,7 +123,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -166,7 +166,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -218,7 +218,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -261,7 +261,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -338,12 +338,12 @@ spec:
           spec:
             description: Spec defines the Provider specifications.
             properties:
-              URL:
-                description: URL is the URL of the proxy to use for the provider. URL is prefixed with http:// or https://.
-                type: string
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
+              url:
+                description: URL is the URL of the proxy to use for the provider. URL is prefixed with http:// or https://.
+                type: string
             type: object
         type: object
     served: true
