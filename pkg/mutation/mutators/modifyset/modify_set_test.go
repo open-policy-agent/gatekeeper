@@ -139,6 +139,12 @@ func TestSetterPrune(t *testing.T) {
 			existing: []interface{}{[]interface{}{"a", "b", "d"}, []interface{}{"r", "r", "r"}},
 			expected: []interface{}{[]interface{}{"r", "r", "r"}},
 		},
+		{
+			name:     "Duplicate existing",
+			vals:     []interface{}{"a"},
+			existing: []interface{}{"a", "b", "a"},
+			expected: []interface{}{"b"},
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

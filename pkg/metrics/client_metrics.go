@@ -16,6 +16,7 @@ limitations under the License.
 package metrics
 
 import (
+	"context"
 	"net/url"
 	"time"
 
@@ -31,4 +32,4 @@ func DisableRESTClientMetrics() {
 
 type noopLatency struct{}
 
-func (noopLatency) Observe(string, url.URL, time.Duration) {}
+func (noopLatency) Observe(context.Context, string, url.URL, time.Duration) {}

@@ -188,10 +188,139 @@ metadata:
 kind: Object
 apiVersion: v1
 metadata:
+  name: object
+`
+	objectMultiple = `
+kind: Object
+apiVersion: v1
+metadata:
+  name: object
+---
+kind: Object
+apiVersion: v1
+metadata:
+  name: object-2
+`
+
+	objectInvalid = `
+kind Object
+apiVersion: v1
+metadata:
   name: object`
+
+	objectEmpty = ``
+
+	objectInvalidInventory = `
+kind: Object
+metadata:
+  name: object
+---
+kind: Object
+apiVersion: v1
+metadata:
+  name: object`
+
+	templateReferential = `
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8suniqueserviceselector
+  annotations:
+    description: Requires Services to have unique selectors within a namespace.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sUniqueServiceSelector
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8suniqueserviceselector
+        make_apiversion(kind) = apiVersion {
+          g := kind.group
+          v := kind.version
+          g != ""
+          apiVersion = sprintf("%v/%v", [g, v])
+        }
+        make_apiversion(kind) = apiVersion {
+          kind.group == ""
+          apiVersion = kind.version
+        }
+        identical(obj, review) {
+          obj.metadata.namespace == review.namespace
+          obj.metadata.name == review.name
+          obj.kind == review.kind.kind
+          obj.apiVersion == make_apiversion(review.kind)
+        }
+        flatten_selector(obj) = flattened {
+          selectors := [s | s = concat(":", [key, val]); val = obj.spec.selector[key]]
+          flattened := concat(",", sort(selectors))
+        }
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.kind.version == "v1"
+          input.review.kind.group == ""
+          input_selector := flatten_selector(input.review.object)
+          other := data.inventory.namespace[namespace][_]["Service"][name]
+          not identical(other, input.review)
+          other_selector := flatten_selector(other)
+          input_selector == other_selector
+          msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
+        }
+`
+
+	constraintReferential = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sUniqueServiceSelector
+metadata:
+  name: unique-service-selector
+  labels:
+    owner: admin.agilebank.demo
+`
+
+	objectReferentialInventory = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-example
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: value
+`
+
+	objectReferentialAllow = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-allowed
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: other-value
+`
+
+	objectReferentialDeny = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: gatekeeper-test-service-disallowed
+  namespace: default
+spec:
+  ports:
+    - port: 443
+  selector:
+    key: value
+`
 )
 
 func TestRunner_Run(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name   string
 		filter string
@@ -339,13 +468,13 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
@@ -375,6 +504,164 @@ func TestRunner_Run(t *testing.T) {
 					CaseResults: []CaseResult{{}},
 				}, {
 					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "invalid object",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectInvalid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrInvalidYAML,
+					}},
+				}},
+			},
+		},
+		{
+			name: "empty inventory",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:    "object.yaml",
+						Inventory: []string{"inventory.yaml"},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(""),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrNoObjects,
+					}},
+				}},
+			},
+		},
+		{
+			name: "multiple objects",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectMultiple),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrMultipleObjects,
+					}},
+				}},
+			},
+		},
+		{
+			name: "no object",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object: "object.yaml",
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(objectEmpty),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrNoObjects,
+					}},
+				}},
+			},
+		},
+		{
+			name: "invalid inventory",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:    "object.yaml",
+						Inventory: []string{"inventory.yaml"},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(templateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintAlwaysValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(object),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(objectInvalidInventory),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Error: ErrAddInventory,
+					}},
 				}},
 			},
 		},
@@ -489,7 +776,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 					}},
 				}},
@@ -516,7 +803,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object: "object.yaml",
 						Assertions: []Assertion{{
 							Violations: intStrFromStr("yes"),
@@ -546,7 +833,7 @@ func TestRunner_Run(t *testing.T) {
 				Tests: []Test{{
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases:      []Case{{}},
+					Cases:      []*Case{{}},
 				}},
 			},
 			f: fstest.MapFS{
@@ -571,7 +858,7 @@ func TestRunner_Run(t *testing.T) {
 					Name:       "allow",
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Name:   "allowed-1",
 						Object: "object.yaml",
 					}, {
@@ -582,7 +869,7 @@ func TestRunner_Run(t *testing.T) {
 					Name:       "deny",
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
-					Cases: []Case{{
+					Cases: []*Case{{
 						Name:   "denied",
 						Object: "object.yaml",
 						Assertions: []Assertion{{
@@ -621,15 +908,69 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "referential constraints",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "referential constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:      "allow",
+						Object:    "allow.yaml",
+						Inventory: []string{"inventory.yaml"},
+					}, {
+						Name:      "deny",
+						Object:    "deny.yaml",
+						Inventory: []string{"inventory.yaml"},
+						Assertions: []Assertion{{
+							Violations: intStrFromStr("yes"),
+						}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(templateReferential),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintReferential),
+				},
+				"allow.yaml": &fstest.MapFile{
+					Data: []byte(objectReferentialAllow),
+				},
+				"deny.yaml": &fstest.MapFile{
+					Data: []byte(objectReferentialDeny),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(objectReferentialInventory),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "referential constraint",
+					CaseResults: []CaseResult{{
+						Name: "allow",
+					}, {
+						Name: "deny",
+					}},
+				}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := context.Background()
 
-			runner := Runner{
-				FS:        tc.f,
-				NewClient: NewOPAClient,
+			runner, err := NewRunner(tc.f, NewOPAClient)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			filter, err := NewFilter(tc.filter)
@@ -649,15 +990,17 @@ func TestRunner_Run(t *testing.T) {
 }
 
 func TestRunner_Run_ClientError(t *testing.T) {
+	t.Parallel()
+
 	want := SuiteResult{
 		TestResults: []TestResult{{Error: ErrCreatingClient}},
 	}
 
-	runner := Runner{
-		FS: fstest.MapFS{},
-		NewClient: func() (Client, error) {
-			return nil, errors.New("error")
-		},
+	runner, err := NewRunner(fstest.MapFS{}, func() (Client, error) {
+		return nil, errors.New("error")
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	ctx := context.Background()
@@ -675,6 +1018,8 @@ func TestRunner_Run_ClientError(t *testing.T) {
 }
 
 func TestRunner_RunCase(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		template   string
@@ -975,12 +1320,17 @@ func TestRunner_RunCase(t *testing.T) {
 	)
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			suite := &Suite{
 				Tests: []Test{{
 					Template:   templateFile,
 					Constraint: constraintFile,
-					Cases: []Case{{
+					Cases: []*Case{{
 						Object:     objectFile,
 						Assertions: tc.assertions,
 					}},
@@ -989,13 +1339,16 @@ func TestRunner_RunCase(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner := Runner{
-				FS: fstest.MapFS{
+			runner, err := NewRunner(
+				fstest.MapFS{
 					templateFile:   &fstest.MapFile{Data: []byte(tc.template)},
 					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
-				NewClient: NewOPAClient,
+				NewOPAClient,
+			)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			got := runner.Run(ctx, &nilFilter{}, "", suite)

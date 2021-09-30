@@ -25,7 +25,7 @@ import (
 
 var _ cache.SharedIndexInformer = &FakeInformer{}
 
-// FakeInformer provides fake Informer functionality for testing
+// FakeInformer provides fake Informer functionality for testing.
 type FakeInformer struct {
 	// Synced is returned by the HasSynced functions to implement the Informer interface
 	Synced bool
@@ -51,7 +51,7 @@ func (f *FakeInformer) Informer() cache.SharedIndexInformer {
 	return f
 }
 
-// HasSynced implements the Informer interface.  Returns f.Synced
+// HasSynced implements the Informer interface.  Returns f.Synced.
 func (f *FakeInformer) HasSynced() bool {
 	return f.Synced
 }
@@ -61,26 +61,26 @@ func (f *FakeInformer) AddEventHandler(handler cache.ResourceEventHandler) {
 	f.handlers = append(f.handlers, handler)
 }
 
-// Run implements the Informer interface.  Increments f.RunCount
+// Run implements the Informer interface.  Increments f.RunCount.
 func (f *FakeInformer) Run(<-chan struct{}) {
 	f.RunCount++
 }
 
-// Add fakes an Add event for obj
+// Add fakes an Add event for obj.
 func (f *FakeInformer) Add(obj metav1.Object) {
 	for _, h := range f.handlers {
 		h.OnAdd(obj)
 	}
 }
 
-// Update fakes an Update event for obj
+// Update fakes an Update event for obj.
 func (f *FakeInformer) Update(oldObj, newObj metav1.Object) {
 	for _, h := range f.handlers {
 		h.OnUpdate(oldObj, newObj)
 	}
 }
 
-// Delete fakes an Delete event for obj
+// Delete fakes an Delete event for obj.
 func (f *FakeInformer) Delete(obj metav1.Object) {
 	for _, h := range f.handlers {
 		h.OnDelete(obj)

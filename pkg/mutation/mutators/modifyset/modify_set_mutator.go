@@ -290,17 +290,21 @@ func (s setter) setValuePrune(obj map[string]interface{}, key string) error {
 	if !ok {
 		return fmt.Errorf("%+v is not a list of values, cannot treat it as a set", val)
 	}
-outer:
-	for _, v := range s.values {
-		for i, existing := range vals {
+
+	// we are assuming order is important, otherwise this could be done
+	// more cheaply by swapping values
+	filtered := make([]interface{}, 0, len(vals))
+	for _, existing := range vals {
+		matched := false
+		for _, v := range s.values {
 			if cmp.Equal(v, existing) {
-				// we are assuming order is important, otherwise this could be done
-				// more cheaply by swapping values
-				vals = append(vals[:i], vals[i+1:]...)
-				continue outer
+				matched = true
 			}
 		}
+		if !matched {
+			filtered = append(filtered, existing)
+		}
 	}
-	obj[key] = vals
+	obj[key] = filtered
 	return nil
 }
