@@ -111,7 +111,7 @@ func TestReconcile(t *testing.T) {
 
 	defer testMgrStopped()
 
-	t.Run("Can add a provider object", func(t *testing.T) {
+	t.Run("Can add a Provider object", func(t *testing.T) {
 		g.Expect(c.Create(ctx, instance)).NotTo(gomega.HaveOccurred())
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
@@ -123,7 +123,22 @@ func TestReconcile(t *testing.T) {
 		}))
 	})
 
-	t.Run("Can delete a provider object", func(t *testing.T) {
+	t.Run("Can update a Provider object", func(t *testing.T) {
+		newInstance := instance.DeepCopy()
+		newInstance.Spec.Timeout = 20
+
+		g.Expect(c.Update(ctx, newInstance)).NotTo(gomega.HaveOccurred())
+		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+		entry, err := pc.Get("my-provider")
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+			URL:     "http://my-provider:8080",
+			Timeout: 20,
+		}))
+	})
+
+	t.Run("Can delete a Provider object", func(t *testing.T) {
 		g.Expect(c.Delete(ctx, instance)).NotTo(gomega.HaveOccurred())
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
