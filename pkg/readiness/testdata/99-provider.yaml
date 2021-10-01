@@ -1,0 +1,7 @@
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: demo
+spec:
+  url: http://demo
+  timeout: 1
