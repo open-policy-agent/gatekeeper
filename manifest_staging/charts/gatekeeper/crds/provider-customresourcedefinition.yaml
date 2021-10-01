@@ -32,12 +32,12 @@ spec:
           spec:
             description: Spec defines the Provider specifications.
             properties:
-              URL:
-                description: URL is the URL of the proxy to use for the provider. URL is prefixed with http:// or https://.
-                type: string
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
+              url:
+                description: URL is the URL of the proxy to use for the provider. URL is prefixed with http:// or https://.
+                type: string
             type: object
         type: object
     served: true
