@@ -1,4 +1,4 @@
-package templates
+package schema
 
 // This file is generated from deploy/crds.yaml via "make constraint-template-string-constant"
 // DO NOT MODIFY THIS FILE DIRECTLY!

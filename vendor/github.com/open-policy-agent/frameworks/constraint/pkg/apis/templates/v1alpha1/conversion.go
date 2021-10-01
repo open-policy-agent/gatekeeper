@@ -16,8 +16,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	apisTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/conversion"
@@ -35,7 +35,7 @@ func Convert_v1alpha1_Validation_To_templates_Validation(in *Validation, out *co
 		inSchemaCopy := inSchema.DeepCopy()
 
 		if in.LegacySchema != nil && *in.LegacySchema {
-			if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
+			if err := schema.AddPreserveUnknownFields(inSchemaCopy); err != nil {
 				return err
 			}
 		}

@@ -247,7 +247,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	if *externaldata.ExternalDataEnabled {
-		providerCache := frameworksexternaldata.NewCache()
+		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
 	}
 	// initialize OPA
