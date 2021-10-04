@@ -13,7 +13,7 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.16.0
 	github.com/open-policy-agent/cert-controller v0.2.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20211004174726-bdb068fbe7c5
 	github.com/open-policy-agent/opa v0.29.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
@@ -38,8 +38,3 @@ require (
 	sigs.k8s.io/controller-runtime v0.9.2
 	sigs.k8s.io/yaml v1.2.0
 )
-
-// TODO(sertac): replace this before merging
-replace github.com/open-policy-agent/frameworks/constraint => /home/sozercan/go/src/github.com/open-policy-agent/frameworks/constraint
-
-//replace github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20210930045743-98d0fcd77afe
