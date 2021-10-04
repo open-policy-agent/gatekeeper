@@ -81,7 +81,7 @@ func init() {
 // NewMutatorStatusForPod returns a mutator status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the mutator status controller.
-func NewMutatorStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwnershipMode, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
+func NewMutatorStatusForPod(pod *corev1.Pod, mutatorID mtypes.ID, scheme *runtime.Scheme) (*MutatorPodStatus, error) {
 	obj := &MutatorPodStatus{}
 	name, err := KeyForMutatorID(pod.Name, mutatorID)
 	if err != nil {
@@ -97,11 +97,11 @@ func NewMutatorStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwnershipMode, 
 		MutatorKindLabel: mutatorID.Kind,
 		PodLabel:         pod.Name,
 	})
-	if podOwnershipMode == PodOwnershipEnabled {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
+
 	return obj, nil
 }
 

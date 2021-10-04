@@ -6,17 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestOwnership(t *testing.T) {
-	g := NewGomegaWithT(t)
-	t.Run("Ownership defaults to enabled", func(t *testing.T) {
-		g.Expect(GetPodOwnershipMode()).Should(Equal(PodOwnershipEnabled))
-	})
-	t.Run("Disabling is honored", func(t *testing.T) {
-		DisablePodOwnership()
-		g.Expect(GetPodOwnershipMode()).Should(Equal(PodOwnershipDisabled))
-	})
-}
-
 var dashingTestCases = []struct {
 	name      string
 	extracted []string
