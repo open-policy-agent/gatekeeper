@@ -469,16 +469,15 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
-						Assertions: []Assertion{{
-							Violations: intStrFromStr("yes"),
-						}},
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -514,7 +513,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -544,8 +544,9 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object:    "object.yaml",
-						Inventory: []string{"inventory.yaml"},
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -578,7 +579,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -608,7 +610,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -638,8 +641,9 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object:    "object.yaml",
-						Inventory: []string{"inventory.yaml"},
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -777,7 +781,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -804,10 +809,8 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Object: "object.yaml",
-						Assertions: []Assertion{{
-							Violations: intStrFromStr("yes"),
-						}},
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -859,22 +862,22 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "allow-template.yaml",
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
-						Name:   "allowed-1",
-						Object: "object.yaml",
+						Name:       "allowed-1",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}, {
-						Name:   "allowed-2",
-						Object: "object.yaml",
+						Name:       "allowed-2",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}},
 				}, {
 					Name:       "deny",
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
-						Name:   "denied",
-						Object: "object.yaml",
-						Assertions: []Assertion{{
-							Violations: intStrFromStr("yes"),
-						}},
+						Name:       "denied",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -916,16 +919,15 @@ func TestRunner_Run(t *testing.T) {
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
 					Cases: []*Case{{
-						Name:      "allow",
-						Object:    "allow.yaml",
-						Inventory: []string{"inventory.yaml"},
+						Name:       "allow",
+						Object:     "allow.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
 					}, {
-						Name:      "deny",
-						Object:    "deny.yaml",
-						Inventory: []string{"inventory.yaml"},
-						Assertions: []Assertion{{
-							Violations: intStrFromStr("yes"),
-						}},
+						Name:       "deny",
+						Object:     "deny.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -1030,12 +1032,12 @@ func TestRunner_RunCase(t *testing.T) {
 	}{
 		// Validation successful
 		{
-			name:       "implicit expect allow",
+			name:       "no assertions is error",
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
 			assertions: nil,
-			want:       CaseResult{},
+			want:       CaseResult{Error: ErrInvalidCase},
 		},
 		{
 			name:       "explicit expect allow boolean",
@@ -1062,9 +1064,7 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateAlwaysValidate,
 			constraint: constraintAlwaysValidate,
 			object:     object,
-			assertions: []Assertion{{
-				Violations: intStrFromStr("yes"),
-			}},
+			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 			want: CaseResult{
 				Error: ErrNumViolations,
 			},
@@ -1117,10 +1117,8 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   templateNeverValidate,
 			constraint: constraintNeverValidate,
 			object:     object,
-			assertions: []Assertion{{
-				Violations: intStrFromStr("yes"),
-			}},
-			want: CaseResult{},
+			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+			want:       CaseResult{},
 		},
 		{
 			name:       "expect deny int",

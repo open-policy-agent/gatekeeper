@@ -282,7 +282,8 @@ func TestRunner_Run_Integer(t *testing.T) {
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
 					Cases: []*Case{{
-						Object: "allow.yaml",
+						Object:     "allow.yaml",
+						Assertions: []Assertion{{Violations: intStrFromInt(0)}},
 					}, {
 						Object:     "disallow.yaml",
 						Assertions: []Assertion{{Violations: intStrFromInt(1)}},
@@ -291,17 +292,18 @@ func TestRunner_Run_Integer(t *testing.T) {
 			}
 
 			result := runner.Run(ctx, &nilFilter{}, "", suite)
-
-			if result.IsFailure() {
-				sb := strings.Builder{}
-				err := PrinterGo{}.PrintSuite(&sb, &result, true)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				t.Log(sb.String())
-				t.Fatal("got failure but want success")
+			if !result.IsFailure() {
+				return
 			}
+
+			sb := strings.Builder{}
+			err = PrinterGo{}.PrintSuite(&sb, &result, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			t.Log(sb.String())
+			t.Fatal("got failure but want success")
 		})
 	}
 }

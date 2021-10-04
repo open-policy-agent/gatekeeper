@@ -196,19 +196,17 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error)
 		return fmt.Errorf("%w: must define object", ErrInvalidCase)
 	}
 
+	if len(tc.Assertions) == 0 {
+		// Test cases must define at least one assertion.
+		return fmt.Errorf("%w: assertions must be non-empty", ErrInvalidCase)
+	}
+
 	review, err := r.runReview(ctx, newClient, suiteDir, tc)
 	if err != nil {
 		return err
 	}
 
 	results := review.Results()
-
-	if len(tc.Assertions) == 0 {
-		// Default to assuming the object passes validation if no Assertions are
-		// defined.
-		tc.Assertions = []Assertion{{Violations: intStrFromStr("no")}}
-	}
-
 	for i := range tc.Assertions {
 		err = tc.Assertions[i].Run(results)
 		if err != nil {
