@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
@@ -146,11 +147,11 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
-	errObj := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "error",
-		},
-	}
+	errObj := fakes.Pod(
+		fakes.WithNamespace("gatekeeper-system"),
+		fakes.WithName("error"),
+	)
+
 	events := make(chan event.GenericEvent, 1024)
 	events <- event.GenericEvent{
 		Object: errObj,

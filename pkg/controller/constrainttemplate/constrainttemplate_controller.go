@@ -169,16 +169,15 @@ func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *
 	}
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
-		Client:           mgr.GetClient(),
-		scheme:           mgr.GetScheme(),
-		opa:              opa,
-		watcher:          w,
-		statusWatcher:    statusW,
-		cs:               cs,
-		metrics:          r,
-		tracker:          tracker,
-		getPod:           getPod,
-		podOwnershipMode: statusv1beta1.GetPodOwnershipMode(),
+		Client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		opa:           opa,
+		watcher:       w,
+		statusWatcher: statusW,
+		cs:            cs,
+		metrics:       r,
+		tracker:       tracker,
+		getPod:        getPod,
 	}
 	if getPod == nil {
 		reconciler.getPod = reconciler.defaultGetPod
@@ -237,8 +236,6 @@ type ReconcileConstraintTemplate struct {
 	metrics       *reporter
 	tracker       *readiness.Tracker
 	getPod        func(context.Context) (*corev1.Pod, error)
-
-	podOwnershipMode statusv1beta1.PodOwnershipMode
 }
 
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;patch;delete
@@ -557,7 +554,7 @@ func (r *ReconcileConstraintTemplate) getOrCreatePodStatus(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	statusObj, err = statusv1beta1.NewConstraintTemplateStatusForPod(pod, r.podOwnershipMode, ctName, r.scheme)
+	statusObj, err = statusv1beta1.NewConstraintTemplateStatusForPod(pod, ctName, r.scheme)
 	if err != nil {
 		return nil, err
 	}

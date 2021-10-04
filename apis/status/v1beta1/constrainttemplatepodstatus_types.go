@@ -63,7 +63,7 @@ func init() {
 // NewConstraintTemplateStatusForPod returns a constraint template status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the constraint template status controller.
-func NewConstraintTemplateStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwnershipMode, templateName string, scheme *runtime.Scheme) (*ConstraintTemplatePodStatus, error) {
+func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, scheme *runtime.Scheme) (*ConstraintTemplatePodStatus, error) {
 	obj := &ConstraintTemplatePodStatus{}
 	name, err := KeyForConstraintTemplate(pod.Name, templateName)
 	if err != nil {
@@ -77,11 +77,11 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, podOwnershipMode PodOwne
 		ConstraintTemplateNameLabel: templateName,
 		PodLabel:                    pod.Name,
 	})
-	if podOwnershipMode == PodOwnershipEnabled {
-		if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
-			return nil, err
-		}
+
+	if err := controllerutil.SetOwnerReference(pod, obj, scheme); err != nil {
+		return nil, err
 	}
+
 	return obj, nil
 }
 
