@@ -667,15 +667,20 @@ type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
 
+// ensureDeleted
+//
+// This package uses the same API server process across multiple test functions.
+// The residual state from a previous test function can cause flakes.
+//
+// To ensure a clean slate, we must verify that any previously applied Config object
+// has been fully removed before applying our new object.
 func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object) func() error {
-	return func() error {
-		instance, ok := toDelete.DeepCopyObject().(client.Object)
-		if !ok {
-			return fmt.Errorf("instance was %T which is not a client.Object", instance)
-		}
+	gvk := toDelete.GetObjectKind().GroupVersionKind()
+	name := toDelete.GetName()
+	namespace := toDelete.GetNamespace()
 
-		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
-		gvk := instance.GetObjectKind().GroupVersionKind()
+	return func() error {
+		key := client.ObjectKey{Namespace: namespace, Name: name}
 
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
@@ -691,7 +696,7 @@ func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object)
 			return fmt.Errorf("waiting for deletion: %v %v", gvk, key)
 		}
 
-		err = c.Delete(ctx, instance)
+		err = c.Delete(ctx, u)
 		if err != nil {
 			return fmt.Errorf("deleting %v %v: %w", gvk, key, err)
 		}
@@ -700,18 +705,21 @@ func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object)
 	}
 }
 
+// ensureCreated attempts to create toCreate in Client c as toCreate existed when ensureCreated was called.
 func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object) func() error {
+	// As ensureCreated returns a closure, it is possible that the value toCreate will be modified after ensureCreated
+	// is called but before the closure is called. Creating a copy here ensures the object to be created is consistent
+	// with the way it existed when ensureCreated was called.
+	toCreateCopy := toCreate.DeepCopyObject()
+
 	return func() error {
-		instance, ok := toCreate.DeepCopyObject().(client.Object)
+		instance, ok := toCreateCopy.DeepCopyObject().(client.Object)
 		if !ok {
 			return fmt.Errorf("instance was %T which is not a client.Object", instance)
 		}
 
 		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
 		gvk := instance.GetObjectKind().GroupVersionKind()
-
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
 
 		err := c.Create(ctx, instance)
 		if apierrors.IsAlreadyExists(err) {
