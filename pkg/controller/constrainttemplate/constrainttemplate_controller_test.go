@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -167,11 +166,8 @@ violation[{"msg": "denied!"}] {
 
 	cstr := newDenyAllCstr()
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	// Clean up to remove the crd, constraint and constraint template
 	t.Cleanup(func() {
@@ -392,18 +388,10 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	// Setup the Manager
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
-	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	// start manager that will start tracker and controller
-	mgrStopped := StartTestManager(ctx, t, mgr)
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	// Create the constraint template object and expect the Reconcile to be created when controller starts
 	instance := &v1beta1.ConstraintTemplate{

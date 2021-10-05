@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// StartManager
 func StartManager(ctx context.Context, t *testing.T, mgr manager.Manager) {
 	ctx, cancel := context.WithCancel(ctx)
 

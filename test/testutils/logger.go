@@ -12,6 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
+// NewLogger creates a logger specifically for t which logs directly to the test.
+// Use test-specific loggers so that when tests fail, only the log messages from the offending test are printed rather
+// than log messages for every test in the package.
 func NewLogger(t *testing.T) logr.Logger {
 	return zap.New(zap.UseDevMode(true), zap.WriteTo(NewTestWriter(t)))
 }

@@ -18,7 +18,6 @@ package config
 import (
 	"fmt"
 	"sort"
-	gosync "sync"
 	"testing"
 	"time"
 
@@ -147,17 +146,8 @@ func TestReconcile(t *testing.T) {
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
@@ -222,9 +212,6 @@ func TestReconcile(t *testing.T) {
 	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
 	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
-
-	testMgrStopped()
-	cs.Stop()
 }
 
 // tests that expectations for sync only resource gets canceled when it gets deleted.

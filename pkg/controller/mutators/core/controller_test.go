@@ -17,7 +17,6 @@ package core
 
 import (
 	"fmt"
-	gosync "sync"
 	"testing"
 	"time"
 
@@ -144,17 +143,8 @@ func TestReconcile(t *testing.T) {
 	statusAdder := &mutatorstatus.Adder{}
 	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("Can add a mutator", func(t *testing.T) {
 		g.Expect(c.Create(ctx, mutator.DeepCopy())).NotTo(gomega.HaveOccurred())
@@ -276,8 +266,6 @@ func TestReconcile(t *testing.T) {
 			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors(nil))
 		})
 	})
-
-	testMgrStopped()
 }
 
 func podStatusMatches(ctx context.Context, c client.Client, pod *corev1.Pod, id types.ID, matchers ...PodStatusMatcher) error {

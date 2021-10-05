@@ -3,7 +3,6 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -138,17 +137,8 @@ violation[{"msg": "denied!"}] {
 	}
 	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	t.Cleanup(cancel)

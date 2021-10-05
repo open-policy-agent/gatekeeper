@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -150,13 +149,10 @@ func Test_AssignMetadata(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	err := os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
-	err = applyFixtures("testdata")
+	err := applyFixtures("testdata")
 	if err != nil {
 		t.Fatalf("applying fixtures: %v", err)
 	}
@@ -202,13 +198,10 @@ func Test_ModifySet(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	err := os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
-	err = applyFixtures("testdata")
+	err := applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -221,11 +214,8 @@ func Test_ModifySet(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -251,13 +241,10 @@ func Test_Assign(t *testing.T) {
 	mutationEnabled := true
 	mutation.MutationEnabled = &mutationEnabled
 
-	err := os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
-	err = applyFixtures("testdata")
+	err := applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -270,11 +257,8 @@ func Test_Assign(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -353,13 +337,10 @@ func Test_Provider(t *testing.T) {
 func Test_Tracker(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	err := os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
-	err = applyFixtures("testdata")
+	err := applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
 
 	// Wire up the rest.
@@ -370,11 +351,8 @@ func Test_Tracker(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
@@ -433,6 +411,8 @@ func Test_Tracker(t *testing.T) {
 func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	g := gomega.NewWithT(t)
 
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
@@ -448,11 +428,8 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -491,11 +468,8 @@ func Test_CollectDeleted(t *testing.T) {
 	}))
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	client := mgr.GetClient()
 

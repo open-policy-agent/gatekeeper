@@ -14,7 +14,7 @@ import (
 // Fails the test if calling Delete() returns an error other than NotFound.
 //
 // Does not ensure the object is actually deleted, just sends a delete request via the passed Client.
-// See #1596 for why this is non-trivial.
+// See #1596 for why this is non-trivial to guarantee.
 //
 // Tests should not rely on objects being deleted from the API Server which were used in other tests; they should
 // instead use unique object names and namespaces to eliminate cross-talk.

@@ -20,7 +20,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -31,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var cfg *rest.Config
@@ -59,27 +57,6 @@ func TestMain(m *testing.M) {
 		log.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
-}
-
-// StartTestManager starts mgr and returns a WaitGroup which finishes when the manager is stopped.
-func StartTestManager(ctx context.Context, t *testing.T, mgr manager.Manager) *sync.WaitGroup {
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	var err error
-	go func() {
-		defer wg.Done()
-		err = mgr.Start(ctx)
-	}()
-
-	t.Cleanup(func() {
-		wg.Wait()
-		if err != nil {
-			t.Error("running Manager", err)
-		}
-	})
-
-	return wg
 }
 
 // Bootstrap the gatekeeper-system namespace for use in tests.
