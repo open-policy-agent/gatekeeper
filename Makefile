@@ -362,7 +362,7 @@ release-manifest:
 	$(MAKE) manifests
 
 promote-staging-manifest:
-	@rm -f deploy/gatekeeper.yaml
+	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
 	@rm -rf charts
 	@cp -r manifest_staging/charts .
