@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"testing"
 
@@ -23,12 +24,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defer func() {
-		err = os.Unsetenv("POD_NAMESPACE")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+	t.Cleanup(testcleanups.UnsetEnv(t, "POD_NAMESPACE"))
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())

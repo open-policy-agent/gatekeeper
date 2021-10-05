@@ -23,7 +23,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,14 +62,24 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// StartTestManager adds recFn.
-func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
+// StartTestManager starts mgr. Returns a WaitGroup which completes after mgr is stopped.
+func StartTestManager(ctx context.Context, t *testing.T, mgr manager.Manager) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
+
+	var err error
 	go func() {
 		defer wg.Done()
-		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
+		err = mgr.Start(ctx)
 	}()
+
+	t.Cleanup(func() {
+		wg.Wait()
+		if err != nil {
+			t.Error("running Manager", err)
+		}
+	})
+
 	return wg
 }
 

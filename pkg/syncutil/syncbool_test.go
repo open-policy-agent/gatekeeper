@@ -44,4 +44,8 @@ func Test_SyncBool(t *testing.T) {
 	case <-done:
 		// Success
 	}
+
+	if !b.Get() {
+		t.Errorf("channel closed but b.Get() was false")
+	}
 }

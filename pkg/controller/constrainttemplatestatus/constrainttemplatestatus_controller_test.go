@@ -3,6 +3,7 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
+	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"sync"
 	"testing"
@@ -42,7 +43,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		NewCache:           dynamiccache.New,
@@ -144,7 +145,7 @@ violation[{"msg": "denied!"}] {
 	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	mgrStopped := StartTestManager(ctx, t, mgr)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -156,7 +157,7 @@ violation[{"msg": "denied!"}] {
 	defer testMgrStopped()
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	mgr.GetCache().WaitForCacheSync(waitCtx)
 
 	templateCpy := template.DeepCopy()
@@ -181,7 +182,9 @@ violation[{"msg": "denied!"}] {
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).To(gomega.BeNil()) }()
+
+		t.Cleanup(testcleanups.DeleteObject(t, c, fakeTStatus))
+
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		g.Expect(c.Delete(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
@@ -194,7 +197,10 @@ violation[{"msg": "denied!"}] {
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(err).To(gomega.BeNil())
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeCStatus))).To(gomega.BeNil()) }()
+
+
+		t.Cleanup(testcleanups.DeleteObject(t, c, fakeCStatus))
+
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		g.Expect(c.Delete(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
@@ -233,13 +239,15 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).NotTo(gomega.HaveOccurred()) }()
+
+		t.Cleanup(testcleanups.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeCStatus))).NotTo(gomega.HaveOccurred()) }()
+
+		t.Cleanup(testcleanups.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())

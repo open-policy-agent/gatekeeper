@@ -131,7 +131,7 @@ func (r *ctRegistry) report(ctx context.Context, mReporter *reporter) {
 	hadErr := false
 	for _, status := range metrics.AllStatuses {
 		if err := mReporter.reportCtMetric(ctx, status, totals[status]); err != nil {
-			log.Error(err, "failed to report total constraint templates")
+			logger.Error(err, "failed to report total constraint templates")
 			hadErr = true
 		}
 	}

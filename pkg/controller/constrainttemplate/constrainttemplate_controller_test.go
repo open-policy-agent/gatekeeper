@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"strings"
 	"sync"
@@ -43,7 +44,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -68,7 +69,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -166,32 +167,28 @@ violation[{"msg": "denied!"}] {
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	cstr := newDenyAllCstr()
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
+	mgrStopped := StartTestManager(ctx, t, mgr)
 
-	defer testMgrStopped()
+	t.Cleanup(mgrStopped.Wait)
+	t.Cleanup(cancelFunc)
+
 	// Clean up to remove the crd, constraint and constraint template
-	defer func() {
+	t.Cleanup(func() {
 		crd := &apiextensionsv1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
 
 		g.Expect(deleteObject(ctx, c, cstr, timeout)).To(gomega.BeNil())
 		g.Expect(deleteObject(ctx, c, crd, timeout)).To(gomega.BeNil())
 		g.Expect(deleteObject(ctx, c, instance, timeout)).To(gomega.BeNil())
-	}()
+	})
 
-	log.Info("Running test: CRD Gets Created")
+	logger.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		err = c.Create(ctx, instance)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -215,14 +212,14 @@ violation[{"msg": "denied!"}] {
 		}, timeout).Should(gomega.BeNil())
 	})
 
-	log.Info("Running test: Constraint is marked as enforced")
+	logger.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
 		err = c.Create(ctx, cstr)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 		constraintEnforced(ctx, c, g, timeout)
 	})
 
-	log.Info("Running test: Constraint actually enforced")
+	logger.Info("Running test: Constraint actually enforced")
 	t.Run("Constraint actually enforced", func(t *testing.T) {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -248,7 +245,7 @@ violation[{"msg": "denied!"}] {
 		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 	})
 
-	log.Info("Running test: Deleted constraint CRDs are recreated")
+	logger.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
 		crd := &apiextensionsv1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
@@ -262,17 +259,17 @@ violation[{"msg": "denied!"}] {
 				return err
 			}
 			if !crd.GetDeletionTimestamp().IsZero() {
-				return errors.New("Still deleting")
+				return errors.New("still deleting")
 			}
 			if crd.GetUID() == origUID {
-				return errors.New("Not yet deleted")
+				return errors.New("not yet deleted")
 			}
 			for _, cond := range crd.Status.Conditions {
 				if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
 					return nil
 				}
 			}
-			return errors.New("Not established")
+			return errors.New("not established")
 		}, timeout, time.Second).Should(gomega.BeNil())
 
 		g.Eventually(func() error {
@@ -281,7 +278,7 @@ violation[{"msg": "denied!"}] {
 				return err
 			}
 			if len(sList.Items) != 0 {
-				return fmt.Errorf("Remaining status items: %+v", sList.Items)
+				return fmt.Errorf("remaining status items: %+v", sList.Items)
 			}
 			return nil
 		}, timeout).Should(gomega.BeNil())
@@ -291,7 +288,7 @@ violation[{"msg": "denied!"}] {
 		constraintEnforced(ctx, c, g, 50*timeout)
 	})
 
-	log.Info("Running test: Templates with Invalid Rego throw errors")
+	logger.Info("Running test: Templates with Invalid Rego throw errors")
 	t.Run("Templates with Invalid Rego throw errors", func(t *testing.T) {
 		// Create template with invalid rego, should populate parse error in status
 		instanceInvalidRego := &v1beta1.ConstraintTemplate{
@@ -322,10 +319,8 @@ violation[{"msg": "denied!"}] {
 
 		err = c.Create(ctx, instanceInvalidRego)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		defer func() {
-			err = c.Delete(ctx, instanceInvalidRego)
-			g.Expect(err).NotTo(gomega.HaveOccurred())
-		}()
+
+		t.Cleanup(testcleanups.DeleteObject(t, c, instanceInvalidRego))
 
 		g.Eventually(func() error {
 			ct := &v1beta1.ConstraintTemplate{}
@@ -354,7 +349,7 @@ violation[{"msg": "denied!"}] {
 		}, timeout).Should(gomega.BeNil())
 	})
 
-	log.Info("Running test: Deleted constraint templates not enforced")
+	logger.Info("Running test: Deleted constraint templates not enforced")
 	t.Run("Deleted constraint templates not enforced", func(t *testing.T) {
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -395,7 +390,7 @@ violation[{"msg": "denied!"}] {
 
 // Tests that expectations for constraints are canceled if the corresponding constraint is deleted.
 func TestReconcile_DeleteConstraintResources(t *testing.T) {
-	log.Info("Running test: Cancel the expectations when constraint gets deleted")
+	logger.Info("Running test: Cancel the expectations when constraint gets deleted")
 
 	g := gomega.NewGomegaWithT(t)
 
@@ -405,7 +400,7 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	// start manager that will start tracker and controller
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	mgrStopped := StartTestManager(ctx, t, mgr)
 	once := sync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -444,7 +439,7 @@ violation[{"msg": "denied!"}] {
 	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, instance))).To(gomega.BeNil()) }()
+	t.Cleanup(testcleanups.DeleteObject(t, c, instance))
 
 	gvk := schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
@@ -648,32 +643,24 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 
 func deleteObject(ctx context.Context, c client.Client, obj client.Object, timeout time.Duration) error {
 	err := c.Delete(ctx, obj)
-	if err != nil {
-		if errors2.IsNotFound(err) {
-			return nil
-		}
+	if apierrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 
-	err = wait.Poll(time.Second, timeout, func() (bool, error) {
+	err = wait.Poll(10*time.Millisecond, timeout, func() (bool, error) {
 		// Get the object name
 		name := client.ObjectKeyFromObject(obj)
-		err := c.Get(ctx, name, obj)
-		if err != nil {
-			if errors2.IsGone(err) || errors2.IsNotFound(err) {
+		err2 := c.Get(ctx, name, obj)
+		if err2 != nil {
+			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
 				return true, nil
 			}
-			return false, err
+			return false, err2
 		}
-		return false, err
+		return false, err2
 	})
-	return err
-}
-
-func ignoreNotFound(err error) error {
-	if err != nil && errors2.IsNotFound(err) {
-		return nil
-	}
 	return err
 }
 

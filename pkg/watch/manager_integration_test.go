@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ import (
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -108,7 +109,7 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 	mgr, wm := setupManager(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -138,7 +139,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	ctrl.SetLogger(logf.NullLogger{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -228,7 +229,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -305,7 +306,7 @@ func Test_Registrar_Replay(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	setupController := func(name string, gvk schema.GroupVersionKind) <-chan reconcile.Request {

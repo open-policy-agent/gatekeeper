@@ -17,6 +17,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	gosync "sync"
 	"testing"
@@ -61,7 +62,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) manager.Manager {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -128,12 +129,8 @@ func TestReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		err = os.Unsetenv("POD_NAME")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+
+	t.Cleanup(testcleanups.UnsetEnv(t, "POD_NAME"))
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
@@ -155,7 +152,7 @@ func TestReconcile(t *testing.T) {
 	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	mgrStopped := StartTestManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {

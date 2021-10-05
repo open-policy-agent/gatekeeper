@@ -320,7 +320,15 @@ type fakeEvents struct {
 	channel chan event.GenericEvent
 
 	wg     sync.WaitGroup
+
+	eventsMtx sync.Mutex
 	events mutationschema.IDSet
+}
+
+func (e *fakeEvents) add(id mutationtypes.ID) {
+	e.eventsMtx.Lock()
+	e.events[id] = true
+	e.eventsMtx.Unlock()
 }
 
 func newFakeEvents() *fakeEvents {
@@ -332,7 +340,7 @@ func newFakeEvents() *fakeEvents {
 	result.wg.Add(1)
 	go func() {
 		for e := range result.channel {
-			result.events[mutationtypes.MakeID(e.Object)] = true
+			result.add(mutationtypes.MakeID(e.Object))
 		}
 		result.wg.Done()
 	}()
