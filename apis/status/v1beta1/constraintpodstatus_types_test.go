@@ -1,10 +1,11 @@
 package v1beta1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	. "github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -27,7 +28,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Cleanup(testcleanups.UnsetEnv(t, "POD_NAMESPACE"))
+	t.Cleanup(testutils.UnsetEnv(t, "POD_NAMESPACE"))
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())

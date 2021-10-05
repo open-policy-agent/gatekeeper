@@ -17,7 +17,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"sort"
 	gosync "sync"
 	"testing"
@@ -67,7 +66,7 @@ const timeout = time.Second * 20
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -149,16 +148,26 @@ func TestReconcile(t *testing.T) {
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}
 
-	t.Cleanup(cancelFunc)
-	t.Cleanup(mgrStopped.Wait)
+	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, instance))
+	defer func() {
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 	gvks := wm.GetManagedGVK()
@@ -214,6 +223,7 @@ func TestReconcile(t *testing.T) {
 	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
 
+	testMgrStopped()
 	cs.Stop()
 }
 
@@ -247,7 +257,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, instance))
+	defer func() {
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 
 	// create the pod that is a sync only resource in config obj
 	pod := fakes.Pod(
@@ -278,11 +292,14 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// start manager that will start tracker and controller
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
-
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	defer func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}()
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
 	// get the object tracker for the synconly pod resource
@@ -377,7 +394,7 @@ func TestConfig_CacheContents(t *testing.T) {
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -419,8 +436,12 @@ func TestConfig_CacheContents(t *testing.T) {
 	err = c.Create(ctx, cm2)
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-2")
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, cm))
-	t.Cleanup(testcleanups.DeleteObject(t, c, cm2))
+	defer func() {
+		err = c.Delete(ctx, cm)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, cm2)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}()
 
 	expected := map[opaKey]interface{}{
 		{gvk: nsGVK, key: "default"}:                      nil,
@@ -531,7 +552,7 @@ func TestConfig_Retries(t *testing.T) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
+	mgrStopped := StartTestManager(ctx, mgr, g)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
@@ -548,7 +569,13 @@ func TestConfig_Retries(t *testing.T) {
 		return c.Create(ctx, instance.DeepCopy())
 	}, timeout).Should(gomega.BeNil())
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, instance))
+	defer func() {
+		ctx := context.Background()
+		err = c.Delete(ctx, instance)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 
 	// Create a configMap to test for
 	cm := unstructuredFor(configMapGVK, "config-test-1")
@@ -558,7 +585,12 @@ func TestConfig_Retries(t *testing.T) {
 		t.Fatal("creating configMap config-test-1:", err)
 	}
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, cm))
+	defer func() {
+		err = c.Delete(ctx, cm)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 
 	expected := map[opaKey]interface{}{
 		{gvk: configMapGVK, key: "default/config-test-1"}: nil,

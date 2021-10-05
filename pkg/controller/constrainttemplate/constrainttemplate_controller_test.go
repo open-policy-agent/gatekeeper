@@ -19,12 +19,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -69,7 +70,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -320,7 +321,7 @@ violation[{"msg": "denied!"}] {
 		err = c.Create(ctx, instanceInvalidRego)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
-		t.Cleanup(testcleanups.DeleteObject(t, c, instanceInvalidRego))
+		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
 		g.Eventually(func() error {
 			ct := &v1beta1.ConstraintTemplate{}
@@ -439,7 +440,7 @@ violation[{"msg": "denied!"}] {
 	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
-	t.Cleanup(testcleanups.DeleteObject(t, c, instance))
+	t.Cleanup(testutils.DeleteObject(t, c, instance))
 
 	gvk := schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",

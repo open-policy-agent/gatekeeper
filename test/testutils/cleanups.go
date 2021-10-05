@@ -1,11 +1,14 @@
-package testcleanups
+package testutils
 
 import (
 	"context"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sync"
 	"testing"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 func UnsetEnv(t *testing.T, key string) func() {
@@ -22,7 +25,7 @@ func UnsetEnv(t *testing.T, key string) func() {
 // Fails the test if calling Delete() returns an error other than NotFound.
 func DeleteObject(t *testing.T, c client.Client, obj client.Object) func() {
 	// We don't want this cleanup method to rely on any context passed by the caller. For example, the caller may have
-	// cancelled their context as part of their test.
+	// canceled their context as part of their test.
 	ctx := context.Background()
 
 	objCopy := obj.DeepCopyObject()
@@ -40,4 +43,26 @@ func DeleteObject(t *testing.T, c client.Client, obj client.Object) func() {
 				obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
+}
+
+func StartManager(ctx context.Context, t *testing.T, mgr manager.Manager) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	mgrStopped := &sync.WaitGroup{}
+	mgrStopped.Add(1)
+
+	var err error
+	go func() {
+		defer mgrStopped.Done()
+		err = mgr.Start(ctx)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+
+		mgrStopped.Wait()
+		if err != nil {
+			t.Errorf("running Manager: %v", err)
+		}
+	})
 }

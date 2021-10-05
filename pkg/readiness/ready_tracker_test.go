@@ -18,12 +18,13 @@ package readiness_test
 import (
 	"context"
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
-	"k8s.io/utils/pointer"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
+	"k8s.io/utils/pointer"
 
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
@@ -47,7 +48,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -59,7 +59,7 @@ import (
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	logger := zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
@@ -68,6 +68,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: logger,
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -142,8 +143,6 @@ func setupController(
 }
 
 func Test_AssignMetadata(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	t.Cleanup(func() {
 		mutation.MutationEnabled = pointer.BoolPtr(false)
 	})
@@ -158,7 +157,9 @@ func Test_AssignMetadata(t *testing.T) {
 
 	// Apply fixtures *before* the controllers are setup.
 	err = applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -170,12 +171,10 @@ func Test_AssignMetadata(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
-	t.Cleanup(mgrStopped.Wait)
-	t.Cleanup(cancelFunc)
-
+	g := gomega.NewWithT(t)
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -186,7 +185,10 @@ func Test_AssignMetadata(t *testing.T) {
 	for _, am := range testAssignMetadata {
 		id := mutationtypes.MakeID(am)
 		expectedMutator := mutationSystem.Get(id)
-		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+
+		if expectedMutator == nil {
+			t.Errorf("got Get(%v) = nil, want non-nil", id)
+		}
 	}
 }
 
@@ -318,7 +320,7 @@ func Test_Provider(t *testing.T) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	mgrStopped := StartTestManager(ctx, t, mgr)
 	defer func() {
 		cancelFunc()
 		mgrStopped.Wait()

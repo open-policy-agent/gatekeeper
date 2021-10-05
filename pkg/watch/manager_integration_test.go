@@ -19,10 +19,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -59,7 +60,7 @@ import (
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",

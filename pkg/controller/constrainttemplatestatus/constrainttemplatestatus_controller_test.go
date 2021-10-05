@@ -3,11 +3,12 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -15,7 +16,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,7 +43,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		NewCache:           dynamiccache.New,
@@ -183,7 +183,7 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 
-		t.Cleanup(testcleanups.DeleteObject(t, c, fakeTStatus))
+		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
@@ -198,8 +198,7 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 
-
-		t.Cleanup(testcleanups.DeleteObject(t, c, fakeCStatus))
+		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		g.Expect(c.Delete(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
@@ -240,14 +239,14 @@ violation[{"msg": "denied!"}] {
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 
-		t.Cleanup(testcleanups.DeleteObject(t, c, fakeTStatus))
+		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 
-		t.Cleanup(testcleanups.DeleteObject(t, c, fakeCStatus))
+		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
@@ -311,16 +310,6 @@ func verifyCByPodStatusCount(ctx context.Context, c client.Client, expected int)
 		}
 		return nil
 	}
-}
-
-func ignoreNotFound(err error) error {
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 func newDenyAllConstraint() *unstructured.Unstructured {

@@ -319,10 +319,10 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 type fakeEvents struct {
 	channel chan event.GenericEvent
 
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 
 	eventsMtx sync.Mutex
-	events mutationschema.IDSet
+	events    mutationschema.IDSet
 }
 
 func (e *fakeEvents) add(id mutationtypes.ID) {

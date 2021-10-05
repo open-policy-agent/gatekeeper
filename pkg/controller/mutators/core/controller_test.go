@@ -17,11 +17,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/open-policy-agent/gatekeeper/test/testcleanups"
 	"os"
 	gosync "sync"
 	"testing"
 	"time"
+
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -62,7 +63,7 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) manager.Manager {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testcleanups.NewTestWriter(t))))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -130,7 +131,7 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Cleanup(testcleanups.UnsetEnv(t, "POD_NAME"))
+	t.Cleanup(testutils.UnsetEnv(t, "POD_NAME"))
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -75,24 +76,14 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan 
 	return fn, requests
 }
 
-// StartTestManager starts mgr. Returns a WaitGroup which completes after mgr is stopped.
-func StartTestManager(ctx context.Context, t *testing.T, mgr manager.Manager) *sync.WaitGroup {
+// StartTestManager adds recFn.
+func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-
-	var err error
 	go func() {
 		defer wg.Done()
-		err = mgr.Start(ctx)
+		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
 	}()
-
-	t.Cleanup(func() {
-		wg.Wait()
-		if err != nil {
-			t.Error("running Manager", err)
-		}
-	})
-
 	return wg
 }
 
