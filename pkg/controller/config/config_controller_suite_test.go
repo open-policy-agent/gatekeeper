@@ -20,8 +20,10 @@ import (
 	stdlog "log"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -29,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -71,6 +74,17 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan 
 		return result, err
 	})
 	return fn, requests
+}
+
+// StartTestManager adds recFn.
+func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
+	}()
+	return wg
 }
 
 // Bootstrap the gatekeeper-system namespace for use in tests.

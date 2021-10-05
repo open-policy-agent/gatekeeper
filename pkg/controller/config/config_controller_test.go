@@ -18,10 +18,9 @@ package config
 import (
 	"fmt"
 	"sort"
+	gosync "sync"
 	"testing"
 	"time"
-
-	"github.com/open-policy-agent/gatekeeper/test/testutils"
 
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -45,10 +44,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -65,6 +66,7 @@ const timeout = time.Second * 20
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -72,7 +74,6 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
-		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -146,8 +147,17 @@ func TestReconcile(t *testing.T) {
 	recFn, requests := SetupTestReconcile(rec)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
-	ctx := context.Background()
-	testutils.StartManager(ctx, t, mgr)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}
+
+	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
@@ -171,8 +181,8 @@ func TestReconcile(t *testing.T) {
 	}))
 
 	ns := &unstructured.Unstructured{}
-	ns.SetName("reconcile-test-ns")
-	nsGvk := corev1.SchemeGroupVersion.WithKind("Namespace")
+	ns.SetName("testns")
+	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 	ns.SetGroupVersionKind(nsGvk)
 	g.Expect(c.Create(ctx, ns)).NotTo(gomega.HaveOccurred())
 
@@ -212,6 +222,9 @@ func TestReconcile(t *testing.T) {
 	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
 	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
 	g.Expect(err).To(gomega.BeNil())
+
+	testMgrStopped()
+	cs.Stop()
 }
 
 // tests that expectations for sync only resource gets canceled when it gets deleted.
@@ -278,10 +291,15 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// start manager that will start tracker and controller
-
-	ctx = context.Background()
-	testutils.StartManager(ctx, t, mgr)
-
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	defer func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}()
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 
 	// get the object tracker for the synconly pod resource
@@ -375,8 +393,20 @@ func TestConfig_CacheContents(t *testing.T) {
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
 
-	ctx := context.Background()
-	testutils.StartManager(ctx, t, mgr)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}
+
+	defer testMgrStopped()
+
+	// Create the Config object and expect the Reconcile to be created
+	ctx = context.Background()
 
 	instance = configFor([]schema.GroupVersionKind{nsGVK, configMapGVK})
 
@@ -521,8 +551,17 @@ func TestConfig_Retries(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	testutils.StartManager(ctx, t, mgr)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	once := gosync.Once{}
+	testMgrStopped := func() {
+		once.Do(func() {
+			cancelFunc()
+			mgrStopped.Wait()
+		})
+	}
+
+	defer testMgrStopped()
 
 	// Create the Config object and expect the Reconcile to be created
 	ctx = context.Background()

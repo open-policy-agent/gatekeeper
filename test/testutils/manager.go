@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// StartManager
+// StartManager starts mgr. Registers a cleanup function to stop the manager at the completion of the test.
 func StartManager(ctx context.Context, t *testing.T, mgr manager.Manager) {
 	ctx, cancel := context.WithCancel(ctx)
 

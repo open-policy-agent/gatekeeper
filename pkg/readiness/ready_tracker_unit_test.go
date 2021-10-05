@@ -90,7 +90,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 		cancel()
 		runWg.Wait()
 		if runErr != nil {
-			t.Errorf("Tracker Run() failed with error: %v", runErr)
+			t.Errorf("got Tracker.Run() error: %v, want %v", runErr, nil)
 		}
 	})
 
