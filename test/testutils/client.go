@@ -2,37 +2,31 @@ package testutils
 
 import (
 	"context"
-	"os"
-	"sync"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-)
 
-func UnsetEnv(t *testing.T, key string) func() {
-	return func() {
-		err := os.Unsetenv(key)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
 // DeleteObject deletes obj from c.
 // Succeeds on success or if obj already did not exist in c.
 // Fails the test if calling Delete() returns an error other than NotFound.
-func DeleteObject(t *testing.T, c client.Client, obj client.Object) func() {
+//
+// Does not ensure the object is actually deleted, just sends a delete request via the passed Client.
+// See #1596 for why this is non-trivial.
+//
+// Tests should not rely on objects being deleted from the API Server which were used in other tests; they should
+// instead use unique object names and namespaces to eliminate cross-talk.
+func DeleteObject(t *testing.T, c client.Client, original client.Object) func() {
 	// We don't want this cleanup method to rely on any context passed by the caller. For example, the caller may have
 	// canceled their context as part of their test.
 	ctx := context.Background()
 
-	objCopy := obj.DeepCopyObject()
+	objCopy := original.DeepCopyObject()
 	obj, ok := objCopy.(client.Object)
 	if !ok {
-		t.Fatalf("got obj.DeepCopyObject() type %T, want %T",
-			objCopy, client.Object(nil))
+		t.Fatalf("got DeepCopyObject(%T) = %T, which is not a client.Object", original, objCopy)
 	}
 
 	return func() {
@@ -43,26 +37,4 @@ func DeleteObject(t *testing.T, c client.Client, obj client.Object) func() {
 				obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
-}
-
-func StartManager(ctx context.Context, t *testing.T, mgr manager.Manager) {
-	ctx, cancel := context.WithCancel(ctx)
-
-	mgrStopped := &sync.WaitGroup{}
-	mgrStopped.Add(1)
-
-	var err error
-	go func() {
-		defer mgrStopped.Done()
-		err = mgr.Start(ctx)
-	}()
-
-	t.Cleanup(func() {
-		cancel()
-
-		mgrStopped.Wait()
-		if err != nil {
-			t.Errorf("running Manager: %v", err)
-		}
-	})
 }

@@ -1,7 +1,6 @@
 package v1beta1
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -23,12 +22,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	podNS := "a-gk-namespace"
 	cstrName := "a-constraint"
 	cstrKind := "AConstraintKind"
-	err := os.Setenv("POD_NAMESPACE", podNS)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(testutils.UnsetEnv(t, "POD_NAMESPACE"))
+	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())

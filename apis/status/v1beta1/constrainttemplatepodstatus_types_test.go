@@ -1,7 +1,6 @@
 package v1beta1
 
 import (
-	"os"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -20,12 +19,7 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	podNS := "a-gk-namespace"
 	templateName := "a-template"
 
-	err := os.Setenv("POD_NAMESPACE", podNS)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(testutils.UnsetEnv(t, "POD_NAMESPACE"))
+	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
 	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())

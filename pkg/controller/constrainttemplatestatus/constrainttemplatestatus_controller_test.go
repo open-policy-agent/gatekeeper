@@ -3,7 +3,6 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -22,10 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -43,13 +40,13 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		NewCache:           dynamiccache.New,
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -122,10 +119,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	err = os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)

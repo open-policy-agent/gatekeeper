@@ -6,12 +6,18 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/go-logr/logr"
+
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+func NewLogger(t *testing.T) logr.Logger {
+	return zap.New(zap.UseDevMode(true), zap.WriteTo(NewTestWriter(t)))
+}
 
 type Writer struct {
 	t *testing.T
-
-	mtx sync.Mutex
 
 	// stopped tracks whether the test has ended. In this case, further attempts to write log messages will fail and
 	// cause flaky panics in unrelated tests. We expect managers to send log messages even after shutting down as there
@@ -40,16 +46,17 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	w.stoppedMtx.RLock()
 	stopped := w.stopped
 	w.stoppedMtx.RUnlock()
+
 	if stopped {
+		// The test has completed and we shouldn't log anything else to the test runner.
 		return 0, os.ErrClosed
 	}
 
 	pstr := string(p)
 	pstr = strings.TrimSpace(pstr)
 
-	w.mtx.Lock()
+	// t.Log is threadsafe.
 	w.t.Log(pstr)
-	w.mtx.Unlock()
 
 	return len(p), nil
 }

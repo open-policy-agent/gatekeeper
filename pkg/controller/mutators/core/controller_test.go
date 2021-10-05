@@ -17,7 +17,6 @@ package core
 
 import (
 	"fmt"
-	"os"
 	gosync "sync"
 	"testing"
 	"time"
@@ -48,11 +47,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
@@ -63,13 +60,13 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) manager.Manager {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t))))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -126,12 +123,7 @@ func TestReconcile(t *testing.T) {
 
 	tracker, err := readiness.SetupTracker(mgr, true, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	err = os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(testutils.UnsetEnv(t, "POD_NAME"))
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
