@@ -173,9 +173,9 @@ violation[{"msg": "denied!"}] {
 		crd := &apiextensionsv1.CustomResourceDefinition{}
 		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
 
-		g.Expect(deleteObject(ctx, c, cstr, timeout)).To(gomega.BeNil())
-		g.Expect(deleteObject(ctx, c, crd, timeout)).To(gomega.BeNil())
-		g.Expect(deleteObject(ctx, c, instance, timeout)).To(gomega.BeNil())
+		g.Expect(deleteObjectAndConfirm(ctx, c, cstr, timeout)).To(gomega.BeNil())
+		g.Expect(deleteObjectAndConfirm(ctx, c, crd, timeout)).To(gomega.BeNil())
+		g.Expect(deleteObjectAndConfirm(ctx, c, instance, timeout)).To(gomega.BeNil())
 	})
 
 	logger.Info("Running test: CRD Gets Created")
@@ -620,7 +620,9 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 	return nil
 }
 
-func deleteObject(ctx context.Context, c client.Client, obj client.Object, timeout time.Duration) error {
+func deleteObjectAndConfirm(ctx context.Context, c client.Client, obj client.Object, timeout time.Duration) error {
+	key := client.ObjectKeyFromObject(obj)
+
 	err := c.Delete(ctx, obj)
 	if apierrors.IsNotFound(err) {
 		return nil
@@ -630,8 +632,7 @@ func deleteObject(ctx context.Context, c client.Client, obj client.Object, timeo
 
 	err = wait.Poll(10*time.Millisecond, timeout, func() (bool, error) {
 		// Get the object name
-		name := client.ObjectKeyFromObject(obj)
-		err2 := c.Get(ctx, name, obj)
+		err2 := c.Get(ctx, key, obj)
 		if err2 != nil {
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
 				return true, nil

@@ -47,7 +47,7 @@ type objectOrErr struct {
 
 func orObject(obj client.Object) *objectOrErr {
 	return &objectOrErr{
-		key:    client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()},
+		key:    client.ObjectKeyFromObject(obj),
 		object: obj,
 		errs:   nil,
 	}
