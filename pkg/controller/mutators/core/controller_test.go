@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/test/testutils"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/gomega"
@@ -35,6 +33,7 @@ import (
 	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"

@@ -4,11 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/test/testutils"
-
 	. "github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
