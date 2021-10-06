@@ -47,6 +47,6 @@ func Test_SyncBool(t *testing.T) {
 
 	if !b.Get() {
 		// Sanity check that our wait.Poll actually waited for b to be set to true.
-		t.Errorf("channel closed but b.Get() was false")
+		t.Errorf("wait.Poll succeeded but b.Get() was false")
 	}
 }
