@@ -3,7 +3,30 @@ id: audit
 title: Audit
 ---
 
-The audit functionality enables periodic evaluations of replicated resources against the policies enforced in the cluster to detect pre-existing misconfigurations. Audit results are stored as violations listed in the `status` field of the failed constraint and logged to stdout of the audit pod.
+Audit performs periodic evaluations of existing resources against constraints, detecting pre-existing misconfigurations.
+
+## Reading Audit Results
+
+There are three ways to gather audit results, depending on the level of detail needed.
+
+### Prometheus Metrics
+
+Prometheus metrics provide an aggregated look at the number of audit violations:
+
+* `gatekeeper_audit_last_run_time` provides the timestamp of the most recently completed audit run
+* `gatekeeper_violations` provides the total number of audited violations for the last audit run, broken down by violation severity
+
+### Constraint Status
+
+Violations of constraints are listed in the `status` field of the corresponding constraint.
+Note that only violations from the most recent audit run are reported. Also note that there
+is a maximum number of individual violations that will be reported on the constraint
+itself. If the number of current violations is greater than this cap, the excess violations
+will not be reported (though they will still be included in the `totalViolations` count).
+This is because Kubernetes has a cap on how large individual API objects can grow, which makes
+unbounded growth a bad idea. This limit can be configured via the `--constraint-violations-limit` flag.
+
+Here is an example of a constraint with violations:
 
 ```yaml
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -39,59 +62,6 @@ status:
     name: kube-system
 ```
 
-## Configuring Audit
-
-- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
-- Audit chunk size: set `--audit-chunk-size=500` (defaults to `0` = infinite) to limit memory consumption of the auditing `Pod`
-- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
-
-By default, the audit will request each resource from the Kubernetes API during each cycle of the audit. To instead rely on the OPA cache, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
-
-### Audit using kinds specified in the constraints only
-
-By default, Gatekeeper will audit all resources in the cluster. This operation can take some time depending on the number of resources.
-
-If all of your constraints match against specific kinds (e.g. "match only pods"), then you can speed up audit runs by setting `--audit-match-kind-only=true` flag. This will only check resources of the kinds specified in all [constraints](howto.md#constraints) defined in the cluster.
-
-For example, defining this constraint will only audit `Pod` kind:
-
-```yaml
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sAllowedRepos
-metadata:
-  name: prod-repo-is-openpolicyagent
-spec:
-  match:
-    kinds:
-      - apiGroups: [""]
-        kinds: ["Pod"]
-...
-```
-
-If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
-
-## Reading Audit Results
-
-There are three ways to gather audit results, depending on the level of detail needed.
-
-### Prometheus Metrics
-
-Prometheus metrics provide an aggregated look at the number of audit violations:
-
-* `gatekeeper_audit_last_run_time` provides the timestamp of the most recently completed audit run
-* `gatekeeper_violations` provides the total number of audited violations for the last audit run, broken down by violation severity
-
-### Constraint Status
-
-Per the top of this page, the constraint status provides details on violations of a specific constraint.
-Note that only violations from the most recent audit run are reported.
-
-Also note that there is a maximum number of individual violations that will be reported on the constraint
-itself, if the number of current violations is greater than this cap, the excess violations
-will not be reported (though they will still be included in the `totalViolations` count).
-This is because Kubernetes has a cap on how large individual API objects can grow, which makes
-unbounded growth a bad idea. This limit can be configured via the `--constraint-violations-limit` flag.
-
 ### Audit Logs
 
 #### Violations
@@ -121,7 +91,7 @@ The audit pod emits JSON-formatted audit logs to stdout. The following is an exa
 }
 ```
 
-In addition to information on the violated constraint, violating resource and violation message, the
+In addition to information on the violated constraint, violating resource, and violation message, the
 audit log entries also contain:
 
 * An `audit_id` field that uniquely identifies a given audit run. This allows indexing of historical audits
@@ -136,3 +106,34 @@ In addition to violations, these other audit events may be useful (all uniquely 
 * `audit_finished` marks the end of the current audit run
 
 All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
+
+## Configuring Audit
+
+- Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
+- Audit chunk size: set `--audit-chunk-size=500` (defaults to `0` = infinite) to limit memory consumption of the auditing `Pod`
+- Audit interval: set `--audit-interval=123` (defaults to every `60` seconds). Disable audit interval by setting `--audit-interval=0`
+
+By default, audit will request each resource from the Kubernetes API during each audit cycle. To rely on the OPA cache instead, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
+
+### Audit using kinds specified in the constraints only
+
+By default, Gatekeeper will audit all resources in the cluster. This operation can take some time depending on the number of resources.
+
+If all of your constraints match against specific kinds (e.g. "match only pods"), then you can speed up audit runs by setting `--audit-match-kind-only=true` flag. This will only check resources of the kinds specified in all [constraints](howto.md#constraints) defined in the cluster.
+
+For example, defining this constraint will only audit `Pod` kind:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: prod-repo-is-openpolicyagent
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+...
+```
+
+If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
