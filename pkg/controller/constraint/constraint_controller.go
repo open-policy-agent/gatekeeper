@@ -135,8 +135,6 @@ func newReconciler(
 		reporter:         reporter,
 		constraintsCache: constraintsCache,
 		tracker:          tracker,
-
-		podOwnershipMode: constraintstatusv1beta1.GetPodOwnershipMode(),
 	}
 	r.getPod = r.defaultGetPod
 	// default
@@ -194,8 +192,6 @@ type ReconcileConstraint struct {
 	// assumeDeleted allows us to short-circuit get requests
 	// that would otherwise trigger a watch
 	assumeDeleted func(schema.GroupVersionKind) bool
-
-	podOwnershipMode constraintstatusv1beta1.PodOwnershipMode
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -360,7 +356,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	if err != nil {
 		return nil, err
 	}
-	statusObj, err = constraintstatusv1beta1.NewConstraintStatusForPod(pod, r.podOwnershipMode, constraint, r.scheme)
+	statusObj, err = constraintstatusv1beta1.NewConstraintStatusForPod(pod, constraint, r.scheme)
 	if err != nil {
 		return nil, err
 	}

@@ -32,8 +32,7 @@ spec:
         - name: kubectl-label
           image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
           imagePullPolicy: {{ .Values.postInstall.labelNamespace.image.pullPolicy }}
-          command:
-            - kubectl
+          args:
             - label
             - ns
             - {{ .Release.Namespace }}

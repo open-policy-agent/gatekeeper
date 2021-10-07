@@ -3,38 +3,7 @@ package v1beta1
 import (
 	"fmt"
 	"strings"
-	"sync"
 )
-
-type PodOwnershipMode bool
-
-const (
-	// PodOwnershipDisabled indicates that owner references should not be put on
-	// dependent resources.
-	PodOwnershipDisabled PodOwnershipMode = false
-	// PodOwnershipEnabled indicates that owner references should be put on
-	// dependent resources.
-	PodOwnershipEnabled PodOwnershipMode = true
-)
-
-var (
-	podOwnershipMode = PodOwnershipEnabled
-	ownerMutex       = sync.RWMutex{}
-)
-
-// DisablePodOwnership disables setting the owner reference for Status resource.
-// This should only be used for testing, where a Pod resource may not be available.
-func DisablePodOwnership() {
-	ownerMutex.Lock()
-	defer ownerMutex.Unlock()
-	podOwnershipMode = PodOwnershipDisabled
-}
-
-func GetPodOwnershipMode() PodOwnershipMode {
-	ownerMutex.RLock()
-	defer ownerMutex.RUnlock()
-	return podOwnershipMode == PodOwnershipEnabled
-}
 
 // dashExtractor unpacks the status resource name, unescaping `-`.
 func dashExtractor(val string) []string {
@@ -84,7 +53,7 @@ func dashPacker(vals ...string) (string, error) {
 			return "", fmt.Errorf("dashPacker cannot pack strings that begin or end with a dash: %+v", vals)
 		}
 		if len(val) == 0 {
-			return "", fmt.Errorf("dashPacker cannot pack empty strings")
+			return "", fmt.Errorf("dashPacker cannot pack empty strings: %v", vals)
 		}
 		if i != 0 {
 			b.WriteString("-")
