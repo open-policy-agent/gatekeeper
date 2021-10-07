@@ -38,7 +38,7 @@ func (in *Anything) DeepCopy() *Anything {
 }
 
 func (in *Anything) DeepCopyInto(out *Anything) {
-	*in = *out
+	*out = *in
 
 	if in.Value != nil {
 		out.Value = runtime.DeepCopyJSONValue(in.Value)

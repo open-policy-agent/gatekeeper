@@ -8,6 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+var (
+	ErrInvalidAssignField  = errors.New("invalid assign field")
+	ErrInvalidFromMetadata = errors.New("invalid fromMetadata field")
+)
+
 type Field string
 
 const (
@@ -41,12 +46,15 @@ func (a *AssignField) GetValue(metadata types.MetadataGetter) (interface{}, erro
 }
 
 func (a *AssignField) Validate() error {
+	if a == nil {
+		return fmt.Errorf("assign is nil: %w", ErrInvalidAssignField)
+	}
 	if a.Value == nil && a.FromMetadata == nil {
-		return errors.New("assign must have one of `value` or `fromMetadata` set")
+		return fmt.Errorf("assign must set one of `value` or `fromMetadata`: %w", ErrInvalidAssignField)
 	}
 
 	if a.Value != nil && a.FromMetadata != nil {
-		return errors.New("assign must only have one of `value` or `fromMetadata` set")
+		return fmt.Errorf("assign must only set one of `value` or `fromMetadata`: %w", ErrInvalidAssignField)
 	}
 
 	if a.FromMetadata != nil {
@@ -68,13 +76,16 @@ func (fm *FromMetadata) GetValue(obj types.MetadataGetter) (string, error) {
 	case ObjName:
 		return obj.GetName(), nil
 	default:
-		return "", fmt.Errorf("attempted to fetch unknown metadata field %s", fm.Field)
+		return "", fmt.Errorf("attempted to fetch unknown metadata field %s: %w", fm.Field, ErrInvalidFromMetadata)
 	}
 }
 
 func (fm *FromMetadata) Validate() error {
+	if fm == nil {
+		return fmt.Errorf("fromMetadata is nil: %w", ErrInvalidFromMetadata)
+	}
 	if !validFields[fm.Field] {
-		return fmt.Errorf("field %s is not recognized", fm.Field)
+		return fmt.Errorf("field %s is not recognized: %w", fm.Field, ErrInvalidFromMetadata)
 	}
 	return nil
 }

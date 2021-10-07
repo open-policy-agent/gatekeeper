@@ -23,7 +23,7 @@ func newFoo(spec map[string]interface{}) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: data}
 }
 
-func newAssignMetadataMutator(path string, value mutationsv1alpha1.AssignField) *Mutator {
+func newAssignMetadataMutator(t *testing.T, path string, value mutationsv1alpha1.AssignField) *Mutator {
 	m := &mutationsv1alpha1.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Foo",
@@ -34,12 +34,12 @@ func newAssignMetadataMutator(path string, value mutationsv1alpha1.AssignField) 
 
 	m2, err := MutatorForAssignMetadata(m)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return m2
 }
 
-func TestAssign(t *testing.T) {
+func TestAssignMetadata(t *testing.T) {
 	tests := []struct {
 		name  string
 		obj   *unstructured.Unstructured
@@ -64,7 +64,7 @@ func TestAssign(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mutator := newAssignMetadataMutator(test.path, test.value)
+			mutator := newAssignMetadataMutator(t, test.path, test.value)
 			obj := test.obj.DeepCopy()
 			_, err := mutator.Mutate(obj)
 			if err != nil {

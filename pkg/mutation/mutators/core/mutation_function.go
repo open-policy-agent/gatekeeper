@@ -9,6 +9,7 @@ import (
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -71,17 +72,14 @@ func (s *DefaultSetter) SetValue(metadata types.MetadataGetter, obj map[string]i
 
 var _ types.MetadataGetter = &metadata{}
 
-type metadata struct {
-	name      string
-	namespace string
-}
+type metadata client.ObjectKey
 
 func (m *metadata) GetName() string {
-	return m.name
+	return m.Name
 }
 
 func (m *metadata) GetNamespace() string {
-	return m.namespace
+	return m.Namespace
 }
 
 func Mutate(
@@ -97,7 +95,7 @@ func Mutate(
 		path:     path,
 		tester:   tester,
 		setter:   setter,
-		metadata: &metadata{name: obj.GetName(), namespace: obj.GetNamespace()},
+		metadata: &metadata{Name: obj.GetName(), Namespace: obj.GetNamespace()},
 	}
 	if len(path.Nodes) == 0 {
 		return false, errors.New("attempting to mutate an empty target location")

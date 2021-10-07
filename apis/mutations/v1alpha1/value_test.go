@@ -1,23 +1,24 @@
 package v1alpha1
 
 import (
+	"errors"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestValidation(t *testing.T) {
+func TestAssignField_Validate(t *testing.T) {
 	tests := []struct {
-		name        string
-		obj         *AssignField
-		errExpected bool
+		name    string
+		obj     *AssignField
+		wantErr error
 	}{
 		{
 			name: "valid constant",
 			obj: &AssignField{
 				Value: &Anything{Value: "something"},
 			},
-			errExpected: false,
+			wantErr: nil,
 		},
 		{
 			name: "valid metadata: name",
@@ -26,7 +27,7 @@ func TestValidation(t *testing.T) {
 					Field: ObjName,
 				},
 			},
-			errExpected: false,
+			wantErr: nil,
 		},
 		{
 			name: "valid metadata: namespace",
@@ -35,7 +36,7 @@ func TestValidation(t *testing.T) {
 					Field: ObjNamespace,
 				},
 			},
-			errExpected: false,
+			wantErr: nil,
 		},
 		{
 			name: "invalid metadata: fish",
@@ -44,12 +45,12 @@ func TestValidation(t *testing.T) {
 					Field: "fish",
 				},
 			},
-			errExpected: true,
+			wantErr: ErrInvalidFromMetadata,
 		},
 		{
-			name:        "empty object",
-			obj:         &AssignField{},
-			errExpected: true,
+			name:    "empty object",
+			obj:     &AssignField{},
+			wantErr: ErrInvalidAssignField,
 		},
 		{
 			name: "double-defined",
@@ -59,21 +60,20 @@ func TestValidation(t *testing.T) {
 					Field: ObjNamespace,
 				},
 			},
-			errExpected: true,
+			wantErr: ErrInvalidAssignField,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.obj.Validate()
-			hasErr := err != nil
-			if hasErr != tc.errExpected {
-				t.Errorf("err := %v, wanted existence to be %v", err, tc.errExpected)
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err := `%v`, wanted `%v`", err, tc.wantErr)
 			}
 		})
 	}
 }
 
-func TestValueRetrieval(t *testing.T) {
+func TestAssignField_GetValue(t *testing.T) {
 	tests := []struct {
 		name     string
 		objNS    string
