@@ -7,7 +7,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Constraint
 
-- Name: `constraints`
+- Name: `gatekeeper_constraints`
 
     Description: `Current number of known constraints`
 
@@ -21,7 +21,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Constraint Template
 
-- Name: `constraint_templates`
+- Name: `gatekeeper_constraint_templates`
 
     Description: `Number of observed constraint templates`
 
@@ -31,7 +31,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-- Name: `constraint_template_ingestion_count`
+- Name: `gatekeeper_constraint_template_ingestion_count`
 
     Description: `Total number of constraint template ingestion actions`
 
@@ -41,7 +41,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-- Name: `constraint_template_ingestion_duration_seconds`
+- Name: `gatekeeper_constraint_template_ingestion_duration_seconds`
 
     Description: `Distribution of how long it took to ingest a constraint template in seconds`
 
@@ -53,7 +53,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Webhook
 
-- Name: `validation_request_count`
+- Name: `gatekeeper_validation_request_count`
 
     Description: `The number of requests that are routed to validation webhook`
 
@@ -63,7 +63,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-- Name: `validation_request_duration_seconds`
+- Name: `gatekeeper_validation_request_duration_seconds`
 
     Description: `The validation webhook response time in seconds`
 
@@ -73,7 +73,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
-- Name: `mutation_request_count`
+- Name: `gatekeeper_mutation_request_count`
 
     Description: `The number of requests that are routed to mutation webhook`
 
@@ -83,7 +83,7 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Count`
 
-- Name: `mutation_request_duration_seconds`
+- Name: `gatekeeper_mutation_request_duration_seconds`
 
     Description: `The mutation webhook response time in seconds`
 
@@ -95,7 +95,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Audit
 
-- Name: `violations`
+- Name: `gatekeeper_violations`
 
     Description: `Total number of audited violations`
 
@@ -105,13 +105,13 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-- Name: `audit_duration_seconds`
+- Name: `gatekeeper_audit_duration_seconds`
 
     Description: `Latency of audit operation in seconds`
 
     Aggregation: `Distribution`
 
-- Name: `audit_last_run_time`
+- Name: `gatekeeper_audit_last_run_time`
 
     Description: `Timestamp of last audit run time`
 
@@ -119,7 +119,7 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Sync
 
-- Name: `sync`
+- Name: `gatekeeper_sync`
 
     Description: `Total number of resources of each kind being cached`
 
@@ -131,13 +131,13 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
-- Name: `sync_duration_seconds`
+- Name: `gatekeeper_sync_duration_seconds`
 
     Description: `Latency of sync operation in seconds`
 
     Aggregation: `Distribution`
 
-- Name: `sync_last_run_time`
+- Name: `gatekeeper_sync_last_run_time`
 
     Description: `Timestamp of last sync operation`
 
@@ -145,13 +145,13 @@ Below are the list of metrics provided by Gatekeeper:
 
 ## Watch
 
-- Name: `watch_manager_watched_gvk`
+- Name: `gatekeeper_watch_manager_watched_gvk`
 
     Description: `Total number of watched GroupVersionKinds`
 
     Aggregation: `LastValue`
 
-- Name: `watch_manager_intended_watch_gvk`
+- Name: `gatekeeper_watch_manager_intended_watch_gvk`
 
     Description: `Total number of GroupVersionKinds with a registered watch intent`
 

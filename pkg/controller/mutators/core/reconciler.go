@@ -56,19 +56,18 @@ func newReconciler(
 	events chan event.GenericEvent,
 ) *Reconciler {
 	r := &Reconciler{
-		system:           mutationSystem,
-		Client:           mgr.GetClient(),
-		tracker:          tracker,
-		getPod:           getPod,
-		scheme:           mgr.GetScheme(),
-		reporter:         ctrlmutators.NewStatsReporter(),
-		cache:            ctrlmutators.NewMutationCache(),
-		gvk:              mutationsv1alpha1.GroupVersion.WithKind(kind),
-		newMutationObj:   newMutationObj,
-		mutatorFor:       mutatorFor,
-		log:              logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
-		podOwnershipMode: statusv1beta1.GetPodOwnershipMode(),
-		events:           events,
+		system:         mutationSystem,
+		Client:         mgr.GetClient(),
+		tracker:        tracker,
+		getPod:         getPod,
+		scheme:         mgr.GetScheme(),
+		reporter:       ctrlmutators.NewStatsReporter(),
+		cache:          ctrlmutators.NewMutationCache(),
+		gvk:            mutationsv1alpha1.GroupVersion.WithKind(kind),
+		newMutationObj: newMutationObj,
+		mutatorFor:     mutatorFor,
+		log:            logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
+		events:         events,
 	}
 	if getPod == nil {
 		r.getPod = r.defaultGetPod
@@ -92,8 +91,6 @@ type Reconciler struct {
 	log      logr.Logger
 
 	events chan event.GenericEvent
-
-	podOwnershipMode statusv1beta1.PodOwnershipMode
 }
 
 // +kubebuilder:rbac:groups=mutations.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -195,7 +192,7 @@ func (r *Reconciler) getOrCreatePodStatus(ctx context.Context, mutatorID types.I
 		return statusObj, nil
 	}
 
-	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, r.podOwnershipMode, mutatorID, r.scheme)
+	statusObj, err = statusv1beta1.NewMutatorStatusForPod(pod, mutatorID, r.scheme)
 	if err != nil {
 		return nil, err
 	}

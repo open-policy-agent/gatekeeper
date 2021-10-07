@@ -12,7 +12,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -82,7 +82,7 @@ func newFoo(spec map[string]interface{}) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: data}
 }
 
-func newPod(pod *v1.Pod) *unstructured.Unstructured {
+func newPod(pod *corev1.Pod) *unstructured.Unstructured {
 	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 	if err != nil {
 		panic(fmt.Sprintf("converting pod to unstructured: %v", err))
@@ -784,7 +784,7 @@ func TestApplyTo(t *testing.T) {
 	}
 }
 
-var testPod = &v1.Pod{
+var testPod = &corev1.Pod{
 	TypeMeta: metav1.TypeMeta{
 		APIVersion: "v1",
 		Kind:       "Pod",
@@ -794,8 +794,8 @@ var testPod = &v1.Pod{
 		Namespace: "production",
 		Labels:    map[string]string{"owner": "me.agilebank.demo"},
 	},
-	Spec: v1.PodSpec{
-		Containers: []v1.Container{
+	Spec: corev1.PodSpec{
+		Containers: []corev1.Container{
 			{
 				Name:  "opa",
 				Image: "openpolicyagent/opa:0.9.2",
@@ -804,7 +804,7 @@ var testPod = &v1.Pod{
 					"--server",
 					"--addr=localhost:8080",
 				},
-				Ports: []v1.ContainerPort{
+				Ports: []corev1.ContainerPort{
 					{
 						ContainerPort: 8080,
 						Name:          "out-of-scope",
@@ -835,7 +835,7 @@ func TestAssign(t *testing.T) {
 			},
 			obj: newPod(testPod),
 			fn: func(u *unstructured.Unstructured) error {
-				var pod v1.Pod
+				var pod corev1.Pod
 				err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &pod)
 				if err != nil {
 					return err
@@ -867,7 +867,7 @@ func TestAssign(t *testing.T) {
 			},
 			obj: newPod(testPod),
 			fn: func(u *unstructured.Unstructured) error {
-				var pod v1.Pod
+				var pod corev1.Pod
 				err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &pod)
 				if err != nil {
 					return err
@@ -899,7 +899,7 @@ func TestAssign(t *testing.T) {
 			},
 			obj: newPod(testPod),
 			fn: func(u *unstructured.Unstructured) error {
-				var pod v1.Pod
+				var pod corev1.Pod
 				err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &pod)
 				if err != nil {
 					return err
@@ -933,7 +933,7 @@ func TestAssign(t *testing.T) {
 			},
 			obj: newPod(testPod),
 			fn: func(u *unstructured.Unstructured) error {
-				var pod v1.Pod
+				var pod corev1.Pod
 				err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &pod)
 				if err == nil {
 					return errors.New("expected type mismatch when deserializing mutated pod")

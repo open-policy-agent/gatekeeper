@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -183,12 +184,10 @@ func TestMutation(t *testing.T) {
 	}
 	for _, tc := range table {
 		t.Run(tc.name, func(t *testing.T) {
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod",
-					Namespace: "foo",
-				},
-			}
+			pod := fakes.Pod(
+				fakes.WithNamespace("foo"),
+				fakes.WithName("test-pod"),
+			)
 
 			converted, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 			if err != nil {
@@ -472,12 +471,10 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	}
 
 	// Prepare a mutate-able object
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "foo",
-		},
-	}
+	pod := fakes.Pod(
+		fakes.WithNamespace("foo"),
+		fakes.WithName("test-pod"),
+	)
 
 	converted, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
 	if err != nil {

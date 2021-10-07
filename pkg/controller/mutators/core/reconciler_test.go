@@ -14,6 +14,7 @@ import (
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
+	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
@@ -302,12 +303,16 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 		},
 		system: mutation.NewSystem(mutation.SystemOpts{}),
 		getPod: func(ctx context.Context) (*corev1.Pod, error) {
-			return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: "gatekeeper-system"}}, nil
+			return fakes.Pod(
+				fakes.WithNamespace("gatekeeper-system"),
+				fakes.WithName(podName),
+				// These tests do not depend on UID and validating this is annoying.
+				fakes.WithUID(""),
+			), nil
 		},
-		scheme:           s,
-		podOwnershipMode: statusv1beta1.PodOwnershipEnabled,
-		gvk:              mutationsv1alpha1.GroupVersion.WithKind("fake"),
-		events:           events,
+		scheme: s,
+		gvk:    mutationsv1alpha1.GroupVersion.WithKind("fake"),
+		events: events,
 	}
 }
 

@@ -224,6 +224,8 @@ spec:
 `
 
 func TestRunner_Run_Integer(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		template   string
@@ -247,7 +249,12 @@ func TestRunner_Run_Integer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// Required for parallel tests.
+		tc := tc
+
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			ctx := context.Background()
 
 			f := &fstest.MapFS{
@@ -265,17 +272,18 @@ func TestRunner_Run_Integer(t *testing.T) {
 				},
 			}
 
-			runner := Runner{
-				FS:        f,
-				NewClient: NewOPAClient,
+			runner, err := NewRunner(f, NewOPAClient)
+			if err != nil {
+				t.Fatal(err)
 			}
 
 			suite := &Suite{
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
-					Cases: []Case{{
-						Object: "allow.yaml",
+					Cases: []*Case{{
+						Object:     "allow.yaml",
+						Assertions: []Assertion{{Violations: intStrFromInt(0)}},
 					}, {
 						Object:     "disallow.yaml",
 						Assertions: []Assertion{{Violations: intStrFromInt(1)}},
@@ -284,17 +292,18 @@ func TestRunner_Run_Integer(t *testing.T) {
 			}
 
 			result := runner.Run(ctx, &nilFilter{}, "", suite)
-
-			if result.IsFailure() {
-				sb := strings.Builder{}
-				err := PrinterGo{}.PrintSuite(&sb, &result, true)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				t.Log(sb.String())
-				t.Fatal("got failure but want success")
+			if !result.IsFailure() {
+				return
 			}
+
+			sb := strings.Builder{}
+			err = PrinterGo{}.PrintSuite(&sb, &result, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			t.Log(sb.String())
+			t.Fatal("got failure but want success")
 		})
 	}
 }
