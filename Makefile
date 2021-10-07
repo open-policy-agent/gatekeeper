@@ -206,7 +206,7 @@ manifests: __controller-gen
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
 	rm -rf manifest_staging
-	mkdir -p manifest_staging/deploy
+	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
@@ -214,6 +214,11 @@ manifests: __controller-gen
 	docker run --rm -v $(shell pwd):/gatekeeper \
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+	docker run --rm -v $(shell pwd):/gatekeeper \
+	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+	  --load_restrictor LoadRestrictionsNone \
+	  /gatekeeper/config/overlays/mutation -o /gatekeeper/manifest_staging/deploy/experimental/gatekeeper-mutation.yaml
+	@grep -q -v 'enable-mutation' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
@@ -352,12 +357,13 @@ release-manifest:
 	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
 	@sed -i "s/version: .*/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
 	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i "s/tag: .*/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
 	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	export
 	$(MAKE) manifests
 
 promote-staging-manifest:
-	@rm -f deploy/gatekeeper.yaml
+	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
 	@rm -rf charts
 	@cp -r manifest_staging/charts .
