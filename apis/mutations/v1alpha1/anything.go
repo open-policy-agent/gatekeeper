@@ -22,6 +22,9 @@ func (in *Anything) UnmarshalJSON(val []byte) error {
 	return json.Unmarshal(val, &in.Value)
 }
 
+// MarshalJSON should be implemented against a value
+// per http://stackoverflow.com/questions/21390979/custom-marshaljson-never-gets-called-in-go
+// credit to K8s api machinery's RawExtension for finding this.
 func (in Anything) MarshalJSON() ([]byte, error) {
 	if in.Value == nil {
 		return []byte("null"), nil
