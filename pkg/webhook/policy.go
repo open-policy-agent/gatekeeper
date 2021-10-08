@@ -123,7 +123,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	timeStart := time.Now()
 
 	if isGkServiceAccount(req.AdmissionRequest.UserInfo) {
-		return admission.ValidationResponse(true, "Gatekeeper does not self-manage")
+		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
 	if req.AdmissionRequest.Operation == admissionv1.Delete {
@@ -131,7 +131,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		// It is null for DELETE operations in API servers prior to v1.15.0.
 		// https://github.com/kubernetes/website/pull/14671
 		if req.AdmissionRequest.OldObject.Raw == nil {
-			vResp := admission.ValidationResponse(false, "For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
+			vResp := admission.Denied("For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
 			vResp.Result.Code = http.StatusInternalServerError
 			return vResp
 		}
@@ -144,16 +144,13 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
-		vResp := admission.ValidationResponse(false, err.Error())
-		if vResp.Result == nil {
-			vResp.Result = &metav1.Status{}
-		}
+		var code int32
 		if userErr {
-			vResp.Result.Code = http.StatusUnprocessableEntity
+			code = http.StatusUnprocessableEntity
 		} else {
-			vResp.Result.Code = http.StatusInternalServerError
+			code = http.StatusInternalServerError
 		}
-		return vResp
+		return admission.Errored(code, err)
 	}
 
 	requestResponse := unknownResponse
@@ -173,26 +170,21 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 
 	if isExcludedNamespace {
 		requestResponse = allowResponse
-		return admission.ValidationResponse(true, "Namespace is set to be ignored by Gatekeeper config")
+		return admission.Allowed("Namespace is set to be ignored by Gatekeeper config")
 	}
 
 	resp, err := h.reviewRequest(ctx, &req)
 	if err != nil {
 		log.Error(err, "error executing query")
-		vResp := admission.ValidationResponse(false, err.Error())
-		if vResp.Result == nil {
-			vResp.Result = &metav1.Status{}
-		}
-		vResp.Result.Code = http.StatusInternalServerError
 		requestResponse = errorResponse
-		return vResp
+		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	res := resp.Results()
 	denyMsgs, warnMsgs := h.getValidationMessages(res, &req)
 
 	if len(denyMsgs) > 0 {
-		vResp := admission.ValidationResponse(false, strings.Join(denyMsgs, "\n"))
+		vResp := admission.Denied(strings.Join(denyMsgs, "\n"))
 		if vResp.Result == nil {
 			vResp.Result = &metav1.Status{}
 		}
@@ -205,7 +197,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	}
 
 	requestResponse = allowResponse
-	vResp := admission.ValidationResponse(true, "")
+	vResp := admission.Allowed("")
 	if vResp.Result == nil {
 		vResp.Result = &metav1.Status{}
 	}
