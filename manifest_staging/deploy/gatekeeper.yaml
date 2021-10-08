@@ -909,7 +909,8 @@ metadata:
   namespace: gatekeeper-system
 spec:
   ports:
-  - port: 443
+  - name: https-webhook-server
+    port: 443
     targetPort: webhook-server
   selector:
     control-plane: controller-manager
