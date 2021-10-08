@@ -77,10 +77,6 @@ func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
 }
 
-func (m *Mutator) Value(_ types.MetadataGetter) (interface{}, error) {
-	return runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList), nil
-}
-
 func (m *Mutator) HasDiff(mutator types.Mutator) bool {
 	toCheck, ok := mutator.(*Mutator)
 	if !ok { // different types, different
@@ -238,11 +234,11 @@ type setter struct {
 
 func (s setter) KeyedListOkay() bool { return false }
 
-func (s setter) KeyedListValue(_ types.MetadataGetter) (map[string]interface{}, error) {
+func (s setter) KeyedListValue() (map[string]interface{}, error) {
 	panic("modifyset setter does not handle keyed lists")
 }
 
-func (s setter) SetValue(_ types.MetadataGetter, obj map[string]interface{}, key string) error {
+func (s setter) SetValue(obj map[string]interface{}, key string) error {
 	switch s.op {
 	case mutationsv1alpha1.MergeOp:
 		return s.setValueMerge(obj, key)

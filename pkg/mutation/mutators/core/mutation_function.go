@@ -4,16 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
 // Setter tells the mutate function what to do once we have found the
 // node that needs mutating.
@@ -21,7 +17,7 @@ type Setter interface {
 	// SetValue takes the object that needs mutating and the key of the
 	// field on that object that should be mutated. It is up to the
 	// implementor to actually mutate the object.
-	SetValue(metadata types.MetadataGetter, obj map[string]interface{}, key string) error
+	SetValue(obj map[string]interface{}, key string) error
 
 	// KeyedListOkay returns whether this setter can handle keyed lists.
 	// If it can't, an attempt to mutate a keyed-list-type field will
@@ -29,44 +25,35 @@ type Setter interface {
 	KeyedListOkay() bool
 
 	// KeyedListValue is the value that will be assigned to the
-	// targeted keyed list entry. Unline SetValue(), this does
+	// targeted keyed list entry. Unlike SetValue(), this does
 	// not do mutation directly.
-	KeyedListValue(metadata types.MetadataGetter) (map[string]interface{}, error)
+	KeyedListValue() (map[string]interface{}, error)
 }
 
 var _ Setter = &DefaultSetter{}
 
-func NewDefaultSetter(m types.Mutator) *DefaultSetter {
-	return &DefaultSetter{mutator: m}
+func NewDefaultSetter(value interface{}) *DefaultSetter {
+	return &DefaultSetter{value: value}
 }
 
 // DefaultSetter is a setter that merely sets the value at the specified path
 // to the provided value. No special logic, like set merging.
 type DefaultSetter struct {
-	mutator types.Mutator
+	value interface{}
 }
 
 func (s *DefaultSetter) KeyedListOkay() bool { return true }
 
-func (s *DefaultSetter) KeyedListValue(metadata types.MetadataGetter) (map[string]interface{}, error) {
-	value, err := s.mutator.Value(metadata)
-	if err != nil {
-		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
-		return nil, err
-	}
-	valueAsObject, ok := value.(map[string]interface{})
+func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
+	valueAsObject, ok := s.value.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("assign.value for keyed list mutator %s is not an object", s.mutator.ID())
+		return nil, fmt.Errorf("assign.value for keyed list is not an object: %+v", s.value)
 	}
 	return valueAsObject, nil
 }
 
-func (s *DefaultSetter) SetValue(metadata types.MetadataGetter, obj map[string]interface{}, key string) error {
-	value, err := s.mutator.Value(metadata)
-	if err != nil {
-		return err
-	}
-	obj[key] = value
+func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
+	obj[key] = s.value
 	return nil
 }
 
@@ -136,7 +123,7 @@ func (s *mutatorState) mutateInternal(current interface{}, depth int) (bool, int
 		}
 		// we have hit the end of our path, this is the base case
 		if len(s.path.Nodes)-1 == depth {
-			if err := s.setter.SetValue(s.metadata, currentAsObject, castPathEntry.Reference); err != nil {
+			if err := s.setter.SetValue(currentAsObject, castPathEntry.Reference); err != nil {
 				return false, nil, err
 			}
 			return true, currentAsObject, nil
@@ -230,7 +217,7 @@ func (s *mutatorState) setListElementToValue(currentAsList []interface{}, listPa
 		return false, nil, fmt.Errorf("last path entry can not be globbed")
 	}
 
-	newValueAsObject, err := s.setter.KeyedListValue(s.metadata)
+	newValueAsObject, err := s.setter.KeyedListValue()
 	if err != nil {
 		return false, nil, err
 	}

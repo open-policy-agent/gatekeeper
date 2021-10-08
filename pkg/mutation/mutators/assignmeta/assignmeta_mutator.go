@@ -69,7 +69,11 @@ func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	// function instead of using a generic function. AssignMetadata only ever
 	// mutates metadata.annotations or metadata.labels, and we spend ~70% of
 	// compute covering cases that aren't valid for this Mutator.
-	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(m), obj)
+	value, err := m.assignMetadata.Spec.Parameters.Assign.GetValue(obj)
+	if err != nil {
+		return false, err
+	}
+	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(value), obj)
 }
 
 func (m *Mutator) ID() types.ID {
@@ -107,10 +111,6 @@ func (m *Mutator) DeepCopy() types.Mutator {
 	return res
 }
 
-func (m *Mutator) Value(metadata types.MetadataGetter) (interface{}, error) {
-	return m.assignMetadata.Spec.Parameters.Assign.GetValue(metadata)
-}
-
 func (m *Mutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
 }
@@ -132,7 +132,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*Mu
 
 	if potentialValue.Value != nil {
 		if _, ok := potentialValue.Value.Value.(string); !ok {
-			return nil, errors.New("spec.parameters.assign.value field must be a string for AssignMetadata " + assignMeta.GetName())
+			return nil, fmt.Errorf("spec.parameters.assign.value field must be a string for AssignMetadata %q", assignMeta.GetName())
 		}
 	}
 

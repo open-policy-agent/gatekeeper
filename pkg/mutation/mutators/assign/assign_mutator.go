@@ -57,7 +57,11 @@ func (m *Mutator) TerminalType() parser.NodeType {
 }
 
 func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	return core.Mutate(m.Path(), m.tester, core.NewDefaultSetter(m), obj)
+	value, err := m.assign.Spec.Parameters.Assign.GetValue(obj)
+	if err != nil {
+		return false, err
+	}
+	return core.Mutate(m.Path(), m.tester, core.NewDefaultSetter(value), obj)
 }
 
 func (m *Mutator) ID() types.ID {
@@ -66,10 +70,6 @@ func (m *Mutator) ID() types.ID {
 
 func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
-}
-
-func (m *Mutator) Value(metadata types.MetadataGetter) (interface{}, error) {
-	return m.assign.Spec.Parameters.Assign.GetValue(metadata)
 }
 
 func (m *Mutator) HasDiff(mutator types.Mutator) bool {
@@ -267,7 +267,7 @@ func validateObjectAssignedToList(p parser.Path, value interface{}) error {
 	}
 	valueMap, ok := value.(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("invalid value: `%+v`,only objects can be added to keyed lists", value)
+		return fmt.Errorf("invalid value: `%+v`, only objects can be added to keyed lists", value)
 	}
 	if listNode.KeyValue != valueMap[listNode.KeyField] {
 		return fmt.Errorf("adding object to list with different key %s: list key %v, object key %v", listNode.KeyField, listNode.KeyValue, valueMap[listNode.KeyField])

@@ -39,7 +39,6 @@ type Mutator interface {
 	HasDiff(mutator Mutator) bool
 	// DeepCopy returns a copy of the current object
 	DeepCopy() Mutator
-	Value(MetadataGetter) (interface{}, error)
 	Path() parser.Path
 	String() string
 }

@@ -1,7 +1,6 @@
 package assignmeta
 
 import (
-	"fmt"
 	"testing"
 
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -52,13 +51,6 @@ func TestAssignMetadata(t *testing.T) {
 			path:  "metadata.labels.foo",
 			value: mutationsv1alpha1.AssignField{FromMetadata: &mutationsv1alpha1.FromMetadata{Field: mutationsv1alpha1.ObjName}},
 			obj:   newFoo(map[string]interface{}{}),
-			fn: func(u *unstructured.Unstructured) error {
-				labels := u.GetLabels()
-				if labels["foo"] != "my-foo" {
-					return fmt.Errorf("metadata.labels.foo = %v; wanted %v", labels["foo"], "my-foo")
-				}
-				return nil
-			},
 		},
 	}
 
@@ -70,8 +62,9 @@ func TestAssignMetadata(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
-			if err := test.fn(obj); err != nil {
-				t.Errorf("failed test: %v", err)
+			labels := obj.GetLabels()
+			if labels["foo"] != "my-foo" {
+				t.Errorf("metadata.labels.foo = %v; wanted %v", labels["foo"], "my-foo")
 			}
 		})
 	}

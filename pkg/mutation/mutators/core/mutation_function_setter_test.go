@@ -5,7 +5,6 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -13,11 +12,11 @@ type notKeyedSetter struct{}
 
 func (s *notKeyedSetter) KeyedListOkay() bool { return false }
 
-func (s *notKeyedSetter) KeyedListValue(_ types.MetadataGetter) (map[string]interface{}, error) {
+func (s *notKeyedSetter) KeyedListValue() (map[string]interface{}, error) {
 	panic("notKeyedSetter setter does not handle keyed lists")
 }
 
-func (s *notKeyedSetter) SetValue(_ types.MetadataGetter, obj map[string]interface{}, key string) error {
+func (s *notKeyedSetter) SetValue(obj map[string]interface{}, key string) error {
 	panic("NOT IMPLEMENTED")
 }
 
