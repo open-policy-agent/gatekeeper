@@ -44,7 +44,6 @@ func TestAssignMetadata(t *testing.T) {
 		obj   *unstructured.Unstructured
 		path  string
 		value mutationsv1alpha1.AssignField
-		fn    func(*unstructured.Unstructured) error
 	}{
 		{
 			name:  "metadata value",
