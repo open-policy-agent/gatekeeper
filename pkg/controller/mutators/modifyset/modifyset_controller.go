@@ -20,6 +20,7 @@ import (
 	"context"
 
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -75,3 +76,5 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
 	a.MutationSystem = mutationSystem
 }
+
+func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}

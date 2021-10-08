@@ -71,7 +71,7 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
 	l := dummyLister{}
-	rt := newTracker(l, false, func() objData {
+	rt := newTracker(l, false, false, func() objData {
 		return objData{retries: 0}
 	})
 
@@ -101,7 +101,7 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
 	l := dummyLister{}
-	rt := newTracker(l, false, func() objData {
+	rt := newTracker(l, false, false, func() objData {
 		return objData{retries: 2}
 	})
 

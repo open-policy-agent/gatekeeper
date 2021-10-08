@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: latest-deployment
+  labels:
+    app: latest-deployment
+spec:
+  replicas: 0 # testing purposes only
+  selector:
+    matchLabels:
+      app: latest-deployment
+  template:
+    metadata:
+      labels:
+        app: latest-deployment
+    spec:
+      containers:
+      - name: latest
+        image: test/image:latest
+      - name: v1
+        image: test/image:v1

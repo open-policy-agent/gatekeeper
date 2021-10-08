@@ -24,20 +24,20 @@ func (errs Errors) Error() string {
 func (errs Errors) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
-		fmt.Fprintf(s, "errors (%d):\n", len(errs))
+		_, _ = fmt.Fprintf(s, "errors (%d):\n", len(errs))
 		for _, err := range errs {
 			if formatter, ok := err.(fmt.Formatter); ok {
 				formatter.Format(s, verb)
-				io.WriteString(s, "\n")
+				_, _ = io.WriteString(s, "\n")
 			} else {
-				fmt.Fprintf(s, "%v\n", err)
+				_, _ = fmt.Fprintf(s, "%v\n", err)
 			}
 		}
 
 	case 's':
-		io.WriteString(s, errs.Error())
+		_, _ = io.WriteString(s, errs.Error())
 
 	case 'q':
-		fmt.Fprintf(s, "%q", errs.Error())
+		_, _ = fmt.Fprintf(s, "%q", errs.Error())
 	}
 }

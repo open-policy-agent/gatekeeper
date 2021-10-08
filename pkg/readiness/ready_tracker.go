@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -57,26 +58,28 @@ type Tracker struct {
 
 	lister Lister
 
-	templates      *objectTracker
-	config         *objectTracker
-	assignMetadata *objectTracker
-	assign         *objectTracker
-	modifySet      *objectTracker
-	constraints    *trackerMap
-	data           *trackerMap
+	templates            *objectTracker
+	config               *objectTracker
+	assignMetadata       *objectTracker
+	assign               *objectTracker
+	modifySet            *objectTracker
+	externalDataProvider *objectTracker
+	constraints          *trackerMap
+	data                 *trackerMap
 
-	ready              chan struct{}
-	constraintTrackers *syncutil.SingleRunner
-	statsEnabled       syncutil.SyncBool
-	mutationEnabled    bool
+	ready               chan struct{}
+	constraintTrackers  *syncutil.SingleRunner
+	statsEnabled        syncutil.SyncBool
+	mutationEnabled     bool
+	externalDataEnabled bool
 }
 
 // NewTracker creates a new Tracker and initializes the internal trackers.
-func NewTracker(lister Lister, mutationEnabled bool) *Tracker {
-	return newTracker(lister, mutationEnabled, nil)
+func NewTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool) *Tracker {
+	return newTracker(lister, mutationEnabled, externalDataEnabled, nil)
 }
 
-func newTracker(lister Lister, mutationEnabled bool, fn objDataFactory) *Tracker {
+func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, fn objDataFactory) *Tracker {
 	tracker := Tracker{
 		lister:             lister,
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), fn),
@@ -86,12 +89,16 @@ func newTracker(lister Lister, mutationEnabled bool, fn objDataFactory) *Tracker
 		ready:              make(chan struct{}),
 		constraintTrackers: &syncutil.SingleRunner{},
 
-		mutationEnabled: mutationEnabled,
+		mutationEnabled:     mutationEnabled,
+		externalDataEnabled: externalDataEnabled,
 	}
 	if mutationEnabled {
 		tracker.assignMetadata = newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), fn)
 		tracker.assign = newObjTracker(mutationv1alpha.GroupVersion.WithKind("Assign"), fn)
 		tracker.modifySet = newObjTracker(mutationv1alpha.GroupVersion.WithKind("ModifySet"), fn)
+	}
+	if externalDataEnabled {
+		tracker.externalDataProvider = newObjTracker(externaldatav1alpha1.SchemeGroupVersion.WithKind("Provider"), fn)
 	}
 	return &tracker
 }
@@ -116,6 +123,8 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return t.templates
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
+	case gvk.GroupVersion() == externaldatav1alpha1.SchemeGroupVersion && gvk.Kind == "Provider":
+		return t.externalDataProvider
 	case gvk.GroupVersion() == mutationv1alpha.GroupVersion && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
 			return t.assignMetadata
@@ -202,6 +211,13 @@ func (t *Tracker) Satisfied() bool {
 		log.V(1).Info("all expectations satisfied", "tracker", "modifySet")
 	}
 
+	if t.externalDataEnabled {
+		if !t.externalDataProvider.Satisfied() {
+			return false
+		}
+		log.V(1).Info("all expectations satisfied", "tracker", "provider")
+	}
+
 	if !t.templates.Satisfied() {
 		return false
 	}
@@ -249,6 +265,11 @@ func (t *Tracker) Run(ctx context.Context) error {
 		})
 		grp.Go(func() error {
 			return t.trackModifySet(gctx)
+		})
+	}
+	if t.externalDataEnabled {
+		grp.Go(func() error {
+			return t.trackExternalDataProvider(gctx)
 		})
 	}
 	grp.Go(func() error {
@@ -301,7 +322,12 @@ func (t *Tracker) Populated() bool {
 		// If !t.mutationEnabled and we call this, it yields a null pointer exception
 		mutationPopulated = t.assignMetadata.Populated() && t.assign.Populated() && t.modifySet.Populated()
 	}
-	return t.templates.Populated() && t.config.Populated() && mutationPopulated && t.constraints.Populated() && t.data.Populated()
+	externalDataProviderPopulated := true
+	if t.externalDataEnabled {
+		// If !t.externalDataEnabled and we call this, it yields a null pointer exception
+		externalDataProviderPopulated = t.externalDataProvider.Populated()
+	}
+	return t.templates.Populated() && t.config.Populated() && mutationPopulated && t.constraints.Populated() && t.data.Populated() && externalDataProviderPopulated
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
@@ -484,6 +510,31 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	for index := range modifySetList.Items {
 		log.V(1).Info("expecting ModifySet", "name", modifySetList.Items[index].GetName())
 		t.modifySet.Expect(&modifySetList.Items[index])
+	}
+	return nil
+}
+
+func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
+	defer func() {
+		t.externalDataProvider.ExpectationsDone()
+		log.V(1).Info("Provider expectations populated")
+		_ = t.constraintTrackers.Wait()
+	}()
+
+	if !t.externalDataEnabled {
+		return nil
+	}
+
+	providerList := &externaldatav1alpha1.ProviderList{}
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, providerList); err != nil {
+		return fmt.Errorf("listing Provider: %w", err)
+	}
+	log.V(1).Info("setting expectations for Provider", "Provider Count", len(providerList.Items))
+
+	for index := range providerList.Items {
+		log.V(1).Info("expecting Provider", "name", providerList.Items[index].GetName())
+		t.externalDataProvider.Expect(&providerList.Items[index])
 	}
 	return nil
 }
@@ -746,6 +797,9 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 			logUnsatisfiedAssign(t)
 			logUnsatisfiedModifySet(t)
 		}
+		if t.externalDataEnabled {
+			logUnsatisfiedExternalDataProvider(t)
+		}
 	}
 }
 
@@ -764,6 +818,12 @@ func logUnsatisfiedAssign(t *Tracker) {
 func logUnsatisfiedModifySet(t *Tracker) {
 	for _, amKey := range t.modifySet.unsatisfied() {
 		log.Info("unsatisfied ModifySet", "name", amKey.namespacedName)
+	}
+}
+
+func logUnsatisfiedExternalDataProvider(t *Tracker) {
+	for _, amKey := range t.externalDataProvider.unsatisfied() {
+		log.Info("unsatisfied Provider", "name", amKey.namespacedName)
 	}
 }
 

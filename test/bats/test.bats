@@ -75,6 +75,41 @@ teardown_file() {
   assert_equal "" "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc
+  kubectl delete --ignore-not-found assignmetadata k8sownerlabel
+  kubectl delete --ignore-not-found assign k8sexternalip
+}
+
+@test "external data provider crd is established" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data tests"
+  fi
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/providers.externaldata.gatekeeper.sh"
+}
+
+@test "gatekeeper external data validation test" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data validation tests"
+  fi
+
+  # deployment, service and provider for dummy-provider
+  run kubectl apply -f test/externaldata/dummy-provider/manifest
+  assert_success
+  kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata latest-image"
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/disallowed.yaml
+  assert_match 'denied the request' "${output}"
+  assert_failure
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/allowed.yaml
+  assert_success
+
+  kubectl delete --ignore-not-found -f test/externaldata/dummy-provider/manifest
+  kubectl delete --ignore-not-found deploy latest-deployment v1-deployment
+  kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }
 
 @test "applying sync config" {

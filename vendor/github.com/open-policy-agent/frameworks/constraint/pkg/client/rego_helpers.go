@@ -1,18 +1,16 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/opa/ast"
-	"github.com/pkg/errors"
 )
 
-var (
-	// Currently rules should only access data.inventory
-	validDataFields = map[string]bool{
-		"inventory": true,
-	}
-)
+// Currently rules should only access data.inventory.
+var validDataFields = map[string]bool{
+	"inventory": true,
+}
 
 // parseModule parses the module and also fails empty modules.
 func parseModule(path, rego string) (*ast.Module, error) {
@@ -21,7 +19,7 @@ func parseModule(path, rego string) (*ast.Module, error) {
 		return nil, err
 	}
 	if module == nil {
-		return nil, errors.New("Empty module")
+		return nil, errors.New("empty module")
 	}
 	return module, nil
 }
@@ -38,7 +36,7 @@ func rewriteModulePackage(path string, module *ast.Module) error {
 	return nil
 }
 
-// requireRulesModule makes sure the listed rules are specified
+// requireRulesModule makes sure the listed rules are specified.
 func requireRulesModule(module *ast.Module, requiredRules map[string]struct{}) error {
 	ruleSets := make(map[string]struct{}, len(module.Rules))
 	for _, rule := range module.Rules {
@@ -49,7 +47,7 @@ func requireRulesModule(module *ast.Module, requiredRules map[string]struct{}) e
 	for name := range requiredRules {
 		_, ok := ruleSets[name]
 		if !ok {
-			errs = append(errs, fmt.Errorf("Missing required rule: %s", name))
+			errs = append(errs, fmt.Errorf("missing required rule: %s", name))
 			continue
 		}
 	}

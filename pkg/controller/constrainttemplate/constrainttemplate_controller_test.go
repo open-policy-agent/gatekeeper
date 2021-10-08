@@ -155,7 +155,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	pod := fakes.Pod(
@@ -467,7 +467,7 @@ violation[{"msg": "denied!"}] {
 	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
 
 	// Set up tracker
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// initialize OPA

@@ -1,10 +1,9 @@
 package regorewriter
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // FilePath represents a path on the filesystem and handles reparenting the file relative to a
@@ -22,7 +21,7 @@ func (f *FilePath) Path() string {
 func (f *FilePath) Reparent(old, new string) error {
 	if filepath.IsAbs(f.path) != filepath.IsAbs(old) ||
 		filepath.IsAbs(old) != filepath.IsAbs(new) {
-		return errors.Errorf("relative path / absolute path mismatch: %s %s %s", f.path, old, new)
+		return fmt.Errorf("relative path / absolute path mismatch: %s %s %s", f.path, old, new)
 	}
 
 	relPath, err := filepath.Rel(old, f.path)
@@ -30,7 +29,7 @@ func (f *FilePath) Reparent(old, new string) error {
 		return err
 	}
 	if strings.HasPrefix(relPath, "..") {
-		return errors.Errorf("old is not a prefix of path")
+		return fmt.Errorf("old is not a prefix of path")
 	}
 
 	f.path = filepath.Join(new, relPath)

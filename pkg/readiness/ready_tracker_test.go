@@ -24,11 +24,14 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -96,8 +99,13 @@ func setupOpa(t *testing.T) *opa.Client {
 	return client
 }
 
-func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mutationSystem *mutation.System) error {
-	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil)
+func setupController(
+	mgr manager.Manager,
+	wm *watch.Manager,
+	opa *opa.Client,
+	mutationSystem *mutation.System,
+	providerCache *frameworksexternaldata.ProviderCache) error {
+	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil, providerCache != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
 	}
@@ -122,6 +130,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, opa *opa.Client, mu
 		GetPod:           func(ctx context.Context) (*corev1.Pod, error) { return pod, nil },
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
+		ProviderCache:    providerCache,
 	}
 	ctx := context.Background()
 	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
@@ -156,7 +165,7 @@ func Test_AssignMetadata(t *testing.T) {
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -176,8 +185,8 @@ func Test_AssignMetadata(t *testing.T) {
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
 		id := mutationtypes.MakeID(am)
-		exptectedMutator := mutationSystem.Get(id)
-		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		expectedMutator := mutationSystem.Get(id)
+		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
 }
 
@@ -207,7 +216,7 @@ func Test_ModifySet(t *testing.T) {
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -227,8 +236,8 @@ func Test_ModifySet(t *testing.T) {
 	// Verify that the ModifySet is present in the cache
 	for _, am := range testModifySet {
 		id := mutationtypes.MakeID(am)
-		exptectedMutator := mutationSystem.Get(id)
-		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		expectedMutator := mutationSystem.Get(id)
+		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
 	}
 }
 
@@ -258,7 +267,7 @@ func Test_Assign(t *testing.T) {
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -278,8 +287,61 @@ func Test_Assign(t *testing.T) {
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
 		id := mutationtypes.MakeID(am)
-		exptectedMutator := mutationSystem.Get(id)
-		g.Expect(exptectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		expectedMutator := mutationSystem.Get(id)
+		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+	}
+}
+
+func Test_Provider(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	defer func() {
+		externalDataEnabled := false
+		externaldata.ExternalDataEnabled = &externalDataEnabled
+	}()
+
+	externalDataEnabled := true
+	externaldata.ExternalDataEnabled = &externalDataEnabled
+
+	providerCache := frameworksexternaldata.NewCache()
+
+	err := os.Setenv("POD_NAME", "no-pod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Apply fixtures *before* the controllers are setup.
+	err = applyFixtures("testdata")
+	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+
+	if err := setupController(mgr, wm, opaClient, nil, providerCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	mgrStopped := StartTestManager(ctx, mgr, g)
+	defer func() {
+		cancelFunc()
+		mgrStopped.Wait()
+	}()
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the Provider is present in the cache
+	for _, tp := range testProvider {
+		instance, err := providerCache.Get(tp.Name)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+		g.Expect(instance.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+			URL:     "http://demo",
+			Timeout: 1,
+		}))
 	}
 }
 
@@ -306,7 +368,7 @@ func Test_Tracker(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	if err := setupController(mgr, wm, opaClient, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, nil, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -385,7 +447,7 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, nil, nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -427,7 +489,7 @@ func Test_CollectDeleted(t *testing.T) {
 		lister:    mgr.GetAPIReader(),
 		namespace: "gatekeeper-system",
 	}
-	tracker := readiness.NewTracker(lister, false)
+	tracker := readiness.NewTracker(lister, false, false)
 	err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return tracker.Run(ctx)
 	}))
