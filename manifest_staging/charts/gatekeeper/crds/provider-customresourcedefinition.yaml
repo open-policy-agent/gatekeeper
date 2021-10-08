@@ -36,7 +36,7 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the URL of the proxy to use for the provider. URL is prefixed with http:// or https://.
+                description: URL is the url for the provider. URL is prefixed with http:// or https://.
                 type: string
             type: object
         type: object
