@@ -15,8 +15,11 @@ import (
 // Does not ensure the object is actually deleted, just sends a delete request via the passed Client.
 // See #1596 for why this is non-trivial to guarantee.
 //
-// Tests should not rely on objects being deleted from the API Server which were used in other tests; they should
-// instead use unique object names and namespaces to eliminate cross-talk.
+// Tests should not rely on objects being deleted from the API Server which were
+// used in other tests; they should instead use unique object names and
+// namespaces to eliminate cross-talk. More explicitly: if you are writing a
+// test which must make use of this cleanup function, you are risking cross-talk
+// between tests and should instead modify your test.
 func DeleteObject(t *testing.T, c client.Client, original client.Object) func() {
 	// We don't want this cleanup method to rely on any context passed by the caller. For example, the caller may have
 	// canceled their context as part of their test.

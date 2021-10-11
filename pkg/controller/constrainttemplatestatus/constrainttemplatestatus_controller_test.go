@@ -165,6 +165,8 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
@@ -180,6 +182,8 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
@@ -221,6 +225,8 @@ violation[{"msg": "denied!"}] {
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
@@ -228,6 +234,8 @@ violation[{"msg": "denied!"}] {
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())

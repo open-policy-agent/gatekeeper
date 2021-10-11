@@ -310,6 +310,8 @@ violation[{"msg": "denied!"}] {
 		err = c.Create(ctx, instanceInvalidRego)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
 		g.Eventually(func() error {
@@ -421,6 +423,8 @@ violation[{"msg": "denied!"}] {
 	err := c.Create(ctx, instance)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
+	// TODO: Test if this removal is necessary.
+	// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 	t.Cleanup(testutils.DeleteObject(t, c, instance))
 
 	gvk := schema.GroupVersionKind{
