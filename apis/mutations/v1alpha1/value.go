@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var (
@@ -39,10 +38,13 @@ type AssignField struct {
 }
 
 func (a *AssignField) GetValue(metadata types.MetadataGetter) (interface{}, error) {
+	if a == nil {
+		return nil, fmt.Errorf("assign is nil: %w", ErrInvalidAssignField)
+	}
 	if a.FromMetadata != nil {
 		return a.FromMetadata.GetValue(metadata)
 	}
-	return runtime.DeepCopyJSONValue(a.Value.Value), nil
+	return a.Value.GetValue(), nil
 }
 
 func (a *AssignField) Validate() error {

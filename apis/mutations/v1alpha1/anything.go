@@ -15,6 +15,10 @@ type Anything struct {
 	Value interface{} `json:"-"`
 }
 
+func (in *Anything) GetValue() interface{} {
+	return runtime.DeepCopyJSONValue(in.Value)
+}
+
 func (in *Anything) UnmarshalJSON(val []byte) error {
 	if bytes.Equal(val, []byte("null")) {
 		return nil
