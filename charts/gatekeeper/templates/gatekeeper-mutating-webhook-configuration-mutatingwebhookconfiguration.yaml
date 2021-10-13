@@ -2,10 +2,10 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  creationTimestamp: null
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
   name: gatekeeper-mutating-webhook-configuration
@@ -18,7 +18,7 @@ webhooks:
       name: gatekeeper-webhook-service
       namespace: '{{ .Release.Namespace }}'
       path: /v1/mutate
-  failurePolicy: Ignore
+  failurePolicy: {{ .Values.mutatingWebhookFailurePolicy }}
   matchPolicy: Exact
   name: mutation.gatekeeper.sh
   namespaceSelector:
@@ -36,5 +36,5 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
-  timeoutSeconds: 3
+  timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}
 {{- end }}

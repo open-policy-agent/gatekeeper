@@ -17,7 +17,8 @@ spec:
     {{- end }}
   {{- end }}
   ports:
-  - port: 443
+  - name: https-webhook-server
+    port: 443
     targetPort: webhook-server
   selector:
     app: '{{ template "gatekeeper.name" . }}'

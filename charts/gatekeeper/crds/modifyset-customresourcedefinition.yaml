@@ -5,21 +5,21 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.5.0
   labels:
     gatekeeper.sh/system: "yes"
-  name: assign.mutations.gatekeeper.sh
+  name: modifyset.mutations.gatekeeper.sh
 spec:
   group: mutations.gatekeeper.sh
   names:
-    kind: Assign
-    listKind: AssignList
-    plural: assign
-    singular: assign
+    kind: ModifySet
+    listKind: ModifySetList
+    plural: modifyset
+    singular: modifyset
   preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Assign is the Schema for the assign API.
+        description: ModifySet allows the user to modify non-keyed lists, such as the list of arguments to a container.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -34,7 +34,7 @@ spec:
                 type: string
             type: object
           spec:
-            description: AssignSpec defines the desired state of Assign.
+            description: ModifySetSpec defines the desired state of ModifySet.
             properties:
               applyTo:
                 description: ApplyTo lists the specific groups, versions and kinds a mutation will be applied to. This is necessary because every mutation implies part of an object schema and object schemas are associated with specific GVKs.
@@ -56,7 +56,7 @@ spec:
                   type: object
                 type: array
               location:
-                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
+                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main].args`.'
                 type: string
               match:
                 description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
@@ -159,11 +159,15 @@ spec:
               parameters:
                 description: Parameters define the behavior of the mutator.
                 properties:
-                  assign:
-                    description: Assign.value holds the value to be assigned
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
+                  operation:
+                    default: merge
+                    description: Operation describes whether values should be merged in ("merge"), or pruned ("prune"). Default value is "merge"
+                    enum:
+                    - merge
+                    - prune
+                    type: string
                   pathTests:
+                    description: PathTests are a series of existence tests that can be checked before a mutation is applied
                     items:
                       description: "PathTest allows the user to customize how the mutation works if parent paths are missing. It traverses the list in order. All sub paths are tested against the provided condition, if the test fails, the mutation is not applied. All `subPath` entries must be a prefix of `location`. Any glob characters will take on the same value as was used to expand the matching glob in `location`. \n Available Tests: * MustExist    - the path must exist or do not mutate * MustNotExist - the path must not exist or do not mutate."
                       properties:
@@ -177,10 +181,14 @@ spec:
                           type: string
                       type: object
                     type: array
+                  values:
+                    description: Values describes the values provided to the operation as `values.fromList`.
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
             type: object
           status:
-            description: AssignStatus defines the observed state of Assign.
+            description: ModifySetStatus defines the observed state of ModifySet.
             properties:
               byPod:
                 items:
@@ -221,3 +229,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

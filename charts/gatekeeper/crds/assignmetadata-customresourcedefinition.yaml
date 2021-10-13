@@ -28,6 +28,10 @@ spec:
             description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
             type: object
           spec:
             description: AssignMetadataSpec defines the desired state of AssignMetadata.
@@ -39,6 +43,8 @@ spec:
                 properties:
                   excludedNamespaces:
                     items:
+                      description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -86,6 +92,10 @@ spec:
                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                         type: object
                     type: object
+                  name:
+                    description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.'
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    type: string
                   namespaceSelector:
                     description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
                     properties:
@@ -118,6 +128,8 @@ spec:
                     type: object
                   namespaces:
                     items:
+                      description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -147,6 +159,9 @@ spec:
                         description: MutatorError represents a single error caught while adding a mutator to a system.
                         properties:
                           message:
+                            type: string
+                          type:
+                            description: Type indicates a specific class of error for use by controller code. If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message
