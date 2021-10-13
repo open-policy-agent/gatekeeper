@@ -131,7 +131,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*Mu
 	}
 
 	if potentialValue.Value != nil {
-		if _, ok := potentialValue.Value.Value.(string); !ok {
+		if _, ok := potentialValue.Value.GetValue().(string); !ok {
 			return nil, fmt.Errorf("spec.parameters.assign.value field must be a string for AssignMetadata %q", assignMeta.GetName())
 		}
 	}

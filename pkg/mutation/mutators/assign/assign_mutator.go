@@ -143,7 +143,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 	}
 
 	if potentialValues.Value != nil {
-		if err = validateObjectAssignedToList(path, potentialValues.Value.Value); err != nil {
+		if err = validateObjectAssignedToList(path, potentialValues.Value.GetValue()); err != nil {
 			return nil, err
 		}
 	}
