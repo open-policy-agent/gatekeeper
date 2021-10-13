@@ -30,14 +30,15 @@ import (
 )
 
 var (
-	// SchemeGroupVersion is group version used to register these objects
+	// SchemeGroupVersion is group version used to register these objects.
 	SchemeGroupVersion = schema.GroupVersion{Group: "templates.gatekeeper.sh", Version: "v1beta1"}
 
-	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
+	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
 
 	localSchemeBuilder = runtime.NewSchemeBuilder(SchemeBuilder.AddToScheme, addDefaultingFuncs)
 
+	// AddToScheme adds templates/v1beta1 types to a Scheme.
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 

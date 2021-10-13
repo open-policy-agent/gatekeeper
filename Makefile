@@ -6,6 +6,7 @@ CRD_IMG := $(CRD_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
+ENABLE_EXTERNAL_DATA ?= false
 
 VERSION := v3.7.0-beta.1
 
@@ -70,9 +71,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --logtostderr"
-
-
-FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -191,6 +189,9 @@ deploy-mutation: patch-image
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
+ifeq ($(ENABLE_EXTERNAL_DATA),true)
+	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
+endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  /config/overlays/dev | kubectl apply -f -

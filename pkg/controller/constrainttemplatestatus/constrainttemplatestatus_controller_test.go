@@ -127,7 +127,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),

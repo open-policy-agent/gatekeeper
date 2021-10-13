@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package templates
+package schema
 
 import (
 	"fmt"
@@ -46,7 +46,8 @@ func AddPreserveUnknownFields(sch *apiextensionsv1.JSONSchemaProps) error {
 	}
 
 	if sch.Properties != nil {
-		for k, v := range sch.Properties {
+		for k := range sch.Properties {
+			v := sch.Properties[k]
 			if err := AddPreserveUnknownFields(&v); err != nil {
 				return err
 			}

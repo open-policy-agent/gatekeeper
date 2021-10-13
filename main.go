@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
@@ -35,6 +36,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -205,7 +207,7 @@ func main() {
 	sw := watch.NewSwitch()
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, *mutation.MutationEnabled)
+	tracker, err := readiness.SetupTracker(mgr, *mutation.MutationEnabled, *externaldata.ExternalDataEnabled)
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		os.Exit(1)
@@ -242,8 +244,15 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
+	var providerCache *frameworksexternaldata.ProviderCache
+	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	if *externaldata.ExternalDataEnabled {
+		providerCache = frameworksexternaldata.NewCache()
+		args = append(args, local.AddExternalDataProviderCache(providerCache))
+	}
 	// initialize OPA
-	driver := local.New(local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...))
+	driver := local.New(args...)
+
 	backend, err := opa.NewBackend(opa.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA backend")
@@ -287,6 +296,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
+		ProviderCache:    providerCache,
 	}
 
 	ctx := context.Background()
