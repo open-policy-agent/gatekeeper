@@ -8,7 +8,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.7.0-beta.1
+VERSION := v3.7.0-beta.2
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -133,9 +133,11 @@ e2e-helm-deploy: e2e-helm-install
 		--set image.repository=${HELM_REPO} \
 		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set postInstall.labelNamespace.enabled=true \
 		--set experimentalEnableMutation=true \
 		--set disabledBuiltins={http.send};\
 
@@ -157,9 +159,11 @@ e2e-helm-upgrade:
 		--set image.repository=${HELM_REPO} \
 		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set postInstall.labelNamespace.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 # Build manager binary

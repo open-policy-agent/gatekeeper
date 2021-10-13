@@ -315,7 +315,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -331,6 +331,8 @@ spec:
                             type: array
                         type: object
                       validation:
+                        default:
+                          legacySchema: false
                         properties:
                           legacySchema:
                             default: false
@@ -356,7 +358,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -408,7 +410,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -424,6 +426,8 @@ spec:
                             type: array
                         type: object
                       validation:
+                        default:
+                          legacySchema: true
                         properties:
                           legacySchema:
                             default: true
@@ -449,7 +453,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -501,7 +505,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+            description: ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
             properties:
               crd:
                 properties:
@@ -517,6 +521,8 @@ spec:
                             type: array
                         type: object
                       validation:
+                        default:
+                          legacySchema: true
                         properties:
                           legacySchema:
                             default: true
@@ -542,7 +548,7 @@ spec:
                 type: array
             type: object
           status:
-            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+            description: ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
             properties:
               byPod:
                 items:
@@ -580,6 +586,57 @@ spec:
     storage: false
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.5.0
+  labels:
+    gatekeeper.sh/system: "yes"
+  name: providers.externaldata.gatekeeper.sh
+spec:
+  group: externaldata.gatekeeper.sh
+  names:
+    kind: Provider
+    listKind: ProviderList
+    plural: providers
+    singular: provider
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Provider is the Schema for the Provider API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the Provider specifications.
+            properties:
+              timeout:
+                description: Timeout is the timeout when querying the provider.
+                type: integer
+              url:
+                description: URL is the url for the provider. URL is prefixed with http:// or https://.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
 status:
   acceptedNames:
     kind: ""
@@ -717,6 +774,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - externaldata.gatekeeper.sh
+  resources:
+  - providers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - mutations.gatekeeper.sh
   resources:
   - '*'
@@ -840,7 +909,8 @@ metadata:
   namespace: gatekeeper-system
 spec:
   ports:
-  - port: 443
+  - name: https-webhook-server
+    port: 443
     targetPort: webhook-server
   selector:
     control-plane: controller-manager
@@ -890,7 +960,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.6.0
+        image: openpolicyagent/gatekeeper:v3.7.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -986,7 +1056,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.6.0
+        image: openpolicyagent/gatekeeper:v3.7.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
