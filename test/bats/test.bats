@@ -102,6 +102,7 @@ teardown_file() {
 
   run kubectl apply -f test/externaldata/dummy-provider/policy/examples/disallowed.yaml
   assert_match 'denied the request' "${output}"
+  assert_match 'has latest tag' "${output}"
   assert_failure
 
   run kubectl apply -f test/externaldata/dummy-provider/policy/examples/allowed.yaml

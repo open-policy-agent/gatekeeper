@@ -1,6 +1,6 @@
 ARG BUILDPLATFORM="linux/amd64"
 ARG BUILDERIMAGE="golang:1.17"
-ARG BASEIMAGE="gcr.io/distroless/static:nonroot-amd64"
+ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
 
 FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
 
@@ -20,7 +20,9 @@ WORKDIR /go/src/github.com/open-policy-agent/gatekeeper/test/externaldata/dummy-
 
 COPY . .
 
-RUN go build -mod vendor -o provider main.go
+RUN go mod init && go mod tidy
+
+RUN go build -o provider provider.go
 
 FROM $BASEIMAGE
 
