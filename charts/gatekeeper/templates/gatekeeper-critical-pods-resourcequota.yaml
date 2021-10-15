@@ -12,7 +12,7 @@ metadata:
   namespace: '{{ .Release.Namespace }}'
 spec:
   hard:
-    pods: {{ .Values.podCountLimit }}
+    pods: '{{ .Values.podCountLimit }}'
   scopeSelector:
     matchExpressions:
     - operator: In
