@@ -1,7 +1,6 @@
 package dummy
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -50,41 +49,30 @@ func (c *Cache) Validate(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// set context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
 	results := make([]externaldata.Item, 0)
 	// iterate over all keys
 	for _, key := range providerRequest.Request.Keys {
-		// check if the key is already in the cache
-		if _, ok := c.cache[key.(string)]; ok {
+		// Providers should add a caching mechanism to avoid extra calls to external data sources.
+
+		// following checks are for testing purposes only
+		// check if key contains "_systemError" to trigger a system error
+		if strings.HasSuffix(key, "_systemError") {
+			sendResponse(nil, "testing system error", w)
+		}
+
+		// check if key contains "error_" to trigger a system error
+		if strings.HasPrefix(key, "error_") {
 			results = append(results, externaldata.Item{
 				Key:   key,
-				Value: true,
+				Value: key + "_invalid",
 			})
-			continue
 		}
 
-		// extract image tag
-		tag, err := extractImageTag(ctx, key.(string))
-		if err != nil {
-			sendResponse(nil, fmt.Sprintf("error while checking image: %v", err), w)
-			return
-		}
-
-		// check if tag is latest
-		if tag != "latest" {
+		// valid key will have "_test" appended as return value
+		if !strings.HasSuffix(key, "_test") {
 			results = append(results, externaldata.Item{
-				Key:   key.(string),
-				Value: true,
-			})
-			// add key to cache
-			c.cache[key.(string)] = true
-		} else {
-			results = append(results, externaldata.Item{
-				Key:   key.(string),
-				Error: "image tag cannot be latest",
+				Key:   key,
+				Value: key + "_test",
 			})
 		}
 	}
@@ -110,12 +98,12 @@ func sendResponse(results *[]externaldata.Item, systemErr string, w http.Respons
 	}
 }
 
-// extractImageTag extracts the image tag from the image name.
-// this is meant for testing purposes.
-func extractImageTag(ctx context.Context, image string) (string, error) {
-	tagSplit := strings.Split(image, ":")
-	if len(tagSplit) < 2 {
-		return "", fmt.Errorf("invalid image: %s", image)
-	}
-	return tagSplit[1], nil
-}
+// // extractImageTag extracts the image tag from the image name.
+// // this is meant for testing purposes.
+// func extractImageTag(ctx context.Context, image string) (string, error) {
+// 	tagSplit := strings.Split(image, ":")
+// 	if len(tagSplit) < 2 {
+// 		return "", fmt.Errorf("invalid image: %s", image)
+// 	}
+// 	return tagSplit[1], nil
+// }
