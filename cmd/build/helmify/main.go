@@ -23,6 +23,18 @@ var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
 const DeploymentKind = "Deployment"
 
+func isRbacKind(str string) bool {
+	rbacKinds := [4]string{"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}
+	result := false
+	for _, x := range rbacKinds {
+		if x == str {
+			result = true
+			break
+		}
+	}
+	return result
+}
+
 func extractKind(s string) (string, error) {
 	matches := kindRegex.FindStringSubmatch(s)
 	if len(matches) != 2 {
@@ -115,6 +127,10 @@ func (ks *kindSet) Write() error {
 
 			if kind == DeploymentKind {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
+			}
+
+			if isRbacKind(kind) {
+				obj = "{{- if .Values.rbac.create }}\n" + obj + "{{- end }}\n"
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {

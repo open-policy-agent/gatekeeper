@@ -89,3 +89,5 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
+rbac:
+  create: true
