@@ -106,10 +106,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	ingestionStatus := ctrlmutators.MutatorStatusError
+	conflict := true
 	// Encasing this call in a function prevents the arguments from being evaluated early.
 	id := types.MakeID(mutationObj)
 	defer func() {
-		r.reportMutator(id, ingestionStatus, startTime)
+		r.reportMutator(id, ingestionStatus, startTime, conflict)
 	}()
 
 	// previousConflicts records the conflicts this Mutator has with other mutators
@@ -141,7 +142,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// for conflicts.
 	r.queueConflicts(diff)
 
-	ingestionStatus = ctrlmutators.MutatorStatusActive
+	// Any mutator that's in conflict with another should be in the "error" state.
+	if len(newConflicts) == 0 {
+		ingestionStatus = ctrlmutators.MutatorStatusActive
+		conflict = false
+	}
+
 	return reconcile.Result{}, nil
 }
 
@@ -208,8 +214,8 @@ func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time) {
-	r.cache.Upsert(id, ingestionStatus)
+func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time, conflict bool) {
+	r.cache.Upsert(id, ingestionStatus, conflict)
 	if r.reporter == nil {
 		return
 	}
@@ -218,10 +224,14 @@ func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.Mut
 		r.log.Error(err, "failed to report mutator ingestion request")
 	}
 
-	for status, count := range r.cache.Tally() {
+	for status, count := range r.cache.TallyStatus() {
 		if err := r.reporter.ReportMutatorsStatus(status, count); err != nil {
 			r.log.Error(err, "failed to report mutator status request")
 		}
+	}
+
+	if err := r.reporter.ReportMutatorsInConflict(r.cache.TallyConflict()); err != nil {
+		r.log.Error(err, "failed to report mutators in conflict request")
 	}
 }
 

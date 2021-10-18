@@ -33,11 +33,11 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	}
 
 	// Count test
-	row, err := checkData(mutatorIngestionCountMetricName, expectedRowLength)
+	rows, err := checkData(mutatorIngestionCountMetricName, expectedRowLength)
 	if err != nil {
 		t.Error(err)
 	}
-	count, ok := row.Data.(*view.CountData)
+	count, ok := rows[0].Data.(*view.CountData)
 	if !ok {
 		t.Error("ReportRequest should have aggregation Count()")
 	}
@@ -45,16 +45,16 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionCountMetricName, 2, count.Value)
 	}
 
-	verifyTags(t, expectedTags, row.Tags)
+	verifyTags(t, expectedTags, rows[0].Tags)
 
 	// Duration test
-	row, err = checkData(mutatorIngestionDurationMetricName, expectedRowLength)
+	rows, err = checkData(mutatorIngestionDurationMetricName, expectedRowLength)
 	if err != nil {
 		t.Error(err)
 	}
-	durationValue, ok := row.Data.(*view.DistributionData)
+	durationValue, ok := rows[0].Data.(*view.DistributionData)
 	if !ok {
-		t.Error("ReportRequest should have aggregation Distribution()")
+		t.Fatalf("ReportRequest should have aggregation Distribution()")
 	}
 	if durationValue.Min != expectedDurationMin {
 		t.Errorf("got tag '%v' min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, expectedDurationMin)
@@ -63,21 +63,121 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 		t.Errorf("got tag '%v' max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, expectedDurationMax)
 	}
 
-	verifyTags(t, expectedTags, row.Tags)
+	verifyTags(t, expectedTags, rows[0].Tags)
 }
 
-func checkData(name string, rowLength int) (*view.Row, error) {
-	row, err := view.RetrieveData(name)
+func TestReportMutatorsStatus(t *testing.T) {
+	r := NewStatsReporter()
+
+	activeMutators := 5
+	errorMutators := 1
+	if err := r.ReportMutatorsStatus(MutatorStatusActive, activeMutators); err != nil {
+		t.Errorf("ReportMutatorsStatus error %v", err)
+	}
+	if err := r.ReportMutatorsStatus(MutatorStatusError, errorMutators); err != nil {
+		t.Errorf("ReportMutatorsStatus error %v", err)
+	}
+
+	rows, err := checkData(mutatorsMetricName, 2)
+	if err != nil {
+		t.Error(err)
+	}
+
+	activeRow, err := getRow(rows, string(MutatorStatusActive))
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok := activeRow.Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted active status row of type LastValueData. got: %v", activeRow.Data)
+	}
+
+	if lastValueData.Value != float64(activeMutators) {
+		t.Errorf("wanted status %q to have value %v, got: %v", MutatorStatusActive, activeMutators, lastValueData.Value)
+	}
+
+	errorRow, err := getRow(rows, string(MutatorStatusError))
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok = errorRow.Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted error status row of type LastValueData. got: %v", activeRow.Data)
+	}
+
+	if lastValueData.Value != float64(errorMutators) {
+		t.Errorf("wanted status %q to have value %v, got: %v", MutatorStatusError, activeMutators, lastValueData.Value)
+	}
+}
+
+func TestReportMutatorsInConflict(t *testing.T) {
+	r := NewStatsReporter()
+
+	conflicts := 3
+
+	// Report conflicts for the first time
+	err := r.ReportMutatorsInConflict(conflicts)
+	if err != nil {
+		t.Errorf("ReportMutatorsInConflict error %v", err)
+	}
+
+	rows, err := checkData(mutatorsConflictingCountMetricsName, 1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok := rows[0].Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted row of type LastValueData. got: %v", rows[0].Data)
+	}
+
+	if lastValueData.Value != float64(conflicts) {
+		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
+	}
+
+	// Report conflicts again, confirming the updated value
+	conflicts = 2
+	err = r.ReportMutatorsInConflict(conflicts)
+	if err != nil {
+		t.Errorf("ReportMutatorsInConflict error %v", err)
+	}
+
+	rows, err = checkData(mutatorsConflictingCountMetricsName, 1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok = rows[0].Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted row of type LastValueData. got: %v", rows[0].Data)
+	}
+
+	if lastValueData.Value != float64(conflicts) {
+		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
+	}
+}
+
+func getRow(rows []*view.Row, tagValue string) (*view.Row, error) {
+	for _, row := range rows {
+		if row.Tags[0].Value == tagValue {
+			return row, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no rows found with tag key name %q", tagValue)
+}
+
+func checkData(name string, rowLength int) ([]*view.Row, error) {
+	rows, err := view.RetrieveData(name)
 	if err != nil {
 		return nil, fmt.Errorf("Error when retrieving data: %v from %v", err, name)
 	}
-	if len(row) != rowLength {
-		return nil, fmt.Errorf("Got '%v' row length %v, want %v", name, len(row), rowLength)
+	if len(rows) != rowLength {
+		return nil, fmt.Errorf("Got '%v' row length %v, want %v", name, len(rows), rowLength)
 	}
-	if row[0].Data == nil {
-		return nil, fmt.Errorf("Expected row data not to be nil")
-	}
-	return row[0], nil
+	return rows, nil
 }
 
 func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {

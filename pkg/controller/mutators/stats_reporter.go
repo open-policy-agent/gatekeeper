@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	mutatorIngestionCountMetricName    = "mutator_ingestion_count"
-	mutatorIngestionDurationMetricName = "mutator_ingestion_duration_seconds"
-	mutatorsMetricName                 = "mutators"
+	mutatorIngestionCountMetricName     = "mutator_ingestion_count"
+	mutatorIngestionDurationMetricName  = "mutator_ingestion_duration_seconds"
+	mutatorsMetricName                  = "mutators"
+	mutatorsConflictingCountMetricsName = "mutator_conflicting_count"
 )
 
 // MutatorIngestionStatus defines the outcomes of an attempt to add a Mutator to the mutation System.
@@ -38,6 +39,11 @@ var (
 		mutatorsMetricName,
 		"The current number of Mutator objects",
 		stats.UnitDimensionless)
+
+	conflictingMutatorsM = stats.Int64(
+		mutatorsConflictingCountMetricsName,
+		"The current number of conflicting Mutator objects",
+		stats.UnitDimensionless)
 )
 
 func init() {
@@ -58,10 +64,16 @@ func init() {
 		},
 		{
 			Name:        mutatorsMetricName,
-			Description: "The current number of Mutator objects",
+			Description: mutatorsM.Description(),
 			Measure:     mutatorsM,
 			Aggregation: view.LastValue(),
 			TagKeys:     []tag.Key{mutatorStatusKey},
+		},
+		{
+			Name:        mutatorsConflictingCountMetricsName,
+			Description: conflictingMutatorsM.Description(),
+			Measure:     conflictingMutatorsM,
+			Aggregation: view.LastValue(),
 		},
 	}
 
@@ -74,6 +86,7 @@ func init() {
 type StatsReporter interface {
 	ReportMutatorIngestionRequest(ms MutatorIngestionStatus, d time.Duration) error
 	ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error
+	ReportMutatorsInConflict(n int) error
 }
 
 // reporter implements StatsReporter interface.
@@ -111,4 +124,9 @@ func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error 
 	}
 
 	return metrics.Record(ctx, mutatorsM.M(int64(n)))
+}
+
+// for this to exist, I need to add conflict status to my bookkeeping data structure
+func (r *reporter) ReportMutatorsInConflict(n int) error {
+	return metrics.Record(context.Background(), conflictingMutatorsM.M(int64(n)))
 }
