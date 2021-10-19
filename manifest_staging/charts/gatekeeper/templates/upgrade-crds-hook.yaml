@@ -83,6 +83,8 @@ spec:
         - apply
         - -f
         - crds/
+        resources:
+          {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
