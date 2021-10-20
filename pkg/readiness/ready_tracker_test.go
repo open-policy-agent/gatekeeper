@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -302,12 +303,8 @@ func Test_Provider(t *testing.T) {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, t, mgr)
-	defer func() {
-		cancelFunc()
-		mgrStopped.Wait()
-	}()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
