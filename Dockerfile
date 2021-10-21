@@ -2,7 +2,7 @@ ARG BUILDPLATFORM="linux/amd64"
 ARG BUILDERIMAGE="golang:1.17"
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-ARG BASEIMAGE="gcr.io/distroless/static:nonroot-amd64"
+ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
 
 FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder
 
@@ -35,6 +35,6 @@ WORKDIR /
 
 COPY --from=builder /go/src/github.com/open-policy-agent/gatekeeper/manager .
 
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/manager"]
