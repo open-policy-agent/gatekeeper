@@ -94,6 +94,7 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
+      dnsPolicy: {{ .Values.audit.dnsPolicy }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
