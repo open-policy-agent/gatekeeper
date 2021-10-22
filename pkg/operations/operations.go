@@ -14,10 +14,11 @@ type Operation string
 
 // All defined Operations.
 const (
-	Audit          = Operation("audit")
-	Status         = Operation("status")
-	MutationStatus = Operation("mutation-status")
-	Webhook        = Operation("webhook")
+	Audit           = Operation("audit")
+	Status          = Operation("status")
+	MutationStatus  = Operation("mutation-status")
+	MutationWebhook = Operation("mutation-webhook")
+	Webhook         = Operation("webhook")
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 		Audit,
 		Status,
 		MutationStatus,
+		MutationWebhook,
 		Webhook,
 	}
 	operations = newOperationSet()

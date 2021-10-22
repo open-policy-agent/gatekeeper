@@ -142,7 +142,6 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set experimentalEnableMutation=true \
 		--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade-init: e2e-helm-install
@@ -188,13 +187,6 @@ install: manifests
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  /config/crd | kubectl apply -f -
 
-deploy-mutation: patch-image
-	@grep -q -v 'enable-mutation' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./config/overlays/dev_mutation/manager_image_patch.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./config/overlays/dev_mutation/manager_image_patch.yaml
-	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone \
-	  /config/overlays/dev_mutation | kubectl apply -f -
-
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
 ifeq ($(ENABLE_EXTERNAL_DATA),true)
@@ -223,11 +215,6 @@ manifests: __controller-gen
 	docker run --rm -v $(shell pwd):/gatekeeper \
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
-	docker run --rm -v $(shell pwd):/gatekeeper \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone \
-	  /gatekeeper/config/overlays/mutation -o /gatekeeper/manifest_staging/deploy/experimental/gatekeeper-mutation.yaml
-	@grep -q -v 'enable-mutation' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-mutation=true' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml && sed -i '/- --operation=status/a \ \ \ \ \ \ \ \ - --operation=mutation-status' ./manifest_staging/deploy/experimental/gatekeeper-mutation.yaml
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
@@ -329,13 +316,10 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
 	@bash -c 'echo -e ${MANAGER_IMAGE_PATCH} > ./config/overlays/dev/manager_image_patch.yaml'
-	cp ./config/overlays/dev/manager_image_patch.yaml ./config/overlays/dev_mutation/manager_image_patch.yaml
 ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
-	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev_mutation/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
-	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev_mutation/manager_image_patch.yaml
 
 # Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
 target-template-source:

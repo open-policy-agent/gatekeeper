@@ -50,7 +50,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
 func add(mgr manager.Manager, r *Reconciler) error {
-	if !*mutation.MutationEnabled {
+	if !mutation.Enabled() {
 		return nil
 	}
 

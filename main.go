@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -73,14 +74,11 @@ var webhooks = []rotator.WebhookInfo{
 
 const (
 	secretName     = "gatekeeper-webhook-server-cert"
-	serviceName    = "gatekeeper-webhook-service"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
 )
 
 var (
-	// DNSName is <service name>.<namespace>.svc.
-	dnsName          = fmt.Sprintf("%s.%s.svc", serviceName, util.GetNamespace())
 	scheme           = runtime.NewScheme()
 	setupLog         = ctrl.Log.WithName("setup")
 	logLevelEncoders = map[string]zapcore.LevelEncoder{
@@ -102,6 +100,7 @@ var (
 	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	enableProfile       = flag.Bool("enable-pprof", false, "enable pprof profiling")
 	profilePort         = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
+	certServiceName     = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
 	disabledBuiltins    = util.NewFlagSet()
 )
 
@@ -153,6 +152,11 @@ func main() {
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
 	}
+
+	if *mutation.DeprecatedMutationEnabled {
+		setupLog.Error(errors.New("--enable-mutation flag is deprecated"), "use of deprecated flag")
+	}
+
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
@@ -191,7 +195,7 @@ func main() {
 			CertDir:        *certDir,
 			CAName:         caName,
 			CAOrganization: caOrganization,
-			DNSName:        dnsName,
+			DNSName:        fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
 			IsReady:        setupFinished,
 			Webhooks:       webhooks,
 		}); err != nil {
@@ -207,7 +211,7 @@ func main() {
 	sw := watch.NewSwitch()
 
 	// Setup tracker and register readiness probe.
-	tracker, err := readiness.SetupTracker(mgr, *mutation.MutationEnabled, *externaldata.ExternalDataEnabled)
+	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled)
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
 		os.Exit(1)

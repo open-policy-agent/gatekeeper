@@ -46,7 +46,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
-	"k8s.io/utils/pointer"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -142,13 +141,6 @@ func setupController(
 }
 
 func Test_AssignMetadata(t *testing.T) {
-	t.Cleanup(func() {
-		mutation.MutationEnabled = pointer.BoolPtr(false)
-	})
-
-	mutationEnabled := true
-	mutation.MutationEnabled = &mutationEnabled
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
@@ -191,13 +183,6 @@ func Test_AssignMetadata(t *testing.T) {
 func Test_ModifySet(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	t.Cleanup(func() {
-		mutation.MutationEnabled = pointer.BoolPtr(false)
-	})
-
-	mutationEnabled := true
-	mutation.MutationEnabled = &mutationEnabled
-
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	// Apply fixtures *before* the controllers are setup.
@@ -233,13 +218,6 @@ func Test_ModifySet(t *testing.T) {
 
 func Test_Assign(t *testing.T) {
 	g := gomega.NewWithT(t)
-
-	t.Cleanup(func() {
-		mutation.MutationEnabled = pointer.BoolPtr(false)
-	})
-
-	mutationEnabled := true
-	mutation.MutationEnabled = &mutationEnabled
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 

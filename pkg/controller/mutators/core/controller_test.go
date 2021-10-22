@@ -117,9 +117,6 @@ func TestReconcile(t *testing.T) {
 	// status resources live by default
 	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
 
-	// force mutation to be enabled
-	*mutation.MutationEnabled = true
-
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
 
 	tracker, err := readiness.SetupTracker(mgr, true, false)

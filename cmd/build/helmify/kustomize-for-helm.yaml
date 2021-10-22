@@ -78,8 +78,8 @@ spec:
             - --log-level={{ .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
-            - --enable-mutation={{ .Values.experimentalEnableMutation}}
             - --enable-external-data={{ .Values.enableExternalData }}
+            - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
