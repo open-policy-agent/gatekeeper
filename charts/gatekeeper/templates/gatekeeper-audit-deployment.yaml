@@ -95,12 +95,11 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
       hostNetwork: {{ .Values.audit.hostNetwork }}
-      dnsPolicy: {{ .Values.audit.dnsPolicy | default Default }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
-      {{- if .Values.audit.priorityClassName }}
+      {{- if .Values.audit.priorityClassName }} 
       priorityClassName:  {{ .Values.audit.priorityClassName }}
       {{- end }}
       serviceAccountName: gatekeeper-admin
