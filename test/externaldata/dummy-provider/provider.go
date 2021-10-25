@@ -55,22 +55,22 @@ func validate(w http.ResponseWriter, req *http.Request) {
 
 		// following checks are for testing purposes only
 		// check if key contains "_systemError" to trigger a system error
-		if strings.HasSuffix(key.(string), "_systemError") {
+		if strings.HasSuffix(key, "_systemError") {
 			sendResponse(nil, "testing system error", w)
 			return
 		}
 
 		// check if key contains "error_" to trigger an error
-		if strings.HasPrefix(key.(string), "error_") {
+		if strings.HasPrefix(key, "error_") {
 			results = append(results, externaldata.Item{
 				Key:   key,
-				Error: key.(string) + "_invalid",
+				Error: key + "_invalid",
 			})
-		} else if !strings.HasSuffix(key.(string), "_valid") {
+		} else if !strings.HasSuffix(key, "_valid") {
 			// valid key will have "_valid" appended as return value
 			results = append(results, externaldata.Item{
 				Key:   key,
-				Value: key.(string) + "_valid",
+				Value: key + "_valid",
 			})
 		}
 	}
