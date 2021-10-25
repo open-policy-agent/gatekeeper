@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,19 +12,19 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 )
 
+const (
+	timeout    = 1 * time.Second
+	apiVersion = "externaldata.gatekeeper.sh/v1alpha1"
+)
+
 func main() {
 	fmt.Println("starting server...")
-	http.HandleFunc("/validate", validate)
+	http.HandleFunc("/validate", processTimeout(validate, timeout))
 
 	if err := http.ListenAndServe(":8090", nil); err != nil {
 		panic(err)
 	}
 }
-
-const (
-	timeout    = 1 * time.Second
-	apiVersion = "externaldata.gatekeeper.sh/v1alpha1"
-)
 
 func validate(w http.ResponseWriter, req *http.Request) {
 	// only accept POST requests
@@ -92,5 +93,26 @@ func sendResponse(results *[]externaldata.Item, systemErr string, w http.Respons
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		panic(err)
+	}
+}
+
+func processTimeout(h http.HandlerFunc, duration time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), duration)
+		defer cancel()
+
+		r = r.WithContext(ctx)
+
+		processDone := make(chan bool)
+		go func() {
+			h(w, r)
+			processDone <- true
+		}()
+
+		select {
+		case <-ctx.Done():
+			sendResponse(nil, "operation timed out", w)
+		case <-processDone:
+		}
 	}
 }

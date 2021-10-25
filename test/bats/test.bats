@@ -94,7 +94,7 @@ teardown_file() {
   # deployment, service and provider for dummy-provider
   run kubectl apply -f test/externaldata/dummy-provider/manifest
   assert_success
-  kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider"
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"

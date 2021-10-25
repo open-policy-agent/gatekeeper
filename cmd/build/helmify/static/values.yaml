@@ -80,6 +80,8 @@ audit:
     requests:
       cpu: 100m
       memory: 256Mi
+crds:
+  resources: {}
 pdb:
   controllerManager:
     minAvailable: 1
