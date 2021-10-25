@@ -19,8 +19,18 @@ spec:
           # send external data request
           response := external_data({"provider": "dummy-provider", "keys": images})
 
-          # check response
-          error := response.errors[_]
-          error[1] == "image tag cannot be latest" 
-          msg := sprintf("Image %v has latest tag", [error[0]])
+          response_with_error(response)
+
+          msg := sprintf("invalid response: %v", [response])
+        }
+
+        response_with_error(response) {
+          not count(response.errors) == 0
+          errs := response.errors[_]
+          count(errs) > 0
+          contains(errs[1], "_invalid")
+        }
+
+        response_with_error(response) {
+          count(response.system_error) > 0
         }

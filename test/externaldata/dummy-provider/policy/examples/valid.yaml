@@ -1,21 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: latest-deployment
+  name: valid-deployment
   labels:
-    app: latest-deployment
+    app: valid-deployment
 spec:
   replicas: 0 # testing purposes only
   selector:
     matchLabels:
-      app: latest-deployment
+      app: valid-deployment
   template:
     metadata:
       labels:
-        app: latest-deployment
+        app: valid-deployment
     spec:
       containers:
-      - name: latest
-        image: test/image:latest
-      - name: v1
+      - name: valid
         image: test/image:v1

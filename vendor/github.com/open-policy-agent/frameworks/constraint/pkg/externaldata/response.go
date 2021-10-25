@@ -45,7 +45,7 @@ type Response struct {
 // Items is the struct that contains the key, value or error from a provider response.
 type Item struct {
 	// Key is the request from the provider.
-	Key string `json:"key,omitempty"`
+	Key interface{} `json:"key,omitempty"`
 	// Value is the response from the provider.
 	Value interface{} `json:"value,omitempty"`
 	// Error is the error from the provider.

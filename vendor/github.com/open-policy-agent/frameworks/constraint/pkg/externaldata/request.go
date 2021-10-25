@@ -5,7 +5,7 @@ type RegoRequest struct {
 	// ProviderName is the name of the external data provider.
 	ProviderName string `json:"provider"`
 	// Keys is the list of keys to send to the external data provider.
-	Keys []string `json:"keys"`
+	Keys []interface{} `json:"keys"`
 }
 
 // ProviderRequest is the API request for the external data provider.
@@ -21,11 +21,11 @@ type ProviderRequest struct {
 // Request is the struct that contains the keys to query.
 type Request struct {
 	// Keys is the list of keys to send to the external data provider.
-	Keys []string `json:"keys,omitempty"`
+	Keys []interface{} `json:"keys,omitempty"`
 }
 
 // NewRequest creates a new request for the external data provider.
-func NewProviderRequest(keys []string) *ProviderRequest {
+func NewProviderRequest(keys []interface{}) *ProviderRequest {
 	return &ProviderRequest{
 		APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
 		Kind:       "ProviderRequest",

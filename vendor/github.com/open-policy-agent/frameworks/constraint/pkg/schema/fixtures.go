@@ -3,6 +3,7 @@ package schema
 import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/utils/pointer"
 )
 
 func VersionedIncompleteSchema() *apiextensionsv1.JSONSchemaProps {
@@ -28,9 +29,8 @@ func VersionedIncompleteSchema() *apiextensionsv1.JSONSchemaProps {
 }
 
 func VersionlessSchemaWithXPreserve() *apiextensions.JSONSchemaProps {
-	trueBool := true
 	return &apiextensions.JSONSchemaProps{
-		XPreserveUnknownFields: &trueBool,
+		XPreserveUnknownFields: pointer.Bool(true),
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"message": {
 				Type: "string",
@@ -40,7 +40,7 @@ func VersionlessSchemaWithXPreserve() *apiextensions.JSONSchemaProps {
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
 						Type:                   "object",
-						XPreserveUnknownFields: &trueBool,
+						XPreserveUnknownFields: pointer.Bool(true),
 						Properties: map[string]apiextensions.JSONSchemaProps{
 							"key":          {Type: "string"},
 							"allowedRegex": {Type: "string"},

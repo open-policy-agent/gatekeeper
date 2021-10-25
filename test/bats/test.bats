@@ -98,18 +98,23 @@ teardown_file() {
 
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata latest-image"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
 
-  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/disallowed.yaml
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/error.yaml
   assert_match 'denied the request' "${output}"
-  assert_match 'has latest tag' "${output}"
+  assert_match 'error_test/image:latest_invalid' "${output}"
   assert_failure
 
-  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/allowed.yaml
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/system-error.yaml
+  assert_match 'denied the request' "${output}"
+  assert_match 'testing system error' "${output}"
+  assert_failure
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/valid.yaml
   assert_success
 
   kubectl delete --ignore-not-found -f test/externaldata/dummy-provider/manifest
-  kubectl delete --ignore-not-found deploy latest-deployment v1-deployment
+  kubectl delete --ignore-not-found deploy error-deployment valid-deployment system-error-deployment
   kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }
 

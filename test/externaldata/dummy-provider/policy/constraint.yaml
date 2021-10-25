@@ -1,7 +1,7 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sExternalData
 metadata:
-  name: latest-image
+  name: dummy
 spec:
   enforcementAction: deny
   match:
