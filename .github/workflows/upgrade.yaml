@@ -8,6 +8,9 @@ on:
     paths:
       - "manifest_staging/charts/**"
 
+permissions:
+  contents: read
+
 env:
   BASE_RELEASE: 3.4.0
   BASE_BRANCH: release-3.4
