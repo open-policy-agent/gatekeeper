@@ -111,6 +111,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
