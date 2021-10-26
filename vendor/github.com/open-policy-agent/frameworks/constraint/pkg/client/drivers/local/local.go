@@ -126,20 +126,6 @@ func (d *driver) Init(ctx context.Context) error {
 				if err := ast.As(regorequest.Value, &regoReq); err != nil {
 					return nil, err
 				}
-				// only primitive types are allowed for keys
-				for _, key := range regoReq.Keys {
-					switch v := key.(type) {
-					case int:
-					case int32:
-					case int64:
-					case string:
-					case float64:
-					case float32:
-						break
-					default:
-						return externaldata.HandleError(http.StatusBadRequest, fmt.Errorf("type %v is not supported in external_data", v))
-					}
-				}
 
 				provider, err := d.providerCache.Get(regoReq.ProviderName)
 				if err != nil {
