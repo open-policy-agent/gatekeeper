@@ -96,7 +96,7 @@ teardown_file() {
   assert_success
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider"
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml"
+  kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
 
@@ -263,7 +263,7 @@ __required_labels_audit_test() {
 }
 
 @test "disable http.send" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/use_http_send_template.yaml"
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/use_http_send_template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced constrainttemplate k8sdenynamehttpsend"
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_http_send.yaml
   assert_failure
