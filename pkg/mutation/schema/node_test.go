@@ -234,6 +234,7 @@ func TestNode_RemovePanic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			defer func() {
 				r := recover()
 				if r == nil && tc.wantPanic {

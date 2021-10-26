@@ -17,8 +17,6 @@ package core
 
 import (
 	"fmt"
-	"os"
-	gosync "sync"
 	"testing"
 	"time"
 
@@ -35,6 +33,7 @@ import (
 	mutationschema "github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -46,11 +45,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
@@ -61,13 +58,13 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) manager.Manager {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -124,16 +121,7 @@ func TestReconcile(t *testing.T) {
 
 	tracker, err := readiness.SetupTracker(mgr, true, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	err = os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		err = os.Unsetenv("POD_NAME")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
@@ -154,17 +142,8 @@ func TestReconcile(t *testing.T) {
 	statusAdder := &mutatorstatus.Adder{}
 	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
-	once := gosync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("Can add a mutator", func(t *testing.T) {
 		g.Expect(c.Create(ctx, mutator.DeepCopy())).NotTo(gomega.HaveOccurred())
@@ -286,8 +265,6 @@ func TestReconcile(t *testing.T) {
 			return podStatusMatches(ctx, c, pod, mBar2ID, hasStatusErrors(nil))
 		})
 	})
-
-	testMgrStopped()
 }
 
 func podStatusMatches(ctx context.Context, c client.Client, pod *corev1.Pod, id types.ID, matchers ...PodStatusMatcher) error {
