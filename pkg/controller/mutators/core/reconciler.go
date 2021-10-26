@@ -149,7 +149,7 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, obj clien
 	mutator, err := r.mutatorFor(obj)
 	if err != nil {
 		r.log.Error(err, "Creating mutator for resource failed", "resource",
-			client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			client.ObjectKeyFromObject(obj))
 		r.getTracker().TryCancelExpect(obj)
 
 		return r.updateStatusWithError(ctx, obj, err)
@@ -157,7 +157,7 @@ func (r *Reconciler) reconcileUpsert(ctx context.Context, id types.ID, obj clien
 
 	if errToUpsert := r.system.Upsert(mutator); errToUpsert != nil {
 		r.log.Error(err, "Insert failed", "resource",
-			client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+			client.ObjectKeyFromObject(obj))
 		r.getTracker().TryCancelExpect(obj)
 
 		// Since we got an error upserting obj, update its PodStatus first.
