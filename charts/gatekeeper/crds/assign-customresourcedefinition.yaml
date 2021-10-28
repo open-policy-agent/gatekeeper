@@ -28,12 +28,16 @@ spec:
             description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
             type: object
           spec:
             description: AssignSpec defines the desired state of Assign.
             properties:
               applyTo:
-                description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run "make" to regenerate code after modifying this file'
+                description: ApplyTo lists the specific groups, versions and kinds a mutation will be applied to. This is necessary because every mutation implies part of an object schema and object schemas are associated with specific GVKs.
                 items:
                   description: ApplyTo determines what GVKs items the mutation should apply to. Globs are not allowed.
                   properties:
@@ -52,12 +56,15 @@ spec:
                   type: object
                 type: array
               location:
+                description: 'Location describes the path to be mutated, for example: `spec.containers[name: main]`.'
                 type: string
               match:
-                description: Match selects objects to apply mutations to.
+                description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
                     items:
+                      description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -105,6 +112,10 @@ spec:
                         description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                         type: object
                     type: object
+                  name:
+                    description: 'Name is the name of an object.  If defined, it will match against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both `pod-a` and `pod-b`.'
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    type: string
                   namespaceSelector:
                     description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
                     properties:
@@ -137,6 +148,8 @@ spec:
                     type: object
                   namespaces:
                     items:
+                      description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -144,14 +157,12 @@ spec:
                     type: string
                 type: object
               parameters:
+                description: Parameters define the behavior of the mutator.
                 properties:
                   assign:
                     description: Assign.value holds the value to be assigned
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
-                  assignIf:
-                    description: once https://github.com/kubernetes-sigs/controller-tools/pull/528 is merged, we can use an actual object
-                    type: object
                   pathTests:
                     items:
                       description: "PathTest allows the user to customize how the mutation works if parent paths are missing. It traverses the list in order. All sub paths are tested against the provided condition, if the test fails, the mutation is not applied. All `subPath` entries must be a prefix of `location`. Any glob characters will take on the same value as was used to expand the matching glob in `location`. \n Available Tests: * MustExist    - the path must exist or do not mutate * MustNotExist - the path must not exist or do not mutate."
@@ -182,6 +193,9 @@ spec:
                         description: MutatorError represents a single error caught while adding a mutator to a system.
                         properties:
                           message:
+                            type: string
+                          type:
+                            description: Type indicates a specific class of error for use by controller code. If not present, the error should be treated as not matching any known type.
                             type: string
                         required:
                         - message

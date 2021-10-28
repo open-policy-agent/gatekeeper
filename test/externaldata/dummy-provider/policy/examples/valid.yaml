@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valid-deployment
+  labels:
+    app: valid-deployment
+spec:
+  replicas: 0 # testing purposes only
+  selector:
+    matchLabels:
+      app: valid-deployment
+  template:
+    metadata:
+      labels:
+        app: valid-deployment
+    spec:
+      containers:
+      - name: valid
+        image: test/image:v1

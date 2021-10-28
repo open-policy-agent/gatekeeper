@@ -6,8 +6,9 @@ CRD_IMG := $(CRD_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
+ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.7.0-beta.1
+VERSION := v3.7.0-beta.2
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -71,9 +72,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=status\
 \n        - --logtostderr"
 
-
-FRAMEWORK_PACKAGE := github.com/open-policy-agent/frameworks/constraint
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -118,6 +116,10 @@ e2e-bootstrap:
 e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
+e2e-build-load-externaldata-image: docker-buildx-builder
+	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
+	kind load docker-image --name kind dummy-provider:test
+
 e2e-verify-release: patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
 
@@ -135,9 +137,11 @@ e2e-helm-deploy: e2e-helm-install
 		--set image.repository=${HELM_REPO} \
 		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set postInstall.labelNamespace.enabled=true \
 		--set experimentalEnableMutation=true \
 		--set disabledBuiltins={http.send};\
 
@@ -159,9 +163,11 @@ e2e-helm-upgrade:
 		--set image.repository=${HELM_REPO} \
 		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set postInstall.labelNamespace.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 # Build manager binary
@@ -191,6 +197,10 @@ deploy-mutation: patch-image
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
+ifeq ($(ENABLE_EXTERNAL_DATA),true)
+	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
+	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
+endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 	  /config/overlays/dev | kubectl apply -f -
@@ -278,13 +288,14 @@ docker-build: build-crds
 	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
 
-# Build docker image with buildx
-# Experimental docker feature to build cross platform multi-architecture docker images
-# https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx: build-crds
+docker-buildx-builder:
 	if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --name container-builder --use;\
 	fi
+
+# Build image with buildx to build cross platform multi-architecture docker images
+# https://docs.docker.com/buildx/working-with-buildx/
+docker-buildx: build-crds docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(IMG) \
 		. --load
@@ -292,37 +303,24 @@ docker-buildx: build-crds
 		-t $(CRD_IMG) \
 		-f crd.Dockerfile .staging/crds/ --load
 
-docker-buildx-dev:
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --name container-builder --use;\
-	fi
+docker-buildx-dev: docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(DEV_TAG) \
 		-t $(REPOSITORY):dev \
 		. --push
 
-docker-buildx-crds-dev: build-crds
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --name container-builder --use;\
-	fi
-
+docker-buildx-crds-dev: build-crds docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
 		-f crd.Dockerfile .staging/crds/ --push
 
-docker-buildx-release:
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --name container-builder --use;\
-	fi
+docker-buildx-release: docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(REPOSITORY):$(VERSION) \
 		. --push
 
-docker-buildx-crds-release: build-crds
-	@if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --name container-builder --use;\
-	fi
+docker-buildx-crds-release: build-crds docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push

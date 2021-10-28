@@ -16,6 +16,7 @@ limitations under the License.
 package readiness_test
 
 import (
+	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,6 +53,10 @@ var testModifySet = []*mutationsv1alpha1.ModifySet{
 
 var testAssign = []*mutationsv1alpha1.Assign{
 	makeAssign("demo"),
+}
+
+var testProvider = []*externaldatav1alpha1.Provider{
+	makeProvider("demo"),
 }
 
 func makeTemplate(name string) *templates.ConstraintTemplate {
@@ -111,6 +116,22 @@ func makeAssign(name string) *mutationsv1alpha1.Assign {
 		},
 		Spec: mutationsv1alpha1.AssignSpec{
 			Location: "spec.dnsPolicy",
+		},
+	}
+}
+
+func makeProvider(name string) *externaldatav1alpha1.Provider {
+	return &externaldatav1alpha1.Provider{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
+			Kind:       "Provider",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: externaldatav1alpha1.ProviderSpec{
+			URL:     "http://demo",
+			Timeout: 1,
 		},
 	}
 }

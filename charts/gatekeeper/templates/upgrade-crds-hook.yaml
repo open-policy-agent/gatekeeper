@@ -1,3 +1,4 @@
+{{- if .Values.upgradeCRDs.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -70,6 +71,10 @@ spec:
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}
       containers:
       - name: crds-upgrade
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
@@ -78,5 +83,16 @@ spec:
         - apply
         - -f
         - crds/
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          readOnlyRootFilesystem: true
+          runAsGroup: 999
+          runAsNonRoot: true
+          runAsUser: 1000
       nodeSelector:
         kubernetes.io/os: linux
+
+{{- end }}

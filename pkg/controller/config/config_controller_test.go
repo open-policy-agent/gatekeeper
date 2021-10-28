@@ -137,7 +137,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
@@ -280,7 +280,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	g.Expect(c.Create(ctx, pod)).NotTo(gomega.HaveOccurred())
 
 	// set up tracker
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// events channel will be used to receive events from dynamic watches
@@ -384,7 +384,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
@@ -524,7 +524,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
@@ -676,12 +676,9 @@ type testExpectations interface {
 // has been fully removed before applying our new object.
 func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object) func() error {
 	gvk := toDelete.GetObjectKind().GroupVersionKind()
-	name := toDelete.GetName()
-	namespace := toDelete.GetNamespace()
+	key := client.ObjectKeyFromObject(toDelete)
 
 	return func() error {
-		key := client.ObjectKey{Namespace: namespace, Name: name}
-
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
 
@@ -707,26 +704,26 @@ func ensureDeleted(ctx context.Context, c client.Client, toDelete client.Object)
 
 // ensureCreated attempts to create toCreate in Client c as toCreate existed when ensureCreated was called.
 func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object) func() error {
+	gvk := toCreate.GetObjectKind().GroupVersionKind()
+	key := client.ObjectKeyFromObject(toCreate)
+
 	// As ensureCreated returns a closure, it is possible that the value toCreate will be modified after ensureCreated
 	// is called but before the closure is called. Creating a copy here ensures the object to be created is consistent
 	// with the way it existed when ensureCreated was called.
 	toCreateCopy := toCreate.DeepCopyObject()
 
 	return func() error {
-		instance, ok := toCreateCopy.DeepCopyObject().(client.Object)
+		instance, ok := toCreateCopy.(client.Object)
 		if !ok {
 			return fmt.Errorf("instance was %T which is not a client.Object", instance)
 		}
-
-		key := client.ObjectKey{Namespace: instance.GetNamespace(), Name: instance.GetName()}
-		gvk := instance.GetObjectKind().GroupVersionKind()
 
 		err := c.Create(ctx, instance)
 		if apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("a copy of %v %v already exists - run ensureDeleted to ensure a fresh copy exists for testing",
 				gvk, key)
 		} else if err != nil {
-			return fmt.Errorf("creating %v %v", gvk, key)
+			return fmt.Errorf("creating %v %v: %v", gvk, key, err)
 		}
 
 		return nil

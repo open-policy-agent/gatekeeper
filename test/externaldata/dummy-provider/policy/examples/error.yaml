@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: error-deployment
+  labels:
+    app: error-deployment
+spec:
+  replicas: 0 # testing purposes only
+  selector:
+    matchLabels:
+      app: error-deployment
+  template:
+    metadata:
+      labels:
+        app: error-deployment
+    spec:
+      containers:
+      - name: error
+        image: error_test/image:latest

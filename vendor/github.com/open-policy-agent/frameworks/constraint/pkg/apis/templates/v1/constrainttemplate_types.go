@@ -23,7 +23,7 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ConstraintTemplateSpec defines the desired state of ConstraintTemplate
+// ConstraintTemplateSpec defines the desired state of ConstraintTemplate.
 type ConstraintTemplateSpec struct {
 	CRD     CRD      `json:"crd,omitempty"`
 	Targets []Target `json:"targets,omitempty"`
@@ -76,7 +76,7 @@ type ByPodStatus struct {
 	Errors             []CreateCRDError `json:"errors,omitempty"`
 }
 
-// ConstraintTemplateStatus defines the observed state of ConstraintTemplate
+// ConstraintTemplateStatus defines the observed state of ConstraintTemplate.
 type ConstraintTemplateStatus struct {
 	Created bool          `json:"created,omitempty"`
 	ByPod   []ByPodStatus `json:"byPod,omitempty"`
@@ -104,7 +104,7 @@ type ConstraintTemplate struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ConstraintTemplateList contains a list of ConstraintTemplate
+// ConstraintTemplateList contains a list of ConstraintTemplate.
 type ConstraintTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

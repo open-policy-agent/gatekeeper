@@ -3,8 +3,6 @@ package constrainttemplatestatus_test
 import (
 	"context"
 	"fmt"
-	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -12,28 +10,25 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
-	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 )
 
 const timeout = time.Second * 15
@@ -42,13 +37,13 @@ const timeout = time.Second * 15
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
 		NewCache:           dynamiccache.New,
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -121,13 +116,10 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
 
-	err = os.Setenv("POD_NAME", "no-pod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
@@ -143,20 +135,11 @@ violation[{"msg": "denied!"}] {
 	}
 	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
-	once := sync.Once{}
-	testMgrStopped := func() {
-		once.Do(func() {
-			cancelFunc()
-			mgrStopped.Wait()
-		})
-	}
-
-	defer testMgrStopped()
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
 
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	mgr.GetCache().WaitForCacheSync(waitCtx)
 
 	templateCpy := template.DeepCopy()
@@ -181,7 +164,11 @@ violation[{"msg": "denied!"}] {
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).To(gomega.BeNil()) }()
+
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
+		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
+
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		g.Expect(c.Delete(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
@@ -194,7 +181,11 @@ violation[{"msg": "denied!"}] {
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(err).To(gomega.BeNil())
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeCStatus))).To(gomega.BeNil()) }()
+
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
+		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
+
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		g.Expect(c.Delete(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
@@ -233,13 +224,19 @@ violation[{"msg": "denied!"}] {
 		g.Expect(err).To(gomega.BeNil())
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeTStatus))).NotTo(gomega.HaveOccurred()) }()
+
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
+		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
 		g.Expect(err).To(gomega.BeNil())
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
-		defer func() { g.Expect(ignoreNotFound(c.Delete(ctx, fakeCStatus))).NotTo(gomega.HaveOccurred()) }()
+
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
+		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
@@ -303,16 +300,6 @@ func verifyCByPodStatusCount(ctx context.Context, c client.Client, expected int)
 		}
 		return nil
 	}
-}
-
-func ignoreNotFound(err error) error {
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 func newDenyAllConstraint() *unstructured.Unstructured {

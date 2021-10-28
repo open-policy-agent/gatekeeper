@@ -159,7 +159,7 @@ func TestRegistrar_AddWatch_Idempotent(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent, 1))
 	if err != nil {
@@ -211,7 +211,7 @@ func TestRegistrar_RemoveWatch_Idempotent(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent, 1))
 	if err != nil {
@@ -292,7 +292,7 @@ func TestRegistrar_RemoveWatch_Idempotent(t *testing.T) {
 func TestRegistrar_Replay(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	gvk := schema.GroupVersionKind{
 		Version: "v1",
@@ -306,7 +306,7 @@ func TestRegistrar_Replay(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	const count = 4
 	type tuple struct {
@@ -367,7 +367,7 @@ func TestRegistrar_Replay(t *testing.T) {
 func TestRegistrar_Replay_Retry(t *testing.T) {
 	g := gomega.NewWithT(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	gvk := schema.GroupVersionKind{
 		Version: "v1",
@@ -399,7 +399,7 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	e1 := make(chan event.GenericEvent, 1)
 	r1, err := wm.NewRegistrar("r1", e1)
@@ -468,7 +468,7 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 		t.Fatalf("creating watch manager: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
 		return wm.Start(ctx)
@@ -554,7 +554,7 @@ func TestRegistrar_Duplicates_Rejected(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
 	g.Expect(err).NotTo(gomega.HaveOccurred())
@@ -591,7 +591,7 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 		t.Errorf("creating watch manager: %v", err)
 		return
 	}
-	defer cancel()
+	t.Cleanup(cancel)
 
 	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent))
 	g.Expect(err).NotTo(gomega.HaveOccurred())

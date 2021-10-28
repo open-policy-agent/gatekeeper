@@ -17,6 +17,7 @@ package readiness
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -71,19 +72,27 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
 	l := dummyLister{}
-	rt := newTracker(l, false, func() objData {
+	rt := newTracker(l, false, false, func() objData {
 		return objData{retries: 0}
 	})
 
 	// Run kicks off all the tracking
 	ctx, cancel := context.WithCancel(context.Background())
+	var runErr error
+	runWg := sync.WaitGroup{}
+	runWg.Add(1)
 	go func() {
-		err := rt.Run(ctx)
-		if err != nil {
-			t.Errorf("Tracker Run() failed with error: %v", err)
-		}
+		runErr = rt.Run(ctx)
+		runWg.Done()
 	}()
-	defer cancel()
+
+	t.Cleanup(func() {
+		cancel()
+		runWg.Wait()
+		if runErr != nil {
+			t.Errorf("got Tracker.Run() error: %v, want %v", runErr, nil)
+		}
+	})
 
 	g.Eventually(func() bool {
 		return rt.Populated()
@@ -101,19 +110,27 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 	g := gomega.NewWithT(t)
 
 	l := dummyLister{}
-	rt := newTracker(l, false, func() objData {
+	rt := newTracker(l, false, false, func() objData {
 		return objData{retries: 2}
 	})
 
 	// Run kicks off all the tracking
 	ctx, cancel := context.WithCancel(context.Background())
+	var runErr error
+	runWg := sync.WaitGroup{}
+	runWg.Add(1)
 	go func() {
-		err := rt.Run(ctx)
-		if err != nil {
-			t.Errorf("Tracker Run() failed with error: %v", err)
-		}
+		runErr = rt.Run(ctx)
+		runWg.Done()
 	}()
-	defer cancel()
+
+	t.Cleanup(func() {
+		cancel()
+		runWg.Wait()
+		if runErr != nil {
+			t.Errorf("Tracker Run() failed with error: %v", runErr)
+		}
+	})
 
 	g.Eventually(func() bool {
 		return rt.Populated()

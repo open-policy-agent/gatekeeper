@@ -159,11 +159,11 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.2.0
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20211025234246-f478d8a555b5
 ## explicit
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
-github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates
+github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1
@@ -173,7 +173,9 @@ github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local
 github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib
 github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints
 github.com/open-policy-agent/frameworks/constraint/pkg/core/templates
+github.com/open-policy-agent/frameworks/constraint/pkg/externaldata
 github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter
+github.com/open-policy-agent/frameworks/constraint/pkg/schema
 github.com/open-policy-agent/frameworks/constraint/pkg/types
 # github.com/open-policy-agent/opa v0.29.4
 ## explicit

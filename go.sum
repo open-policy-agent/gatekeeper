@@ -607,8 +607,8 @@ github.com/onsi/gomega v1.16.0/go.mod h1:HnhC7FXeEQY45zxNK3PPoIUhzk/80Xly9PcubAl
 github.com/op/go-logging v0.0.0-20160315200505-970db520ece7/go.mod h1:HzydrMdWErDVzsI23lYNej1Htcns9BCg93Dk0bBINWk=
 github.com/open-policy-agent/cert-controller v0.2.0 h1:Z+IPOYDor28l6cjEo2WvTZY6Bv5oYR6wECEIP8pyG/M=
 github.com/open-policy-agent/cert-controller v0.2.0/go.mod h1:SWS7Ame8oKHF11cDsQCFlULrrOMV5Z59FIGEAF/M6YI=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76 h1:T6XdkOS3onLqKniqlqImmlSct46oMl50IDZ/YSrHVQE=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20210816184142-2924b2c86f76/go.mod h1:sxECOn2E9o4DIK6ttinq1frfiErxi0Z8oIgtz7VDVBc=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20211025234246-f478d8a555b5 h1:v5CdVF+Gk0OGPZM+6g0CKjaUWjehnf5e/sezx1Qp7vw=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20211025234246-f478d8a555b5/go.mod h1:sxECOn2E9o4DIK6ttinq1frfiErxi0Z8oIgtz7VDVBc=
 github.com/open-policy-agent/opa v0.29.4 h1:rNa/Gd3Fs0xWgL0aZoyblRwCZLJsSLDQOhnck6DWpaA=
 github.com/open-policy-agent/opa v0.29.4/go.mod h1:ZCOTD3yyFR8JvF8ETdWdiSPn9WcF1dXeQWOv7VoPorU=
 github.com/opentracing-contrib/go-observer v0.0.0-20170622124052-a52f23424492/go.mod h1:Ngi6UdF0k5OKD5t5wlmGhe/EDKPoUM3BXZSSfIuJbis=

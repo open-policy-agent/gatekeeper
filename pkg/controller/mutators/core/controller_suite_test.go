@@ -20,10 +20,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var cfg *rest.Config
@@ -59,17 +56,6 @@ func TestMain(m *testing.M) {
 		log.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
-}
-
-// StartTestManager adds recFn.
-func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
-	}()
-	return wg
 }
 
 // Bootstrap the gatekeeper-system namespace for use in tests.

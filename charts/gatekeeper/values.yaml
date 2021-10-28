@@ -9,6 +9,8 @@ validatingWebhookFailurePolicy: Ignore
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 experimentalEnableMutation: false
+mutatingWebhookFailurePolicy: Ignore
+mutatingWebhookTimeoutSeconds: 3
 auditChunkSize: 0
 logLevel: INFO
 logDenies: false
@@ -19,14 +21,14 @@ postInstall:
   labelNamespace:
     enabled: true
     image:
-      repository: line/kubectl-kustomize
-      tag: 1.20.4-4.0.5
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.7.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.7.0-beta.1
+  release: v3.7.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
@@ -36,6 +38,7 @@ podCountLimit: 100
 secretAnnotations: {}
 controllerManager:
   exemptNamespaces: []
+  exemptNamespacePrefixes: []
   hostNetwork: false
   port: 8443
   metricsPort: 8888
@@ -82,3 +85,7 @@ pdb:
     minAvailable: 1
 service: {}
 disabledBuiltins:
+psp:
+  enabled: true
+upgradeCRDs:
+  enabled: true

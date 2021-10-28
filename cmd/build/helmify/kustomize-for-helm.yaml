@@ -48,6 +48,12 @@ metadata:
   name: assign.mutations.gatekeeper.sh
 status: null
 ---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: providers.externaldata.gatekeeper.sh
+status: null
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -107,6 +113,7 @@ spec:
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
+      dnsPolicy: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DNS_POLICY
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -162,6 +169,7 @@ spec:
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
+      dnsPolicy: HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY
 ---
 apiVersion: v1
 kind: Secret

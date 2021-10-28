@@ -24,7 +24,7 @@ import (
 
 func Test_SingleRunner(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	var wg sync.WaitGroup
 	syncOne := make(chan struct{})
 	syncTwo := make(chan struct{})

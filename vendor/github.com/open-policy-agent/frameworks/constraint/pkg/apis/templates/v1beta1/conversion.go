@@ -16,14 +16,14 @@ limitations under the License.
 package v1beta1
 
 import (
-	apisTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
-func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
+func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { // nolint:revive // Required exact function name.
 	inSchema := in.OpenAPIV3Schema
 
 	// legacySchema should allow for users to provide arbitrary parameters, regardless of whether the user specified them
@@ -35,7 +35,7 @@ func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *cor
 		inSchemaCopy := inSchema.DeepCopy()
 
 		if in.LegacySchema != nil && *in.LegacySchema {
-			if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
+			if err := schema.AddPreserveUnknownFields(inSchemaCopy); err != nil {
 				return err
 			}
 		}
