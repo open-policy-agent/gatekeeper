@@ -19,7 +19,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -34,8 +33,7 @@ type AssignMetadataSpec struct {
 
 type MetadataParameters struct {
 	// Assign.value holds the value to be assigned
-	// +kubebuilder:validation:XPreserveUnknownFields
-	Assign runtime.RawExtension `json:"assign,omitempty"`
+	Assign AssignField `json:"assign,omitempty"`
 }
 
 // AssignMetadataStatus defines the observed state of AssignMetadata.

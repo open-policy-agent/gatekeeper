@@ -136,8 +136,18 @@ spec:
                 properties:
                   assign:
                     description: Assign.value holds the value to be assigned
+                    properties:
+                      fromMetadata:
+                        description: FromMetadata assigns a value from the specified metadata field.
+                        properties:
+                          field:
+                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            type: string
+                        type: object
+                      value:
+                        description: Value is a constant value that will be assigned to `location`
+                        x-kubernetes-preserve-unknown-fields: true
                     type: object
-                    x-kubernetes-preserve-unknown-fields: true
                 type: object
             type: object
           status:

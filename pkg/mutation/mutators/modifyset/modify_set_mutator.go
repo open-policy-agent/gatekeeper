@@ -77,10 +77,6 @@ func (m *Mutator) SchemaBindings() []runtimeschema.GroupVersionKind {
 	return m.bindings
 }
 
-func (m *Mutator) Value() (interface{}, error) {
-	return runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList), nil
-}
-
 func (m *Mutator) HasDiff(mutator types.Mutator) bool {
 	toCheck, ok := mutator.(*Mutator)
 	if !ok { // different types, different

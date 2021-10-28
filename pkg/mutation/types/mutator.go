@@ -39,9 +39,15 @@ type Mutator interface {
 	HasDiff(mutator Mutator) bool
 	// DeepCopy returns a copy of the current object
 	DeepCopy() Mutator
-	Value() (interface{}, error)
 	Path() parser.Path
 	String() string
+}
+
+// MetadataGetter is an object that can retrieve
+// the metadata fields that support `AssignField.FromMetadata`.
+type MetadataGetter interface {
+	GetNamespace() string
+	GetName() string
 }
 
 // MakeID builds an ID object for the given object.
