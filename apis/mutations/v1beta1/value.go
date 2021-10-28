@@ -1,4 +1,4 @@
-package v1alpha1
+package v1beta1
 
 import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"

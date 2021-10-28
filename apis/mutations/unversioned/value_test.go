@@ -1,9 +1,10 @@
-package v1alpha1
+package unversioned
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -16,7 +17,7 @@ func TestAssignField_Validate(t *testing.T) {
 		{
 			name: "valid constant",
 			obj: &AssignField{
-				Value: &Anything{Value: "something"},
+				Value: &types.Anything{Value: "something"},
 			},
 			wantErr: nil,
 		},
@@ -55,7 +56,7 @@ func TestAssignField_Validate(t *testing.T) {
 		{
 			name: "double-defined",
 			obj: &AssignField{
-				Value: &Anything{Value: "something"},
+				Value: &types.Anything{Value: "something"},
 				FromMetadata: &FromMetadata{
 					Field: ObjNamespace,
 				},
@@ -86,7 +87,7 @@ func TestAssignField_GetValue(t *testing.T) {
 			objNS:   "some-namespace",
 			objName: "some-name",
 			assign: &AssignField{
-				Value: &Anything{Value: "something"},
+				Value: &types.Anything{Value: "something"},
 			},
 			expected: "something",
 		},

@@ -226,8 +226,13 @@ lint:
 	 golangci-lint run -v
 
 # Generate code
-generate: __controller-gen target-template-source
+generate: __conversion-gen __controller-gen target-template-source
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
+	$(CONVERSION_GEN) \
+	            --output-base=/gatekeeper \
+                --input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1 \
+                --go-header-file=./hack/boilerplate.go.txt \
+                --output-file-base=zz_generated.conversion
 
 # Prepare crds to be added to gatekeeper-crds image
 clean-crds:
@@ -357,6 +362,9 @@ uninstall:
 
 __controller-gen: __tooling-image
 CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
+
+__conversion-gen: __tooling-image
+CONVERSION_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
 
 __tooling-image:
 	docker build . \

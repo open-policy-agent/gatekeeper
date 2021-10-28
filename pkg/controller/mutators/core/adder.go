@@ -10,13 +10,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -71,7 +72,14 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.MutatorPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, util.EventPackerMapFunc())),
+		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(obj client.Object) []reconcile.Request {
+			return []reconcile.Request{{
+				NamespacedName: apitypes.NamespacedName{
+					Namespace: obj.GetNamespace(),
+					Name:      obj.GetName(),
+				},
+			}}
+		})),
 	)
 	if err != nil {
 		return err
@@ -81,8 +89,17 @@ func add(mgr manager.Manager, r *Reconciler) error {
 		// Watch for enqueued events.
 		err = c.Watch(
 			&source.Channel{Source: r.events},
-			&handler.EnqueueRequestForObject{},
-		)
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
+				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
+					return nil
+				}
+				return []reconcile.Request{{
+					NamespacedName: apitypes.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
+					},
+				}}
+			}))
 	}
 
 	return err

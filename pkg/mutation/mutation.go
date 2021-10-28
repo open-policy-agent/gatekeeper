@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	DeprecatedMutationEnabled  = flag.Bool("enable-mutation", false, "Deprecated. This used to enable the mutation feature, now it has no effect. Use --operation instead.")
+	DeprecatedMutationEnabled  = flag.Bool("enable-mutation", false, "Deprecated. This used to enable the mutation feature, now it has no effect. Use --operation=mutation-webhook and --operation=mutation-status instead.")
 	MutationLoggingEnabled     *bool
 	MutationAnnotationsEnabled *bool
 	log                        = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")

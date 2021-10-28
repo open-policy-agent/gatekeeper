@@ -24,7 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -120,7 +120,7 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 			}
 		}
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: kind})
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1beta1", Kind: kind})
 		u.SetName(name)
 		return packerMap(u)
 	}
@@ -145,15 +145,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to mutators
 	err = c.Watch(
-		&source.Kind{Type: &mutationsv1alpha1.Assign{}},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "Assign"})),
+		&source.Kind{Type: &mutationsv1beta1.Assign{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1beta1", Kind: "Assign"})),
 	)
 	if err != nil {
 		return err
 	}
 	return c.Watch(
-		&source.Kind{Type: &mutationsv1alpha1.AssignMetadata{}},
-		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignMetadata"})),
+		&source.Kind{Type: &mutationsv1beta1.AssignMetadata{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1beta1", Kind: "AssignMetadata"})),
 	)
 }
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 )
 
 func TestSetterMerge(t *testing.T) {
@@ -66,7 +66,7 @@ func TestSetterMerge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := setter{
 				values: tc.vals,
-				op:     mutationsv1alpha1.MergeOp,
+				op:     mutationsunversioned.MergeOp,
 			}
 			obj := map[string]interface{}{}
 			if tc.existing != nil {
@@ -150,7 +150,7 @@ func TestSetterPrune(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := setter{
 				values: tc.vals,
-				op:     mutationsv1alpha1.PruneOp,
+				op:     mutationsunversioned.PruneOp,
 			}
 			obj := map[string]interface{}{}
 			if tc.existing != nil {

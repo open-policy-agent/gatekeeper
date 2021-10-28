@@ -5,25 +5,26 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func makeValue(v interface{}) mutationsv1alpha1.AssignField {
-	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+func makeValue(v interface{}) mutationsunversioned.AssignField {
+	return mutationsunversioned.AssignField{Value: &types.Anything{Value: v}}
 }
 
 func TestAssignToMutator(t *testing.T) {
-	assign := &mutationsv1alpha1.Assign{
+	assign := &mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsunversioned.AssignSpec{
 			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group1", "group2"},
@@ -38,7 +39,7 @@ func TestAssignToMutator(t *testing.T) {
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -71,15 +72,15 @@ func TestAssignToMutator(t *testing.T) {
 }
 
 func TestAssignMetadataToMutator(t *testing.T) {
-	assignMeta := &mutationsv1alpha1.AssignMetadata{
+	assignMeta := &mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
+		Spec: mutationsunversioned.AssignMetadataSpec{
 			Match:    match.Match{},
 			Location: "metadata.labels.foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{
+			Parameters: mutationsunversioned.MetadataParameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -96,12 +97,12 @@ func TestAssignMetadataToMutator(t *testing.T) {
 }
 
 func TestAssignHasDiff(t *testing.T) {
-	first := &mutationsv1alpha1.Assign{
+	first := &mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsunversioned.AssignSpec{
 			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group1", "group2"},
@@ -116,7 +117,7 @@ func TestAssignHasDiff(t *testing.T) {
 			},
 			Match:    match.Match{},
 			Location: "spec.foo",
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -133,32 +134,32 @@ func TestAssignHasDiff(t *testing.T) {
 
 	table := []struct {
 		tname        string
-		modify       func(*mutationsv1alpha1.Assign)
+		modify       func(*mutationsunversioned.Assign)
 		areDifferent bool
 	}{
 		{
 			"same",
-			func(a *mutationsv1alpha1.Assign) {},
+			func(a *mutationsunversioned.Assign) {},
 			false,
 		},
 		{
 			"differentApplyTo",
-			func(a *mutationsv1alpha1.Assign) {
+			func(a *mutationsunversioned.Assign) {
 				a.Spec.ApplyTo[1].Kinds[0] = "kind"
 			},
 			true,
 		},
 		{
 			"differentLocation",
-			func(a *mutationsv1alpha1.Assign) {
+			func(a *mutationsunversioned.Assign) {
 				a.Spec.Location = "bar"
 			},
 			true,
 		},
 		{
 			"differentParameters",
-			func(a *mutationsv1alpha1.Assign) {
-				a.Spec.Parameters.PathTests = []mutationsv1alpha1.PathTest{{SubPath: "spec", Condition: tester.MustExist}}
+			func(a *mutationsunversioned.Assign) {
+				a.Spec.Parameters.PathTests = []mutationsunversioned.PathTest{{SubPath: "spec", Condition: tester.MustExist}}
 			},
 			true,
 		},
@@ -189,15 +190,15 @@ func TestAssignHasDiff(t *testing.T) {
 }
 
 func TestAssignMetadataHasDiff(t *testing.T) {
-	first := &mutationsv1alpha1.AssignMetadata{
+	first := &mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
+		Spec: mutationsunversioned.AssignMetadataSpec{
 			Match:    match.Match{},
 			Location: "metadata.labels.foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{
+			Parameters: mutationsunversioned.MetadataParameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -215,31 +216,31 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 
 	table := []struct {
 		tname        string
-		modify       func(*mutationsv1alpha1.AssignMetadata)
+		modify       func(*mutationsunversioned.AssignMetadata)
 		areDifferent bool
 	}{
 		{
 			"same",
-			func(a *mutationsv1alpha1.AssignMetadata) {},
+			func(a *mutationsunversioned.AssignMetadata) {},
 			false,
 		},
 		{
 			"differentLocation",
-			func(a *mutationsv1alpha1.AssignMetadata) {
+			func(a *mutationsunversioned.AssignMetadata) {
 				a.Spec.Location = "metadata.annotations.bar"
 			},
 			true,
 		},
 		{
 			"differentName",
-			func(a *mutationsv1alpha1.AssignMetadata) {
+			func(a *mutationsunversioned.AssignMetadata) {
 				a.Name = "anothername"
 			},
 			true,
 		},
 		{
 			"differentMatch",
-			func(a *mutationsv1alpha1.AssignMetadata) {
+			func(a *mutationsunversioned.AssignMetadata) {
 				a.Spec.Match.Namespaces = []util.PrefixWildcard{"foo", "bar"}
 			},
 			true,
@@ -271,12 +272,12 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 }
 
 func TestParseShouldFail(t *testing.T) {
-	assign := &mutationsv1alpha1.Assign{
+	assign := &mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsunversioned.AssignSpec{
 			ApplyTo: []match.ApplyTo{
 				{
 					Groups:   []string{"group3", "group4"},
@@ -286,7 +287,7 @@ func TestParseShouldFail(t *testing.T) {
 			},
 			Match:    match.Match{},
 			Location: "aaa..bb",
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -297,15 +298,15 @@ func TestParseShouldFail(t *testing.T) {
 		t.Errorf("Parsing was expected to fail for assign: %v", err)
 	}
 
-	assignMeta := &mutationsv1alpha1.AssignMetadata{
+	assignMeta := &mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
+		Spec: mutationsunversioned.AssignMetadataSpec{
 			Match:    match.Match{},
 			Location: "spec...foo",
-			Parameters: mutationsv1alpha1.MetadataParameters{
+			Parameters: mutationsunversioned.MetadataParameters{
 				Assign: makeValue("foobar"),
 			},
 		},
@@ -317,14 +318,14 @@ func TestParseShouldFail(t *testing.T) {
 }
 
 func TestPathValidation(t *testing.T) {
-	assignMeta := &mutationsv1alpha1.AssignMetadata{
+	assignMeta := &mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "name",
 			Namespace: "namespace",
 		},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
+		Spec: mutationsunversioned.AssignMetadataSpec{
 			Match: match.Match{},
-			Parameters: mutationsv1alpha1.MetadataParameters{
+			Parameters: mutationsunversioned.MetadataParameters{
 				Assign: makeValue("foobar"),
 			},
 		},

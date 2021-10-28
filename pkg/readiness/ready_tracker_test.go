@@ -164,10 +164,10 @@ func Test_AssignMetadata(t *testing.T) {
 
 	g := gomega.NewWithT(t)
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 30*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify that the AssignMetadata is present in the cache
 	for _, am := range testAssignMetadata {
@@ -203,10 +203,10 @@ func Test_ModifySet(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify that the ModifySet is present in the cache
 	for _, am := range testModifySet {
@@ -239,10 +239,10 @@ func Test_Assign(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify that the Assign is present in the cache
 	for _, am := range testAssign {
@@ -277,7 +277,7 @@ func Test_Provider(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	if err := setupController(mgr, wm, opaClient, nil, providerCache); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -285,10 +285,10 @@ func Test_Provider(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify that the Provider is present in the cache
 	for _, tp := range testProvider {
@@ -321,7 +321,7 @@ func Test_Tracker(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	if err := setupController(mgr, wm, opaClient, nil, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -333,10 +333,10 @@ func Test_Tracker(t *testing.T) {
 	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
 
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 
 	// Verify cache (tracks testdata fixtures)
 	for _, ct := range testTemplates {
@@ -374,9 +374,9 @@ func Test_Tracker(t *testing.T) {
 		}
 
 		return true, nil
-	}, 10*time.Second, 100*time.Millisecond).Should(gomega.BeTrue(), "verifying cache for post-fixtures")
+	}, 20*time.Second, 100*time.Millisecond).Should(gomega.BeTrue(), "verifying cache for post-fixtures")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	t.Cleanup(cancel)
 	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
 }
@@ -398,7 +398,7 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient, nil, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), nil); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -406,10 +406,10 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	testutils.StartManager(ctx, t, mgr)
 
 	g.Eventually(func() (bool, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		return probeIsReady(ctx)
-	}, 300*time.Second, 1*time.Second).Should(gomega.BeTrue())
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
 }
 
 // Test_CollectDeleted adds resources and starts the readiness tracker, then
@@ -485,7 +485,7 @@ func Test_CollectDeleted(t *testing.T) {
 
 		g.Eventually(func() (bool, error) {
 			return tt.Populated() && !tt.Satisfied(), nil
-		}, 10*time.Second, 1*time.Second).
+		}, 20*time.Second, 1*time.Second).
 			Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly", tc.description)
 
 		ul := &unstructured.UnstructuredList{}
@@ -501,7 +501,7 @@ func Test_CollectDeleted(t *testing.T) {
 
 		g.Eventually(func() (bool, error) {
 			return tt.Satisfied(), nil
-		}, 10*time.Second, 1*time.Second).
+		}, 20*time.Second, 1*time.Second).
 			Should(gomega.BeTrue(), "checking the tracker collects deletes of %s", tc.description)
 	}
 }

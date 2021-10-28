@@ -5,22 +5,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func assign(value interface{}, location string) *v1alpha1.Assign {
-	result := &v1alpha1.Assign{
-		Spec: v1alpha1.AssignSpec{
+func assign(value interface{}, location string) *unversioned.Assign {
+	result := &unversioned.Assign{
+		Spec: unversioned.AssignSpec{
 			ApplyTo: []match.ApplyTo{{
 				Groups:   []string{"*"},
 				Versions: []string{"*"},
 				Kinds:    []string{"*"},
 			}},
 			Location: location,
-			Parameters: v1alpha1.Parameters{
+			Parameters: unversioned.Parameters{
 				Assign: makeValue(value),
 			},
 		},
@@ -56,7 +56,7 @@ func benchmarkAssignMutator(b *testing.B, n int) {
 func benchmarkNoAssignMutator(b *testing.B, n int) {
 	path := "spec" + strings.Repeat(".spec", n-1)
 	a := assign("foo", path)
-	a.Spec.Parameters.PathTests = []v1alpha1.PathTest{{
+	a.Spec.Parameters.PathTests = []unversioned.PathTest{{
 		SubPath:   path,
 		Condition: tester.MustNotExist,
 	}}

@@ -23,7 +23,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/onsi/gomega"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsinternal "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutatorstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -53,8 +54,8 @@ import (
 
 const timeout = time.Second * 15
 
-func makeValue(v interface{}) mutationsv1alpha1.AssignField {
-	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+func makeValue(v interface{}) mutationsv1beta1.AssignField {
+	return mutationsv1beta1.AssignField{Value: &types.Anything{Value: v}}
 }
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
@@ -75,17 +76,17 @@ func setupManager(t *testing.T) manager.Manager {
 	return mgr
 }
 
-func newAssign(name, location, value string) *mutationsv1alpha1.Assign {
-	return &mutationsv1alpha1.Assign{
+func newAssign(name, location, value string) *mutationsv1beta1.Assign {
+	return &mutationsv1beta1.Assign{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: mutationsv1alpha1.GroupVersion.String(),
+			APIVersion: mutationsv1beta1.GroupVersion.String(),
 			Kind:       "Assign",
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsv1beta1.AssignSpec{
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
 			Location: location,
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsv1beta1.Parameters{
 				Assign: makeValue(value),
 			},
 		},
@@ -94,14 +95,14 @@ func newAssign(name, location, value string) *mutationsv1alpha1.Assign {
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	mutator := &mutationsv1alpha1.Assign{
+	mutator := &mutationsv1beta1.Assign{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "assign-test-obj",
 		},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsv1beta1.AssignSpec{
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"ConfigMap"}}},
 			Location: "spec.test",
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsv1beta1.Parameters{
 				Assign: makeValue("works"),
 			},
 		},
@@ -129,10 +130,14 @@ func TestReconcile(t *testing.T) {
 	)
 
 	kind := "Assign"
-	newObj := func() client.Object { return &mutationsv1alpha1.Assign{} }
+	newObj := func() client.Object { return &mutationsv1beta1.Assign{} }
 	newMutator := func(obj client.Object) (types.Mutator, error) {
-		assign := obj.(*mutationsv1alpha1.Assign) // nolint:forcetypeassert
-		return mutators.MutatorForAssign(assign)
+		assign := obj.(*mutationsv1beta1.Assign) // nolint:forcetypeassert
+		unversioned := &mutationsinternal.Assign{}
+		if err := mgr.GetScheme().Convert(assign, unversioned, nil); err != nil {
+			return nil, err
+		}
+		return mutators.MutatorForAssign(unversioned)
 	}
 	events := make(chan event.GenericEvent, 1024)
 
@@ -151,7 +156,7 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("Mutator is reported as enforced", func(t *testing.T) {
 		g.Eventually(func() error {
-			v := &mutationsv1alpha1.Assign{}
+			v := &mutationsv1beta1.Assign{}
 			v.SetName("assign-test-obj")
 			if err := c.Get(ctx, objName, v); err != nil {
 				return errors.Wrap(err, "cannot get mutator")
