@@ -53,6 +53,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --emit-admission-events\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
+\n        - --operation=mutation-webhook\
 \n        - --disable-opa-builtin=http.send\
 \n---\
 \napiVersion: apps/v1\
@@ -70,6 +71,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --emit-audit-events\
 \n        - --operation=audit\
 \n        - --operation=status\
+\n        - --operation=mutation-status\
 \n        - --logtostderr"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)

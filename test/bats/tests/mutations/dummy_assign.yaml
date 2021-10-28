@@ -1,0 +1,13 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  name: k8sexternalip
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Service"]
+    versions: ["v1"]
+  location: "spec.foo[name: bar]"
+  parameters:
+    assign:
+        value: {name: "bar"}
