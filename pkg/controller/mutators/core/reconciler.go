@@ -290,7 +290,7 @@ func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
 
 	for id := range ids {
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{Kind: id.Kind})
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: r.gvk.Group, Kind: id.Kind})
 		u.SetNamespace(id.Namespace)
 		u.SetName(id.Name)
 

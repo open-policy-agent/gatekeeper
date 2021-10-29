@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const timeout = time.Second * 15
@@ -142,8 +143,9 @@ func TestReconcile(t *testing.T) {
 	events := make(chan event.GenericEvent, 1024)
 
 	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
+	adder := Adder{EventsSource: &source.Channel{Source: events}}
 
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	g.Expect(adder.add(mgr, rec)).NotTo(gomega.HaveOccurred())
 	statusAdder := &mutatorstatus.Adder{}
 	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
 

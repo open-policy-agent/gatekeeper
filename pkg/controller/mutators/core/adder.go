@@ -40,17 +40,21 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
+	// EventsSource watches for events broadcast to Events.
+	// If multiple controllers listen to EventsSource, then
+	// each controller gets a copy of each event.
+	EventsSource source.Source
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events)
-	return add(mgr, r)
+	return a.add(mgr, r)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
-func add(mgr manager.Manager, r *Reconciler) error {
+func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
 	if !mutation.Enabled() {
 		return nil
 	}
@@ -85,10 +89,10 @@ func add(mgr manager.Manager, r *Reconciler) error {
 		return err
 	}
 
-	if r.events != nil {
+	if a.EventsSource != nil {
 		// Watch for enqueued events.
 		err = c.Watch(
-			&source.Channel{Source: r.events},
+			a.EventsSource,
 			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
 				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
 					return nil
