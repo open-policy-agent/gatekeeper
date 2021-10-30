@@ -46,9 +46,6 @@ teardown_file() {
 }
 
 @test "mutation crds are established" {
-  if [ -z $ENABLE_MUTATION_TESTS ]; then
-    skip "skipping mutation tests"
-  fi
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assign.mutations.gatekeeper.sh"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignmetadata.mutations.gatekeeper.sh"
 }
@@ -58,18 +55,16 @@ teardown_file() {
 }
 
 @test "gatekeeper mutation test" {
-  if [ -z $ENABLE_MUTATION_TESTS ]; then
-    skip "skipping mutation tests"
-  fi
-
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml"
+  kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sownerlabel_assignmetadata.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata k8sownerlabel"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_cm.yaml"
   run kubectl get cm mutate-cm -o jsonpath="{.metadata.labels.owner}"
   assert_equal 'gatekeeper' "${output}"
 
   kubectl delete --ignore-not-found cm mutate-cm
 
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sexternalip_assign.yaml"
+  kubectl apply -f ${BATS_TESTS_DIR}/mutations/k8sexternalip_assign.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign k8sexternalip"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_svc.yaml"
   run kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}"
   assert_equal "" "${output}"
