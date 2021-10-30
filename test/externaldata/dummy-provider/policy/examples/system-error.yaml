@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: system-error-deployment
+  labels:
+    app: system-error-deployment
+spec:
+  replicas: 0 # testing purposes only
+  selector:
+    matchLabels:
+      app: system-error-deployment
+  template:
+    metadata:
+      labels:
+        app: system-error-deployment
+    spec:
+      containers:
+      - name: system-error
+        image: test/image:latest_systemError

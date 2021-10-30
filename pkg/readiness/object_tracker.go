@@ -290,7 +290,10 @@ func (t *objectTracker) Satisfied() bool {
 
 	// Proceed only if we have state changes to make.
 	if !needMutate {
+		// Read lock to prevent concurrent read/write while logging readiness state.
+		t.mu.RLock()
 		log.V(1).Info("readiness state", "gvk", t.gvk, "satisfied", fmt.Sprintf("%d/%d", len(t.satisfied), len(t.expect)+len(t.satisfied)))
+		t.mu.RUnlock()
 		return false
 	}
 

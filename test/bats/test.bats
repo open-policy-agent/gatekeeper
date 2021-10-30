@@ -75,6 +75,8 @@ teardown_file() {
   assert_equal "" "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc
+  kubectl delete --ignore-not-found assignmetadata k8sownerlabel
+  kubectl delete --ignore-not-found assign k8sexternalip
 }
 
 @test "applying sync config" {
@@ -222,10 +224,49 @@ __required_labels_audit_test() {
 }
 
 @test "disable http.send" {
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/templates/use_http_send_template.yaml"
+  kubectl apply -f ${BATS_TESTS_DIR}/templates/use_http_send_template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced constrainttemplate k8sdenynamehttpsend"
   run kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_http_send.yaml
   assert_failure
   run kubectl get constrainttemplate/k8sdenynamehttpsend -o jsonpath="{.status}"
   assert_match 'undefined function http.send' "${output}"
+}
+
+@test "external data provider crd is established" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data tests"
+  fi
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/providers.externaldata.gatekeeper.sh"
+}
+
+@test "gatekeeper external data validation test" {
+  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
+    skip "skipping external data validation tests"
+  fi
+
+  # deployment, service and provider for dummy-provider
+  run kubectl apply -f test/externaldata/dummy-provider/manifest
+  assert_success
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider"
+
+  kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/error.yaml
+  assert_match 'denied the request' "${output}"
+  assert_match 'error_test/image:latest_invalid' "${output}"
+  assert_failure
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/system-error.yaml
+  assert_match 'denied the request' "${output}"
+  assert_match 'testing system error' "${output}"
+  assert_failure
+
+  run kubectl apply -f test/externaldata/dummy-provider/policy/examples/valid.yaml
+  assert_success
+
+  kubectl delete --ignore-not-found -f test/externaldata/dummy-provider/manifest
+  kubectl delete --ignore-not-found deploy error-deployment valid-deployment system-error-deployment
+  kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }

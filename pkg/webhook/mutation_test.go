@@ -20,6 +20,10 @@ import (
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+func makeValue(v interface{}) mutationsv1alpha1.AssignField {
+	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+}
+
 func TestWebhookAssign(t *testing.T) {
 	sys := mutation.NewSystem(mutation.SystemOpts{})
 
@@ -29,7 +33,7 @@ func TestWebhookAssign(t *testing.T) {
 			ApplyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Pod"}}},
 			Location: "spec.value",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foo"}`)},
+				Assign: makeValue("foo"),
 			},
 		},
 	}
@@ -95,7 +99,7 @@ func TestWebhookAssignMetadata(t *testing.T) {
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
 			Location: "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "bar"}`)},
+				Assign: makeValue("bar"),
 			},
 		},
 	}

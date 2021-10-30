@@ -74,7 +74,7 @@ func (m *fakeMutator) Path() parser.Path {
 	return m.MPath
 }
 
-func (m *fakeMutator) Value() (interface{}, error) {
+func (m *fakeMutator) Value(_ types.MetadataGetter) (interface{}, error) {
 	return nil, nil
 }
 

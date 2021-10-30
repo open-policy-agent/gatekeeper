@@ -10,9 +10,12 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+func makeValue(v interface{}) mutationsv1alpha1.AssignField {
+	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+}
 
 func TestAssignToMutator(t *testing.T) {
 	assign := &mutationsv1alpha1.Assign{
@@ -36,7 +39,7 @@ func TestAssignToMutator(t *testing.T) {
 			Match:    match.Match{},
 			Location: "spec.foo",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -77,7 +80,7 @@ func TestAssignMetadataToMutator(t *testing.T) {
 			Match:    match.Match{},
 			Location: "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -114,7 +117,7 @@ func TestAssignHasDiff(t *testing.T) {
 			Match:    match.Match{},
 			Location: "spec.foo",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -195,7 +198,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 			Match:    match.Match{},
 			Location: "metadata.labels.foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -284,7 +287,7 @@ func TestParseShouldFail(t *testing.T) {
 			Match:    match.Match{},
 			Location: "aaa..bb",
 			Parameters: mutationsv1alpha1.Parameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -303,7 +306,7 @@ func TestParseShouldFail(t *testing.T) {
 			Match:    match.Match{},
 			Location: "spec...foo",
 			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}
@@ -322,7 +325,7 @@ func TestPathValidation(t *testing.T) {
 		Spec: mutationsv1alpha1.AssignMetadataSpec{
 			Match: match.Match{},
 			Parameters: mutationsv1alpha1.MetadataParameters{
-				Assign: runtime.RawExtension{Raw: []byte(`{"value": "foobar"}`)},
+				Assign: makeValue("foobar"),
 			},
 		},
 	}

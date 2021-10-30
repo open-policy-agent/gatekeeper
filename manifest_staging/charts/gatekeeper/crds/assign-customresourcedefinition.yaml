@@ -161,8 +161,18 @@ spec:
                 properties:
                   assign:
                     description: Assign.value holds the value to be assigned
+                    properties:
+                      fromMetadata:
+                        description: FromMetadata assigns a value from the specified metadata field.
+                        properties:
+                          field:
+                            description: Field specifies which metadata field provides the assigned value. Valid fields are `namespace` and `name`.
+                            type: string
+                        type: object
+                      value:
+                        description: Value is a constant value that will be assigned to `location`
+                        x-kubernetes-preserve-unknown-fields: true
                     type: object
-                    x-kubernetes-preserve-unknown-fields: true
                   pathTests:
                     items:
                       description: "PathTest allows the user to customize how the mutation works if parent paths are missing. It traverses the list in order. All sub paths are tested against the provided condition, if the test fails, the mutation is not applied. All `subPath` entries must be a prefix of `location`. Any glob characters will take on the same value as was used to expand the matching glob in `location`. \n Available Tests: * MustExist    - the path must exist or do not mutate * MustNotExist - the path must not exist or do not mutate."

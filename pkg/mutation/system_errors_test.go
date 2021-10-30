@@ -60,7 +60,7 @@ func (e errorMutator) DeepCopy() types.Mutator {
 	return errorMutator{err: fmt.Errorf(e.err.Error())}
 }
 
-func (e errorMutator) Value() (interface{}, error) {
+func (e errorMutator) Value(_ types.MetadataGetter) (interface{}, error) {
 	return nil, nil
 }
 
