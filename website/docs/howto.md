@@ -75,7 +75,7 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
-   * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namesapced-scoped resources are selected. (defaults to `*`)
+   * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespace-scoped resources are selected. (defaults to `*`)
    * `namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.
    * `excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.
    * `labelSelector` is a standard Kubernetes label selector.
@@ -83,3 +83,10 @@ Note the `match` field, which defines the scope of objects to which a given cons
    * `name` is the name of an object.  If defined, it matches against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` matches both `pod-a` and `pod-b`.
 
 Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything). Also understand `namespaces`, `excludedNamespaces`, and `namespaceSelector` will match on cluster scoped resources which are not namespaced. To avoid this adjust the `scope` to `Namespaced`.
+
+### Listing constraints
+You can list all constraints in a cluster with the following command:
+
+```sh
+kubectl get constraints
+```

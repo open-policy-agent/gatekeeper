@@ -33,6 +33,8 @@ jobs:
     name: "Lint"
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
     - uses: actions/checkout@v2
       # source: https://github.com/golangci/golangci-lint-action
@@ -46,6 +48,8 @@ jobs:
     name: "Unit test"
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - name: Set up Go 1.17
         uses: actions/setup-go@v2
@@ -75,6 +79,8 @@ jobs:
     name: "Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       matrix:
         KUBERNETES_VERSION: ["1.20.7", "1.21.1", "1.22.0"]
@@ -102,6 +108,7 @@ jobs:
           make test-e2e
 
       - name: Save logs
+        if: ${{ always() }}
         run: |
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller.json
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
@@ -118,6 +125,8 @@ jobs:
     name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       matrix:
         HELM_VERSION: ["3.4.2"]
@@ -139,6 +148,7 @@ jobs:
           make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }} ENABLE_MUTATION_TESTS=1
 
       - name: Save logs
+        if: ${{ always() }}
         run: |
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
@@ -147,7 +157,54 @@ jobs:
         uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
-          name: logs
+          name: helm-logs
+          path: |
+            logs-*.json
+
+  build_test_externaldata:
+    name: "[External Data] Build and Test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        KUBERNETES_VERSION: ["1.22.0"]
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go 1.17
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
+
+      - name: Run e2e
+        run: |
+          make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
+          make e2e-build-load-externaldata-image
+          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true ENABLE_EXTERNAL_DATA=true
+          # there should be no additional manifest changes
+          git diff --exit-code
+          make test-e2e ENABLE_EXTERNAL_DATA_TESTS=1
+
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-externaldata-controller.json
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-externaldata-audit.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: externaldata-logs
           path: |
             logs-*.json
 
@@ -157,6 +214,8 @@ jobs:
     if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-')) && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -190,6 +249,8 @@ jobs:
   tagged-release:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
+    permissions:
+      contents: write
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, test, build_test, helm_build_test]
     timeout-minutes: 30

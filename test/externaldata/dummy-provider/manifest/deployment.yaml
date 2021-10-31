@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dummy-provider
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummy-provider
+  namespace: dummy-provider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: dummy-provider
+  template:
+    metadata:
+      labels:
+        run: dummy-provider
+    spec:
+      containers:
+      - image: dummy-provider:test
+        imagePullPolicy: Never
+        name: dummy-provider
+        ports:
+        - containerPort: 8090
+          protocol: TCP
+      restartPolicy: Always
+      nodeSelector:
+        kubernetes.io/os: linux

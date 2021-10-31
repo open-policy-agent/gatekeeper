@@ -40,6 +40,7 @@ controllerManager:
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
+  dnsPolicy: Default
   port: 8443
   metricsPort: 8888
   healthPort: 9090
@@ -67,6 +68,7 @@ controllerManager:
       memory: 256Mi
 audit:
   hostNetwork: false
+  dnsPolicy: Default
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
@@ -80,6 +82,8 @@ audit:
     requests:
       cpu: 100m
       memory: 256Mi
+crds:
+  resources: {}
 pdb:
   controllerManager:
     minAvailable: 1

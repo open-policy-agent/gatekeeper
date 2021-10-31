@@ -35,10 +35,6 @@ func (d *DummyMutator) ID() types.ID {
 	return types.ID{Group: "mutators.gatekeeper.sh", Kind: "DummyMutator", Name: d.name}
 }
 
-func (d *DummyMutator) Value() (interface{}, error) {
-	return d.value, nil
-}
-
 func (d *DummyMutator) Path() parser.Path {
 	return d.path
 }
@@ -53,7 +49,7 @@ func (d *DummyMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 
 func (d *DummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 	t, _ := path.New(parser.Path{}, nil)
-	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d), obj)
+	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d.value), obj)
 }
 
 func (d *DummyMutator) String() string {

@@ -4,15 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation")
 
 // Setter tells the mutate function what to do once we have found the
 // node that needs mutating.
@@ -28,45 +25,48 @@ type Setter interface {
 	KeyedListOkay() bool
 
 	// KeyedListValue is the value that will be assigned to the
-	// targeted keyed list entry. Unline SetValue(), this does
+	// targeted keyed list entry. Unlike SetValue(), this does
 	// not do mutation directly.
 	KeyedListValue() (map[string]interface{}, error)
 }
 
 var _ Setter = &DefaultSetter{}
 
-func NewDefaultSetter(m types.Mutator) *DefaultSetter {
-	return &DefaultSetter{mutator: m}
+func NewDefaultSetter(value interface{}) *DefaultSetter {
+	return &DefaultSetter{value: value}
 }
 
 // DefaultSetter is a setter that merely sets the value at the specified path
 // to the provided value. No special logic, like set merging.
 type DefaultSetter struct {
-	mutator types.Mutator
+	value interface{}
 }
 
 func (s *DefaultSetter) KeyedListOkay() bool { return true }
 
 func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
-	value, err := s.mutator.Value()
-	if err != nil {
-		log.Error(err, "error getting mutator value for mutator %+v", s.mutator)
-		return nil, err
-	}
-	valueAsObject, ok := value.(map[string]interface{})
+	valueAsObject, ok := s.value.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("assign.value for keyed list mutator %s is not an object", s.mutator.ID())
+		return nil, fmt.Errorf("assign.value for keyed list is not an object: %+v", s.value)
 	}
 	return valueAsObject, nil
 }
 
 func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
-	value, err := s.mutator.Value()
-	if err != nil {
-		return err
-	}
-	obj[key] = value
+	obj[key] = s.value
 	return nil
+}
+
+var _ types.MetadataGetter = &metadata{}
+
+type metadata client.ObjectKey
+
+func (m *metadata) GetName() string {
+	return m.Name
+}
+
+func (m *metadata) GetNamespace() string {
+	return m.Namespace
 }
 
 func Mutate(
@@ -79,9 +79,10 @@ func Mutate(
 		return false, errors.New("setter must not be nil")
 	}
 	s := &mutatorState{
-		path:   path,
-		tester: tester,
-		setter: setter,
+		path:     path,
+		tester:   tester,
+		setter:   setter,
+		metadata: &metadata{Name: obj.GetName(), Namespace: obj.GetNamespace()},
 	}
 	if len(path.Nodes) == 0 {
 		return false, errors.New("attempting to mutate an empty target location")
@@ -94,9 +95,10 @@ func Mutate(
 }
 
 type mutatorState struct {
-	path   parser.Path
-	tester *path.Tester
-	setter Setter
+	path     parser.Path
+	tester   *path.Tester
+	setter   Setter
+	metadata *metadata
 }
 
 // mutateInternal mutates the resource recursively. It returns false if there has been no change

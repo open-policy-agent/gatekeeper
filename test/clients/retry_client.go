@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// defaultRefilRate is the default rate at which potential calls are
+	// defaultRefillRate is the default rate at which potential calls are
 	// added back to the "bucket" of allowed calls.
 	defaultRefillRate = 5
 	// defaultLimitSize is the default starting/max number of potential calls

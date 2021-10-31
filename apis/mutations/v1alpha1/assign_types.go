@@ -20,7 +20,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -55,8 +54,7 @@ type Parameters struct {
 	// is merged, we can use an actual object for `Assign`
 
 	// Assign.value holds the value to be assigned
-	// +kubebuilder:validation:XPreserveUnknownFields
-	Assign runtime.RawExtension `json:"assign,omitempty"`
+	Assign AssignField `json:"assign,omitempty"`
 }
 
 // PathTest allows the user to customize how the mutation works if parent

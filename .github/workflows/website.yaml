@@ -8,6 +8,9 @@ on:
       - ".github/workflows/website.yaml"
       - "website/**"
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

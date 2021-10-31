@@ -28,6 +28,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
@@ -47,7 +48,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -58,7 +58,6 @@ import (
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -66,6 +65,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
 			return apiutil.NewDynamicRESTMapper(c)
 		},
+		Logger: testutils.NewLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("setting up controller manager: %s", err)
@@ -108,7 +108,7 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 	mgr, wm := setupManager(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -138,7 +138,7 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	ctrl.SetLogger(logf.NullLogger{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -228,7 +228,7 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
@@ -305,7 +305,7 @@ func Test_Registrar_Replay(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	grp, ctx := errgroup.WithContext(ctx)
 
 	setupController := func(name string, gvk schema.GroupVersionKind) <-chan reconcile.Request {
