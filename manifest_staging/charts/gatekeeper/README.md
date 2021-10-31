@@ -65,8 +65,8 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | Parameter                                    | Description                                                                            | Default                                                                   |
 | :------------------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
 | postInstall.labelNamespace.enabled           | Add labels to the namespace during post install hooks                                  | `true`                                                                    |
-| postInstall.labelNamespace.image.repository  | Image with kubectl to label the namespace                                              | `openpolicyagent/gatekeeper-crds`                                                  |
-| postInstall.labelNamespace.image.tag         | Image tag                                                                              | Current release version: `v3.7.0-beta.2`                                                            |
+| postInstall.labelNamespace.image.repository  | Image with kubectl to label the namespace                                              | `openpolicyagent/gatekeeper-crds`                                         |
+| postInstall.labelNamespace.image.tag         | Image tag                                                                              | Current release version: `v3.7.0-beta.2`                                  |
 | postInstall.labelNamespace.image.pullPolicy  | Image pullPolicy                                                                       | `IfNotPresent`                                                            |
 | postInstall.labelNamespace.image.pullSecrets | Image pullSecrets                                                                      | `[]`                                                                      |
 | psp.enabled                                  | Enabled PodSecurityPolicy                                                              | `true`                                                                    |
@@ -115,6 +115,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | pdb.controllerManager.minAvailable           | The number of controller manager pods that must still be available after an eviction   | `1`                                                                       |
 | service.type                                 | Service type                                                                           | `ClusterIP`                                                               |
 | service.loadBalancerIP                       | The IP address of LoadBalancer service                                                 | ``                                                                        |
+| rbac.create                                  | Enable the creation of RBAC resources                                                  | `true`                                                                    |
 
 ## Contributing Changes
 
