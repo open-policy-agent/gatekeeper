@@ -63,7 +63,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 ## Parameters
 
 | Parameter                                    | Description                                                                            | Default                                                                   |
-| :------------------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
+|:---------------------------------------------|:---------------------------------------------------------------------------------------|:--------------------------------------------------------------------------|
 | postInstall.labelNamespace.enabled           | Add labels to the namespace during post install hooks                                  | `true`                                                                    |
 | postInstall.labelNamespace.image.repository  | Image with kubectl to label the namespace                                              | `openpolicyagent/gatekeeper-crds`                                         |
 | postInstall.labelNamespace.image.tag         | Image tag                                                                              | Current release version: `v3.7.0-beta.2`                                  |
@@ -81,6 +81,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | validatingWebhookFailurePolicy               | The failurePolicy for the validating webhook                                           | `Ignore`                                                                  |
 | validatingWebhookCheckIgnoreFailurePolicy    | The failurePolicy for the check-ignore-label validating webhook                        | `Fail`                                                                    |
 | enableDeleteOperations                       | Enable validating webhook for delete operations                                        | `false`                                                                   |
+| enableExternalData                           | Enable external data (alpha feature)                                                   | `false`                                                                   |
 | experimentalEnableMutation                   | Enable mutation  (alpha feature)                                                       | `false`                                                                   |
 | mutatingWebhookFailurePolicy                 | The failurePolicy for the mutating webhook                                             | `Ignore`                                                                  |
 | mutatingWebhookTimeoutSeconds                | The timeout for the mutating webhook in seconds                                        | `3`                                                                       |

@@ -51,6 +51,7 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-mutation={{ .Values.experimentalEnableMutation}}
+        - --enable-external-data={{ .Values.enableExternalData }}
         
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
