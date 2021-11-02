@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -43,7 +45,8 @@ const (
 	msgSize                          = 256
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
-	defaultListLimit                 = 0
+	defaultListLimit                 = 500
+	defaultOutputDir                 = "/tmp"
 )
 
 var (
@@ -53,6 +56,7 @@ var (
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
+	outputDir                 = flag.String("output-dir", defaultOutputDir, "The directory where audit from api server cache are stored, defaults to /tmp")
 	emptyAuditResults         []auditResult
 )
 
@@ -239,6 +243,15 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
+	// delete all from cache dir before starting audit
+	dir, err := os.ReadDir(*outputDir)
+	if err != nil {
+		return err
+	}
+	for _, d := range dir {
+		os.RemoveAll(path.Join(*outputDir, d.Name()))
+	}
+
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return err
@@ -331,7 +344,8 @@ func (am *Manager) auditResources(
 	} else {
 		matchedKinds["*"] = true
 	}
-
+	// tracking number of folders created
+	folderCount := 0
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
@@ -345,7 +359,7 @@ func (am *Manager) auditResources(
 				Limit: int64(*auditChunkSize),
 			}
 			resourceVersion := ""
-
+			subPath := ""
 			for {
 				objList.SetGroupVersionKind(schema.GroupVersionKind{
 					Group:   gv.Group,
@@ -359,7 +373,14 @@ func (am *Manager) auditResources(
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					continue kindsLoop
 				}
-
+				// for each batch, make a parent folder
+				subPath = fmt.Sprintf("%d", folderCount)
+				parentDir := path.Join(*outputDir, subPath)
+				if err := os.Mkdir(parentDir, 0o750); err != nil {
+					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
+					continue kindsLoop
+				}
+				folderCount++
 				for index := range objList.Items {
 					objNamespace := objList.Items[index].GetNamespace()
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
@@ -371,34 +392,71 @@ func (am *Manager) auditResources(
 						continue
 					}
 
-					ns := corev1.Namespace{}
-					if objNamespace != "" {
-						ns, err = nsCache.Get(ctx, am.client, objNamespace)
-						if err != nil {
-							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
-							continue
-						}
-					}
-
-					augmentedObj := target.AugmentedUnstructured{
-						Object:    objList.Items[index],
-						Namespace: &ns,
-					}
-					resp, err := am.opa.Review(ctx, augmentedObj)
+					// for each item, write object to a file along with the namespace
+					fileName := fmt.Sprintf("%s_%d", objNamespace, index)
+					destFile := path.Join(*outputDir, subPath, fileName)
+					item := objList.Items[index]
+					data, err := item.MarshalJSON()
 					if err != nil {
-						errs = append(errs, err)
-					} else if len(resp.Results()) > 0 {
-						err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-						if err != nil {
-							return err
-						}
+						log.Error(err, "error while marshaling unstructured object to JSON")
+						continue
+					}
+					if err := os.WriteFile(destFile, []byte(data), 0o600); err != nil {
+						log.Error(err, "error writing data to file")
+						continue
 					}
 				}
-
 				resourceVersion = objList.GetResourceVersion()
 				opts.Continue = objList.GetContinue()
 				if opts.Continue == "" {
 					break
+				}
+			}
+		}
+	}
+	// loop thru each subDir in output dir to get files
+	for i := 0; i < folderCount; i++ {
+		subDir := fmt.Sprintf("%d", i)
+		pDir := path.Join(*outputDir, subDir)
+		files, err := os.ReadDir(pDir)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, f := range files {
+			fileName := f.Name()
+			objNs := strings.Split(fileName, "_")[0]
+			ns := corev1.Namespace{}
+			if objNs != "" {
+				ns, err = nsCache.Get(ctx, am.client, objNs)
+				if err != nil {
+					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+					continue
+				}
+			}
+			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			objFile, err := am.readUnstructured(contents)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			augmentedObj := target.AugmentedUnstructured{
+				Object:    *objFile,
+				Namespace: &ns,
+			}
+			resp, err := am.opa.Review(ctx, augmentedObj)
+			if err != nil {
+				errs = append(errs, err)
+			} else if len(resp.Results()) > 0 {
+				err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+				if err != nil {
+					// updated to not return err immediately
+					errs = append(errs, err)
+					continue
 				}
 			}
 		}
@@ -408,6 +466,17 @@ func (am *Manager) auditResources(
 		return errs
 	}
 	return nil
+}
+
+func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
+	u := &unstructured.Unstructured{
+		Object: make(map[string]interface{}),
+	}
+	err := json.Unmarshal(jsonBytes, u)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {

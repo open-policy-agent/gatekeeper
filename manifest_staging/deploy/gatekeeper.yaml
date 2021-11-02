@@ -2312,6 +2312,7 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
+        - --audit-chunk-size=500
         - --logtostderr
         command:
         - /manager
@@ -2359,11 +2360,17 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      volumes:
+      - emptyDir: {}
+        name: tmp-volume
 ---
 apiVersion: apps/v1
 kind: Deployment

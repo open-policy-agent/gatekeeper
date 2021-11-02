@@ -127,6 +127,7 @@ spec:
         - args:
             - --operation=audit
             - --operation=status
+            - --audit-chunk-size=500
             - --logtostderr
           command:
             - /manager
@@ -147,6 +148,9 @@ spec:
               path: /healthz
               port: 9090
           name: manager
+          volumeMounts:
+          - mountPath: /tmp
+            name: tmp-volume
           ports:
             - containerPort: 8888
               name: metrics
@@ -178,6 +182,9 @@ spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
       priorityClassName: system-cluster-critical
 ---
 apiVersion: v1
