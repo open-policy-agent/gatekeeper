@@ -105,7 +105,7 @@ constraint_enforced() {
 mutator_enforced() {
   local kind="$1"
   local name="$2"
-  local pod_list="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=mutation-webhook -o json)"
+  local pod_list="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -o json)"
   if [[ $? -ne 0 ]]; then
     echo "error gathering pods"
     return 1
