@@ -312,6 +312,7 @@ jobs:
             # in case of windows, we need to append .exe to the file name
             EXTENSION="$(echo ${1} | cut -d '-' -f 3)"
             EXTENSION=${EXTENSION/exe/.exe}
+            FILENAME=${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}
             # build the binary
             make bin/gator-${GOOS}-${GOARCH}${EXTENSION}
             # rename the binary to gator
@@ -319,12 +320,11 @@ jobs:
             cp bin/gator-${GOOS}-${GOARCH}${EXTENSION} ${tmp_dir}/gator${EXTENSION}
             pushd ${tmp_dir}
             if [[ ${EXTENSION} == ".exe" ]]; then
-              zip ${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}.zip gator*.exe
+              zip ${FILENAME}.zip gator*.exe
             else
-              tar -czf ${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}.tar.gz gator*
+              tar -czf ${FILENAME}.tar.gz gator*
             fi
             popd
-            rm -rf ${tmp_dir}
           }
           mkdir -p _dist
           for os_arch_extension in $PLATFORMS; do
