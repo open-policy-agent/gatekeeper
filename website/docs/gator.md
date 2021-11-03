@@ -1,0 +1,158 @@
+---
+id: gator
+title: The gator CLI
+---
+
+The `gator` CLI is a tool for testing Gatekeeper ConstraintTemplates and
+Constraints on Kubernetes objects.
+
+We plan on adding more subcommands in the future.
+
+## Installation
+
+```
+go get github.com/open-policy-agent/gatekeeper/cmd/gator
+```
+
+## The `gator test` subcommand
+
+`gator test` organizes tests into three levels: Suites, Tests, and Cases:
+
+- A Suite is a file which defines Tests.
+- A Test declares a ConstraintTemplate, a Constraint, and Cases to test the
+  Constraint.
+- A Case defines an object to validate and whether the object is expected to
+  pass validation.
+
+Any file paths declared in a Suite are assumed to be relative to the Suite
+itself. Absolute paths are not allowed. Thus, it is possible to move around a
+directory containing a Suite, and the files it uses for tests.
+
+### Suites
+
+[An example Suite file](https://github.com/open-policy-agent/gatekeeper-library/blob/8765ec11c12a523688ed77485c7a458df84266d6/library/general/allowedrepos/suite.yaml).
+
+To be valid, a Suite file must declare:
+```yaml
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+```
+
+This differentiates Suites from "real" Kubernetes objects. `gator test` silently
+ignores files which do not declare these and does not attempt to run them.
+
+A Suite may declare multiple Tests, each containing different Templates and
+Constraints. Each Test in a Suite is independent.
+
+### Tests
+
+A Test compiles a ConstraintTemplate, and instantiates a Constraint for the
+ConstraintTemplate. It is an error for the Constraint to have a different type
+than the ConstraintTemplate, or for the ConstraintTemplate to not compile.
+
+### Cases
+
+A Case validates an object against a Constraint. The case may specify that the
+object is expected to pass or fail validation, and may make assertions about
+the returned violations (if any).
+
+A Case must specify `assertions` and whether it expects violations. The simplest
+way to declare this is:
+
+The Case expects at least one violation:
+```yaml
+assertions:
+- violations: yes
+```
+
+The Case expects no violations:
+```yaml
+assertions:
+- violations: no
+```
+
+- `violations` is either "yes", "no", or a non-negative integer. If "yes", at
+  least one violation must otherwise match the assertion. If "no", the no
+  violation messages must otherwise match the assertion. If a nonnegative
+  integer, then exactly that many violations must match.
+- `message` matches violations containing the exact string specified. `message`
+  is case-sensitive.
+
+A Case may specify multiple assertions. For example:
+
+```yaml
+  - name: both-disallowed
+    object: samples/repo-must-be-openpolicyagent/disallowed_both.yaml
+    assertions:
+    - violations: 2
+    - message: initContainer
+      violations: 1
+    - message: container
+      violations: 1
+```
+
+This Case specifies:
+
+- There are exactly two violations.
+- There is exactly one violation containing "initContainer".
+- There is exactly one violation containing "container".
+
+It is valid to test that no violations match an assertion. For example, the
+below is valid:
+
+```yaml
+- violations: yes
+- violations: no
+  message: foobar
+```
+
+This Case specifies that there is at least one violation, and no violations
+contain the string "foobar".
+
+### Usage
+
+To run a specific suite:
+```
+gator test suite.yaml
+```
+
+To run all suites in the current directory and all child directories
+recursively
+```
+gator test ./...
+```
+
+Run `gator test --help` for more information.
+
+## Gotchas
+
+### Duplicate violation messages
+
+Rego de-duplicates identical violation messages. If you want to be sure that
+a test returns multiple violations, use a unique message for each violation.
+Otherwise, if you specify an exact number of violations, the test may fail.
+
+### Matching is case-sensitive
+
+Message declarations are case-sensitive. If a test fails, check that the
+expected message's capitalization exactly matches the one in the template.
+
+### Referential constraints and Namespace-scoped resources
+
+Gator cannot determine if a type is Namespace-scoped or not, so it does not
+assign objects to the default Namespace automatically. Always specify
+`metadata.namespace` for Namespace-scoped objects to prevent test failures, or
+to keep from specifying templates which will fail in a real cluster.
+
+## Windows Compatibility
+
+`gator` is only automatically tested on Linux for each commit. If you want to
+use `gator` on other systems, let us know by replying to
+[this issue](https://github.com/open-policy-agent/gatekeeper/issues/1655).
+
+`gator test` has been manually tested on Windows and works as of
+[this commit](https://github.com/open-policy-agent/gatekeeper/commit/b3ed94406583c85f3102c54a32f362d27f76da96).
+Continued functionality is not guaranteed.
+
+File paths which include backslashes are not portable, so suites using such
+paths will not work as intended on Windows.
