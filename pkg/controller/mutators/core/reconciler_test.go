@@ -396,7 +396,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   true,
 					Errors:     nil,
 				},
@@ -428,7 +428,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   true,
 					Errors:     nil,
 				},
@@ -488,7 +488,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   false,
 					Errors:     []statusv1beta1.MutatorError{{Message: newErrSome(1).Error()}},
 				},
@@ -529,7 +529,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{
 						{
@@ -628,7 +628,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{
 						{
@@ -679,7 +679,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   true,
 					Errors:     nil,
 				},
@@ -744,7 +744,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{
 						{Type: mutationschema.ErrConflictingSchemaType},
@@ -771,7 +771,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   true,
 					Errors:     nil,
 				},
@@ -805,7 +805,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   true,
 					Errors:     nil,
 				},
@@ -830,7 +830,7 @@ func TestReconciler_Reconcile(t *testing.T) {
 				},
 				Status: statusv1beta1.MutatorPodStatusStatus{
 					ID:         "no-pod",
-					Operations: []string{"audit", "mutation-status", "status", "webhook"},
+					Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 					Enforced:   false,
 					Errors: []statusv1beta1.MutatorError{{
 						Type: mutationschema.ErrConflictingSchemaType,
@@ -934,7 +934,7 @@ func TestReconciler_Reconcile_DeletePodStatus(t *testing.T) {
 		},
 		Status: statusv1beta1.MutatorPodStatusStatus{
 			ID:         "no-pod",
-			Operations: []string{"audit", "mutation-status", "status", "webhook"},
+			Operations: []string{"audit", "mutation-status", "mutation-webhook", "status", "webhook"},
 			Enforced:   true,
 		},
 	}

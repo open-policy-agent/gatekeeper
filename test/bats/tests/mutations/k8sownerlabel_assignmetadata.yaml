@@ -1,4 +1,4 @@
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata
 metadata:
   name: k8sownerlabel

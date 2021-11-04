@@ -404,7 +404,12 @@ func objKeyFromObject(obj runtime.Object) (objKey, error) {
 			gvk = ugvk
 		}
 	default:
-		gvk = obj.GetObjectKind().GroupVersionKind()
+		// unfortunately gvk is not always populated by kubernetes, we would need access
+		// to the scheme to make an educated guess on the conversion between K8s struct
+		// and GVK. Fortunately, if we aren't talking about constraints/templates, there
+		// is no parent/child relationship, and all other object trackers already index
+		// by gvk
+		gvk = schema.GroupVersionKind{}
 	}
 
 	nn := types.NamespacedName{Namespace: accessor.GetNamespace(), Name: accessor.GetName()}

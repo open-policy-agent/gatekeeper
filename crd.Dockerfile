@@ -9,6 +9,7 @@ RUN apk add --no-cache curl && \
     chmod +x kubectl
 
 FROM scratch
-COPY * /crds/
+USER 65532:65532
+COPY --chown=65532:65532 * /crds/
 COPY --from=builder /kubectl /kubectl
 ENTRYPOINT ["/kubectl"]

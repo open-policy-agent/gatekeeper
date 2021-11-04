@@ -101,3 +101,32 @@ constraint_enforced() {
   echo "ready: ${ready_count}, expected: ${pod_count}"
   [[ "${ready_count}" -eq "${pod_count}" ]]
 }
+
+mutator_enforced() {
+  local kind="$1"
+  local name="$2"
+  local pod_list="$(kubectl -n ${GATEKEEPER_NAMESPACE} get pod -l gatekeeper.sh/operation=webhook -o json)"
+  if [[ $? -ne 0 ]]; then
+    echo "error gathering pods"
+    return 1
+  fi
+
+  # ensure pod_count is at least one
+  local pod_count=$(echo "${pod_list}" | jq '.items | length')
+  if [[ ${pod_count} -lt 1 ]]; then
+    echo "Gatekeeper pod count is < 1"
+    return 2
+  fi
+  
+  local cstr="$(kubectl get ${kind} ${name} -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "Error gathering mutator ${kind} ${name}"
+    return 3
+  fi
+
+  echo "checking mutator ${cstr}"
+
+  local ready_count=$(echo "${cstr}" | jq '.metadata.generation as $generation | [.status.byPod[] | select( .operations[] == "mutation-webhook" and .observedGeneration == $generation)] | length')
+  echo "ready: ${ready_count}, expected: ${pod_count}"
+  [[ "${ready_count}" -eq "${pod_count}" ]]
+}

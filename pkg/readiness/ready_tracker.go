@@ -26,8 +26,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	mutationv1alpha "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -43,7 +44,7 @@ var log = logf.Log.WithName("readiness-tracker")
 
 const (
 	constraintGroup = "constraints.gatekeeper.sh"
-	statsPeriod     = 15 * time.Second
+	statsPeriod     = 1 * time.Second
 )
 
 // Lister lists resources from a cache.
@@ -93,9 +94,9 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 		externalDataEnabled: externalDataEnabled,
 	}
 	if mutationEnabled {
-		tracker.assignMetadata = newObjTracker(mutationv1alpha.GroupVersion.WithKind("AssignMetadata"), fn)
-		tracker.assign = newObjTracker(mutationv1alpha.GroupVersion.WithKind("Assign"), fn)
-		tracker.modifySet = newObjTracker(mutationv1alpha.GroupVersion.WithKind("ModifySet"), fn)
+		tracker.assignMetadata = newObjTracker(mutationv1beta1.GroupVersion.WithKind("AssignMetadata"), fn)
+		tracker.assign = newObjTracker(mutationv1beta1.GroupVersion.WithKind("Assign"), fn)
+		tracker.modifySet = newObjTracker(mutationv1beta1.GroupVersion.WithKind("ModifySet"), fn)
 	}
 	if externalDataEnabled {
 		tracker.externalDataProvider = newObjTracker(externaldatav1alpha1.SchemeGroupVersion.WithKind("Provider"), fn)
@@ -120,22 +121,25 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 
 	switch {
 	case gvk.GroupVersion() == v1beta1.SchemeGroupVersion && gvk.Kind == "ConstraintTemplate":
-		return t.templates
+		if operations.HasValidationOperations() {
+			return t.templates
+		}
+		return noopExpectations{}
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
 	case gvk.GroupVersion() == externaldatav1alpha1.SchemeGroupVersion && gvk.Kind == "Provider":
 		return t.externalDataProvider
-	case gvk.GroupVersion() == mutationv1alpha.GroupVersion && gvk.Kind == "AssignMetadata":
+	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
 			return t.assignMetadata
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1alpha.GroupVersion && gvk.Kind == "Assign":
+	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "Assign":
 		if t.mutationEnabled {
 			return t.assign
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1alpha.GroupVersion && gvk.Kind == "ModifySet":
+	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "ModifySet":
 		if t.mutationEnabled {
 			return t.modifySet
 		}
@@ -218,13 +222,15 @@ func (t *Tracker) Satisfied() bool {
 		log.V(1).Info("all expectations satisfied", "tracker", "provider")
 	}
 
-	if !t.templates.Satisfied() {
-		return false
-	}
-	templateKinds := t.templates.kinds()
-	for _, gvk := range templateKinds {
-		if !t.constraints.Get(gvk).Satisfied() {
+	if operations.HasValidationOperations() {
+		if !t.templates.Satisfied() {
 			return false
+		}
+		templateKinds := t.templates.kinds()
+		for _, gvk := range templateKinds {
+			if !t.constraints.Get(gvk).Satisfied() {
+				return false
+			}
 		}
 	}
 	log.V(1).Info("all expectations satisfied", "tracker", "constraints")
@@ -232,10 +238,13 @@ func (t *Tracker) Satisfied() bool {
 	if !t.config.Satisfied() {
 		return false
 	}
-	configKinds := t.config.kinds()
-	for _, gvk := range configKinds {
-		if !t.data.Get(gvk).Satisfied() {
-			return false
+
+	if operations.HasValidationOperations() {
+		configKinds := t.config.kinds()
+		for _, gvk := range configKinds {
+			if !t.data.Get(gvk).Satisfied() {
+				return false
+			}
 		}
 	}
 	log.V(1).Info("all expectations satisfied", "tracker", "data")
@@ -272,9 +281,11 @@ func (t *Tracker) Run(ctx context.Context) error {
 			return t.trackExternalDataProvider(gctx)
 		})
 	}
-	grp.Go(func() error {
-		return t.trackConstraintTemplates(gctx)
-	})
+	if operations.HasValidationOperations() {
+		grp.Go(func() error {
+			return t.trackConstraintTemplates(gctx)
+		})
+	}
 	grp.Go(func() error {
 		return t.trackConfig(gctx)
 	})
@@ -327,7 +338,11 @@ func (t *Tracker) Populated() bool {
 		// If !t.externalDataEnabled and we call this, it yields a null pointer exception
 		externalDataProviderPopulated = t.externalDataProvider.Populated()
 	}
-	return t.templates.Populated() && t.config.Populated() && mutationPopulated && t.constraints.Populated() && t.data.Populated() && externalDataProviderPopulated
+	validationPopulated := true
+	if operations.HasValidationOperations() {
+		validationPopulated = t.templates.Populated() && t.constraints.Populated() && t.data.Populated()
+	}
+	return validationPopulated && t.config.Populated() && mutationPopulated && externalDataProviderPopulated
 }
 
 // collectForObjectTracker identifies objects that are unsatisfied for the provided
@@ -450,7 +465,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 		return nil
 	}
 
-	assignMetadataList := &mutationv1alpha.AssignMetadataList{}
+	assignMetadataList := &mutationv1beta1.AssignMetadataList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, assignMetadataList); err != nil {
 		return fmt.Errorf("listing AssignMetadata: %w", err)
@@ -475,7 +490,7 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 		return nil
 	}
 
-	assignList := &mutationv1alpha.AssignList{}
+	assignList := &mutationv1beta1.AssignList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, assignList); err != nil {
 		return fmt.Errorf("listing Assign: %w", err)
@@ -500,7 +515,7 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 		return nil
 	}
 
-	modifySetList := &mutationv1alpha.ModifySetList{}
+	modifySetList := &mutationv1beta1.ModifySetList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, modifySetList); err != nil {
 		return fmt.Errorf("listing ModifySet: %w", err)
@@ -611,30 +626,32 @@ func (t *Tracker) trackConfig(ctx context.Context) error {
 		return nil
 	}
 
-	// Expect the resource kinds specified in the Config.
-	// We will fail-open (resolve expectations) for GVKs
-	// that are unregistered.
-	for _, entry := range cfg.Spec.Sync.SyncOnly {
-		gvk := schema.GroupVersionKind{
-			Group:   entry.Group,
-			Version: entry.Version,
-			Kind:    entry.Kind,
-		}
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-		t.config.Expect(u)
-		t.config.Observe(u) // we only care about the gvk entry in kinds()
-
-		// Set expectations for individual cached resources
-		dt := t.ForData(gvk)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := t.trackData(ctx, gvk, dt)
-			if err != nil {
-				log.Error(err, "aborted trackData", "gvk", gvk)
+	if operations.HasValidationOperations() {
+		// Expect the resource kinds specified in the Config.
+		// We will fail-open (resolve expectations) for GVKs
+		// that are unregistered.
+		for _, entry := range cfg.Spec.Sync.SyncOnly {
+			gvk := schema.GroupVersionKind{
+				Group:   entry.Group,
+				Version: entry.Version,
+				Kind:    entry.Kind,
 			}
-		}()
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(gvk)
+			t.config.Expect(u)
+			t.config.Observe(u) // we only care about the gvk entry in kinds()
+
+			// Set expectations for individual cached resources
+			dt := t.ForData(gvk)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				err := t.trackData(ctx, gvk, dt)
+				if err != nil {
+					log.Error(err, "aborted trackData", "gvk", gvk)
+				}
+			}()
+		}
 	}
 
 	return nil
@@ -746,50 +763,52 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 			return
 		}
 
-		if unsat := t.templates.unsatisfied(); len(unsat) > 0 {
-			log.Info("--- begin unsatisfied templates ---", "populated", t.templates.Populated(), "count", len(unsat))
-			for _, u := range unsat {
-				log.Info("unsatisfied template", "name", u.namespacedName, "gvk", u.gvk)
-			}
-		}
-
-		for _, gvk := range t.templates.kinds() {
-			if t.constraints.Get(gvk).Satisfied() {
-				continue
-			}
-			c := t.constraints.Get(gvk)
-			tr, ok := c.(*objectTracker)
-			if !ok {
-				continue
-			}
-			unsat := tr.unsatisfied()
-			if len(unsat) == 0 {
-				continue
+		if operations.HasValidationOperations() {
+			if unsat := t.templates.unsatisfied(); len(unsat) > 0 {
+				log.Info("--- begin unsatisfied templates ---", "populated", t.templates.Populated(), "count", len(unsat))
+				for _, u := range unsat {
+					log.Info("unsatisfied template", "name", u.namespacedName, "gvk", u.gvk)
+				}
 			}
 
-			log.Info("--- begin unsatisfied constraints ---", "gvk", gvk, "populated", tr.Populated(), "count", len(unsat))
-			for _, u := range unsat {
-				log.Info("unsatisfied constraint", "name", u.namespacedName, "gvk", u.gvk)
-			}
-		}
+			for _, gvk := range t.templates.kinds() {
+				if t.constraints.Get(gvk).Satisfied() {
+					continue
+				}
+				c := t.constraints.Get(gvk)
+				tr, ok := c.(*objectTracker)
+				if !ok {
+					continue
+				}
+				unsat := tr.unsatisfied()
+				if len(unsat) == 0 {
+					continue
+				}
 
-		for _, gvk := range t.config.kinds() {
-			if t.data.Get(gvk).Satisfied() {
-				continue
-			}
-			c := t.data.Get(gvk)
-			tr, ok := c.(*objectTracker)
-			if !ok {
-				continue
-			}
-			unsat := tr.unsatisfied()
-			if len(unsat) == 0 {
-				continue
+				log.Info("--- begin unsatisfied constraints ---", "gvk", gvk, "populated", tr.Populated(), "count", len(unsat))
+				for _, u := range unsat {
+					log.Info("unsatisfied constraint", "name", u.namespacedName, "gvk", u.gvk)
+				}
 			}
 
-			log.Info("--- Begin unsatisfied data ---", "gvk", gvk, "populated", tr.Populated(), "count", len(unsat))
-			for _, u := range unsat {
-				log.Info("unsatisfied data", "name", u.namespacedName, "gvk", u.gvk)
+			for _, gvk := range t.config.kinds() {
+				if t.data.Get(gvk).Satisfied() {
+					continue
+				}
+				c := t.data.Get(gvk)
+				tr, ok := c.(*objectTracker)
+				if !ok {
+					continue
+				}
+				unsat := tr.unsatisfied()
+				if len(unsat) == 0 {
+					continue
+				}
+
+				log.Info("--- Begin unsatisfied data ---", "gvk", gvk, "populated", tr.Populated(), "count", len(unsat))
+				for _, u := range unsat {
+					log.Info("unsatisfied data", "name", u.namespacedName, "gvk", u.gvk)
+				}
 			}
 		}
 		if t.mutationEnabled {

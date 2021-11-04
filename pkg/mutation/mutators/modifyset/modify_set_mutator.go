@@ -6,7 +6,8 @@ import (
 	"sort"
 
 	"github.com/google/go-cmp/cmp"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
@@ -29,7 +30,7 @@ var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation", 
 // ModifySet instance.
 type Mutator struct {
 	id        types.ID
-	modifySet *mutationsv1alpha1.ModifySet
+	modifySet *mutationsunversioned.ModifySet
 
 	path parser.Path
 
@@ -127,7 +128,10 @@ func (m *Mutator) String() string {
 
 // MutatorForModifySet returns an Mutator built from
 // the given modifyset instance.
-func MutatorForModifySet(modifySet *mutationsv1alpha1.ModifySet) (*Mutator, error) {
+func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, error) {
+	// This is not always set by the kubernetes API server
+	modifySet.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "ModifySet"})
+
 	path, err := parser.Parse(modifySet.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format `%s` for ModifySet %s", modifySet.Spec.Location, modifySet.GetName())
@@ -171,7 +175,7 @@ func MutatorForModifySet(modifySet *mutationsv1alpha1.ModifySet) (*Mutator, erro
 	}, nil
 }
 
-func gatherPathTests(modifySet *mutationsv1alpha1.ModifySet) ([]patht.Test, error) {
+func gatherPathTests(modifySet *mutationsunversioned.ModifySet) ([]patht.Test, error) {
 	pts := modifySet.Spec.Parameters.PathTests
 	var pathTests []patht.Test
 	for _, pt := range pts {
@@ -186,7 +190,7 @@ func gatherPathTests(modifySet *mutationsv1alpha1.ModifySet) ([]patht.Test, erro
 
 // IsValidModifySet returns an error if the given modifyset object is not
 // semantically valid.
-func IsValidModifySet(modifySet *mutationsv1alpha1.ModifySet) error {
+func IsValidModifySet(modifySet *mutationsunversioned.ModifySet) error {
 	if _, err := MutatorForModifySet(modifySet); err != nil {
 		return err
 	}
@@ -229,7 +233,7 @@ var _ core.Setter = setter{}
 
 type setter struct {
 	values []interface{}
-	op     mutationsv1alpha1.Operation
+	op     mutationsunversioned.Operation
 }
 
 func (s setter) KeyedListOkay() bool { return false }
@@ -240,9 +244,9 @@ func (s setter) KeyedListValue() (map[string]interface{}, error) {
 
 func (s setter) SetValue(obj map[string]interface{}, key string) error {
 	switch s.op {
-	case mutationsv1alpha1.MergeOp:
+	case mutationsunversioned.MergeOp:
 		return s.setValueMerge(obj, key)
-	case mutationsv1alpha1.PruneOp:
+	case mutationsunversioned.PruneOp:
 		return s.setValuePrune(obj, key)
 	default:
 		return fmt.Errorf("unrecognized operation for modifyset: %s", s.op)

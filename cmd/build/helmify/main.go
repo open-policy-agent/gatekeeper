@@ -110,7 +110,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-mutating-webhook-configuration" {
-				obj = "{{- if .Values.experimentalEnableMutation }}\n" + obj + "{{- end }}\n"
+				obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
 			}
 
 			if name == "gatekeeper-critical-pods" && kind == "ResourceQuota" {

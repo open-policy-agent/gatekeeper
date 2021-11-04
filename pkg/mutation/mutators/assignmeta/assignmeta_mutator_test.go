@@ -3,7 +3,7 @@ package assignmeta
 import (
 	"testing"
 
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -22,8 +22,8 @@ func newFoo(spec map[string]interface{}) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: data}
 }
 
-func newAssignMetadataMutator(t *testing.T, path string, value mutationsv1alpha1.AssignField) *Mutator {
-	m := &mutationsv1alpha1.AssignMetadata{
+func newAssignMetadataMutator(t *testing.T, path string, value mutationsunversioned.AssignField) *Mutator {
+	m := &mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Foo",
 		},
@@ -43,12 +43,12 @@ func TestAssignMetadata(t *testing.T) {
 		name  string
 		obj   *unstructured.Unstructured
 		path  string
-		value mutationsv1alpha1.AssignField
+		value mutationsunversioned.AssignField
 	}{
 		{
 			name:  "metadata value",
 			path:  "metadata.labels.foo",
-			value: mutationsv1alpha1.AssignField{FromMetadata: &mutationsv1alpha1.FromMetadata{Field: mutationsv1alpha1.ObjName}},
+			value: mutationsunversioned.AssignField{FromMetadata: &mutationsunversioned.FromMetadata{Field: mutationsunversioned.ObjName}},
 			obj:   newFoo(map[string]interface{}{}),
 		},
 	}

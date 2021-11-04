@@ -14,10 +14,11 @@ type Operation string
 
 // All defined Operations.
 const (
-	Audit          = Operation("audit")
-	Status         = Operation("status")
-	MutationStatus = Operation("mutation-status")
-	Webhook        = Operation("webhook")
+	Audit           = Operation("audit")
+	Status          = Operation("status")
+	MutationStatus  = Operation("mutation-status")
+	MutationWebhook = Operation("mutation-webhook")
+	Webhook         = Operation("webhook")
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 		Audit,
 		Status,
 		MutationStatus,
+		MutationWebhook,
 		Webhook,
 	}
 	operations = newOperationSet()
@@ -107,4 +109,10 @@ func AssignedStringList() []string {
 	sort.Strings(ret)
 	operations.assignedStringList = ret
 	return operations.assignedStringList
+}
+
+// HasValidationOperations() returns `true` if there
+// are any operations that would require a constraint/template controller.
+func HasValidationOperations() bool {
+	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)
 }
