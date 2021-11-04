@@ -71,10 +71,10 @@ func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-// readTemplate reads the contents of the path and returns the
+// ReadTemplate reads the contents of the path and returns the
 // ConstraintTemplate it defines. Returns an error if the file does not define
 // a ConstraintTemplate.
-func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.ConstraintTemplate, error) {
+func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading ConstraintTemplate from %q: %w", path, err)
