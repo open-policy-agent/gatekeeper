@@ -28,7 +28,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -377,15 +377,15 @@ func (h *validationHandler) validateConfigResource(req *admission.Request) error
 }
 
 func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.AssignMetadata{})
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
 	}
-	assignMetadata, ok := obj.(*mutationsv1alpha1.AssignMetadata)
-	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type AssignMetadata")
+	unversioned := &mutationsunversioned.AssignMetadata{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
 	}
-	err = assignmeta.IsValidAssignMetadata(assignMetadata)
+	err = assignmeta.IsValidAssignMetadata(unversioned)
 	if err != nil {
 		return true, err
 	}
@@ -394,16 +394,15 @@ func (h *validationHandler) validateAssignMetadata(req *admission.Request) (bool
 }
 
 func (h *validationHandler) validateAssign(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.Assign{})
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
 	}
-	a, ok := obj.(*mutationsv1alpha1.Assign)
-	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type Assign")
+	unversioned := &mutationsunversioned.Assign{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
 	}
-
-	err = assign.IsValidAssign(a)
+	err = assign.IsValidAssign(unversioned)
 	if err != nil {
 		return true, err
 	}
@@ -412,16 +411,15 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 }
 
 func (h *validationHandler) validateModifySet(req *admission.Request) (bool, error) {
-	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, &mutationsv1alpha1.ModifySet{})
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
 	}
-	m, ok := obj.(*mutationsv1alpha1.ModifySet)
-	if !ok {
-		return false, fmt.Errorf("Deserialized object is not of type ModifySet")
+	unversioned := &mutationsunversioned.ModifySet{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
 	}
-
-	err = modifyset.IsValidModifySet(m)
+	err = modifyset.IsValidModifySet(unversioned)
 	if err != nil {
 		return true, err
 	}

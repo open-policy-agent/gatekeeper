@@ -3,13 +3,13 @@ auditInterval: 60
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
+disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 enableExternalData: false
-experimentalEnableMutation: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookTimeoutSeconds: 3
 auditChunkSize: 0

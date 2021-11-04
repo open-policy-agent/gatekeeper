@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
@@ -20,8 +20,8 @@ const (
 	TestValue = "testValue"
 )
 
-func makeValue(v interface{}) mutationsv1alpha1.AssignField {
-	return mutationsv1alpha1.AssignField{Value: &mutationsv1alpha1.Anything{Value: v}}
+func makeValue(v interface{}) mutationsunversioned.AssignField {
+	return mutationsunversioned.AssignField{Value: &types.Anything{Value: v}}
 }
 
 func prepareTestPod(t *testing.T) *unstructured.Unstructured {
@@ -363,12 +363,12 @@ func testAssignMutation(
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
-	assign := mutationsv1alpha1.Assign{
+	assign := mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
-		Spec: mutationsv1alpha1.AssignSpec{
+		Spec: mutationsunversioned.AssignSpec{
 			ApplyTo:  []match.ApplyTo{{Groups: []string{group}, Versions: []string{version}, Kinds: []string{kind}}},
 			Location: location,
-			Parameters: mutationsv1alpha1.Parameters{
+			Parameters: mutationsunversioned.Parameters{
 				Assign: makeValue(value),
 			},
 		},
@@ -386,11 +386,11 @@ func testAssignMetadataMutation(
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
 	t *testing.T) error {
-	assignMetadata := mutationsv1alpha1.AssignMetadata{
+	assignMetadata := mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{},
-		Spec: mutationsv1alpha1.AssignMetadataSpec{
+		Spec: mutationsunversioned.AssignMetadataSpec{
 			Location: location,
-			Parameters: mutationsv1alpha1.MetadataParameters{
+			Parameters: mutationsunversioned.MetadataParameters{
 				Assign: makeValue(value),
 			},
 		},

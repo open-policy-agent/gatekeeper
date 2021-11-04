@@ -95,9 +95,9 @@ spec:
             drop:
             - all
           readOnlyRootFilesystem: true
-          runAsGroup: 999
+          runAsGroup: 65532
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 65532
       nodeSelector:
         kubernetes.io/os: linux
 

@@ -16,9 +16,9 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/assignmetadata"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/instances"
 )
 
 func init() {
-	Injectors = append(Injectors, &assignmetadata.Adder{})
+	Injectors = append(Injectors, &instances.Adder{})
 }

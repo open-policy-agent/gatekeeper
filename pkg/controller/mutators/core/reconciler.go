@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	ctrlmutators "github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -63,7 +63,7 @@ func newReconciler(
 		scheme:         mgr.GetScheme(),
 		reporter:       ctrlmutators.NewStatsReporter(),
 		cache:          ctrlmutators.NewMutationCache(),
-		gvk:            mutationsv1alpha1.GroupVersion.WithKind(kind),
+		gvk:            mutationsv1beta1.GroupVersion.WithKind(kind),
 		newMutationObj: newMutationObj,
 		mutatorFor:     mutatorFor,
 		log:            logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),
@@ -290,7 +290,7 @@ func (r *Reconciler) queueConflicts(ids mutationschema.IDSet) {
 
 	for id := range ids {
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(r.gvk)
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: r.gvk.Group, Kind: id.Kind})
 		u.SetNamespace(id.Namespace)
 		u.SetName(id.Name)
 

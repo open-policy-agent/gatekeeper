@@ -25,6 +25,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -53,6 +54,9 @@ type Adder struct {
 // Add creates a new Sync Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !operations.HasValidationOperations() {
+		return nil
+	}
 	reporter, err := NewStatsReporter()
 	if err != nil {
 		log.Error(err, "Sync metrics reporter could not start")

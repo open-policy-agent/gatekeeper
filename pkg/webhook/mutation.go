@@ -23,6 +23,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,12 +48,12 @@ func init() {
 	}
 }
 
-// TODO enable this once mutation is beta +kubebuilder:webhook:verbs=create;update,path=/v1/mutate,mutating=true,failurePolicy=ignore,groups=*,resources=*,versions=*,name=mutation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
-// TODO enable this once mutation is beta +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;update
+// +kubebuilder:webhook:verbs=create;update,path=/v1/mutate,mutating=true,failurePolicy=ignore,groups=*,resources=*,versions=*,name=mutation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
+// +kubebuilder:rbac:resourceNames=gatekeeper-mutating-webhook-configuration,groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;update;patch
 
 // AddMutatingWebhook registers the mutating webhook server with the manager.
 func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
-	if !*mutation.MutationEnabled {
+	if !operations.IsAssigned(operations.MutationWebhook) {
 		return nil
 	}
 	reporter, err := newStatsReporter()
@@ -204,7 +205,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 }
 
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
-	if *mutation.MutationEnabled {
+	if operations.IsAssigned(operations.MutationWebhook) {
 		return append(webhooks, rotator.WebhookInfo{
 			Name: MwhName,
 			Type: rotator.Mutating,

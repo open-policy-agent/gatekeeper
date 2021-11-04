@@ -10,13 +10,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -39,18 +40,22 @@ type Adder struct {
 	MutatorFor func(client.Object) (types.Mutator, error)
 	// Events enables queueing other Mutators for updates.
 	Events chan event.GenericEvent
+	// EventsSource watches for events broadcast to Events.
+	// If multiple controllers listen to EventsSource, then
+	// each controller gets a copy of each event.
+	EventsSource source.Source
 }
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.MutationSystem, a.Tracker, a.GetPod, a.Kind, a.NewMutationObj, a.MutatorFor, a.Events)
-	return add(mgr, r)
+	return a.add(mgr, r)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler.
-func add(mgr manager.Manager, r *Reconciler) error {
-	if !*mutation.MutationEnabled {
+func (a *Adder) add(mgr manager.Manager, r *Reconciler) error {
+	if !mutation.Enabled() {
 		return nil
 	}
 
@@ -71,18 +76,34 @@ func add(mgr manager.Manager, r *Reconciler) error {
 	// Watch for changes to MutatorPodStatuses.
 	err = c.Watch(
 		&source.Kind{Type: &statusv1beta1.MutatorPodStatus{}},
-		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, util.EventPackerMapFunc())),
+		handler.EnqueueRequestsFromMapFunc(mutatorstatus.PodStatusToMutatorMapper(true, r.gvk.Kind, func(obj client.Object) []reconcile.Request {
+			return []reconcile.Request{{
+				NamespacedName: apitypes.NamespacedName{
+					Namespace: obj.GetNamespace(),
+					Name:      obj.GetName(),
+				},
+			}}
+		})),
 	)
 	if err != nil {
 		return err
 	}
 
-	if r.events != nil {
+	if a.EventsSource != nil {
 		// Watch for enqueued events.
 		err = c.Watch(
-			&source.Channel{Source: r.events},
-			&handler.EnqueueRequestForObject{},
-		)
+			a.EventsSource,
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
+				if obj.GetObjectKind().GroupVersionKind().Kind != r.gvk.Kind {
+					return nil
+				}
+				return []reconcile.Request{{
+					NamespacedName: apitypes.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
+					},
+				}}
+			}))
 	}
 
 	return err

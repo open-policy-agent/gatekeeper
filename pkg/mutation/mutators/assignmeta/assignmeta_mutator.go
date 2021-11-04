@@ -5,7 +5,8 @@ import (
 	"reflect"
 
 	"github.com/google/go-cmp/cmp"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
@@ -15,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -45,7 +47,7 @@ var (
 // AssignMeta instance.
 type Mutator struct {
 	id             types.ID
-	assignMetadata *mutationsv1alpha1.AssignMetadata
+	assignMetadata *mutationsunversioned.AssignMetadata
 
 	path parser.Path
 
@@ -116,7 +118,10 @@ func (m *Mutator) String() string {
 }
 
 // MutatorForAssignMetadata builds an Mutator from the given AssignMetadata object.
-func MutatorForAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) (*Mutator, error) {
+func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (*Mutator, error) {
+	// This is not always set by the kubernetes API server
+	assignMeta.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "AssignMetadata"})
+
 	path, err := parser.Parse(assignMeta.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format for AssignMetadata %s: %s", assignMeta.GetName(), assignMeta.Spec.Location)
@@ -172,7 +177,7 @@ func isValidMetadataPath(path parser.Path) bool {
 
 // IsValidAssignMetadata returns an error if the given assignmetadata object is not
 // semantically valid.
-func IsValidAssignMetadata(assignMeta *mutationsv1alpha1.AssignMetadata) error {
+func IsValidAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) error {
 	if _, err := MutatorForAssignMetadata(assignMeta); err != nil {
 		return err
 	}

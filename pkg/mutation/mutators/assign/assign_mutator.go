@@ -6,7 +6,8 @@ import (
 	"sort"
 
 	"github.com/google/go-cmp/cmp"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
@@ -28,7 +29,7 @@ var log = logf.Log.WithName("mutation").WithValues(logging.Process, "mutation", 
 // Assign instance.
 type Mutator struct {
 	id     types.ID
-	assign *mutationsv1alpha1.Assign
+	assign *mutationsunversioned.Assign
 
 	path parser.Path
 
@@ -122,7 +123,10 @@ func (m *Mutator) String() string {
 
 // MutatorForAssign returns an mutator built from
 // the given assign instance.
-func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
+func MutatorForAssign(assign *mutationsunversioned.Assign) (*Mutator, error) {
+	// This is not always set by the kubernetes API server
+	assign.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "Assign"})
+
 	path, err := parser.Parse(assign.Spec.Location)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid location format `%s` for Assign %s", assign.Spec.Location, assign.GetName())
@@ -182,7 +186,7 @@ func MutatorForAssign(assign *mutationsv1alpha1.Assign) (*Mutator, error) {
 	}, nil
 }
 
-func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
+func gatherPathTests(assign *mutationsunversioned.Assign) ([]patht.Test, error) {
 	pts := assign.Spec.Parameters.PathTests
 	var pathTests []patht.Test
 	for _, pt := range pts {
@@ -197,7 +201,7 @@ func gatherPathTests(assign *mutationsv1alpha1.Assign) ([]patht.Test, error) {
 
 // IsValidAssign returns an error if the given assign object is not
 // semantically valid.
-func IsValidAssign(assign *mutationsv1alpha1.Assign) error {
+func IsValidAssign(assign *mutationsunversioned.Assign) error {
 	if _, err := MutatorForAssign(assign); err != nil {
 		return err
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,17 +24,17 @@ func makeValue(v interface{}) runtime.RawExtension {
 	return runtime.RawExtension{Raw: j}
 }
 
-func modifyset(value interface{}, location string) *v1alpha1.ModifySet {
-	result := &v1alpha1.ModifySet{
-		Spec: v1alpha1.ModifySetSpec{
+func modifyset(value interface{}, location string) *unversioned.ModifySet {
+	result := &unversioned.ModifySet{
+		Spec: unversioned.ModifySetSpec{
 			ApplyTo: []match.ApplyTo{{
 				Groups:   []string{"*"},
 				Versions: []string{"*"},
 				Kinds:    []string{"*"},
 			}},
 			Location: location,
-			Parameters: v1alpha1.ModifySetParameters{
-				Values: v1alpha1.Values{
+			Parameters: unversioned.ModifySetParameters{
+				Values: unversioned.Values{
 					FromList: []interface{}{makeValue(value)},
 				},
 			},
@@ -71,7 +71,7 @@ func benchmarkModifySetMutator(b *testing.B, n int) {
 func benchmarkNoModifySetMutator(b *testing.B, n int) {
 	path := "spec" + strings.Repeat(".spec", n-1)
 	a := modifyset("foo", path)
-	a.Spec.Parameters.PathTests = []v1alpha1.PathTest{{
+	a.Spec.Parameters.PathTests = []unversioned.PathTest{{
 		SubPath:   path,
 		Condition: tester.MustNotExist,
 	}}

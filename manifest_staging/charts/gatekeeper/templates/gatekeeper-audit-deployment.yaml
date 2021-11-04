@@ -50,6 +50,7 @@ spec:
         - --emit-audit-events={{ .Values.emitAuditEvents }}
         - --operation=audit
         - --operation=status
+        {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
         - --logtostderr
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}

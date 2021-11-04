@@ -5,7 +5,7 @@ commonLabels:
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
 bases:
-  - "../../../config/overlays/mutation" # calls ../../default
+  - "../../../config/default"
 patchesStrategicMerge:
   - kustomize-for-helm.yaml
   - delete-ports.yaml
