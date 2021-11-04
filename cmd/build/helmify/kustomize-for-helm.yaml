@@ -139,6 +139,7 @@ spec:
             - --emit-audit-events={{ .Values.emitAuditEvents }}
             - --operation=audit
             - --operation=status
+            - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
             - --logtostderr
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
