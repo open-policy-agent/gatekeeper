@@ -27,6 +27,9 @@ GOLANGCI_LINT_VERSION := v1.42.1
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
+ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+BIN_DIR := $(abspath $(ROOT_DIR)/bin)
+
 BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
 BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
 BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
@@ -377,3 +380,15 @@ __tooling-image:
 vendor:
 	go mod vendor
 	go mod tidy
+
+.PHONY: gator
+gator: bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION)
+	mv bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION) bin/gator
+
+EXTENSION.linux :=
+EXTENSION.darwin :=
+EXTENSION.windows := .exe
+EXTENSION := $(EXTENSION.$(GOOS))
+
+bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION):
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH)$(EXTENSION) -ldflags $(LDFLAGS) ./cmd/gator

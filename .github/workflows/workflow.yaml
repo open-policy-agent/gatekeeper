@@ -267,7 +267,6 @@ jobs:
         id: get_version
         run: |
           echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          echo $TAG
 
       - name: Publish release
         run: |
@@ -305,11 +304,49 @@ jobs:
         run: |
           make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
 
+      - name: Build gator-cli
+        run: |
+          build() {
+            export GOOS="$(echo ${1} | cut -d '-' -f 1)"
+            export GOARCH="$(echo ${1} | cut -d '-' -f 2)"
+            # in case of windows, we need to append .exe to the file name
+            EXTENSION="$(echo ${1} | cut -d '-' -f 3)"
+            EXTENSION=${EXTENSION/exe/.exe}
+            FILENAME=${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}
+            # build the binary
+            make bin/gator-${GOOS}-${GOARCH}${EXTENSION}
+            # rename the binary to gator
+            tmp_dir=$(mktemp -d)
+            cp bin/gator-${GOOS}-${GOARCH}${EXTENSION} ${tmp_dir}/gator${EXTENSION}
+            pushd ${tmp_dir}
+            if [[ ${EXTENSION} == ".exe" ]]; then
+              zip ${FILENAME}.zip gator*.exe
+            else
+              tar -czf ${FILENAME}.tar.gz gator*
+            fi
+            popd
+          }
+          mkdir -p _dist
+          for os_arch_extension in $PLATFORMS; do
+            build ${os_arch_extension} &
+          done
+          wait
+          pushd _dist
+          # consolidate tar and zip's sha256sum into a single file
+          find . -type f -name '*.tar.gz' -o -name '*.zip' | sort | xargs sha256sum >> sha256sums.txt
+          popd
+        env:
+          PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64-exe"
+
       - name: Create GitHub release
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          files: |
+            _dist/sha256sums.txt
+            _dist/*.tar.gz
+            _dist/*.zip
 
       - name: Publish Helm chart
         uses: stefanprodan/helm-gh-pages@v1.4.1
