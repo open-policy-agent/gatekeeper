@@ -8,6 +8,7 @@ validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
+enableExternalData: false
 experimentalEnableMutation: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookTimeoutSeconds: 3
@@ -93,3 +94,5 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
+rbac:
+  create: true
