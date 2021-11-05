@@ -354,7 +354,6 @@ release-manifest:
 	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
 	export
 	$(MAKE) manifests
-	$(MAKE) version-docs
 
 # Tags a new version for docs
 .PHONY: version-docs
