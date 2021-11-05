@@ -149,7 +149,7 @@ spec:
               port: 9090
           name: manager
           volumeMounts:
-          - mountPath: /tmp
+          - mountPath: /tmp/audit
             name: tmp-volume
           ports:
             - containerPort: 8888

@@ -2361,7 +2361,7 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
         volumeMounts:
-        - mountPath: /tmp
+        - mountPath: /tmp/audit
           name: tmp-volume
       nodeSelector:
         kubernetes.io/os: linux
