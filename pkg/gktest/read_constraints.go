@@ -124,7 +124,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-func readObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
+func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
@@ -139,7 +139,7 @@ func readObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 }
 
 func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
-	u, err := readObject(f, path)
+	u, err := ReadObject(f, path)
 	if err != nil {
 		return nil, err
 	}
