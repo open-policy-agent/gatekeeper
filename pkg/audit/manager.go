@@ -47,7 +47,7 @@ const (
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
-	defaultApiCacheDir               = "/tmp/audit"
+	defaultAPICacheDir               = "/tmp/audit"
 )
 
 var (
@@ -57,7 +57,7 @@ var (
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
-	apiCacheDir               = flag.String("api-cache-dir", defaultApiCacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
+	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults         []auditResult
 )
 

@@ -1698,7 +1698,6 @@ spec:
         - --operation=audit
         - --operation=status
         - --operation=mutation-status
-        - --audit-chunk-size=500
         - --logtostderr
         command:
         - /manager
