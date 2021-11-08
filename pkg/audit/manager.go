@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strconv"
@@ -46,13 +47,13 @@ const (
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
 	defaultListLimit                 = 500
-	defaultApiCacheDir                  = "/tmp/audit"
+	defaultApiCacheDir               = "/tmp/audit"
 )
 
 var (
 	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
 	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
+	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
@@ -244,9 +245,9 @@ func (am *Manager) auditResources(
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
 	// delete all from cache dir before starting audit
-	err := am.removeAllFromDir(*apiCacheDir)
+	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 	if err != nil {
-		am.log.Error(err, "unable to remove existing content from cache directory", "apiCacheDir", *apiCacheDir)
+		am.log.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
 		return err
 	}
 
@@ -342,14 +343,14 @@ func (am *Manager) auditResources(
 	} else {
 		matchedKinds["*"] = true
 	}
-	
+
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
-			// remove existing folders
-			err := am.removeAllFromDir(*apiCacheDir)
+			// delete all existing folders from cache dir before starting next kind
+			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 			if err != nil {
-				am.log.Error(err, "unable to remove existing content from cache directory", "apiCacheDir", *apiCacheDir)
+				am.log.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
 				return err
 			}
 			// tracking number of folders created for this kind
@@ -378,9 +379,9 @@ func (am *Manager) auditResources(
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					continue kindsLoop
 				}
-				// for each batch, make a parent folder
-				subPath = fmt.Sprintf("%d", folderCount)
-				am.log.Info("RITA", "kind", kind, "subPath", subPath)
+				// for each batch, create a parent folder
+				// prefix kind to avoid delays in removeall
+				subPath = fmt.Sprintf("%s_%d", kind, folderCount)
 				parentDir := path.Join(*apiCacheDir, subPath)
 				if err := os.Mkdir(parentDir, 0o750); err != nil {
 					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
@@ -419,7 +420,7 @@ func (am *Manager) auditResources(
 				}
 			}
 			// loop thru all subDirs to review all files for this kind
-			err = am.reviewObjects(ctx, folderCount, nsCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			err = am.reviewObjects(ctx, kind, folderCount, nsCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -432,22 +433,22 @@ func (am *Manager) auditResources(
 	return nil
 }
 
-func (am *Manager) reviewObjects(ctx context.Context, folderCount int, nsCache *nsCache, 
-    updateLists map[util.KindVersionResource][]auditResult,
+func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
+	updateLists map[util.KindVersionResource][]auditResult,
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
 	var errs opa.Errors
 	for i := 0; i < folderCount; i++ {
-		subDir := strconv.Itoa(i)
+		subDir := fmt.Sprintf("%s_%d", kind, i)
 		pDir := path.Join(*apiCacheDir, subDir)
-		files, err := os.ReadDir(pDir)
+
+		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		for _, f := range files {
-			fileName := f.Name()
+		for _, fileName := range files {
 			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
 			if err != nil {
 				errs = append(errs, err)
@@ -476,7 +477,7 @@ func (am *Manager) reviewObjects(ctx context.Context, folderCount int, nsCache *
 			if err != nil {
 				errs = append(errs, err)
 				continue
-			} 
+			}
 			if len(resp.Results()) > 0 {
 				err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {
@@ -493,15 +494,40 @@ func (am *Manager) reviewObjects(ctx context.Context, folderCount int, nsCache *
 	return nil
 }
 
-func (am *Manager) removeAllFromDir(directory string) error {
-	// delete all from cache dir before starting audit
-	dir, err := os.ReadDir(directory)
+func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []string, err error) {
+	files = []string{}
+	dir, err := os.Open(directory)
+	if err != nil {
+		return files, err
+	}
+	defer dir.Close()
+	for {
+		names, err := dir.Readdirnames(batchSize)
+		if err == io.EOF || len(names) == 0 {
+			break
+		}
+		files = append(files, names...)
+	}
+	return files, nil
+}
+
+func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
+	dir, err := os.Open(directory)
 	if err != nil {
 		return err
 	}
-	for _, d := range dir {
-		err = os.RemoveAll(path.Join(*apiCacheDir, d.Name()))
-		return err
+	defer dir.Close()
+	for {
+		names, err := dir.Readdirnames(batchSize)
+		if err == io.EOF || len(names) == 0 {
+			break
+		}
+		for _, n := range names {
+			err = os.RemoveAll(path.Join(directory, n))
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
