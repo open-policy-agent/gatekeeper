@@ -124,6 +124,9 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
+// ReadObject reads a file from the filesystem abstraction at the specified
+// path, and returns an unstructured.Unstructured object if the file can be
+// successfully unmarshalled.
 func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
