@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
@@ -72,8 +73,15 @@ func runE(cmd *cobra.Command, args []string) error {
 	// os-independent.
 	fileSystem := getFS(path)
 
+	// fs.FS does not allow the drive prefix for absolute Windows paths.
+	if runtime.GOOS == "windows" {
+		path = path[2:]
+		path = filepath.ToSlash(path)
+	}
+
 	recursive := false
-	if strings.HasSuffix(path, "/...") {
+	// filepath.Abs strips "/..." from the end of Windows paths, so check the original string.
+	if strings.HasSuffix(args[0], "/...") {
 		recursive = true
 		path = strings.TrimSuffix(path, "...")
 	}
