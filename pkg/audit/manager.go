@@ -398,7 +398,6 @@ func (am *Manager) auditResources(
 						continue
 					}
 
-					// for each item, write object to a file along with the namespace
 					fileName := fmt.Sprintf("%d", index)
 					destFile := path.Join(*apiCacheDir, subPath, fileName)
 					item := objList.Items[index]
@@ -440,6 +439,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	timestamp string) error {
 	var errs opa.Errors
 	for i := 0; i < folderCount; i++ {
+		// cache directory structure:
+		// apiCacheDir/kind_folderIndex/fileIndex
 		subDir := fmt.Sprintf("%s_%d", kind, i)
 		pDir := path.Join(*apiCacheDir, subDir)
 
@@ -505,6 +506,9 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 		names, err := dir.Readdirnames(batchSize)
 		if err == io.EOF || len(names) == 0 {
 			break
+		}
+		if err != nil {
+			return files, err
 		}
 		files = append(files, names...)
 	}
