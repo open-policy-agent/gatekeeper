@@ -26,14 +26,19 @@ module.exports = {
       },
       items: [
         {
-          href: 'https://github.com/open-policy-agent/gatekeeper',
-          label: 'GitHub',
-          position: 'left',
-        },
-        {
           href: 'https://github.com/open-policy-agent/gatekeeper-library',
           label: 'Library',
           position: 'left',
+        },
+        {
+          type: 'docsVersionDropdown',
+          position: 'right',
+        },
+        {
+          href: 'https://github.com/open-policy-agent/gatekeeper',
+          position: 'right',
+          className: 'header-github-link',
+          'aria-label': 'GitHub repository',
         },
       ],
     },

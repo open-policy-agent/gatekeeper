@@ -56,9 +56,16 @@ Cherry pick script is copied over from https://github.com/kubernetes/kubernetes/
 	make promote-staging-manifest
 	```
 
+1. If it's a new minor release (e.g. v3.**6**.x -> 3.**7**.0), tag docs to be versioned. Make sure to keep patch version as `.x` for a minor release.
+
+	```
+	make version-docs NEWVERSION=v3.7.x
+	```
+
 1. Preview the changes:
 
 	```
+	git status
 	git diff
 	```
 
