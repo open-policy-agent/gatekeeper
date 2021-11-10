@@ -325,11 +325,11 @@ jobs:
           done
           wait
           pushd _dist
-          # consolidate tar and zip's sha256sum into a single file
+          # consolidate tar's sha256sum into a single file
           find . -type f -name '*.tar.gz' | sort | xargs sha256sum >> sha256sums.txt
           popd
         env:
-          PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64-exe"
+          PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
 
       - name: Create GitHub release
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
@@ -339,7 +339,6 @@ jobs:
           files: |
             _dist/sha256sums.txt
             _dist/*.tar.gz
-            _dist/*.zip
 
       - name: Publish Helm chart
         uses: stefanprodan/helm-gh-pages@v1.4.1

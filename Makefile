@@ -17,6 +17,8 @@ KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.4.2
+NODE_VERSION ?= 16-bullseye-slim
+
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
@@ -75,6 +77,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
+\n        - --audit-chunk-size=500\
 \n        - --logtostderr"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -189,8 +192,8 @@ run: generate manifests
 # Install CRDs into a cluster
 install: manifests
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/crd | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/crd | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
@@ -199,8 +202,8 @@ ifeq ($(ENABLE_EXTERNAL_DATA),true)
 	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/overlays/dev | kubectl apply -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: __controller-gen
@@ -215,29 +218,29 @@ manifests: __controller-gen
 	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
 # Source: https://golangci-lint.run/usage/install/#docker
 lint:
 	docker run --rm -v $(shell pwd):/app \
-	 -v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
-	 -w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
-	 golangci-lint run -v
+		-v ${GOLANGCI_LINT_CACHE}:/root/.cache/golangci-lint \
+		-w /app golangci/golangci-lint:${GOLANGCI_LINT_VERSION}-alpine \
+		golangci-lint run -v
 
 # Generate code
 generate: __conversion-gen __controller-gen target-template-source
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
-	            --output-base=/gatekeeper \
-                --input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1 \
-                --go-header-file=./hack/boilerplate.go.txt \
-                --output-file-base=zz_generated.conversion
+		--output-base=/gatekeeper \
+		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1 \
+		--go-header-file=./hack/boilerplate.go.txt \
+		--output-file-base=zz_generated.conversion
 
 # Prepare crds to be added to gatekeeper-crds image
 clean-crds:
@@ -353,6 +356,16 @@ release-manifest:
 	export
 	$(MAKE) manifests
 
+# Tags a new version for docs
+.PHONY: version-docs
+version-docs:
+	docker run \
+		-v $(shell pwd)/website:/website \
+		-w /website \
+		-u $(shell id -u):$(shell id -g) \
+		node:${NODE_VERSION} \
+		sh -c "yarn install --frozen-lockfile && yarn run docusaurus docs:version ${NEWVERSION}"
+
 promote-staging-manifest:
 	@rm -rf deploy
 	@cp -r manifest_staging/deploy .
@@ -362,8 +375,8 @@ promote-staging-manifest:
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-	  k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-	  /config/overlays/dev | kubectl delete -f -
+		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		/config/overlays/dev | kubectl delete -f -
 
 __controller-gen: __tooling-image
 CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen

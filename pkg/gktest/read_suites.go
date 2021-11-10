@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"path/filepath"
+	"path"
 
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -108,7 +108,7 @@ type fileList []string
 
 func (l *fileList) addFile(target string) error {
 	// target is a file.
-	ext := filepath.Ext(target)
+	ext := path.Ext(target)
 	if ext != ".yaml" && ext != ".yml" {
 		return fmt.Errorf("%w: %q", ErrUnsupportedExtension, ext)
 	}
@@ -123,7 +123,7 @@ func (l *fileList) addDirectory(f fs.FS, target string) error {
 		return err
 	}
 	for _, entry := range entries {
-		err = l.walkEntry(filepath.Join(target, entry.Name()), entry, nil)
+		err = l.walkEntry(path.Join(target, entry.Name()), entry, nil)
 		if err != nil {
 			return err
 		}
@@ -145,7 +145,7 @@ func isYAMLFile(d fs.DirEntry) bool {
 	if d.IsDir() {
 		return false
 	}
-	ext := filepath.Ext(d.Name())
+	ext := path.Ext(d.Name())
 	return ext == ".yaml" || ext == ".yml"
 }
 
