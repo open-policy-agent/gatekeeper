@@ -77,6 +77,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
+\n        - --audit-chunk-size=500\
 \n        - --logtostderr"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)

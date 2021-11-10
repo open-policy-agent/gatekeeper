@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -43,16 +46,18 @@ const (
 	msgSize                          = 256
 	defaultAuditInterval             = 60
 	defaultConstraintViolationsLimit = 20
-	defaultListLimit                 = 0
+	defaultListLimit                 = 500
+	defaultAPICacheDir               = "/tmp/audit"
 )
 
 var (
 	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
 	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 0 if unspecified")
+	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
+	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults         []auditResult
 )
 
@@ -239,6 +244,13 @@ func (am *Manager) auditResources(
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
+	// delete all from cache dir before starting audit
+	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+	if err != nil {
+		am.log.Error(err, "unable to remove existing content from cache directory in auditResources", "apiCacheDir", *apiCacheDir)
+		return err
+	}
+
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(am.mgr.GetConfig())
 	if err != nil {
 		return err
@@ -335,6 +347,14 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
+			// delete all existing folders from cache dir before starting next kind
+			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
+			if err != nil {
+				am.log.Error(err, "unable to remove existing content from cache directory in kindsLoop", "apiCacheDir", *apiCacheDir)
+				return err
+			}
+			// tracking number of folders created for this kind
+			folderCount := 0
 			_, matchAll := matchedKinds["*"]
 			if _, found := matchedKinds[kind]; !found && !matchAll {
 				continue
@@ -345,7 +365,7 @@ func (am *Manager) auditResources(
 				Limit: int64(*auditChunkSize),
 			}
 			resourceVersion := ""
-
+			subPath := ""
 			for {
 				objList.SetGroupVersionKind(schema.GroupVersionKind{
 					Group:   gv.Group,
@@ -359,9 +379,16 @@ func (am *Manager) auditResources(
 					am.log.Error(err, "Unable to list objects for gvk", "group", gv.Group, "version", gv.Version, "kind", kind)
 					continue kindsLoop
 				}
-
+				// for each batch, create a parent folder
+				// prefix kind to avoid delays in removeall
+				subPath = fmt.Sprintf("%s_%d", kind, folderCount)
+				parentDir := path.Join(*apiCacheDir, subPath)
+				if err := os.Mkdir(parentDir, 0o750); err != nil {
+					am.log.Error(err, "Unable to create parentDir", "parentDir", parentDir)
+					continue kindsLoop
+				}
+				folderCount++
 				for index := range objList.Items {
-					objNamespace := objList.Items[index].GetNamespace()
 					isExcludedNamespace, err := am.skipExcludedNamespace(&objList.Items[index])
 					if err != nil {
 						log.Error(err, "error while excluding namespaces")
@@ -371,27 +398,17 @@ func (am *Manager) auditResources(
 						continue
 					}
 
-					ns := corev1.Namespace{}
-					if objNamespace != "" {
-						ns, err = nsCache.Get(ctx, am.client, objNamespace)
-						if err != nil {
-							am.log.Error(err, "Unable to look up object namespace", "group", gv.Group, "version", gv.Version, "kind", kind)
-							continue
-						}
-					}
-
-					augmentedObj := target.AugmentedUnstructured{
-						Object:    objList.Items[index],
-						Namespace: &ns,
-					}
-					resp, err := am.opa.Review(ctx, augmentedObj)
+					fileName := fmt.Sprintf("%d", index)
+					destFile := path.Join(*apiCacheDir, subPath, fileName)
+					item := objList.Items[index]
+					data, err := item.MarshalJSON()
 					if err != nil {
-						errs = append(errs, err)
-					} else if len(resp.Results()) > 0 {
-						err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-						if err != nil {
-							return err
-						}
+						log.Error(err, "error while marshaling unstructured object to JSON")
+						continue
+					}
+					if err := os.WriteFile(destFile, []byte(data), 0o600); err != nil {
+						log.Error(err, "error writing data to file")
+						continue
 					}
 				}
 
@@ -401,13 +418,133 @@ func (am *Manager) auditResources(
 					break
 				}
 			}
+			// loop thru all subDirs to review all files for this kind
+			err = am.reviewObjects(ctx, kind, folderCount, nsCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
 		}
 	}
-
 	if len(errs) > 0 {
 		return errs
 	}
 	return nil
+}
+
+func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
+	updateLists map[util.KindVersionResource][]auditResult,
+	totalViolationsPerConstraint map[util.KindVersionResource]int64,
+	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
+	timestamp string) error {
+	var errs opa.Errors
+	for i := 0; i < folderCount; i++ {
+		// cache directory structure:
+		// apiCacheDir/kind_folderIndex/fileIndex
+		subDir := fmt.Sprintf("%s_%d", kind, i)
+		pDir := path.Join(*apiCacheDir, subDir)
+
+		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, fileName := range files {
+			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			objFile, err := am.readUnstructured(contents)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			objNs := objFile.GetNamespace()
+			ns := corev1.Namespace{}
+			if objNs != "" {
+				ns, err = nsCache.Get(ctx, am.client, objNs)
+				if err != nil {
+					errs = append(errs, err)
+					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
+					continue
+				}
+			}
+			augmentedObj := target.AugmentedUnstructured{
+				Object:    *objFile,
+				Namespace: &ns,
+			}
+			resp, err := am.opa.Review(ctx, augmentedObj)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			if len(resp.Results()) > 0 {
+				err = am.addAuditResponsesToUpdateLists(updateLists, resp.Results(), totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+				if err != nil {
+					// updated to not return err immediately
+					errs = append(errs, err)
+					continue
+				}
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
+func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []string, err error) {
+	files = []string{}
+	dir, err := os.Open(directory)
+	if err != nil {
+		return files, err
+	}
+	defer dir.Close()
+	for {
+		names, err := dir.Readdirnames(batchSize)
+		if err == io.EOF || len(names) == 0 {
+			break
+		}
+		if err != nil {
+			return files, err
+		}
+		files = append(files, names...)
+	}
+	return files, nil
+}
+
+func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
+	dir, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	for {
+		names, err := dir.Readdirnames(batchSize)
+		if err == io.EOF || len(names) == 0 {
+			break
+		}
+		for _, n := range names {
+			err = os.RemoveAll(path.Join(directory, n))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructured, error) {
+	u := &unstructured.Unstructured{
+		Object: make(map[string]interface{}),
+	}
+	err := json.Unmarshal(jsonBytes, u)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
