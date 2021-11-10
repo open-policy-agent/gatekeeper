@@ -147,6 +147,9 @@ spec:
               path: /healthz
               port: 9090
           name: manager
+          volumeMounts:
+          - mountPath: /tmp/audit
+            name: tmp-volume
           ports:
             - containerPort: 8888
               name: metrics
@@ -178,6 +181,9 @@ spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
       priorityClassName: system-cluster-critical
 ---
 apiVersion: v1

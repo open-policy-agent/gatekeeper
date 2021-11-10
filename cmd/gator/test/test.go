@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
@@ -54,14 +55,16 @@ var Cmd = &cobra.Command{
 
 func runE(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	path := args[0]
+	originalPath := args[0]
+
+	targetPath := originalPath
 
 	// Convert path to be absolute. Allowing for relative and absolute paths
 	// everywhere in the code leads to unnecessary complexity, so the first
 	// thing we do on encountering a path is to convert it to an absolute path.
 	var err error
-	if !filepath.IsAbs(path) {
-		path, err = filepath.Abs(path)
+	if !filepath.IsAbs(targetPath) {
+		targetPath, err = filepath.Abs(targetPath)
 		if err != nil {
 			return fmt.Errorf("getting absolute path: %w", err)
 		}
@@ -70,16 +73,23 @@ func runE(cmd *cobra.Command, args []string) error {
 	// Create the base file system. We use fs.FS rather than direct calls to
 	// os.ReadFile or filepath.WalkDir to make testing easier and keep logic
 	// os-independent.
-	fileSystem := getFS(path)
+	fileSystem := getFS(targetPath)
+
+	// fs.FS does not allow the drive prefix for absolute Windows paths.
+	if runtime.GOOS == "windows" {
+		targetPath = targetPath[2:]
+		targetPath = filepath.ToSlash(targetPath)
+	}
 
 	recursive := false
-	if strings.HasSuffix(path, "/...") {
+	// filepath.Abs strips "/..." from the end of Windows paths, so check the original string.
+	if strings.HasSuffix(originalPath, "/...") {
 		recursive = true
-		path = strings.TrimSuffix(path, "...")
+		targetPath = strings.TrimSuffix(targetPath, "...")
 	}
-	path = strings.Trim(path, "/")
+	targetPath = strings.Trim(targetPath, "/")
 
-	suites, err := gktest.ReadSuites(fileSystem, path, recursive)
+	suites, err := gktest.ReadSuites(fileSystem, targetPath, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}

@@ -1745,11 +1745,17 @@ spec:
           runAsGroup: 999
           runAsNonRoot: true
           runAsUser: 1000
+        volumeMounts:
+        - mountPath: /tmp/audit
+          name: tmp-volume
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      volumes:
+      - emptyDir: {}
+        name: tmp-volume
 ---
 apiVersion: apps/v1
 kind: Deployment

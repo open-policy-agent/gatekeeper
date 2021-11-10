@@ -12,7 +12,7 @@ enableDeleteOperations: false
 enableExternalData: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookTimeoutSeconds: 3
-auditChunkSize: 0
+auditChunkSize: 500
 logLevel: INFO
 logDenies: false
 emitAdmissionEvents: false
