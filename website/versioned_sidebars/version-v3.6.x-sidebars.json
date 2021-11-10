@@ -1,0 +1,108 @@
+{
+  "version-v3.6.x/docs": [
+    {
+      "type": "category",
+      "label": "Getting Started",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/intro"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/install"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/examples"
+        }
+      ],
+      "collapsible": true
+    },
+    {
+      "type": "category",
+      "label": "How to use Gatekeeper",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/howto"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/audit"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/violations"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/sync"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/exempt-namespaces"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/library"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/customize-startup"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/customize-admission"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/metrics"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/debug"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/emergency"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/vendor-specific"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/failing-closed"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/mutation"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/constrainttemplates"
+        }
+      ],
+      "collapsible": true
+    },
+    {
+      "type": "category",
+      "label": "Contributing",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/help"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/security"
+        }
+      ],
+      "collapsible": true
+    }
+  ]
+}
