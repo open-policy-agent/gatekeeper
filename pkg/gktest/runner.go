@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"path/filepath"
+	"path"
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -56,7 +56,7 @@ func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Su
 
 // runTests runs every Test in Suite.
 func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, tests []Test) ([]TestResult, error) {
-	suiteDir := filepath.Dir(suitePath)
+	suiteDir := path.Dir(suitePath)
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
@@ -148,7 +148,7 @@ func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath str
 		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
 	}
 
-	cObj, err := readConstraint(r.filesystem, filepath.Join(suiteDir, constraintPath))
+	cObj, err := readConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
 	}
 
-	template, err := readTemplate(r.scheme, r.filesystem, filepath.Join(suiteDir, templatePath))
+	template, err := readTemplate(r.scheme, r.filesystem, path.Join(suiteDir, templatePath))
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 		return nil, err
 	}
 
-	toReviewPath := filepath.Join(suiteDir, tc.Object)
+	toReviewPath := path.Join(suiteDir, tc.Object)
 	toReviewObjs, err := readObjects(r.filesystem, toReviewPath)
 	if err != nil {
 		return nil, err
@@ -234,8 +234,8 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 	}
 	toReview := toReviewObjs[0]
 
-	for _, path := range tc.Inventory {
-		err = r.addInventory(ctx, c, suiteDir, path)
+	for _, p := range tc.Inventory {
+		err = r.addInventory(ctx, c, suiteDir, p)
 		if err != nil {
 			return nil, err
 		}
@@ -245,9 +245,9 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 }
 
 func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {
-	path := filepath.Join(suiteDir, inventoryPath)
+	p := path.Join(suiteDir, inventoryPath)
 
-	inventory, err := readObjects(r.filesystem, path)
+	inventory, err := readObjects(r.filesystem, p)
 	if err != nil {
 		return err
 	}
