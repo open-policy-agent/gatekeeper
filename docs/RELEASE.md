@@ -62,6 +62,13 @@ Cherry pick script is copied over from https://github.com/kubernetes/kubernetes/
 	make version-docs NEWVERSION=v3.7.x
 	```
 
+	This will create/update the following files and directories under `/website`: (example: https://github.com/open-policy-agent/gatekeeper/pull/1656)
+	```
+	versioned_docs/
+	versioned_sidebars/
+	versions.json
+	```
+
 1. Preview the changes:
 
 	```
