@@ -113,5 +113,10 @@ spec:
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
+      {{- if .Values.audit.writeToRAMDisk }} 
+      - emptyDir:
+          medium: Memory
+      {{ else }} 
       - emptyDir: {}
+      {{- end }}
         name: tmp-volume
