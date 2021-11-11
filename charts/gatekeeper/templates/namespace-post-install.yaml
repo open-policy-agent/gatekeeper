@@ -60,6 +60,7 @@ metadata:
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 ---
+{{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -82,7 +83,9 @@ rules:
       - patch
     resourceNames:
       - {{ .Release.Namespace }}
+{{- end }}
 ---
+{{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -102,5 +105,5 @@ subjects:
   - kind: ServiceAccount
     name: gatekeeper-update-namespace-label
     namespace: {{ .Release.Namespace | quote }}
-
+{{- end }}
 {{- end }}

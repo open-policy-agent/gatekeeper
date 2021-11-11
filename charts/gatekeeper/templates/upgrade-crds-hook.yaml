@@ -1,4 +1,5 @@
 {{- if .Values.upgradeCRDs.enabled }}
+{{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -14,7 +15,9 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "create", "update", "patch"]
+{{- end }}
 ---
+{{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -34,6 +37,7 @@ roleRef:
   kind: ClusterRole
   name: gatekeeper-admin-upgrade-crds
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -83,15 +87,17 @@ spec:
         - apply
         - -f
         - crds/
+        resources:
+          {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - all
           readOnlyRootFilesystem: true
-          runAsGroup: 999
+          runAsGroup: 65532
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 65532
       nodeSelector:
         kubernetes.io/os: linux
 
