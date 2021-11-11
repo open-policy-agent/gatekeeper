@@ -125,6 +125,10 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }} \n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
 			}
 
+			if name == "gatekeeper-audit" && kind == DeploymentKind {
+				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if .Values.audit.writeToRAMDisk }} \n      - emptyDir:\n          medium: Memory\n      {{ else }} \n      - emptyDir: {}\n      {{- end }}", 1)
+			}
+
 			if kind == DeploymentKind {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}

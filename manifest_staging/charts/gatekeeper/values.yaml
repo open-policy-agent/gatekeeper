@@ -76,6 +76,7 @@ audit:
   affinity: {}
   tolerations: []
   nodeSelector: { kubernetes.io/os: linux }
+  writeToRAMDisk: false
   resources:
     limits:
       cpu: 1000m
