@@ -395,13 +395,8 @@ vendor:
 	go mod tidy
 
 .PHONY: gator
-gator: bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION)
-	mv bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION) bin/gator
+gator: bin/gator-$(GOOS)-$(GOARCH)
+	mv bin/gator-$(GOOS)-$(GOARCH) bin/gator
 
-EXTENSION.linux :=
-EXTENSION.darwin :=
-EXTENSION.windows := .exe
-EXTENSION := $(EXTENSION.$(GOOS))
-
-bin/gator-$(GOOS)-$(GOARCH)$(EXTENSION):
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH)$(EXTENSION) -ldflags $(LDFLAGS) ./cmd/gator
+bin/gator-$(GOOS)-$(GOARCH):
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH) -ldflags $(LDFLAGS) ./cmd/gator
