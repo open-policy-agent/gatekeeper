@@ -297,7 +297,8 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"matchLabels": {
-				Type: "object",
+				Type:        "object",
+				Description: "a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is `key`, the operator is `In`, and the values array contains only `value`. The requirements are ANDed.  ",
 				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
 					Allows: true,
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
@@ -305,14 +306,20 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 				XPreserveUnknownFields: &trueBool,
 			},
 			"matchExpressions": {
-				Type: "array",
+				Type:        "array",
+				Description: "a list of label selector requirements. The requirements are ANDed.",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
-						Type: "object",
+						Type:        "object",
+						Description: "a selector that contains values, a key, and an operator that relates the key and values.",
 						Properties: map[string]apiextensions.JSONSchemaProps{
-							"key": {Type: "string"},
+							"key": {
+								Description: "the label key that the selector applies to.",
+								Type:        "string",
+							},
 							"operator": {
-								Type: "string",
+								Type:        "string",
+								Description: "a relationship between the label key and the included set of values.",
 								Enum: []apiextensions.JSON{
 									"In",
 									"NotIn",
@@ -347,7 +354,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
 			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
-			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is a standard Kubernetes label selector."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions are ANDed to determine if an object meets the cumulative requirements of the selector."),
 			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace or the object itself, if the object is a namespace."),
 			"scope": {
 				Type:        "string",
