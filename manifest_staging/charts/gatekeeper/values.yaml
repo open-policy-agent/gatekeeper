@@ -23,13 +23,13 @@ postInstall:
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.7.0-beta.2
+      tag: v3.7.0
       pullPolicy: IfNotPresent
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.7.0-beta.2
+  release: v3.7.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:

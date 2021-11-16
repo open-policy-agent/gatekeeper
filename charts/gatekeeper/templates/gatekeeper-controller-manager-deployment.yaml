@@ -50,7 +50,8 @@ spec:
         - --log-level={{ .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
-        - --enable-mutation={{ .Values.experimentalEnableMutation}}
+        - --enable-external-data={{ .Values.enableExternalData }}
+        {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
@@ -111,6 +112,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}

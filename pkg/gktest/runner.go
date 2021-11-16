@@ -165,7 +165,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
 	}
 
-	template, err := readTemplate(r.scheme, r.filesystem, path.Join(suiteDir, templatePath))
+	template, err := ReadTemplate(r.scheme, r.filesystem, path.Join(suiteDir, templatePath))
 	if err != nil {
 		return err
 	}
