@@ -127,6 +127,7 @@ spec:
                         type: object
                     type: object
                   namespaces:
+                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -304,6 +305,7 @@ spec:
                         type: object
                     type: object
                   namespaces:
+                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$

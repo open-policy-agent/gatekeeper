@@ -272,12 +272,6 @@ func propsWithDescription(props *apiextensions.JSONSchemaProps, description stri
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	// Define some repeatedly used sections
-	stringList := apiextensions.JSONSchemaProps{
-		Type: "array",
-		Items: &apiextensions.JSONSchemaPropsOrArray{
-			Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-		},
-	}
 	wildcardNSList := apiextensions.JSONSchemaProps{
 		Type: "array",
 		Items: &apiextensions.JSONSchemaPropsOrArray{
@@ -298,7 +292,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"matchLabels": {
 				Type:        "object",
-				Description: "a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is `key`, the operator is `In`, and the values array contains only `value`. The requirements are ANDed.  ",
+				Description: "A mapping of label keys to sets of allowed label values for those keys.  These mappings are ANDed together.",
 				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
 					Allows: true,
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
@@ -311,7 +305,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
 						Type:        "object",
-						Description: "a selector that contains values, a key, and an operator that relates the key and values.",
+						Description: "a selector that specifies a label key, a set of label values, an operator that defines the relationship between the two that will match the selector.",
 						Properties: map[string]apiextensions.JSONSchemaProps{
 							"key": {
 								Description: "the label key that the selector applies to.",
@@ -319,7 +313,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 							},
 							"operator": {
 								Type:        "string",
-								Description: "a relationship between the label key and the included set of values.",
+								Description: "the relationship between the label and value set that defines a matching selection.",
 								Enum: []apiextensions.JSON{
 									"In",
 									"NotIn",
@@ -327,7 +321,13 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 									"DoesNotExist",
 								},
 							},
-							"values": stringList,
+							"values": {
+								Type:        "array",
+								Description: "a set of label values.",
+								Items: &apiextensions.JSONSchemaPropsOrArray{
+									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+								},
+							},
 						},
 					},
 				},
@@ -354,7 +354,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
 			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
-			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions are ANDed to determine if an object meets the cumulative requirements of the selector."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector."),
 			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace or the object itself, if the object is a namespace."),
 			"scope": {
 				Type:        "string",
