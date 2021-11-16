@@ -67,11 +67,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        {{- if not .Values.image.release }}
-        image: '{{ .Values.image.repository }}'
-        {{- else }}
         image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
-        {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         livenessProbe:
           httpGet:
