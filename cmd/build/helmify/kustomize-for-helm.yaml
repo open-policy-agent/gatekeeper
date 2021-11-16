@@ -84,7 +84,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
-          image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+          HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
           - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
             name: webhook-server
@@ -145,7 +145,7 @@ spec:
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
-          image: "{{ .Values.image.repository }}:{{ .Values.image.release }}"
+          HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
           - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             name: metrics
