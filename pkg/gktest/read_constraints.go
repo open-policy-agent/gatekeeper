@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
-	"sync"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -72,13 +71,10 @@ func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-// TODO(willbeason): Remove once ToVersionless() is threadsafe.
-var versionlessMtx sync.Mutex
-
-// readTemplate reads the contents of the path and returns the
+// ReadTemplate reads the contents of the path and returns the
 // ConstraintTemplate it defines. Returns an error if the file does not define
 // a ConstraintTemplate.
-func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.ConstraintTemplate, error) {
+func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.ConstraintTemplate, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading ConstraintTemplate from %q: %w", path, err)
@@ -118,9 +114,7 @@ func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 		return nil, fmt.Errorf("%w: %T", ErrConvertingTemplate, t)
 	}
 
-	versionlessMtx.Lock()
 	template, err := v.ToVersionless()
-	versionlessMtx.Unlock()
 	if err != nil {
 		// This shouldn't happen unless there's a bug in the conversion functions.
 		// Most likely it means the conversion functions weren't generated.
@@ -130,7 +124,10 @@ func readTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 	return template, nil
 }
 
-func readObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
+// ReadObject reads a file from the filesystem abstraction at the specified
+// path, and returns an unstructured.Unstructured object if the file can be
+// successfully unmarshalled.
+func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	bytes, err := fs.ReadFile(f, path)
 	if err != nil {
 		return nil, fmt.Errorf("reading Constraint from %q: %w", path, err)
@@ -145,7 +142,7 @@ func readObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 }
 
 func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
-	u, err := readObject(f, path)
+	u, err := ReadObject(f, path)
 	if err != nil {
 		return nil, err
 	}
