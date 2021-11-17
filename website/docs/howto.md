@@ -75,7 +75,7 @@ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/
 Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
-   * `scope` accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespace-scoped resources are selected. (defaults to `*`)
+   * `scope` determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
    * `namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.
    * `excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.
    * `labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions are ANDed to determine if an object meets the cumulative requirements of the selector.

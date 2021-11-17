@@ -88,6 +88,7 @@ spec:
                 description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -109,7 +110,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -143,7 +144,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -173,14 +174,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
@@ -300,6 +301,7 @@ spec:
                 description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -321,7 +323,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -355,7 +357,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -385,14 +387,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
@@ -521,6 +523,7 @@ spec:
                 description: Match selects objects to apply mutations to.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -542,7 +545,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -576,7 +579,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -606,14 +609,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
@@ -699,6 +702,7 @@ spec:
                 description: Match selects objects to apply mutations to.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -720,7 +724,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -754,7 +758,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -784,14 +788,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
@@ -1495,6 +1499,7 @@ spec:
                 description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -1516,7 +1521,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -1550,7 +1555,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -1580,14 +1585,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
@@ -1705,6 +1710,7 @@ spec:
                 description: Match allows the user to limit which resources get mutated. Individual match criteria are AND-ed together. An undefined match criteria matches everything.
                 properties:
                   excludedNamespaces:
+                    description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
@@ -1726,7 +1732,7 @@ spec:
                       type: object
                     type: array
                   labelSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: 'LabelSelector is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector.'
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -1760,7 +1766,7 @@ spec:
                     pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
-                    description: A label selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty label selector matches all objects. A null label selector matches no objects.
+                    description: NamespaceSelector is a label selector against an object's containing namespace or the object itself, if the object is a namespace.
                     properties:
                       matchExpressions:
                         description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -1790,14 +1796,14 @@ spec:
                         type: object
                     type: object
                   namespaces:
-                    description: '`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
+                    description: 'Namespaces is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`.'
                     items:
                       description: 'A string that supports globbing at its end.  Ex: "kube-*" will match "kube-system" or "kube-public".  The asterisk is required for wildcard matching.'
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
-                    description: ResourceScope is an enum defining the different scopes available to a custom resource
+                    description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                 type: object
               parameters:
