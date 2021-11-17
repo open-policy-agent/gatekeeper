@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -36,6 +37,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
+	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -71,6 +73,9 @@ func init() {
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
 func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+	if !operations.IsAssigned(operations.Webhook) {
+		return nil
+	}
 	reporter, err := newStatsReporter()
 	if err != nil {
 		return err
@@ -486,4 +491,14 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnames
 		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
 		Namespace: gkNamespace,
 	}
+}
+
+func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
+	if operations.IsAssigned(operations.MutationWebhook) {
+		return append(webhooks, rotator.WebhookInfo{
+			Name: VwhName,
+			Type: rotator.Validating,
+		})
+	}
+	return webhooks
 }
