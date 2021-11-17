@@ -272,12 +272,6 @@ func propsWithDescription(props *apiextensions.JSONSchemaProps, description stri
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	// Define some repeatedly used sections
-	stringList := apiextensions.JSONSchemaProps{
-		Type: "array",
-		Items: &apiextensions.JSONSchemaPropsOrArray{
-			Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-		},
-	}
 	wildcardNSList := apiextensions.JSONSchemaProps{
 		Type: "array",
 		Items: &apiextensions.JSONSchemaPropsOrArray{
@@ -297,7 +291,8 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"matchLabels": {
-				Type: "object",
+				Type:        "object",
+				Description: "A mapping of label keys to sets of allowed label values for those keys.  A selected resource will match all of these expressions.",
 				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
 					Allows: true,
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
@@ -305,14 +300,20 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 				XPreserveUnknownFields: &trueBool,
 			},
 			"matchExpressions": {
-				Type: "array",
+				Type:        "array",
+				Description: "a list of label selection expressions. A selected resource will match all of these expressions.",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
-						Type: "object",
+						Type:        "object",
+						Description: "a selector that specifies a label key, a set of label values, an operator that defines the relationship between the two that will match the selector.",
 						Properties: map[string]apiextensions.JSONSchemaProps{
-							"key": {Type: "string"},
+							"key": {
+								Description: "the label key that the selector applies to.",
+								Type:        "string",
+							},
 							"operator": {
-								Type: "string",
+								Type:        "string",
+								Description: "the relationship between the label and value set that defines a matching selection.",
 								Enum: []apiextensions.JSON{
 									"In",
 									"NotIn",
@@ -320,7 +321,13 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 									"DoesNotExist",
 								},
 							},
-							"values": stringList,
+							"values": {
+								Type:        "array",
+								Description: "a set of label values.",
+								Items: &apiextensions.JSONSchemaPropsOrArray{
+									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
+								},
+							},
 						},
 					},
 				},
@@ -347,11 +354,11 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
 			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
-			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is a standard Kubernetes label selector."),
+			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector."),
 			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace or the object itself, if the object is a namespace."),
 			"scope": {
 				Type:        "string",
-				Description: "scope accepts `*`, `Cluster`, or `Namespaced` which determines if cluster-scoped and/or namespaced-scoped resources are matched. (defaults to `*`)",
+				Description: "`scope` determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)",
 				Enum: []apiextensions.JSON{
 					"*",
 					"Cluster",
