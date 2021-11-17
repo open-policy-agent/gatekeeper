@@ -292,7 +292,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"matchLabels": {
 				Type:        "object",
-				Description: "A mapping of label keys to sets of allowed label values for those keys.  These mappings are ANDed together.",
+				Description: "A mapping of label keys to sets of allowed label values for those keys.  A selected resource will match all of these expressions.",
 				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
 					Allows: true,
 					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
@@ -301,7 +301,7 @@ func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 			},
 			"matchExpressions": {
 				Type:        "array",
-				Description: "a list of label selector requirements. The requirements are ANDed.",
+				Description: "a list of label selection expressions. A selected resource will match all of these expressions.",
 				Items: &apiextensions.JSONSchemaPropsOrArray{
 					Schema: &apiextensions.JSONSchemaProps{
 						Type:        "object",
