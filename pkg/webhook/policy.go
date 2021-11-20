@@ -494,7 +494,7 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnames
 }
 
 func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
-	if operations.IsAssigned(operations.MutationWebhook) {
+	if operations.IsAssigned(operations.Webhook) {
 		return append(webhooks, rotator.WebhookInfo{
 			Name: VwhName,
 			Type: rotator.Validating,
