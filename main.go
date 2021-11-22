@@ -65,13 +65,6 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-var webhooks = []rotator.WebhookInfo{
-	{
-		Name: webhook.VwhName,
-		Type: rotator.Validating,
-	},
-}
-
 const (
 	secretName     = "gatekeeper-webhook-server-cert"
 	caName         = "gatekeeper-ca"
@@ -160,6 +153,8 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
+	webhooks := []rotator.WebhookInfo{}
+	webhooks = webhook.AppendValidationWebhookIfEnabled(webhooks)
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
 	// Disable high-cardinality REST client metrics (rest_client_request_latency).
@@ -185,7 +180,7 @@ func main() {
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && operations.IsAssigned(operations.Webhook) {
+	if !*disableCertRotation && (operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook)) {
 		setupLog.Info("setting up cert rotation")
 		if err := rotator.AddRotator(mgr, &rotator.CertRotator{
 			SecretKey: types.NamespacedName{
@@ -309,7 +304,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
-	if operations.IsAssigned(operations.Webhook) {
+	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
 		setupLog.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
