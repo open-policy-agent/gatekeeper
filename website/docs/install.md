@@ -69,7 +69,7 @@ A basic Helm chart exists in `charts/gatekeeper`. If you have Helm installed, yo
 
 ```sh
 helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
-helm install gatekeeper/gatekeeper --generate-name
+helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace
 ```
 
 If you are using the older Gatekeeper Helm repo location and Helm v3.3.2+, then use `force-update` to override the default behavior to update the existing repo.
@@ -103,7 +103,7 @@ If you used `make` to deploy, then run the following to uninstall Gatekeeper:
 
 If you used `helm` to deploy, then run the following to uninstall Gatekeeper:
 ```sh
-helm delete <release name>
+helm delete gatekeeper --namespace gatekeeper-system
 ```
 
 Helm v3 will not cleanup Gatekeeper installed CRDs. Run the following to uninstall Gatekeeper CRDs:

@@ -290,7 +290,7 @@ func (am *Manager) auditResources(
 		}
 	}
 
-	var errs opa.Errors
+	var errs []error
 	nsCache := newNSCache()
 
 	matchedKinds := make(map[string]bool)
@@ -426,8 +426,9 @@ func (am *Manager) auditResources(
 			}
 		}
 	}
+
 	if len(errs) > 0 {
-		return errs
+		return mergeErrors(errs)
 	}
 	return nil
 }
@@ -437,7 +438,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string) error {
-	var errs opa.Errors
+	var errs []error
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
 		// apiCacheDir/kind_folderIndex/fileIndex
@@ -490,7 +491,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 		}
 	}
 	if len(errs) > 0 {
-		return errs
+		return mergeErrors(errs)
 	}
 	return nil
 }
@@ -957,4 +958,17 @@ func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnames
 		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
 		Namespace: gkNamespace,
 	}
+}
+
+// mergeErrors concatenates errs into a single error. None of the original errors
+// may be extracted from the result.
+func mergeErrors(errs []error) error {
+	sb := strings.Builder{}
+	for i, err := range errs {
+		if i != 0 {
+			sb.WriteString("\n")
+			sb.WriteString(err.Error())
+		}
+	}
+	return errors.New(sb.String())
 }
