@@ -18,14 +18,14 @@ A similar way to connect with an external data source can be done today using OP
 Using the external data solution provides benefits, such as:
 - Addresses security concerns by:
   - Restricting which hosts a user can access.
-  - Providing an interface for making requests, which allows us to better handle things like escaping strings.
-- Addresses common scenarios with a single provider, such as image SHA mutation that many of these scenarios may utilize.
+  - Providing an interface for making requests, which allows Gatekeeper to better handle things like escaping strings.
+- Addresses common patterns with a single provider, such as image SHA mutation, that potential scenarios (such as validating image signatures or vulnerabilities) may utilize.
 - Provider model creates a common interface for extending Gatekeeper with external data.
   - Developers and consumers of data sources can rely on that common protocol to ease authoring of both constraint templates and data sources.
-  - Makes change management easier as users of an external data provider should be able to tell whether upgrading it will break existing constraint templates. (our goal is to have that answer always be "no")
-- Performance benefits as we can now directly control caching.
+  - Makes change management easier as users of an external data provider should be able to tell whether upgrading it will break existing constraint templates. (once external data API is stable, our goal is to have that answer always be "no")
+- Performance benefits as Gatekeeper can now directly control caching and which values are significant for caching, which increases the likelihood of cache hits.
   - For mutation, we can batch requests via lazy evaluation.
-  - For validation we make batching easier via function design.
+  - For validation, we make batching easier via function design.
 
 ## Enabling external data support
 
