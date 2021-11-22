@@ -7,15 +7,25 @@ title: External Data
 
 ## Motivation
 
-Gatekeeper provides various means to mutate and validate Kubernetes resources. However, in many of these scenarios this data is either built-in, static or user-defined. With external data feature, we are enabling Gatekeeper to interface with various external data sources, such as image registries, using a provider-based model.
+Gatekeeper provides various means to mutate and validate Kubernetes resources. However, in many of these scenarios this data is either built-in, static or user defined. With external data feature, we are enabling Gatekeeper to interface with various external data sources, such as image registries, using a provider-based model.
 
 A similar way to connect with an external data source can be done today using OPA's built-in `http.send` functionality. However, there are limitations to this approach.
-- Gatekeeper does not support rego policies for mutation, which can not use the OPA http.send built-in function
-- There are unknown factors when the proxy endpoint is not responsive, doesn't exist/down or fails. These are addressed by external data interfaces such as timeout.
+- Gatekeeper does not support Rego policies for mutation, which cannot use the OPA `http.send` built-in function.
+- Security concerns due to:
+  - if template authors are not trusted, it will potentially give template authors access to the in-cluster network.
+  - if template authors are trusted, authors will need to be careful on how rego is written to avoid injection attacks.
 
 Using the external data solution provides benefits, such as:
-- Tackle common scenarios together, such as image SHA mutation that many of these scenarios will utilize.
-- Provider based model provides examples and guidelines for each provider to integrate with Gatekeeper
+- Addresses security concerns by:
+  - Restricting which hosts a user can access.
+  - Providing an interface for making requests, which allows us to better handle things like escaping strings.
+- Addresses common scenarios with a single provider, such as image SHA mutation that many of these scenarios may utilize.
+- Provider model creates a common interface for extending Gatekeeper with external data.
+  - Developers and consumers of data sources can rely on that common protocol to ease authoring of both constraint templates and data sources.
+  - Makes change management easier as users of an external data provider should be able to tell whether upgrading it will break existing constraint templates. (our goal is to have that answer always be "no")
+- Performance benefits as we can now directly control caching.
+  - For mutation, we can batch requests via lazy evaluation.
+  - For validation we make batching easier via function design.
 
 ## Enabling external data support
 
@@ -26,7 +36,7 @@ You can enable external data support by adding `--enable-external-data` in gatek
 You can also enable external data by installing or upgrading Helm chart by setting `enableExternalData=true`:
 
 ```sh
-helm install --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
+helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
 	--set enableExternalData=true \
 	--set controllerManager.dnsPolicy=ClusterFirst,audit.dnsPolicy=ClusterFirst
 ```
