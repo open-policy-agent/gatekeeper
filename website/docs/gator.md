@@ -10,11 +10,18 @@ We plan on adding more subcommands in the future.
 
 ## Installation
 
+To install `gator`, you may either
+[download the binary](https://github.com/open-policy-agent/gatekeeper/releases/tag/v3.7.0)
+relevant to your system or build it directly from source.
+
+To build from source:
 ```
 go get github.com/open-policy-agent/gatekeeper/cmd/gator
 ```
 
 ## The `gator test` subcommand
+
+### Writing Test Suites
 
 `gator test` organizes tests into three levels: Suites, Tests, and Cases:
 
@@ -46,11 +53,15 @@ Constraints. Each Test in a Suite is independent.
 
 ### Tests
 
+The `tests` top-level field is a list representing tests to run.
+
 A Test compiles a ConstraintTemplate, and instantiates a Constraint for the
 ConstraintTemplate. It is an error for the Constraint to have a different type
 than the ConstraintTemplate, or for the ConstraintTemplate to not compile.
 
 ### Cases
+
+The `cases` field is within `tests`, is a list.
 
 A Case validates an object against a Constraint. The case may specify that the
 object is expected to pass or fail validation, and may make assertions about
@@ -97,7 +108,7 @@ This Case specifies:
 - There is exactly one violation containing "initContainer".
 - There is exactly one violation containing "container".
 
-It is valid to test that no violations match an assertion. For example, the
+It is valid to check that no violations match an assertion. For example, the
 below is valid:
 
 ```yaml
@@ -108,6 +119,10 @@ below is valid:
 
 This Case specifies that there is at least one violation, and no violations
 contain the string "foobar".
+
+More examples of working `gator test` suites are available in the
+[gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library)
+repository.
 
 ### Usage
 
@@ -120,6 +135,13 @@ To run all suites in the current directory and all child directories
 recursively
 ```
 gator test ./...
+```
+
+To only run tests whose full names contain a match for a regular expression, use
+the `run` flag:
+
+```
+gator test path/to/suites/... --run "disallowed"
 ```
 
 Run `gator test --help` for more information.
@@ -144,7 +166,7 @@ assign objects to the default Namespace automatically. Always specify
 `metadata.namespace` for Namespace-scoped objects to prevent test failures, or
 to keep from specifying templates which will fail in a real cluster.
 
-## Windows Compatibility
+## Platform Compatibility
 
 `gator` is only automatically tested on Linux for each commit. If you want to
 use `gator` on other systems, let us know by replying to
