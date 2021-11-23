@@ -307,7 +307,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.opa.RemoveConstraint(ctx, instance); err != nil {
-			if _, ok := err.(*opa.UnrecognizedConstraintError); !ok {
+			if opa.IsUnrecognizedConstraintError(err) {
 				return reconcile.Result{}, err
 			}
 		}
