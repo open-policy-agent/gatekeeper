@@ -3,7 +3,8 @@ id: externaldata
 title: External Data
 ---
 
-> This feature is still in alpha stage, so the final form can still change (feedback is welcome!). Mutation is not yet supported with external data.
+> ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
+> 🚧  Mutation is not yet supported with external data.
 
 ## Motivation
 
@@ -15,12 +16,13 @@ A similar way to connect with an external data source can be done today using OP
   - if template authors are not trusted, it will potentially give template authors access to the in-cluster network.
   - if template authors are trusted, authors will need to be careful on how rego is written to avoid injection attacks.
 
-Using the external data solution provides benefits, such as:
+Key benefits provided by the external data solution:
 - Addresses security concerns by:
   - Restricting which hosts a user can access.
   - Providing an interface for making requests, which allows Gatekeeper to better handle things like escaping strings.
-- Addresses common patterns with a single provider, such as image SHA mutation, that potential scenarios (such as validating image signatures or vulnerabilities) may utilize.
+- Addresses common patterns with a single provider, e.g. image tag-to-digest mutation, which can be leveraged by multiple scenarios (e.g. validating image signatures or vulnerabilities).
 - Provider model creates a common interface for extending Gatekeeper with external data.
+  - It allows for separation of concerns between the implementation that allows access to external data and the actual policy being evaluated.
   - Developers and consumers of data sources can rely on that common protocol to ease authoring of both constraint templates and data sources.
   - Makes change management easier as users of an external data provider should be able to tell whether upgrading it will break existing constraint templates. (once external data API is stable, our goal is to have that answer always be "no")
 - Performance benefits as Gatekeeper can now directly control caching and which values are significant for caching, which increases the likelihood of cache hits.
