@@ -9,12 +9,14 @@ import (
 )
 
 const (
-	expectedDurationValueMin         = time.Duration(1 * time.Second)
-	expectedDurationValueMax         = time.Duration(5 * time.Second)
-	expectedDurationMin      float64 = 1
-	expectedDurationMax      float64 = 5
-	expectedCount            int64   = 2
-	expectedRowLength                = 1
+	minValidationDuration = time.Duration(1 * time.Second)
+	maxValidationDuration = time.Duration(5 * time.Second)
+
+	wantMinValidationSeconds float64 = 1
+	wantMaxValidationSeconds float64 = 5
+
+	expectedCount     int64 = 2
+	expectedRowLength int   = 1
 )
 
 func TestValidationReportRequest(t *testing.T) {
@@ -27,11 +29,11 @@ func TestValidationReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportValidationRequest(ctx, allowResponse, expectedDurationValueMin)
+	err = r.ReportValidationRequest(ctx, allowResponse, minValidationDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportValidationRequest(ctx, allowResponse, expectedDurationValueMax)
+	err = r.ReportValidationRequest(ctx, allowResponse, maxValidationDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
@@ -48,11 +50,11 @@ func TestMutationReportRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.ReportMutationRequest(ctx, successResponse, expectedDurationValueMin)
+	err = r.ReportMutationRequest(ctx, successResponse, minValidationDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportMutationRequest(ctx, successResponse, expectedDurationValueMax)
+	err = r.ReportMutationRequest(ctx, successResponse, maxValidationDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
@@ -88,11 +90,13 @@ func check(t *testing.T, expectedTags map[string]string, requestCountMetricName 
 			t.Errorf("ReportRequest tags does not match for %v", tag.Key.Name())
 		}
 	}
-	if durationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, expectedDurationMin, durationValue.Min)
+
+	if durationValue.Min != wantMinValidationSeconds {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, wantMinValidationSeconds, durationValue.Min)
 	}
-	if durationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, expectedDurationMax, durationValue.Max)
+
+	if durationValue.Max != wantMaxValidationSeconds {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", requestDurationMetricName, wantMaxValidationSeconds, durationValue.Max)
 	}
 }
 

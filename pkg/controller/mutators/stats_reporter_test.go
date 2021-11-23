@@ -15,19 +15,21 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	}
 
 	const (
-		expectedDurationValueMin = time.Duration(1 * time.Second)
-		expectedDurationValueMax = time.Duration(5 * time.Second)
-		expectedDurationMin      = 1.0
-		expectedDurationMax      = 5.0
-		expectedRowLength        = 1
+		minIngestionDuration = time.Duration(1 * time.Second)
+		maxIngestionDuration = time.Duration(5 * time.Second)
+
+		wantMinIngestionDuration = 1.0
+		wantMaxIngestionDuration = 5.0
+
+		expectedRowLength = 1
 	)
 
 	r := NewStatsReporter()
-	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMin)
+	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, minIngestionDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
-	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, expectedDurationValueMax)
+	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, maxIngestionDuration)
 	if err != nil {
 		t.Errorf("ReportRequest error %v", err)
 	}
@@ -56,11 +58,11 @@ func TestReportMutatorIngestionRequest(t *testing.T) {
 	if !ok {
 		t.Error("ReportRequest should have aggregation Distribution()")
 	}
-	if durationValue.Min != expectedDurationMin {
-		t.Errorf("got tag '%v' min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, expectedDurationMin)
+	if durationValue.Min != wantMinIngestionDuration {
+		t.Errorf("got tag '%v' min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, wantMinIngestionDuration)
 	}
-	if durationValue.Max != expectedDurationMax {
-		t.Errorf("got tag '%v' max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, expectedDurationMax)
+	if durationValue.Max != wantMaxIngestionDuration {
+		t.Errorf("got tag '%v' max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, wantMaxIngestionDuration)
 	}
 
 	verifyTags(t, expectedTags, row.Tags)

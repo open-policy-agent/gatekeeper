@@ -16,20 +16,25 @@ func TestReportIngestion(t *testing.T) {
 	expectedTags := map[string]string{
 		"status": "active",
 	}
-	const expectedDurationValueMin = time.Duration(1 * time.Second)
-	const expectedDurationValueMax = time.Duration(5 * time.Second)
-	const expectedDurationMin float64 = 1
-	const expectedDurationMax float64 = 5
-	const expectedCount int64 = 2
-	const expectedRowLength = 1
+
+	const (
+		minIngestDuration = time.Duration(1 * time.Second)
+		maxIngestDuration = time.Duration(5 * time.Second)
+
+		wantMinIngestDurationSeconds float64 = 1
+		wantMaxIngestDurationSeconds float64 = 5
+
+		expectedCount     int64 = 2
+		expectedRowLength int   = 1
+	)
 
 	r := newStatsReporter()
 	ctx := context.Background()
-	err := r.reportIngestDuration(ctx, metrics.ActiveStatus, expectedDurationValueMin)
+	err := r.reportIngestDuration(ctx, metrics.ActiveStatus, minIngestDuration)
 	if err != nil {
 		t.Errorf("reportIngestDuration error %v", err)
 	}
-	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, expectedDurationValueMax)
+	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, maxIngestDuration)
 	if err != nil {
 		t.Errorf("reportIngestDuration error %v", err)
 	}
@@ -60,11 +65,11 @@ func TestReportIngestion(t *testing.T) {
 			t.Errorf("ingestDuration tags does not match for %v", tag.Key.Name())
 		}
 	}
-	if durationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Min, expectedDurationMin)
+	if durationValue.Min != wantMinIngestDurationSeconds {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Min, wantMinIngestDurationSeconds)
 	}
-	if durationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Max, expectedDurationMax)
+	if durationValue.Max != wantMaxIngestDurationSeconds {
+		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Max, wantMaxIngestDurationSeconds)
 	}
 }
 

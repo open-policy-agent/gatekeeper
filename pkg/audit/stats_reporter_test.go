@@ -38,22 +38,23 @@ func TestReportTotalViolations(t *testing.T) {
 }
 
 func TestReportLatency(t *testing.T) {
-	const expectedLatencyValueMin = time.Duration(100 * time.Second)
-	const expectedLatencyValueMax = time.Duration(500 * time.Second)
+	const minLatency = time.Duration(100 * time.Second)
+	const maxLatency = time.Duration(500 * time.Second)
+
 	const expectedLatencyCount int64 = 2
 	const expectedLatencyMin float64 = 100
 	const expectedLatencyMax float64 = 500
-	const expectedRowLength = 1
+	const expectedRowLength int = 1
 
 	r, err := newStatsReporter()
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportLatency(expectedLatencyValueMin)
+	err = r.reportLatency(minLatency)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
-	err = r.reportLatency(expectedLatencyValueMax)
+	err = r.reportLatency(maxLatency)
 	if err != nil {
 		t.Errorf("ReportLatency error %v", err)
 	}
