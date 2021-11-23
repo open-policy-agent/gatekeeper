@@ -27,7 +27,7 @@ Key benefits provided by the external data solution:
   - Makes change management easier as users of an external data provider should be able to tell whether upgrading it will break existing constraint templates. (once external data API is stable, our goal is to have that answer always be "no")
 - Performance benefits as Gatekeeper can now directly control caching and which values are significant for caching, which increases the likelihood of cache hits.
   - For mutation, we can batch requests via lazy evaluation.
-  - For validation, we make batching easier via function design.
+  - For validation, we make batching easier via [`external_data`](#external-data-for-Gatekeeper-validating-webhook) Rego function design.
 
 ## Enabling external data support
 
@@ -66,7 +66,7 @@ As part of [ProviderResponse](#ProviderResponse), the provider can return a list
 
 If there is a system error, the provider should return the system error message in the `SystemError` field.
 
-> Recommendation is to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
+> 📎 Recommendation is for provider implementations to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
 
 Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
 
@@ -81,10 +81,10 @@ metadata:
   name: my-provider
 spec:
   url: http://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., http://my-provider.my-namespace:8090/validate)
-  timeout: <timeout> # timeout value in seconds (e.g., 1)
+  timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
 ```
 
-## Gatekeeper validation
+## External data for Gatekeeper validating webhook
 
 External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
 
@@ -99,7 +99,7 @@ External data adds a [custom OPA built-in function](https://www.openpolicyagent.
 
 Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
 
-> To avoid multiple calls to the provider, recommendation is to batch the keys list and send the request only once.
+> 📎 To avoid multiple calls to the same provider, recommendation is to batch the keys list to send a single request.
 
 Example template:
 https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
