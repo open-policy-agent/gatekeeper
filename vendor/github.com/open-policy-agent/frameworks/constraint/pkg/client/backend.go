@@ -48,36 +48,43 @@ func (b *Backend) NewClient(opts ...Opt) (*Client, error) {
 	if b.hasClient {
 		return nil, errors.New("currently only one client per backend is supported")
 	}
+
 	var fields []string
 	for k := range validDataFields {
 		fields = append(fields, k)
 	}
+
 	c := &Client{
 		backend:           b,
 		constraints:       make(map[schema.GroupKind]map[string]*unstructured.Unstructured),
 		templates:         make(map[templateKey]*templateEntry),
 		allowedDataFields: fields,
 	}
+
 	var errs Errors
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
 			errs = append(errs, err)
 		}
 	}
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
 	for _, field := range c.allowedDataFields {
 		if !validDataFields[field] {
 			return nil, fmt.Errorf("invalid data field %s", field)
 		}
 	}
-	if len(errs) > 0 {
-		return nil, errs
-	}
+
 	if len(c.targets) == 0 {
 		return nil, errors.New("no targets registered: please register a target via client.Targets()")
 	}
+
 	if err := b.driver.Init(context.Background()); err != nil {
 		return nil, err
 	}
+
 	if err := c.init(); err != nil {
 		return nil, err
 	}

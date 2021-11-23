@@ -1,0 +1,87 @@
+package local
+
+import (
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/storage"
+	"github.com/open-policy-agent/opa/storage/inmem"
+	opatypes "github.com/open-policy-agent/opa/types"
+)
+
+type Arg func(*driver)
+
+func Defaults() Arg {
+	return func(d *driver) {
+		if d.compiler == nil {
+			d.compiler = ast.NewCompiler()
+		}
+
+		if d.modules == nil {
+			d.modules = make(map[string]*ast.Module)
+		}
+
+		if d.storage == nil {
+			d.storage = inmem.New()
+		}
+
+		if d.capabilities == nil {
+			d.capabilities = ast.CapabilitiesForThisVersion()
+		}
+
+		// adding external_data builtin otherwise capabilities get overridden
+		// if a capability, like http.send, is disabled
+		if d.providerCache != nil {
+			d.capabilities.Builtins = append(d.capabilities.Builtins, &ast.Builtin{
+				Name: "external_data",
+				Decl: opatypes.NewFunction(opatypes.Args(opatypes.A), opatypes.A),
+			})
+		}
+	}
+}
+
+func Tracing(enabled bool) Arg {
+	return func(d *driver) {
+		d.traceEnabled = enabled
+	}
+}
+
+func Modules(modules map[string]*ast.Module) Arg {
+	return func(d *driver) {
+		d.modules = modules
+	}
+}
+
+func Storage(s storage.Store) Arg {
+	return func(d *driver) {
+		d.storage = s
+	}
+}
+
+func AddExternalDataProviderCache(providerCache *externaldata.ProviderCache) Arg {
+	return func(d *driver) {
+		d.providerCache = providerCache
+	}
+}
+
+func DisableBuiltins(builtins ...string) Arg {
+	return func(d *driver) {
+		if d.capabilities == nil {
+			d.capabilities = ast.CapabilitiesForThisVersion()
+		}
+
+		disableBuiltins := make(map[string]bool)
+		for _, b := range builtins {
+			disableBuiltins[b] = true
+		}
+
+		var nb []*ast.Builtin
+		builtins := d.capabilities.Builtins
+		for i, b := range builtins {
+			if !disableBuiltins[b.Name] {
+				nb = append(nb, builtins[i])
+			}
+		}
+
+		d.capabilities.Builtins = nb
+	}
+}
