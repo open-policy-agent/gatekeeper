@@ -38,6 +38,11 @@ func (e *UnrecognizedConstraintError) Error() string {
 	return fmt.Sprintf("Constraint kind %s is not recognized", e.s)
 }
 
+func IsUnrecognizedConstraintError(e error) bool {
+	_, ok := e.(*UnrecognizedConstraintError)
+	return ok
+}
+
 func NewUnrecognizedConstraintError(text string) error {
 	return &UnrecognizedConstraintError{text}
 }
