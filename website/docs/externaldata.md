@@ -4,6 +4,7 @@ title: External Data
 ---
 
 > ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
+
 > 🚧  Mutation is not yet supported with external data.
 
 ## Motivation

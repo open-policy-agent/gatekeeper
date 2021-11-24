@@ -4,9 +4,8 @@ title: Mutation
 ---
 
 The mutation feature allows Gatekeeper to not only validate created Kubernetes resources but also modify them based on defined mutation policies.
-The feature is still in an alpha stage, so the final form can still change.
 
-Status: alpha
+> 🚧 This feature is in _beta_ stage and it is enabled by default.
 
 ## Mutation CRDs
 
@@ -137,7 +136,7 @@ parameters:
 ### AssignMetadata
 
 AssignMetadata is a CRD for modifying the metadata section of a resource. Note that the metadata of a resource is a very sensitive piece of data, and certain mutations could result in unintended consequences. An example of this could be changing the name or namespace of a resource. The AssignMetadata changes have therefore been limited to only the labels and annotations. Furthermore, it is currently only allowed to add a label or annotation.
- 
+
  An example of an AssignMetadata adding a label `owner` set to `admin`:
 ```yaml
 apiVersion: mutations.gatekeeper.sh/v1alpha1
