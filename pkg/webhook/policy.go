@@ -189,14 +189,14 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	denyMsgs, warnMsgs := h.getValidationMessages(res, &req)
 
 	if len(denyMsgs) > 0 {
-		vResp := admission.Denied(strings.Join(denyMsgs, "\n"))
+		vResp := admission.Denied(string(metav1.StatusReasonForbidden))
 		if vResp.Result == nil {
 			vResp.Result = &metav1.Status{}
 		}
 		if len(warnMsgs) > 0 {
 			vResp.Warnings = warnMsgs
 		}
-		vResp.Result.Code = http.StatusForbidden
+		vResp.Result.Message = strings.Join(denyMsgs, "\n")
 		requestResponse = denyResponse
 		return vResp
 	}
