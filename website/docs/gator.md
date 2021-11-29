@@ -3,15 +3,16 @@ id: gator
 title: The gator CLI
 ---
 
-The `gator` CLI is a tool for testing Gatekeeper ConstraintTemplates and
-Constraints on Kubernetes objects.
+The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
+Constraints in a local environment.
 
-We plan on adding more subcommands in the future.
+For now, the only subcommand is `gator test`, which allows writing unit tests
+for Constraints. We plan on adding more subcommands in the future.
 
 ## Installation
 
 To install `gator`, you may either
-[download the binary](https://github.com/open-policy-agent/gatekeeper/releases/tag/v3.7.0)
+[download the binary](https://github.com/open-policy-agent/gatekeeper/releases)
 relevant to your system or build it directly from source.
 
 To build from source:
@@ -53,15 +54,16 @@ Constraints. Each Test in a Suite is independent.
 
 ### Tests
 
-The `tests` top-level field is a list representing tests to run.
+Each Suite contains a list of Tests under the `tests` field.
 
 A Test compiles a ConstraintTemplate, and instantiates a Constraint for the
 ConstraintTemplate. It is an error for the Constraint to have a different type
-than the ConstraintTemplate, or for the ConstraintTemplate to not compile.
+than that defined in the ConstraintTemplate spec.crd.spec.names.kind, or for the
+ConstraintTemplate to not compile.
 
 ### Cases
 
-The `cases` field is within `tests`, is a list.
+Each Test contains a list of Cases under the `cases` field.
 
 A Case validates an object against a Constraint. The case may specify that the
 object is expected to pass or fail validation, and may make assertions about
@@ -87,7 +89,8 @@ assertions:
   violation messages must otherwise match the assertion. If a nonnegative
   integer, then exactly that many violations must match.
 - `message` matches violations containing the exact string specified. `message`
-  is case-sensitive.
+  is case-sensitive. If not specified or explicitly set to empty string, matches
+  all violations.
 
 A Case may specify multiple assertions. For example:
 
