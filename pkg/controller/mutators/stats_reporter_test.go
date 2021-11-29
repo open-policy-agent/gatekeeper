@@ -10,83 +10,93 @@ import (
 )
 
 func TestReportMutatorIngestionRequest(t *testing.T) {
-	expectedTags := map[string]string{
+	wantTags := map[string]string{
 		"status": "active",
 	}
 
 	const (
-		minIngestionDuration = time.Duration(1 * time.Second)
-		maxIngestionDuration = time.Duration(5 * time.Second)
+		minIngestionDuration = 1 * time.Second
+		maxIngestionDuration = 5 * time.Second
 
 		wantMinIngestionDuration = 1.0
 		wantMaxIngestionDuration = 5.0
 
-		expectedRowLength = 1
+		wantRowLength      = 1
+		wantIngestionCount = 2
 	)
 
 	r := NewStatsReporter()
 	err := r.ReportMutatorIngestionRequest(MutatorStatusActive, minIngestionDuration)
 	if err != nil {
-		t.Errorf("ReportRequest error %v", err)
+		t.Fatalf("got ReportRequest error %v, want nil", err)
 	}
+
 	err = r.ReportMutatorIngestionRequest(MutatorStatusActive, maxIngestionDuration)
 	if err != nil {
-		t.Errorf("ReportRequest error %v", err)
+		t.Fatalf("got ReportRequest error %v, want nil", err)
 	}
 
 	// Count test
-	row, err := checkData(mutatorIngestionCountMetricName, expectedRowLength)
+	row, err := checkData(mutatorIngestionCountMetricName, wantRowLength)
 	if err != nil {
-		t.Error(err)
-	}
-	count, ok := row.Data.(*view.CountData)
-	if !ok {
-		t.Error("ReportRequest should have aggregation Count()")
-	}
-	if count.Value != 2 {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", mutatorIngestionCountMetricName, 2, count.Value)
+		t.Fatal(err)
 	}
 
-	verifyTags(t, expectedTags, row.Tags)
+	gotCount, ok := row.Data.(*view.CountData)
+	if !ok {
+		t.Fatalf("got %q type %T, want %T", mutatorIngestionCountMetricName, row.Data, &view.CountData{})
+	}
+
+	if gotCount.Value != wantIngestionCount {
+		t.Errorf("got %q = %v, want %v", mutatorIngestionCountMetricName, gotCount.Value, wantIngestionCount)
+	}
+
+	verifyTags(t, wantTags, row.Tags)
 
 	// Duration test
-	row, err = checkData(mutatorIngestionDurationMetricName, expectedRowLength)
+	row, err = checkData(mutatorIngestionDurationMetricName, wantRowLength)
 	if err != nil {
 		t.Error(err)
 	}
+
 	durationValue, ok := row.Data.(*view.DistributionData)
 	if !ok {
-		t.Error("ReportRequest should have aggregation Distribution()")
-	}
-	if durationValue.Min != wantMinIngestionDuration {
-		t.Errorf("got tag '%v' min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, wantMinIngestionDuration)
-	}
-	if durationValue.Max != wantMaxIngestionDuration {
-		t.Errorf("got tag '%v' max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, wantMaxIngestionDuration)
+		t.Fatalf("got %q type %T, want %T", mutatorIngestionCountMetricName, row.Data, &view.DistributionData{})
 	}
 
-	verifyTags(t, expectedTags, row.Tags)
+	if durationValue.Min != wantMinIngestionDuration {
+		t.Errorf("got tag %q min %v, want %v", mutatorIngestionDurationMetricName, durationValue.Min, wantMinIngestionDuration)
+	}
+
+	if durationValue.Max != wantMaxIngestionDuration {
+		t.Errorf("got tag %q max %v, want %v", mutatorIngestionDurationMetricName, durationValue.Max, wantMaxIngestionDuration)
+	}
+
+	verifyTags(t, wantTags, row.Tags)
 }
 
 func checkData(name string, rowLength int) (*view.Row, error) {
 	row, err := view.RetrieveData(name)
 	if err != nil {
-		return nil, fmt.Errorf("Error when retrieving data: %v from %v", err, name)
+		return nil, fmt.Errorf("got RetrieveData error %v from %v, want nil", err, name)
 	}
+
 	if len(row) != rowLength {
-		return nil, fmt.Errorf("Got '%v' row length %v, want %v", name, len(row), rowLength)
+		return nil, fmt.Errorf("got %q row length %v, want %v", name, len(row), rowLength)
 	}
+
 	if row[0].Data == nil {
-		return nil, fmt.Errorf("Expected row data not to be nil")
+		return nil, fmt.Errorf("got row[0].Data = nil, want non-nil")
 	}
 	return row[0], nil
 }
 
-func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
-	for _, tag := range actual {
-		ex := expected[tag.Key.Name()]
-		if tag.Value != ex {
-			t.Errorf("Got tag '%v' value '%v', want '%v'", tag.Key.Name(), tag.Value, ex)
+func verifyTags(t *testing.T, wantTags map[string]string, actual []tag.Tag) {
+	for _, gotTag := range actual {
+		tagName := gotTag.Key.Name()
+		want := wantTags[tagName]
+		if gotTag.Value != want {
+			t.Errorf("got tag %q value %q, want %q", tagName, gotTag.Value, want)
 		}
 	}
 }

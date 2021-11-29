@@ -10,9 +10,9 @@ import (
 )
 
 func TestReportSync(t *testing.T) {
-	const expectedValue int64 = 10
-	const expectedRowLength = 1
-	expectedTags := Tags{
+	const wantValue = 10
+	const wantRowLength = 1
+	wantTags := Tags{
 		Kind:   "Pod",
 		Status: metrics.ActiveStatus,
 	}
@@ -21,93 +21,107 @@ func TestReportSync(t *testing.T) {
 	if err != nil {
 		t.Errorf("newStatsReporter() error %v", err)
 	}
-	err = r.reportSync(expectedTags, expectedValue)
+
+	err = r.reportSync(wantTags, wantValue)
 	if err != nil {
-		t.Errorf("reportSync error %v", err)
+		t.Fatalf("got reportSync() error %v", err)
 	}
-	row := checkData(t, syncMetricName, expectedRowLength)
-	value, ok := row.Data.(*view.LastValueData)
+
+	row := checkData(t, syncMetricName, wantRowLength)
+	gotLast, ok := row.Data.(*view.LastValueData)
 	if !ok {
-		t.Error("reportSync should have aggregation LastValue()")
+		t.Fatalf("got %q type %T, want %T", syncMetricName, row.Data, &view.LastValueData{})
 	}
-	found := contains(row.Tags, expectedTags.Kind)
+
+	found := contains(row.Tags, wantTags.Kind)
 	if !found {
-		t.Errorf("reportSync tags does not match for %v", expectedTags.Kind)
+		t.Errorf("reportSync tags %+v does not contain %q", row.Tags, wantTags.Kind)
 	}
-	found = contains(row.Tags, string(expectedTags.Status))
+
+	found = contains(row.Tags, string(wantTags.Status))
 	if !found {
-		t.Errorf("reportSync tags does not match for %v", expectedTags.Status)
+		t.Errorf("reportSync tags %+v does not contain %v", row.Tags, wantTags.Status)
 	}
-	if int64(value.Value) != expectedValue {
-		t.Errorf("Metric: %v - Expected %v, got %v", syncMetricName, expectedValue, value.Value)
+
+	if gotLast.Value != wantValue {
+		t.Errorf("got %v = %v, want %v", syncMetricName, gotLast.Value, wantValue)
 	}
 }
 
 func TestReportSyncLatency(t *testing.T) {
-	const minLatency = time.Duration(100 * time.Second)
-	const maxLatency = time.Duration(500 * time.Second)
+	const minLatency = 100 * time.Second
+	const maxLatency = 500 * time.Second
 
-	const expectedLatencyCount int64 = 2
-	const expectedLatencyMin float64 = 100
-	const expectedLatencyMax float64 = 500
-	const expectedRowLength int = 1
+	const wantLatencyCount int64 = 2
+	const wantLatencyMin float64 = 100
+	const wantLatencyMax float64 = 500
+	const wantRowLength int = 1
 
 	r, err := NewStatsReporter()
 	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
+		t.Fatalf("got newStatsReporter() error %v, want nil", err)
 	}
 
 	err = r.reportSyncDuration(minLatency)
 	if err != nil {
-		t.Errorf("ReportLatency error %v", err)
+		t.Fatalf("got reportSyncDuration() error %v, want nil", err)
 	}
+
 	err = r.reportSyncDuration(maxLatency)
 	if err != nil {
-		t.Errorf("ReportLatency error %v", err)
+		t.Fatalf("got reportSyncDuration error %v, want nil", err)
 	}
-	row := checkData(t, syncDurationMetricName, expectedRowLength)
-	latencyValue, ok := row.Data.(*view.DistributionData)
+
+	row := checkData(t, syncDurationMetricName, wantRowLength)
+	gotLatency, ok := row.Data.(*view.DistributionData)
 	if !ok {
-		t.Error("reportSyncDuration should have aggregation type Distribution")
+		t.Fatalf("got %q type %T, want %T", syncDurationMetricName, row.Data, &view.DistributionData{})
 	}
-	if latencyValue.Count != expectedLatencyCount {
-		t.Errorf("Metric: %v - Expected %v, got %v", syncDurationMetricName, latencyValue.Count, expectedLatencyCount)
+
+	if gotLatency.Count != wantLatencyCount {
+		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Count, wantLatencyCount)
 	}
-	if latencyValue.Min != expectedLatencyMin {
-		t.Errorf("Metric: %v - Expected %v, got %v", syncDurationMetricName, latencyValue.Min, expectedLatencyMin)
+
+	if gotLatency.Min != wantLatencyMin {
+		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Min, wantLatencyMin)
 	}
-	if latencyValue.Max != expectedLatencyMax {
-		t.Errorf("Metric: %v - Expected %v, got %v", syncDurationMetricName, latencyValue.Max, expectedLatencyMax)
+
+	if gotLatency.Max != wantLatencyMax {
+		t.Errorf("got %q = %v, want %v", syncDurationMetricName, gotLatency.Max, wantLatencyMax)
 	}
 }
 
 func TestLastRunSync(t *testing.T) {
-	const expectedTime float64 = 11
-	const expectedRowLength = 1
+	const wantTime float64 = 11
+	const wantRowLength = 1
 
 	fakeNow := func() float64 {
-		return float64(expectedTime)
+		return wantTime
 	}
 
 	r, err := NewStatsReporter()
 	if err != nil {
-		t.Errorf("newStatsReporter() error %v", err)
+		t.Fatalf("got NewStatsReporter() error %v, want nil", err)
 	}
+
 	r.now = fakeNow
 	err = r.reportLastSync()
 	if err != nil {
-		t.Errorf("reportRestartCheck error %v", err)
+		t.Fatalf("got reportLastSync() error %v, want nil", err)
 	}
-	row := checkData(t, lastRunTimeMetricName, expectedRowLength)
-	value, ok := row.Data.(*view.LastValueData)
+
+	row := checkData(t, lastRunTimeMetricName, wantRowLength)
+	gotLast, ok := row.Data.(*view.LastValueData)
 	if !ok {
-		t.Error("reportRestartCheck should have aggregation LastValue()")
+		t.Fatalf("got %q type %T, want %T", lastRunTimeMetricName, row.Data, &view.LastValueData{})
 	}
+
 	if len(row.Tags) != 0 {
 		t.Errorf("reportRestartCheck tags is non-empty, got: %v", row.Tags)
 	}
-	if value.Value != expectedTime {
-		t.Errorf("Metric: %v - Expected %v, got %v", lastRunTimeMetricName, expectedTime, value.Value)
+
+	if gotLast.Value != wantTime {
+		t.Errorf("got %q = %v, want %v", lastRunTimeMetricName, gotLast.Value, wantTime)
 	}
 }
 
@@ -120,16 +134,18 @@ func contains(s []tag.Tag, e string) bool {
 	return false
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
+func checkData(t *testing.T, name string, wantRowLength int) *view.Row {
 	row, err := view.RetrieveData(name)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+		t.Fatalf("got %v RetrieveData() error = %v", name, err)
 	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
+
+	if len(row) != wantRowLength {
+		t.Fatalf("got row length %v, want %v", len(row), wantRowLength)
 	}
+
 	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
+		t.Fatalf("got row[0].Data = nil, want non-nil")
 	}
 	return row[0]
 }
