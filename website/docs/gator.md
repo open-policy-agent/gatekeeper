@@ -87,7 +87,7 @@ assertions:
 - `violations` is either "yes", "no", or a non-negative integer. If "yes", at
   least one violation must otherwise match the assertion. If "no", then no
   violation messages must otherwise match the assertion. If a nonnegative
-  integer, then exactly that many violations must match.
+  integer, then exactly that many violations must match. Defaults to "yes".
 - `message` matches violations containing the exact string specified. `message`
   is case-sensitive. If not specified or explicitly set to empty string, matches
   all violations.
