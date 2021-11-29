@@ -35,6 +35,7 @@ image:
 podAnnotations:
   { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
 podLabels: {}
+deploymentLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
 controllerManager:

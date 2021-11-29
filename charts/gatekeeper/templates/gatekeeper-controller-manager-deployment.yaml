@@ -9,6 +9,9 @@ metadata:
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
+{{- if .Values.deploymentLabels }}
+{{ toYaml .Values.deploymentLabels | indent 4 }}
+{{- end }}
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
