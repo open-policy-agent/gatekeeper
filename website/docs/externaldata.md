@@ -96,10 +96,10 @@ External data adds a [custom OPA built-in function](https://www.openpolicyagent.
 e.g.,
 ```rego
   # build a list of keys containing images for batching
-  my-list := [img | img = input.review.object.spec.template.spec.containers[_].image]
+  my_list := [img | img = input.review.object.spec.template.spec.containers[_].image]
 
   # send external data request
-  response := external_data({"provider": "my-provider", "keys": my-list})
+  response := external_data({"provider": "my-provider", "keys": my_list})
 ```
 
 Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
