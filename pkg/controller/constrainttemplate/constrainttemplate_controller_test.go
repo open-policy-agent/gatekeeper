@@ -319,25 +319,31 @@ violation[{"msg": "denied!"}] {
 			if err := c.Get(ctx, types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
 				return err
 			}
-			if ct.Name == "invalidrego" {
-				status, found := getCTByPodStatus(ct)
-				if !found {
-					return fmt.Errorf("could not retrieve CT status for pod, byPod status: %+v", ct.Status.ByPod)
-				}
-				if len(status.Errors) == 0 {
-					j, err := json.Marshal(status)
-					if err != nil {
-						t.Fatal("could not parse JSON", err)
-					}
-					s := string(j)
-					return fmt.Errorf("InvalidRego template should contain an error: %s", s)
-				}
-				if status.Errors[0].Code != "rego_parse_error" {
-					return fmt.Errorf("InvalidRego template returning unexpected error %s", status.Errors[0].Code)
-				}
-				return nil
+
+			if ct.Name != "invalidrego" {
+				return errors.New("InvalidRego not found")
 			}
-			return errors.New("InvalidRego not found")
+
+			status, found := getCTByPodStatus(ct)
+			if !found {
+				return fmt.Errorf("could not retrieve CT status for pod, byPod status: %+v", ct.Status.ByPod)
+			}
+
+			if len(status.Errors) == 0 {
+				j, err := json.Marshal(status)
+				if err != nil {
+					t.Fatal("could not parse JSON", err)
+				}
+				s := string(j)
+				return fmt.Errorf("InvalidRego template should contain an error: %q", s)
+			}
+
+			if status.Errors[0].Code != ErrCreateCode {
+				return fmt.Errorf("InvalidRego template returning unexpected error %q, got error %+v",
+					status.Errors[0].Code, status.Errors)
+			}
+
+			return nil
 		}, timeout).Should(gomega.BeNil())
 	})
 
