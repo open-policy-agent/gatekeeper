@@ -29,7 +29,8 @@ module.exports = {
         'vendor-specific',
         'failing-closed',
         'mutation',
-        'constrainttemplates'
+        'constrainttemplates',
+        'externaldata'
       ],
     },
     {

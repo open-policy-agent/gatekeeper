@@ -13,8 +13,8 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.16.0
 	github.com/open-policy-agent/cert-controller v0.2.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20211025234246-f478d8a555b5
-	github.com/open-policy-agent/opa v0.29.4
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20211123155909-217139c4a6bd
+	github.com/open-policy-agent/opa v0.29.4 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.30.0 // indirect

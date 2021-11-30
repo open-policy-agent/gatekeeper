@@ -36,7 +36,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"github.com/open-policy-agent/opa/ast"
 	errorpkg "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -336,16 +335,9 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		logger.Error(err, "CRD creation error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
-		var createErr *v1beta1.CreateCRDError
-		if parseErrs, ok := err.(ast.Errors); ok {
-			for i := 0; i < len(parseErrs); i++ {
-				createErr = &v1beta1.CreateCRDError{Code: parseErrs[i].Code, Message: parseErrs[i].Message, Location: parseErrs[i].Location.String()}
-				status.Status.Errors = append(status.Status.Errors, createErr)
-			}
-		} else {
-			createErr = &v1beta1.CreateCRDError{Code: "create_error", Message: err.Error()}
-			status.Status.Errors = append(status.Status.Errors, createErr)
-		}
+
+		createErr := &v1beta1.CreateCRDError{Code: ErrCreateCode, Message: err.Error()}
+		status.Status.Errors = append(status.Status.Errors, createErr)
 
 		if updateErr := r.Update(ctx, status); updateErr != nil {
 			logger.Error(updateErr, "update error")
@@ -460,7 +452,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	if currentCRD == nil {
 		logger.Info("creating crd")
 		if err := r.Create(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, "create_error", "Could not create CRD", status, err)
+			err := r.reportErrorOnCTStatus(ctx, ErrCreateCode, "Could not create CRD", status, err)
 			return reconcile.Result{}, err
 		}
 	} else if !reflect.DeepEqual(newCRD, currentCRD) {
