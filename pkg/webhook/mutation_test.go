@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func makeValue(v interface{}) mutationsunversioned.AssignField {
@@ -69,7 +68,7 @@ func TestWebhookAssign(t *testing.T) {
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
 
-	req := atypes.Request{
+	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Kind: metav1.GroupVersionKind{
 				Group:   "",
@@ -135,7 +134,7 @@ func TestWebhookAssignMetadata(t *testing.T) {
 
 	raw := []byte(`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`)
 
-	req := atypes.Request{
+	req := admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Kind: metav1.GroupVersionKind{
 				Group:   "",
