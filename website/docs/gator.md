@@ -46,11 +46,9 @@ kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
 ```
 
-This differentiates Suites from "real" Kubernetes objects. `gator test` silently
-ignores files which do not declare these and does not attempt to run them.
-
-A Suite may declare multiple Tests, each containing different Templates and
-Constraints. Each Test in a Suite is independent.
+`gator test` silently ignores files which do not declare these. A Suite may
+declare multiple Tests, each containing different Templates and Constraints.
+Each Test in a Suite is independent.
 
 ### Tests
 
@@ -71,7 +69,7 @@ the returned violations (if any).
 
 A Case must specify `assertions` and whether it expects violations. The simplest
 way to declare this is:
-
+  
 The Case expects at least one violation:
 ```yaml
 assertions:
@@ -84,13 +82,17 @@ assertions:
 - violations: no
 ```
 
-- `violations` is either "yes", "no", or a non-negative integer. If "yes", at
-  least one violation must otherwise match the assertion. If "no", then no
-  violation messages must otherwise match the assertion. If a nonnegative
-  integer, then exactly that many violations must match. Defaults to "yes".
+Assertions contain the following fields, acting as conditions for each assertion
+to check.
+
+- `violations` is either "yes", "no", or a non-negative integer.
+  - If "yes", at least one violation must otherwise match the assertion.
+  - If "no", then no violation messages must otherwise match the assertion.
+  - If a nonnegative integer, then exactly that many violations must match.
+    Defaults to "yes".
 - `message` matches violations containing the exact string specified. `message`
-  is case-sensitive. If not specified or explicitly set to empty string, matches
-  all violations.
+  is case-sensitive. If not specified or explicitly set to empty string, all 
+  messages returned by the Constraint are considered matching.
 
 A Case may specify multiple assertions. For example:
 
@@ -111,8 +113,8 @@ This Case specifies:
 - There is exactly one violation containing "initContainer".
 - There is exactly one violation containing "container".
 
-It is valid to check that no violations match an assertion. For example, the
-below is valid:
+It is valid to assert that no violations match a specified message. For example,
+the below is valid:
 
 ```yaml
 - violations: yes

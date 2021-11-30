@@ -88,6 +88,10 @@
         {
           "type": "doc",
           "id": "version-v3.7.x/externaldata"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.7.x/gator"
         }
       ],
       "collapsible": true
