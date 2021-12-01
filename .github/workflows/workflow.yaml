@@ -103,7 +103,8 @@ jobs:
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
           make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-          # there should be no additional manifest changes
+          go mod tidy
+          # there should be no additional manifest or go.mod changes
           git diff --exit-code
           make test-e2e
 
@@ -190,7 +191,8 @@ jobs:
           make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
           make e2e-build-load-externaldata-image
           make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true ENABLE_EXTERNAL_DATA=true
-          # there should be no additional manifest changes
+          go mod tidy
+          # there should be no additional manifest or go.mod changes
           git diff --exit-code
           make test-e2e ENABLE_EXTERNAL_DATA_TESTS=1
 
