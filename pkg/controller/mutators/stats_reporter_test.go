@@ -188,3 +188,50 @@ func verifyTags(t *testing.T, expected map[string]string, actual []tag.Tag) {
 		}
 	}
 }
+
+func TestReportMutatorsInConflict(t *testing.T) {
+	r := NewStatsReporter()
+
+	conflicts := 3
+
+	// Report conflicts for the first time
+	err := r.ReportMutatorsInConflict(conflicts)
+	if err != nil {
+		t.Errorf("ReportMutatorsInConflict error %v", err)
+	}
+
+	row, err := checkData(mutatorsConflictingCountMetricsName, 1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok := row.Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted row of type LastValueData. got: %v", row.Data)
+	}
+
+	if lastValueData.Value != float64(conflicts) {
+		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
+	}
+
+	// Report conflicts again, confirming the updated value
+	conflicts = 2
+	err = r.ReportMutatorsInConflict(conflicts)
+	if err != nil {
+		t.Errorf("ReportMutatorsInConflict error %v", err)
+	}
+
+	row, err = checkData(mutatorsConflictingCountMetricsName, 1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	lastValueData, ok = row.Data.(*view.LastValueData)
+	if !ok {
+		t.Fatalf("wanted row of type LastValueData. got: %v", row.Data)
+	}
+
+	if lastValueData.Value != float64(conflicts) {
+		t.Errorf("wanted metric value %v, got %v", conflicts, lastValueData.Value)
+	}
+}
