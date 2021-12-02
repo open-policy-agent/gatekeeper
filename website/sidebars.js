@@ -31,7 +31,7 @@ module.exports = {
         'mutation',
         'constrainttemplates',
         'externaldata',
-        'gator CLI'
+        'gator'
       ],
     },
     {

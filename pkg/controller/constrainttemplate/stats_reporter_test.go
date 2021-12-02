@@ -11,66 +11,82 @@ import (
 
 func TestReportIngestion(t *testing.T) {
 	if err := reset(); err != nil {
-		t.Errorf("Could not reset stats: %v", err)
+		t.Fatalf("Could not reset stats: %v", err)
 	}
-	expectedTags := map[string]string{
+	wantTags := map[string]string{
 		"status": "active",
 	}
-	const expectedDurationValueMin = time.Duration(1 * time.Second)
-	const expectedDurationValueMax = time.Duration(5 * time.Second)
-	const expectedDurationMin float64 = 1
-	const expectedDurationMax float64 = 5
-	const expectedCount int64 = 2
-	const expectedRowLength = 1
+
+	const (
+		minIngestDuration = 1 * time.Second
+		maxIngestDuration = 5 * time.Second
+
+		wantMinIngestDurationSeconds = 1.0
+		wantMaxIngestDurationSeconds = 5.0
+
+		wantCount     = 2
+		wantRowLength = 1
+	)
 
 	r := newStatsReporter()
 	ctx := context.Background()
-	err := r.reportIngestDuration(ctx, metrics.ActiveStatus, expectedDurationValueMin)
+	err := r.reportIngestDuration(ctx, metrics.ActiveStatus, minIngestDuration)
 	if err != nil {
-		t.Errorf("reportIngestDuration error %v", err)
+		t.Fatalf("got reportIngestDuration() error %v, want nil", err)
 	}
-	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, expectedDurationValueMax)
+
+	err = r.reportIngestDuration(ctx, metrics.ActiveStatus, maxIngestDuration)
 	if err != nil {
-		t.Errorf("reportIngestDuration error %v", err)
+		t.Fatalf("got reportIngestDuration() error %v, want nil", err)
 	}
 
 	// count test
-	row := checkData(t, ingestCount, expectedRowLength)
-	count, ok := row.Data.(*view.CountData)
+	row := checkData(t, ingestCount, wantRowLength)
+	gotCount, ok := row.Data.(*view.CountData)
 	if !ok {
-		t.Error("ingestCount should have aggregation Count()")
+		t.Fatalf("got %q type %T, want %T", ingestCount, row.Data, &view.CountData{})
 	}
+
 	for _, tag := range row.Tags {
-		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ingestCount tags does not match for %v", tag.Key.Name())
+		name := tag.Key.Name()
+		wantValue := wantTags[name]
+		if tag.Value != wantValue {
+			t.Errorf("got ingestCount tag %q =  %q, want %q", name, tag.Value, wantValue)
 		}
 	}
-	if count.Value != expectedCount {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestCount, expectedCount, count.Value)
+
+	if gotCount.Value != wantCount {
+		t.Errorf("got %q = %v, want %v", ingestCount, gotCount.Value, wantCount)
 	}
 
 	// Duration test
-	row = checkData(t, ingestDuration, expectedRowLength)
-	durationValue, ok := row.Data.(*view.DistributionData)
+	row = checkData(t, ingestDuration, wantRowLength)
+	gotDuration, ok := row.Data.(*view.DistributionData)
 	if !ok {
-		t.Error("ingestDuration should have aggregation Distribution()")
+		t.Fatalf("got %q type %T, want %T", ingestDuration, row.Data, &view.DistributionData{})
 	}
+
 	for _, tag := range row.Tags {
-		if tag.Value != expectedTags[tag.Key.Name()] {
-			t.Errorf("ingestDuration tags does not match for %v", tag.Key.Name())
+		name := tag.Key.Name()
+		wantValue := wantTags[name]
+		if tag.Value != wantValue {
+			t.Errorf("got tag %q = %q, want %q", name, tag.Value, wantValue)
 		}
 	}
-	if durationValue.Min != expectedDurationMin {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Min, expectedDurationMin)
+
+	if gotDuration.Min != wantMinIngestDurationSeconds {
+		t.Errorf("got %q = %v, want %v", ingestDuration, gotDuration.Min, wantMinIngestDurationSeconds)
 	}
-	if durationValue.Max != expectedDurationMax {
-		t.Errorf("Metric: %v - Expected %v, got %v. ", ingestDuration, durationValue.Max, expectedDurationMax)
+
+	if gotDuration.Max != wantMaxIngestDurationSeconds {
+		t.Errorf("got %q = %v, want %v", ingestDuration, gotDuration.Max, wantMaxIngestDurationSeconds)
 	}
 }
 
 func TestGauges(t *testing.T) {
 	r := newStatsReporter()
-	tc := []struct {
+
+	tcs := []struct {
 		name string
 		fn   func(context.Context, metrics.Status, int64) error
 	}{
@@ -79,50 +95,59 @@ func TestGauges(t *testing.T) {
 			fn:   r.reportCtMetric,
 		},
 	}
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			const expectedValue int64 = 10
-			const expectedRowLength = 1
-			expectedTags := map[string]string{
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			const wantValue = 10
+			const wantRowLength = 1
+			wantTags := map[string]string{
 				"status": "active",
 			}
 
 			ctx := context.Background()
-			err := tt.fn(ctx, metrics.ActiveStatus, expectedValue)
+			err := tc.fn(ctx, metrics.ActiveStatus, wantValue)
 			if err != nil {
-				t.Errorf("function error %v", err)
+				t.Fatalf("function error %v", err)
 			}
-			row := checkData(t, tt.name, expectedRowLength)
-			value, ok := row.Data.(*view.LastValueData)
+
+			row := checkData(t, tc.name, wantRowLength)
+			got, ok := row.Data.(*view.LastValueData)
 			if !ok {
-				t.Errorf("metric %s should have aggregation LastValue()", tt.name)
+				t.Fatalf("got metric %q type %T, want %T", wantRowLength, row.Data, &view.LastValueData{})
 			}
 
 			if len(row.Tags) != 1 {
-				t.Errorf("%s expected %v tags, got: %v", tt.name, len(expectedTags), len(row.Tags))
+				t.Errorf("got %v tags, want: %v", len(row.Tags), len(wantTags))
 			}
+
 			for _, tag := range row.Tags {
-				if tag.Value != expectedTags[tag.Key.Name()] {
-					t.Errorf("%v tags does not match for %v", tt.name, tag.Key.Name())
+				name := tag.Key.Name()
+				wantTagValue := wantTags[name]
+				if tag.Value != wantTagValue {
+					t.Errorf("got tag %q = %q, want %q", name, tag.Value, wantValue)
 				}
 			}
-			if int64(value.Value) != expectedValue {
-				t.Errorf("Metric: %v - Expected %v, got %v", tt.name, expectedValue, value.Value)
+
+			if int(got.Value) != wantValue {
+				t.Errorf("got %v = %v, want %v", tc.name, got.Value, wantValue)
 			}
 		})
 	}
 }
 
-func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
+func checkData(t *testing.T, name string, wantRowLength int) *view.Row {
 	row, err := view.RetrieveData(name)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+		t.Fatalf("Error when retrieving data: %v from %v", err, name)
 	}
-	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
+
+	if len(row) != wantRowLength {
+		t.Fatalf("got length %v, want %v", len(row), wantRowLength)
 	}
+
 	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
+		t.Fatalf("got row[0].Data = nil, want non-nil")
 	}
+
 	return row[0]
 }
