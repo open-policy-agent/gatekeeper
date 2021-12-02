@@ -126,7 +126,8 @@ func (r *reporter) ReportMutatorsStatus(ms MutatorIngestionStatus, n int) error 
 	return metrics.Record(ctx, mutatorsM.M(int64(n)))
 }
 
-// for this to exist, I need to add conflict status to my bookkeeping data structure
+// ReportMutatorsInConflict reports the number of mutators that have schema
+// conflicts with other mutators in the mutation system.
 func (r *reporter) ReportMutatorsInConflict(n int) error {
 	return metrics.Record(context.Background(), conflictingMutatorsM.M(int64(n)))
 }
