@@ -3,21 +3,22 @@ id: mutation
 title: Mutation
 ---
 
-The mutation feature allows Gatekeeper to not only validate created Kubernetes resources but also modify them based on defined mutation policies.
+The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
 > 🚧 This feature is in _beta_ stage and it is enabled by default.
 
 ## Mutation CRDs
 
-The mutation policies are defined by means of mutation specific CRDs:
+Mutation policies are defined using mutation-specific CRDs, called __mutators__:
 - AssignMetadata - defines changes to the metadata section of a resource
 - Assign - any change outside the metadata section
+- ModifySet - adds or removes entries from a list, such as the arguments to a container
 
-The rules of mutating the metadata section are more strict than for mutating the rest of the resource definition. The differences will be described in more detail below.
+The rules for mutating metadata are more strict than for mutating the rest of the resource. The differences are described in more detail below.
 
 Here is an example of a simple AssignMetadata CRD:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -40,8 +41,9 @@ Each mutation CRD can be divided into 3 distinct sections:
 
 #### Extent of changes
 
-The extent of changes section describes the resource which will be mutated.
-It allows to filter the resources to be mutated by kind, label and namespace.
+The extent of changes section describes which resources will be mutated.
+It allows selecting resources to be mutated using the same match critia
+as constraints.
 
 An example of the extent of changes section.
 ```yaml
@@ -60,9 +62,11 @@ match:
   excludedNamespaces: []
 ```
 
-Note that the `applyTo` section applies to the Assign CRD only. It allows filtering of resources by the resource GVK (group version kind). Note that the `applyTo` section does not accept globs.
+Note that the `applyTo` field is required for `Assign` and `ModifySet` mutators, and does not exist for `AssignMetadata` mutators.
+It allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
+to a kind's schema, which can cause non-convegent mutations. Also, the `applyTo` section does not accept globs.
 
-The `match` section is common to both Assign and AssignMetadata. It supports the following elements:
+The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
 - kinds - the resource kind, any of the elements listed
 - labelSelector - filters resources by resource labels listed
@@ -70,7 +74,7 @@ The `match` section is common to both Assign and AssignMetadata. It supports the
 - namespaceSelector - filters resources by namespace selector
 - excludedNamespaces - list of excluded namespaces, resources in listed namespaces will not be mutated
 
-Note that the resource is not filtered if an element is not present or an empty list.
+Note that any empty/undefined match criteria are inclusive: they match any object.
 
 #### Intent
 
@@ -78,7 +82,7 @@ This specifies what should be changed in the resource.
 
 An example of the section is shown below:
 ```yaml
-location: "spec.containers[name:foo].imagePullPolicy"
+location: "spec.containers[name: foo].imagePullPolicy"
 parameters:
   assign:
     value: "Always"
@@ -89,7 +93,7 @@ The `parameters.assign.value` element specifies the value to be set for the elem
 
 An example of a composite value:
 ```yaml
-location: "spec.containers[name:networking]"
+location: "spec.containers[name: networking]"
 parameters:
   assign:
     value:
@@ -100,9 +104,9 @@ parameters:
 
 The `location` element can specify either a simple subelement or an element in a list.
 For example the location `spec.containers[name:foo].imagePullPolicy` would be parsed as follows:
-- ***spec**.containers[name:foo].imagePullPolicy* - the spec element
-- *spec.**containers[name:foo]**.imagePullPolicy* - container subelement of spec. The container element is a list. Out of the list chosen, an element with the `name` element having the value `foo`.
- - *spec.containers[name:foo].**imagePullPolicy*** - in the element from the list chosen in the previous step the element `imagePullPolicy` is chosen
+- ***spec**.containers[name: foo].imagePullPolicy* - the spec element
+- *spec.**containers[name: foo]**.imagePullPolicy* - container subelement of spec. The container element is a list. Out of the list chosen, an element with the `name` element having the value `foo`.
+ - *spec.containers[name: foo].**imagePullPolicy*** - in the element from the list chosen in the previous step the element `imagePullPolicy` is chosen
 
 The yaml illustrating the above `location`:
 ```yaml
@@ -112,7 +116,31 @@ spec:
     imagePullPolicy:
 ```
 
-Wildcards can be used for list element values: `spec.containers[name:*].imagePullPolicy`
+Wildcards can be used for list element values: `spec.containers[name: *].imagePullPolicy`
+
+##### Assigning values from metadata
+
+*This section does not apply to ModifySet mutators*
+
+Sometimes it's useful to assign a field's value from metadata. For instance, injecting a deployment's name into its pod template's labels
+to use affinity/anti-affinity rules to [keep Pods from the same deployment on different nodes](https://github.com/open-policy-agent/feedback/discussions/15).
+
+Assign and AssignMetadata can do this via the `fromMetadata` field. Here is an example:
+
+```
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: demo-annotation-owner
+spec:
+  location: "metadata.labels.namespace"
+  parameters:
+    assign:
+      fromMetadata:
+        field: namespace
+```
+
+Valid values for `spec.parameters.assign.fromMetadata.field` are `namespace` and `name`. They will inject the namespace's name and the object's name, respectively.
 
 
 ##### Conditionals
@@ -126,20 +154,23 @@ when a parent is missing, such as accidentally creating an empty sidecar named "
 ```yaml
 parameters:
   pathTests:
-  - subPath: "spec.containers[name:foo]"
+  - subPath: "spec.containers[name: foo]"
     condition: MustExist
-  - subPath: spec.containers[name:foo].securityContext.capabilities
+  - subPath: spec.containers[name: foo].securityContext.capabilities
     condition: MustNotExist
 ```
 
 
 ### AssignMetadata
 
-AssignMetadata is a CRD for modifying the metadata section of a resource. Note that the metadata of a resource is a very sensitive piece of data, and certain mutations could result in unintended consequences. An example of this could be changing the name or namespace of a resource. The AssignMetadata changes have therefore been limited to only the labels and annotations. Furthermore, it is currently only allowed to add a label or annotation.
+AssignMetadata is a mutator that modifies the metadata section of a resource. Note that the metadata of a resource is a very sensitive piece of data,
+and certain mutations could result in unintended consequences. An example of this could be changing the name or namespace of a resource.
+The AssignMetadata changes have therefore been limited to only the labels and annotations. Furthermore, it is currently only allowed to add a label or annotation.
+Pre-existing labels and annotations cannot be modified.
 
  An example of an AssignMetadata adding a label `owner` set to `admin`:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -152,12 +183,36 @@ spec:
       value: "admin"
 ```
 
+### ModifySet
+
+ModifySet is a mutator that allows for the adding and removal of items from a list as if that list were a set.
+New values are appended to the end of a list.
+
+For example, the following mutator removes an `--alsologtostderr` argument from all containers in a pod:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: ModifySet
+metadata:
+  name: add-err-logging
+spec:
+  location: "spec.containers[name: *].args"
+  parameters:
+    operation: prune
+    values:
+      - --alsologtostderr
+```
+
+- `spec.parameters.values` holds the list of values that will be added or removed.
+- `operation` can be `merge` to insert values into the list if missing, or `prune` to remove values from the list. `merge` is default.
+
+
 ## Examples
 
 ### Adding an annotation
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -175,7 +230,7 @@ spec:
 Set the security context of container named `foo` in a Pod in namespace `bar` to be non-privileged
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
   name: demo-privileged
@@ -199,7 +254,7 @@ spec:
 #### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
   name: demo-image-pull-policy
@@ -223,7 +278,7 @@ spec:
 ### Adding a `network` sidecar to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
   name: demo-sidecar
@@ -251,7 +306,7 @@ spec:
 ### Adding dnsPolicy and dnsConfig to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
   name: demo-dns-policy
@@ -270,7 +325,7 @@ spec:
     assign:
       value: None
 ---
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
   name: demo-dns-config
