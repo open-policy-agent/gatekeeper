@@ -27,3 +27,4 @@ spec:
   - projected
   - secret
   - downwardAPI
+  - emptyDir
