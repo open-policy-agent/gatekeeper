@@ -21,7 +21,10 @@ var kindRegex = regexp.MustCompile(`(?m)^kind:[\s]+([\S]+)[\s]*$`)
 // use exactly two spaces to be sure we are capturing metadata.name.
 var nameRegex = regexp.MustCompile(`(?m)^  name:[\s]+([\S]+)[\s]*$`)
 
-const DeploymentKind = "Deployment"
+const (
+	DeploymentKind               = "Deployment"
+	CustomResourceDefinitionKind = "CustomResourceDefinition"
+)
 
 func isRbacKind(str string) bool {
 	rbacKinds := [4]string{"Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding"}
@@ -82,7 +85,7 @@ func (ks *kindSet) Write() error {
 	for kind, objs := range ks.byKind {
 		subPath := "templates"
 		nameExtractor := extractName
-		if kind == "CustomResourceDefinition" {
+		if kind == CustomResourceDefinitionKind {
 			nameExtractor = extractCRDKind
 			subPath = "crds"
 			parentDir := path.Join(*outputDir, subPath)
@@ -111,6 +114,16 @@ func (ks *kindSet) Write() error {
 
 			if name == "gatekeeper-mutating-webhook-configuration" {
 				obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
+			}
+
+			if kind == CustomResourceDefinitionKind {
+				switch name {
+				case "assign.mutations.gatekeeper.sh",
+					"assignmetadata.mutations.gatekeeper.sh",
+					"modifyset.mutations.gatekeeper.sh",
+					"mutatorpodstatuses.status.gatekeeper.sh":
+					obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
+				}
 			}
 
 			if name == "gatekeeper-critical-pods" && kind == "ResourceQuota" {
