@@ -99,11 +99,11 @@ func TestReportMutatorsStatus(t *testing.T) {
 
 	lastValueData, ok := activeRow.Data.(*view.LastValueData)
 	if !ok {
-		t.Fatalf("wanted active status row of type LastValueData. got: %v", activeRow.Data)
+		t.Fatalf("got row type %T, want type 'view.LastValueData'", activeRow.Data)
 	}
 
 	if lastValueData.Value != float64(activeMutators) {
-		t.Errorf("wanted status %q to have value %v, got: %v", MutatorStatusActive, activeMutators, lastValueData.Value)
+		t.Errorf("got row value %v for status %q, want %v", lastValueData.Value, MutatorStatusActive, activeMutators)
 	}
 
 	errorRow, err := getRow(rows, string(MutatorStatusError))
@@ -113,11 +113,11 @@ func TestReportMutatorsStatus(t *testing.T) {
 
 	lastValueData, ok = errorRow.Data.(*view.LastValueData)
 	if !ok {
-		t.Fatalf("wanted error status row of type LastValueData. got: %v", activeRow.Data)
+		t.Fatalf("got row type %T, want type 'view.LastValueData'", errorRow.Data)
 	}
 
 	if lastValueData.Value != float64(errorMutators) {
-		t.Errorf("wanted status %q to have value %v, got: %v", MutatorStatusError, activeMutators, lastValueData.Value)
+		t.Errorf("got row value %v for status %q, want %v", lastValueData.Value, MutatorStatusError, errorMutators)
 	}
 }
 
