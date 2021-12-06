@@ -88,10 +88,9 @@ func (a *Assertion) matchesCountInt(matching int32) error {
 		if a.Message != nil {
 			return fmt.Errorf("%w: got %d violations containing %q but want exactly %d",
 				ErrNumViolations, matching, *a.Message, wantMatching)
-		} else {
-			return fmt.Errorf("%w: got %d violations but want exactly %d",
-				ErrNumViolations, matching, wantMatching)
 		}
+		return fmt.Errorf("%w: got %d violations but want exactly %d",
+			ErrNumViolations, matching, wantMatching)
 	}
 
 	return nil
@@ -104,10 +103,9 @@ func (a *Assertion) matchesCountStr(matching int32) error {
 			if a.Message != nil {
 				return fmt.Errorf("%w: got %d violations containing %q but want at least %d",
 					ErrNumViolations, matching, *a.Message, 1)
-			} else {
-				return fmt.Errorf("%w: got %d violations but want at least %d",
-					ErrNumViolations, matching, 1)
 			}
+			return fmt.Errorf("%w: got %d violations but want at least %d",
+				ErrNumViolations, matching, 1)
 		}
 
 		return nil
@@ -116,10 +114,9 @@ func (a *Assertion) matchesCountStr(matching int32) error {
 			if a.Message != nil {
 				return fmt.Errorf("%w: got %d violations containing %q but want none",
 					ErrNumViolations, matching, *a.Message)
-			} else {
-				return fmt.Errorf("%w: got %d violations but want none",
-					ErrNumViolations, matching)
 			}
+			return fmt.Errorf("%w: got %d violations but want none",
+				ErrNumViolations, matching)
 		}
 
 		return nil
