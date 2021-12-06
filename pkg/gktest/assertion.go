@@ -67,6 +67,10 @@ func (a *Assertion) Run(results []*types.Result) error {
 func (a *Assertion) matchesCount(matching int32) error {
 	switch a.Violations.Type {
 	case intstr.Int:
+		if a.Violations.IntVal < 0 {
+			return fmt.Errorf(`%w: assertion.violation, if set, must be a nonnegative integer, "yes", or "no"`,
+				ErrInvalidYAML)
+		}
 		return a.matchesCountInt(matching)
 	case intstr.String:
 		return a.matchesCountStr(matching)
@@ -81,8 +85,13 @@ func (a *Assertion) matchesCount(matching int32) error {
 func (a *Assertion) matchesCountInt(matching int32) error {
 	wantMatching := a.Violations.IntVal
 	if wantMatching != matching {
-		return fmt.Errorf("%w: got %d violations but want exactly %d",
-			ErrNumViolations, matching, wantMatching)
+		if a.Message != nil {
+			return fmt.Errorf("%w: got %d violations containing %q but want exactly %d",
+				ErrNumViolations, matching, *a.Message, wantMatching)
+		} else {
+			return fmt.Errorf("%w: got %d violations but want exactly %d",
+				ErrNumViolations, matching, wantMatching)
+		}
 	}
 
 	return nil
@@ -92,20 +101,30 @@ func (a *Assertion) matchesCountStr(matching int32) error {
 	switch a.Violations.StrVal {
 	case "yes":
 		if matching == 0 {
-			return fmt.Errorf("%w: got %d violations but want at least %d",
-				ErrNumViolations, matching, 1)
+			if a.Message != nil {
+				return fmt.Errorf("%w: got %d violations containing %q but want at least %d",
+					ErrNumViolations, matching, *a.Message, 1)
+			} else {
+				return fmt.Errorf("%w: got %d violations but want at least %d",
+					ErrNumViolations, matching, 1)
+			}
 		}
 
 		return nil
 	case "no":
 		if matching > 0 {
-			return fmt.Errorf("%w: got %d violations but want none",
-				ErrNumViolations, matching)
+			if a.Message != nil {
+				return fmt.Errorf("%w: got %d violations containing %q but want none",
+					ErrNumViolations, matching, *a.Message)
+			} else {
+				return fmt.Errorf("%w: got %d violations but want none",
+					ErrNumViolations, matching)
+			}
 		}
 
 		return nil
 	default:
-		return fmt.Errorf(`%w: assertion.violation, if set, must be an integer, "yes", or "no"`,
+		return fmt.Errorf(`%w: assertion.violation, if set, must be a nonnegative integer, "yes", or "no"`,
 			ErrInvalidYAML)
 	}
 }
