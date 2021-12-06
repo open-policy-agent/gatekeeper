@@ -113,7 +113,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gktest.Suite, fi
 	i := 0
 
 	for _, suite := range suites {
-		suiteResult := runner.Run(ctx, filter, suite.Path, suite)
+		suiteResult := runner.Run(ctx, filter, suite)
 		for _, testResult := range suiteResult.TestResults {
 			if testResult.Error != nil {
 				isFailure = true
