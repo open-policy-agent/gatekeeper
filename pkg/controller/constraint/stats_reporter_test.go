@@ -42,13 +42,15 @@ func TestReportConstraints(t *testing.T) {
 func checkData(t *testing.T, name string, expectedRowLength int) *view.Row {
 	row, err := view.RetrieveData(name)
 	if err != nil {
-		t.Errorf("Error when retrieving data: %v from %v", err, name)
+		t.Fatalf("got RetrieveData(%q) error %v, want nil", name, err)
 	}
+
 	if len(row) != expectedRowLength {
-		t.Errorf("Expected length %v, got %v", expectedRowLength, len(row))
+		t.Fatalf("got row length %v, want %v", len(row), expectedRowLength)
 	}
+
 	if row[0].Data == nil {
-		t.Errorf("Expected row data not to be nil")
+		t.Fatalf("got row[0].Data = nil, want non-nil")
 	}
 	return row[0]
 }
