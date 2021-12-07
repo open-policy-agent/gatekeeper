@@ -30,7 +30,8 @@ module.exports = {
         'failing-closed',
         'mutation',
         'constrainttemplates',
-        'externaldata'
+        'externaldata',
+        'gator'
       ],
     },
     {

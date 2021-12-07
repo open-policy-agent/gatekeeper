@@ -39,7 +39,7 @@ func Test_Flags(t *testing.T) {
 
 			err := flagSet.Parse(tc.input)
 			if err != nil {
-				t.Errorf("parsing: %w", err)
+				t.Errorf("parsing: %v", err)
 				return
 			}
 			if diff := cmp.Diff(tc.expected, ops.assignedOperations); diff != "" {
