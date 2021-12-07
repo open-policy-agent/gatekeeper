@@ -42,7 +42,7 @@ Each mutation CRD can be divided into 3 distinct sections:
 #### Extent of changes
 
 The extent of changes section describes which resources will be mutated.
-It allows selecting resources to be mutated using the same match critia
+It allows selecting resources to be mutated using the same match criteria
 as constraints.
 
 An example of the extent of changes section.
@@ -63,8 +63,8 @@ match:
 ```
 
 Note that the `applyTo` field is required for `Assign` and `ModifySet` mutators, and does not exist for `AssignMetadata` mutators.
-It allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
-to a kind's schema, which can cause non-convegent mutations. Also, the `applyTo` section does not accept globs.
+`applyTo` allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
+to a kind's schema, which can cause non-convergent mutations. Also, the `applyTo` section does not accept globs.
 
 The `match` section is common to all mutators. It supports the following match criteria:
 - scope - the scope (Namespaced | Cluster) of the mutated resource
