@@ -9,7 +9,8 @@ module.exports = {
   projectName: 'gatekeeper',
   themeConfig: {
     algolia: {
-      apiKey: '8fe2f10b6a869179c50b6f0c1bf015d9',
+      appId: 'PT2IX43ZFM',
+      apiKey: '9e442eec9ecd30ad131824f9738db98d',
       indexName: 'gatekeeper',
     },
     colorMode: {
