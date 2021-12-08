@@ -194,7 +194,7 @@ For example, the following mutator removes an `--alsologtostderr` argument from 
 apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: ModifySet
 metadata:
-  name: add-err-logging
+  name: remove-err-logging
 spec:
   location: "spec.containers[name: *].args"
   parameters:
