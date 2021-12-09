@@ -41,13 +41,13 @@ func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, err
 }
 
 // Run executes all Tests in the Suite and returns the results.
-func (r *Runner) Run(ctx context.Context, filter Filter, suitePath string, s *Suite) SuiteResult {
+func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 	start := time.Now()
 
-	results, err := r.runTests(ctx, filter, suitePath, s.Tests)
+	results, err := r.runTests(ctx, filter, s.Path, s.Tests)
 
 	return SuiteResult{
-		Path:        suitePath,
+		Path:        s.Path,
 		Error:       err,
 		Runtime:     Duration(time.Since(start)),
 		TestResults: results,

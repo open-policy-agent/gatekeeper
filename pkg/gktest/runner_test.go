@@ -980,7 +980,7 @@ func TestRunner_Run(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := runner.Run(ctx, filter, "", &tc.suite)
+			got := runner.Run(ctx, filter, &tc.suite)
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 				cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
@@ -1010,7 +1010,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 	suite := &Suite{
 		Tests: []Test{{}},
 	}
-	got := runner.Run(ctx, &nilFilter{}, "", suite)
+	got := runner.Run(ctx, &nilFilter{}, suite)
 
 	if diff := cmp.Diff(want, got, cmpopts.EquateErrors(), cmpopts.EquateEmpty(),
 		cmpopts.IgnoreFields(SuiteResult{}, "Runtime"), cmpopts.IgnoreFields(TestResult{}, "Runtime"), cmpopts.IgnoreFields(CaseResult{}, "Runtime"),
@@ -1349,7 +1349,7 @@ func TestRunner_RunCase(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got := runner.Run(ctx, &nilFilter{}, "", suite)
+			got := runner.Run(ctx, &nilFilter{}, suite)
 
 			want := SuiteResult{
 				TestResults: []TestResult{{

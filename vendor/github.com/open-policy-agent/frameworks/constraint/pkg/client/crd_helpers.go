@@ -1,7 +1,6 @@
 package client
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	apivalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/pointer"
 )
 
 var supportedVersions = map[string]bool{
@@ -27,16 +27,19 @@ var supportedVersions = map[string]bool{
 func validateTargets(templ *templates.ConstraintTemplate) error {
 	targets := templ.Spec.Targets
 	if targets == nil {
-		return errors.New(`field "targets" not specified in ConstraintTemplate spec`)
+		return fmt.Errorf(`%w: field "targets" not specified in ConstraintTemplate spec`,
+			ErrInvalidConstraintTemplate)
 	}
 
 	switch len(targets) {
 	case 0:
-		return errors.New("no targets specified: ConstraintTemplate must specify one target")
+		return fmt.Errorf("%w: no targets specified: ConstraintTemplate must specify one target",
+			ErrInvalidConstraintTemplate)
 	case 1:
 		return nil
 	default:
-		return errors.New("multi-target templates are not currently supported")
+		return fmt.Errorf("%w: multi-target templates are not currently supported",
+			ErrInvalidConstraintTemplate)
 	}
 }
 
@@ -53,7 +56,6 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 		props["parameters"] = internalSchema
 	}
 
-	trueBool := true
 	schema := &apiextensions.JSONSchemaProps{
 		Type: "object",
 		Properties: map[string]apiextensions.JSONSchemaProps{
@@ -71,7 +73,7 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 				Properties: props,
 			},
 			"status": {
-				XPreserveUnknownFields: &trueBool,
+				XPreserveUnknownFields: pointer.BoolPtr(true),
 			},
 		},
 	}
@@ -97,10 +99,9 @@ func newCRDHelper() (*crdHelper, error) {
 func (h *crdHelper) createCRD(
 	templ *templates.ConstraintTemplate,
 	schema *apiextensions.JSONSchemaProps) (*apiextensions.CustomResourceDefinition, error) {
-	falseBool := false
 	crd := &apiextensions.CustomResourceDefinition{
 		Spec: apiextensions.CustomResourceDefinitionSpec{
-			PreserveUnknownFields: &falseBool,
+			PreserveUnknownFields: pointer.Bool(false),
 			Group:                 constraintGroup,
 			Names: apiextensions.CustomResourceDefinitionNames{
 				Kind:       templ.Spec.CRD.Spec.Names.Kind,
@@ -116,7 +117,7 @@ func (h *crdHelper) createCRD(
 			Validation: &apiextensions.CustomResourceValidation{
 				OpenAPIV3Schema: schema,
 			},
-			Scope:   "Cluster",
+			Scope:   apiextensions.ClusterScoped,
 			Version: v1beta1.SchemeGroupVersion.Version,
 			Subresources: &apiextensions.CustomResourceSubresources{
 				Status: &apiextensions.CustomResourceSubresourceStatus{},
@@ -178,17 +179,25 @@ func (h *crdHelper) validateCR(cr *unstructured.Unstructured, crd *apiextensions
 	if err := validation.ValidateCustomResource(field.NewPath(""), cr, validator); err != nil {
 		return err.ToAggregate()
 	}
+
 	if errs := apivalidation.IsDNS1123Subdomain(cr.GetName()); len(errs) != 0 {
-		return fmt.Errorf("invalid Name: %s", strings.Join(errs, "\n"))
+		return fmt.Errorf("%w: invalid name: %q",
+			ErrInvalidConstraint, strings.Join(errs, "\n"))
 	}
+
 	if cr.GetKind() != crd.Spec.Names.Kind {
-		return fmt.Errorf("wrong kind for constraint %s. Have %s, want %s", cr.GetName(), cr.GetKind(), crd.Spec.Names.Kind)
+		return fmt.Errorf("%w: wrong kind %q for constraint %q; want %q",
+			ErrInvalidConstraint, cr.GetName(), cr.GetKind(), crd.Spec.Names.Kind)
 	}
+
 	if cr.GroupVersionKind().Group != constraintGroup {
-		return fmt.Errorf("wrong group for constraint %s. Have %s, want %s", cr.GetName(), cr.GroupVersionKind().Group, constraintGroup)
+		return fmt.Errorf("%w: unsupported group %q for constraint %q; allowed group: %q",
+			ErrInvalidConstraint, cr.GetName(), cr.GroupVersionKind().Group, constraintGroup)
 	}
+
 	if !supportedVersions[cr.GroupVersionKind().Version] {
-		return fmt.Errorf("wrong version for constraint %s. Have %s, supported: %v", cr.GetName(), cr.GroupVersionKind().Version, supportedVersions)
+		return fmt.Errorf("%w: unsupported version %q for Constraint %q; supported versions: %v",
+			ErrInvalidConstraint, cr.GroupVersionKind().Version, cr.GetName(), supportedVersions)
 	}
 	return nil
 }
