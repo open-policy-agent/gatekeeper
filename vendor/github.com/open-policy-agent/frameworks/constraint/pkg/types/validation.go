@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
@@ -73,6 +74,18 @@ func (r *Responses) Results() []*Result {
 	for _, resp := range r.ByTarget {
 		res = append(res, resp.Results...)
 	}
+
+	// Make results more (but not completely) deterministic.
+	// After we shard Rego compilation environments, we will be able to tie
+	// responses to individual constraints. This is a stopgap to make tests easier
+	// to write until then.
+	sort.Slice(res, func(i, j int) bool {
+		if res[i].EnforcementAction != res[j].EnforcementAction {
+			return res[i].EnforcementAction < res[j].EnforcementAction
+		}
+		return res[i].Msg < res[j].Msg
+	})
+
 	return res
 }
 
@@ -80,12 +93,14 @@ func (r *Responses) HandledCount() int {
 	if r == nil {
 		return 0
 	}
+
 	c := 0
 	for _, h := range r.Handled {
 		if h {
 			c++
 		}
 	}
+
 	return c
 }
 

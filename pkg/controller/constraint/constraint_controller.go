@@ -17,6 +17,7 @@ package constraint
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
@@ -34,7 +35,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -235,7 +236,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		instance.SetNamespace(unpackedRequest.NamespacedName.Namespace)
 		instance.SetName(unpackedRequest.NamespacedName.Name)
 	} else if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
-		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+		if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
@@ -307,7 +308,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.opa.RemoveConstraint(ctx, instance); err != nil {
-			if opa.IsUnrecognizedConstraintError(err) {
+			if errors.Is(err, opa.ErrMissingConstraint) {
 				return reconcile.Result{}, err
 			}
 		}
@@ -328,7 +329,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		statusObj.SetName(sName)
 		statusObj.SetNamespace(util.GetNamespace())
 		if err := r.writer.Delete(ctx, statusObj); err != nil {
-			if !errors.IsNotFound(err) {
+			if !apierrors.IsNotFound(err) {
 				return reconcile.Result{}, err
 			}
 		}
@@ -350,7 +351,7 @@ func (r *ReconcileConstraint) getOrCreatePodStatus(ctx context.Context, constrai
 	}
 	key := types.NamespacedName{Name: sName, Namespace: util.GetNamespace()}
 	if err := r.reader.Get(ctx, key, statusObj); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 	} else {
