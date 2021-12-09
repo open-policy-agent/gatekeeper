@@ -1,8 +1,8 @@
 package client
 
 import (
-	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/open-policy-agent/opa/ast"
 )
@@ -18,9 +18,12 @@ func parseModule(path, rego string) (*ast.Module, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if module == nil {
-		return nil, errors.New("empty module")
+		return nil, fmt.Errorf("%w: module %q is empty",
+			ErrInvalidModule, path)
 	}
+
 	return module, nil
 }
 
@@ -30,29 +33,34 @@ func rewriteModulePackage(path string, module *ast.Module) error {
 	if err != nil {
 		return err
 	}
+
 	packageRef := ast.Ref([]*ast.Term{ast.VarTerm("data")})
 	newPath := packageRef.Extend(pathParts)
 	module.Package.Path = newPath
 	return nil
 }
 
-// requireRulesModule makes sure the listed rules are specified.
-func requireRulesModule(module *ast.Module, requiredRules map[string]struct{}) error {
+// requireModuleRules makes sure the module contains all of the specified
+// requiredRules.
+func requireModuleRules(module *ast.Module, requiredRules map[string]struct{}) error {
 	ruleSets := make(map[string]struct{}, len(module.Rules))
 	for _, rule := range module.Rules {
 		ruleSets[string(rule.Head.Name)] = struct{}{}
 	}
 
-	var errs Errors
+	var missing []string
 	for name := range requiredRules {
 		_, ok := ruleSets[name]
 		if !ok {
-			errs = append(errs, fmt.Errorf("missing required rule: %s", name))
-			continue
+			missing = append(missing, name)
 		}
 	}
-	if len(errs) != 0 {
-		return errs
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: missing required rules: %v",
+			ErrInvalidModule, missing)
 	}
+
 	return nil
 }
