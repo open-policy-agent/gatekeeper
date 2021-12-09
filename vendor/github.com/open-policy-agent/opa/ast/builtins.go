@@ -33,6 +33,10 @@ var DefaultBuiltins = [...]*Builtin{
 	// Assignment (":=")
 	Assign,
 
+	// Membership, infix "in": `x in xs`
+	Member,
+	MemberWithKey,
+
 	// Comparisons
 	GreaterThan,
 	GreaterThanEq,
@@ -126,6 +130,7 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Numbers
 	NumbersRange,
+	RandIntn,
 
 	// Encoding
 	JSONMarshal,
@@ -189,10 +194,12 @@ var DefaultBuiltins = [...]*Builtin{
 
 	// Crypto
 	CryptoX509ParseCertificates,
+	CryptoX509ParseAndVerifyCertificates,
 	CryptoMd5,
 	CryptoSha1,
 	CryptoSha256,
 	CryptoX509ParseCertificateRequest,
+	CryptoX509ParseRSAPrivateKey,
 
 	// Graphs
 	WalkBuiltin,
@@ -223,13 +230,14 @@ var DefaultBuiltins = [...]*Builtin{
 	// Tracing
 	Trace,
 
-	// CIDR
+	// Networking
 	NetCIDROverlap,
 	NetCIDRIntersects,
 	NetCIDRContains,
 	NetCIDRContainsMatches,
 	NetCIDRExpand,
 	NetCIDRMerge,
+	NetLookupIPAddr,
 
 	// Glob
 	GlobMatch,
@@ -244,6 +252,10 @@ var DefaultBuiltins = [...]*Builtin{
 	//SemVers
 	SemVerIsValid,
 	SemVerCompare,
+
+	// Printing
+	Print,
+	InternalPrint,
 }
 
 // BuiltinMap provides a convenient mapping of built-in names to
@@ -257,6 +269,8 @@ var IgnoreDuringPartialEval = []*Builtin{
 	NowNanos,
 	HTTPSend,
 	UUIDRFC4122,
+	RandIntn,
+	NetLookupIPAddr,
 }
 
 /**
@@ -283,6 +297,34 @@ var Assign = &Builtin{
 	Infix: ":=",
 	Decl: types.NewFunction(
 		types.Args(types.A, types.A),
+		types.B,
+	),
+}
+
+// Member represents the `in` (infix) operator.
+var Member = &Builtin{
+	Name:  "internal.member_2",
+	Infix: "in",
+	Decl: types.NewFunction(
+		types.Args(
+			types.A,
+			types.A,
+		),
+		types.B,
+	),
+}
+
+// MemberWithKey represents the `in` (infix) operator when used
+// with two terms on the lhs, i.e., `k, v in obj`.
+var MemberWithKey = &Builtin{
+	Name:  "internal.member_3",
+	Infix: "in",
+	Decl: types.NewFunction(
+		types.Args(
+			types.A,
+			types.A,
+			types.A,
+		),
 		types.B,
 	),
 }
@@ -1038,6 +1080,18 @@ var Sprintf = &Builtin{
  * Numbers
  */
 
+// RandIntn returns a random number 0 - n
+var RandIntn = &Builtin{
+	Name: "rand.intn",
+	Decl: types.NewFunction(
+		types.Args(
+			types.S,
+			types.N,
+		),
+		types.N,
+	),
+}
+
 // NumbersRange returns an array of numbers in the given inclusive range.
 var NumbersRange = &Builtin{
 	Name: "numbers.range",
@@ -1755,10 +1809,37 @@ var CryptoX509ParseCertificates = &Builtin{
 	),
 }
 
+// CryptoX509ParseAndVerifyCertificates returns one or more certificates from the given
+// string containing PEM or base64 encoded DER certificates after verifying the supplied
+// certificates form a complete certificate chain back to a trusted root.
+//
+// The first certificate is treated as the root and the last is treated as the leaf,
+// with all others being treated as intermediates
+var CryptoX509ParseAndVerifyCertificates = &Builtin{
+	Name: "crypto.x509.parse_and_verify_certificates",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewArray([]types.Type{
+			types.B,
+			types.NewArray(nil, types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))),
+		}, nil),
+	),
+}
+
 // CryptoX509ParseCertificateRequest returns a PKCS #10 certificate signing
 // request from the given PEM-encoded PKCS#10 certificate signing request.
 var CryptoX509ParseCertificateRequest = &Builtin{
 	Name: "crypto.x509.parse_certificate_request",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
+	),
+}
+
+// CryptoX509ParseRSAPrivateKey returns a JWK for signing a JWT from the given
+// PEM-encoded RSA private key.
+var CryptoX509ParseRSAPrivateKey = &Builtin{
+	Name: "crypto.x509.parse_rsa_private_key",
 	Decl: types.NewFunction(
 		types.Args(types.S),
 		types.NewObject(nil, types.NewDynamicProperty(types.S, types.A)),
@@ -2065,7 +2146,7 @@ var GlobQuoteMeta = &Builtin{
 }
 
 /**
- * Net CIDR
+ * Networking
  */
 
 // NetCIDRIntersects checks if a cidr intersects with another cidr and returns true or false
@@ -2145,6 +2226,17 @@ var netCidrContainsMatchesOperandType = types.NewAny(
 	)),
 )
 
+// NetLookupIPAddr returns the set of IP addresses (as strings, both v4 and v6)
+// that the passed-in name (string) resolves to using the standard name resolution
+// mechanisms available.
+var NetLookupIPAddr = &Builtin{
+	Name: "net.lookup_ip_addr",
+	Decl: types.NewFunction(
+		types.Args(types.S),
+		types.NewSet(types.S),
+	),
+}
+
 /**
  * Semantic Versions
  */
@@ -2173,6 +2265,27 @@ var SemVerCompare = &Builtin{
 		),
 		types.N,
 	),
+}
+
+/**
+ * Printing
+ */
+
+// Print is a special built-in function that writes zero or more operands
+// to a message buffer. The caller controls how the buffer is displayed. The
+// operands may be of any type. Furthermore, unlike other built-in functions,
+// undefined operands DO NOT cause the print() function to fail during
+// evaluation.
+var Print = &Builtin{
+	Name: "print",
+	Decl: types.NewVariadicFunction(nil, types.A, nil),
+}
+
+// InternalPrint represents the internal implementation of the print() function.
+// The compiler rewrites print() calls to refer to the internal implementation.
+var InternalPrint = &Builtin{
+	Name: "internal.print",
+	Decl: types.NewFunction([]types.Type{types.NewArray(nil, types.NewSet(types.A))}, nil),
 }
 
 /**
