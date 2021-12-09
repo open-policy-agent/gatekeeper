@@ -1,82 +1,22 @@
 package client
 
 import (
-	"fmt"
-	"strings"
+	"errors"
 )
 
-// Errors is a list of error.
-type Errors []error
+var (
+	ErrCreatingBackend           = errors.New("unable to create backend")
+	ErrCreatingClient            = errors.New("unable to create client")
+	ErrInvalidConstraintTemplate = errors.New("invalid ConstraintTemplate")
+	ErrInvalidConstraint         = errors.New("invalid Constraint")
+	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
+	ErrMissingConstraint         = errors.New("missing Constraint")
+	ErrInvalidModule             = errors.New("invalid module")
+)
 
-// Errors implements error.
-var _ error = Errors{}
-
-// Error implements error.
-func (errs Errors) Error() string {
-	s := make([]string, len(errs))
-	for _, e := range errs {
-		s = append(s, e.Error())
-	}
-	return strings.Join(s, "\n")
-}
-
-type ErrorMap map[string]error
-
-func (e ErrorMap) Error() string {
-	b := &strings.Builder{}
-	for k, v := range e {
-		_, _ = fmt.Fprintf(b, "%s: %s\n", k, v)
-	}
-	return b.String()
-}
-
-type UnrecognizedConstraintError struct {
-	s string
-}
-
-func (e *UnrecognizedConstraintError) Error() string {
-	return fmt.Sprintf("Constraint kind %s is not recognized", e.s)
-}
-
-func IsUnrecognizedConstraintError(e error) bool {
-	_, ok := e.(*UnrecognizedConstraintError)
-	return ok
-}
-
-func NewUnrecognizedConstraintError(text string) error {
-	return &UnrecognizedConstraintError{text}
-}
-
-func IsMissingConstraintError(e error) bool {
-	_, ok := e.(*MissingConstraintError)
-	return ok
-}
-
-type MissingConstraintError struct {
-	s string
-}
-
-func (e *MissingConstraintError) Error() string {
-	return fmt.Sprintf("Constraint kind %s is not recognized", e.s)
-}
-
-func NewMissingConstraintError(subPath string) error {
-	return &MissingConstraintError{subPath}
-}
-
-func IsMissingTemplateError(e error) bool {
-	_, ok := e.(*MissingTemplateError)
-	return ok
-}
-
-type MissingTemplateError struct {
-	s string
-}
-
-func (e *MissingTemplateError) Error() string {
-	return fmt.Sprintf("Constraint kind %s is not recognized", e.s)
-}
-
-func NewMissingTemplateError(mapKey string) error {
-	return &MissingTemplateError{mapKey}
+// IsUnrecognizedConstraintError returns true if err is an ErrMissingConstraint.
+//
+// Deprecated: Use errors.Is(err, ErrMissingConstraint) instead.
+func IsUnrecognizedConstraintError(err error) bool {
+	return errors.Is(err, ErrMissingConstraint)
 }

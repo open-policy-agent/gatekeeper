@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/url"
 	"regexp"
@@ -108,7 +109,11 @@ func InterfaceToValue(x interface{}) (Value, error) {
 		}
 		return r, nil
 	default:
-		return nil, fmt.Errorf("ast: illegal value: %T", x)
+		ptr := util.Reference(x)
+		if err := util.RoundTrip(ptr); err != nil {
+			return nil, fmt.Errorf("ast: interface conversion: %w", err)
+		}
+		return InterfaceToValue(*ptr)
 	}
 }
 
@@ -128,12 +133,12 @@ func As(v Value, x interface{}) error {
 
 // Resolver defines the interface for resolving references to native Go values.
 type Resolver interface {
-	Resolve(ref Ref) (value interface{}, err error)
+	Resolve(ref Ref) (interface{}, error)
 }
 
 // ValueResolver defines the interface for resolving references to AST values.
 type ValueResolver interface {
-	Resolve(ref Ref) (value Value, err error)
+	Resolve(ref Ref) (Value, error)
 }
 
 // UnknownValueErr indicates a ValueResolver was unable to resolve a reference
@@ -390,12 +395,13 @@ func (term *Term) Get(name *Term) *Term {
 	return nil
 }
 
-// Hash returns the hash code of the Term's value.
+// Hash returns the hash code of the Term's Value. Its Location
+// is ignored.
 func (term *Term) Hash() int {
 	return term.Value.Hash()
 }
 
-// IsGround returns true if this terms' Value is ground.
+// IsGround returns true if this term's Value is ground.
 func (term *Term) IsGround() bool {
 	return term.Value.IsGround()
 }
@@ -466,7 +472,7 @@ func IsComprehension(x Value) bool {
 // ContainsRefs returns true if the Value v contains refs.
 func ContainsRefs(v interface{}) bool {
 	found := false
-	WalkRefs(v, func(r Ref) bool {
+	WalkRefs(v, func(Ref) bool {
 		found = true
 		return found
 	})
@@ -540,7 +546,7 @@ func (null Null) Hash() int {
 }
 
 // IsGround always returns true.
-func (null Null) IsGround() bool {
+func (Null) IsGround() bool {
 	return true
 }
 
@@ -589,7 +595,7 @@ func (bol Boolean) Hash() int {
 }
 
 // IsGround always returns true.
-func (bol Boolean) IsGround() bool {
+func (Boolean) IsGround() bool {
 	return true
 }
 
@@ -681,7 +687,7 @@ func (num Number) Float64() (float64, bool) {
 }
 
 // IsGround always returns true.
-func (num Number) IsGround() bool {
+func (Number) IsGround() bool {
 	return true
 }
 
@@ -743,7 +749,7 @@ func (str String) Find(path Ref) (Value, error) {
 }
 
 // IsGround always returns true.
-func (str String) IsGround() bool {
+func (String) IsGround() bool {
 	return true
 }
 
@@ -797,7 +803,7 @@ func (v Var) Hash() int {
 }
 
 // IsGround always returns false.
-func (v Var) IsGround() bool {
+func (Var) IsGround() bool {
 	return false
 }
 
@@ -838,7 +844,10 @@ func PtrRef(head *Term, s string) (Ref, error) {
 		return Ref{head}, nil
 	}
 	parts := strings.Split(s, "/")
-	ref := make(Ref, len(parts)+1)
+	if max := math.MaxInt32; len(parts) >= max {
+		return nil, fmt.Errorf("path too long: %s, %d > %d (max)", s, len(parts), max)
+	}
+	ref := make(Ref, uint(len(parts))+1)
 	ref[0] = head
 	for i := 0; i < len(parts); i++ {
 		var err error
@@ -945,7 +954,7 @@ func (ref Ref) Compare(other Value) int {
 	return Compare(ref, other)
 }
 
-// Find returns the current value or a not found error.
+// Find returns the current value or a "not found" error.
 func (ref Ref) Find(path Ref) (Value, error) {
 	if len(path) == 0 {
 		return ref, nil
@@ -1173,11 +1182,16 @@ func (arr *Array) MarshalJSON() ([]byte, error) {
 }
 
 func (arr *Array) String() string {
-	var buf []string
-	for _, e := range arr.elems {
-		buf = append(buf, e.String())
+	var b strings.Builder
+	b.WriteRune('[')
+	for i, e := range arr.elems {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(e.String())
 	}
-	return "[" + strings.Join(buf, ", ") + "]"
+	b.WriteRune(']')
+	return b.String()
 }
 
 // Len returns the number of elements in the array.
@@ -1332,12 +1346,16 @@ func (s *set) String() string {
 	if s.Len() == 0 {
 		return "set()"
 	}
-	buf := []string{}
-	sorted := s.Sorted()
-	sorted.Foreach(func(x *Term) {
-		buf = append(buf, fmt.Sprint(x))
-	})
-	return "{" + strings.Join(buf, ", ") + "}"
+	var b strings.Builder
+	b.WriteRune('{')
+	for i := range s.keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(s.keys[i].Value.String())
+	}
+	b.WriteRune('}')
+	return b.String()
 }
 
 // Compare compares s to other, return <0, 0, or >0 if it is less than, equal to,
@@ -1351,8 +1369,6 @@ func (s *set) Compare(other Value) int {
 		return 1
 	}
 	t := other.(*set)
-	sort.Sort(termSlice(s.keys))
-	sort.Sort(termSlice(t.keys))
 	return termSliceCompare(s.keys, t.keys)
 }
 
@@ -1602,7 +1618,16 @@ func (s *set) insert(x *Term) {
 	}
 
 	s.elems[hash] = x
-	s.keys = append(s.keys, x)
+	i := sort.Search(len(s.keys), func(i int) bool { return Compare(x, s.keys[i]) < 0 })
+	if i < len(s.keys) {
+		// insert at position `i`:
+		s.keys = append(s.keys, nil)   // add some space
+		copy(s.keys[i+1:], s.keys[i:]) // move things over
+		s.keys[i] = x                  // drop it in position
+	} else {
+		s.keys = append(s.keys, x)
+	}
+
 	s.hash = 0
 	s.ground = s.ground && x.IsGround()
 }
@@ -1784,9 +1809,6 @@ func (obj *object) Compare(other Value) int {
 	}
 	a := obj
 	b := other.(*object)
-	// TODO: Ideally Compare would be immutable; the following sorts happen in place.
-	sort.Sort(a.keys)
-	sort.Sort(b.keys)
 	minLen := len(a.keys)
 	if len(b.keys) < len(a.keys) {
 		minLen = len(b.keys)
@@ -2036,12 +2058,19 @@ func (obj object) Len() int {
 }
 
 func (obj object) String() string {
-	var buf []string
-	sorted := objectElemSliceSorted(obj.keys)
-	for _, elem := range sorted {
-		buf = append(buf, fmt.Sprintf("%s: %s", elem.key, elem.value))
+	var b strings.Builder
+	b.WriteRune('{')
+
+	for i, elem := range obj.keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(elem.key.String())
+		b.WriteString(": ")
+		b.WriteString(elem.value.String())
 	}
-	return "{" + strings.Join(buf, ", ") + "}"
+	b.WriteRune('}')
+	return b.String()
 }
 
 func (obj *object) get(k *Term) *objectElem {
@@ -2236,7 +2265,15 @@ func (obj *object) insert(k, v *Term) {
 		next:  head,
 	}
 	obj.elems[hash] = elem
-	obj.keys = append(obj.keys, elem)
+	i := sort.Search(len(obj.keys), func(i int) bool { return Compare(elem.key, obj.keys[i].key) < 0 })
+	if i < len(obj.keys) {
+		// insert at position `i`:
+		obj.keys = append(obj.keys, nil)   // add some space
+		copy(obj.keys[i+1:], obj.keys[i:]) // move things over
+		obj.keys[i] = elem                 // drop it in position
+	} else {
+		obj.keys = append(obj.keys, elem)
+	}
 	obj.hash = 0
 
 	if k.IsGround() {
@@ -2533,15 +2570,6 @@ func (c Call) String() string {
 		args[i-1] = c[i].String()
 	}
 	return fmt.Sprintf("%v(%v)", c[0], strings.Join(args, ", "))
-}
-
-func objectElemSliceSorted(a objectElemSlice) objectElemSlice {
-	b := make(objectElemSlice, len(a))
-	for i := range b {
-		b[i] = a[i]
-	}
-	sort.Sort(b)
-	return b
 }
 
 func termSliceCopy(a []*Term) []*Term {
