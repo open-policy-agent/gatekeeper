@@ -291,7 +291,7 @@ func TestRunner_Run_Integer(t *testing.T) {
 				}},
 			}
 
-			result := runner.Run(ctx, &nilFilter{}, "", suite)
+			result := runner.Run(ctx, &nilFilter{}, suite)
 			if !result.IsFailure() {
 				return
 			}
