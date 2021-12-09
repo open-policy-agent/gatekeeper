@@ -91,6 +91,52 @@ PASS
 `,
 		},
 		{
+			name: "skipped test",
+			result: []SuiteResult{{
+				Path: "tests.go",
+				TestResults: []TestResult{{
+					Name:    "forbid-labels",
+					Skipped: true,
+				}},
+			}},
+			want: `ok	tests.go	0.000s
+PASS
+`,
+			wantVerbose: `=== SKIP  forbid-labels
+ok	tests.go	0.000s
+PASS
+`,
+		},
+		{
+			name: "skipped case",
+			result: []SuiteResult{{
+				Path:    "tests.go",
+				Runtime: Duration(230 * time.Millisecond),
+				TestResults: []TestResult{{
+					Name:    "forbid-labels",
+					Runtime: Duration(230 * time.Millisecond),
+					CaseResults: []CaseResult{{
+						Name:    "forbid-labels/with label",
+						Skipped: true,
+					}, {
+						Name:    "forbid-labels/without label",
+						Runtime: Duration(230 * time.Millisecond),
+					}},
+				}},
+			}},
+			want: `ok	tests.go	0.230s
+PASS
+`,
+			wantVerbose: `=== RUN   forbid-labels
+    === SKIP  forbid-labels/with label
+    === RUN   forbid-labels/without label
+    --- PASS: forbid-labels/without label	(0.230s)
+--- PASS: forbid-labels	(0.230s)
+ok	tests.go	0.230s
+PASS
+`,
+		},
+		{
 			name: "constraint test failure",
 			result: []SuiteResult{{
 				Path:    "tests.go",
