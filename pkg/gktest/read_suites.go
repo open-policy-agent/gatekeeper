@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -47,7 +48,7 @@ const (
 // Returns an error if:
 // - path is a file that does not define a Suite
 // - any matched files containing Suites are not parseable.
-func ReadSuites(f fs.FS, target string, recursive bool) (map[string]*Suite, error) {
+func ReadSuites(f fs.FS, target string, recursive bool) ([]*Suite, error) {
 	if f == nil {
 		return nil, ErrNoFileSystem
 	}
@@ -87,8 +88,8 @@ func ReadSuites(f fs.FS, target string, recursive bool) (map[string]*Suite, erro
 }
 
 // readSuites reads the passed set of files into Suites on the given filesystem.
-func readSuites(f fs.FS, files []string) (map[string]*Suite, error) {
-	suites := make(map[string]*Suite)
+func readSuites(f fs.FS, files []string) ([]*Suite, error) {
+	var suites []*Suite
 	for _, file := range files {
 		suite, err := readSuite(f, file)
 		if err != nil {
@@ -96,9 +97,16 @@ func readSuites(f fs.FS, files []string) (map[string]*Suite, error) {
 		}
 
 		if suite != nil {
-			suites[file] = suite
+			suite.Path = file
+			suites = append(suites, suite)
 		}
 	}
+
+	// Ensure Suites are returned in a deterministic order.
+	sort.Slice(suites, func(i, j int) bool {
+		return suites[i].Path < suites[j].Path
+	})
+
 	return suites, nil
 }
 
