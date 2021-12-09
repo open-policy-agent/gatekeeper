@@ -106,7 +106,7 @@ test:
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
-test-gator: gator
+test-gator: bin/gator-${GOOS}-${GOARCH}
 	./bin/gator test test/gator/suite.yaml
 
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
