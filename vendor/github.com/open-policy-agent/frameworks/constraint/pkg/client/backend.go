@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
@@ -81,7 +80,7 @@ func (b *Backend) NewClient(opts ...Opt) (*Client, error) {
 			ErrCreatingClient)
 	}
 
-	if err := b.driver.Init(context.Background()); err != nil {
+	if err := b.driver.Init(); err != nil {
 		return nil, err
 	}
 

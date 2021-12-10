@@ -212,7 +212,7 @@ func TestTemplateValidation(t *testing.T) {
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -381,7 +381,7 @@ func TestConstraintValidation(t *testing.T) {
 			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
 				t.Fatalf("Could not convert to unversioned: %v", err)
 			}
-			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
+			if _, err := opa.AddTemplate(unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
@@ -401,7 +401,7 @@ func TestConstraintValidation(t *testing.T) {
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -502,7 +502,7 @@ func TestTracing(t *testing.T) {
 			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
 				t.Fatalf("Could not convert to unversioned: %v", err)
 			}
-			if _, err := opa.AddTemplate(context.Background(), unversioned); err != nil {
+			if _, err := opa.AddTemplate(unversioned); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
@@ -528,7 +528,7 @@ func TestTracing(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error: %s", err)
 			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil {
 				t.Errorf("unable to validate gatekeeper resources: %s", err)
 			}

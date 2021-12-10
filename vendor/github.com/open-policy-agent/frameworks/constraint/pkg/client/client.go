@@ -333,7 +333,7 @@ func (c *Client) createTemplateArtifacts(templ *templates.ConstraintTemplate) (*
 }
 
 // CreateCRD creates a CRD from template.
-func (c *Client) CreateCRD(_ context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+func (c *Client) CreateCRD(templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
 	if templ == nil {
 		return nil, fmt.Errorf("%w: got nil ConstraintTemplate",
 			ErrInvalidConstraintTemplate)
@@ -349,7 +349,7 @@ func (c *Client) CreateCRD(_ context.Context, templ *templates.ConstraintTemplat
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
 // schema validation on calls to AddConstraint. On error, the responses return value
 // will still be populated so that partial results can be analyzed.
-func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error) {
+func (c *Client) AddTemplate(templ *templates.ConstraintTemplate) (*types.Responses, error) {
 	resp := types.NewResponses()
 
 	basicArtifacts, err := c.createBasicTemplateArtifacts(templ)
@@ -358,7 +358,7 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 	}
 
 	// return immediately if no change
-	if cached, err := c.GetTemplate(ctx, templ); err == nil && cached.SemanticEqual(templ) {
+	if cached, err := c.GetTemplate(templ); err == nil && cached.SemanticEqual(templ) {
 		resp.Handled[basicArtifacts.targetHandler.GetName()] = true
 		return resp, nil
 	}
@@ -371,7 +371,7 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if err = c.backend.driver.PutModules(ctx, artifacts.namePrefix, artifacts.modules); err != nil {
+	if err = c.backend.driver.PutModules(artifacts.namePrefix, artifacts.modules); err != nil {
 		return resp, fmt.Errorf("%w: %v", local.ErrCompile, err)
 	}
 
@@ -417,7 +417,7 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 		return resp, err
 	}
 
-	if _, err := c.backend.driver.DeleteModules(ctx, artifacts.namePrefix); err != nil {
+	if _, err := c.backend.driver.DeleteModules(artifacts.namePrefix); err != nil {
 		return resp, err
 	}
 
@@ -438,7 +438,7 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 }
 
 // GetTemplate gets the currently recognized template.
-func (c *Client) GetTemplate(_ context.Context, templ *templates.ConstraintTemplate) (*templates.ConstraintTemplate, error) {
+func (c *Client) GetTemplate(templ *templates.ConstraintTemplate) (*templates.ConstraintTemplate, error) {
 	artifacts, err := c.createRawTemplateArtifacts(templ)
 	if err != nil {
 		return nil, err
@@ -651,7 +651,7 @@ func (c *Client) getConstraintNoLock(constraint *unstructured.Unstructured) (*un
 }
 
 // GetConstraint gets the currently recognized constraint.
-func (c *Client) GetConstraint(_ context.Context, constraint *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func (c *Client) GetConstraint(constraint *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
 
@@ -679,7 +679,7 @@ func (c *Client) validateConstraint(constraint *unstructured.Unstructured, lock 
 
 // ValidateConstraint returns an error if the constraint is not recognized or does not conform to
 // the registered CRD for that constraint.
-func (c *Client) ValidateConstraint(_ context.Context, constraint *unstructured.Unstructured) error {
+func (c *Client) ValidateConstraint(constraint *unstructured.Unstructured) error {
 	return c.validateConstraint(constraint, true)
 }
 
@@ -695,7 +695,7 @@ func (c *Client) init() error {
 		}
 
 		builtinPath := fmt.Sprintf("%s.hooks_builtin", hooks)
-		err := c.backend.driver.PutModule(context.Background(), builtinPath, libBuiltin.String())
+		err := c.backend.driver.PutModule(builtinPath, libBuiltin.String())
 		if err != nil {
 			return err
 		}
@@ -744,7 +744,7 @@ func (c *Client) init() error {
 				ErrCreatingClient, err)
 		}
 
-		err = c.backend.driver.PutModule(context.TODO(), modulePath, string(src))
+		err = c.backend.driver.PutModule(modulePath, string(src))
 		if err != nil {
 			return fmt.Errorf("%w: error %s from compiled source:\n%s",
 				ErrCreatingClient, err, src)
@@ -769,7 +769,7 @@ func (c *Client) Reset(ctx context.Context) error {
 	}
 	for name, v := range c.templates {
 		for _, t := range v.Targets {
-			if _, err := c.backend.driver.DeleteModule(ctx, fmt.Sprintf(`templates["%s"]["%s"]`, t, name)); err != nil {
+			if _, err := c.backend.driver.DeleteModule(fmt.Sprintf(`templates["%s"]["%s"]`, t, name)); err != nil {
 				return err
 			}
 		}
