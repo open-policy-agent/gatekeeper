@@ -19,7 +19,7 @@ func TestReadSuites(t *testing.T) {
 		target     string
 		recursive  bool
 		fileSystem fs.FS
-		want       map[string]*Suite
+		want       []*Suite
 		wantErr    error
 	}{
 		{
@@ -70,7 +70,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    map[string]*Suite{"test.yaml": {}},
+			want:    []*Suite{{Path: "test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -145,7 +145,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    map[string]*Suite{"tests/test.yaml": {}},
+			want:    []*Suite{{Path: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -163,7 +163,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 					Data: []byte(`some data`),
 				},
 			},
-			want:    map[string]*Suite{"tests/test.yaml": {}},
+			want:    []*Suite{{Path: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -171,13 +171,13 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 			target:    "tests",
 			recursive: false,
 			fileSystem: fstest.MapFS{
-				"tests/labels/test.yaml": &fstest.MapFile{
+				"tests/annotations/test.yaml": &fstest.MapFile{
 					Data: []byte(`
 kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
-				"tests/annotations/test.yaml": &fstest.MapFile{
+				"tests/labels/test.yaml": &fstest.MapFile{
 					Data: []byte(`
 kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
@@ -190,7 +190,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    map[string]*Suite{"tests/test.yaml": {}},
+			want:    []*Suite{{Path: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -198,13 +198,13 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 			target:    "tests",
 			recursive: true,
 			fileSystem: fstest.MapFS{
-				"tests/labels/test.yaml": &fstest.MapFile{
+				"tests/annotations/test.yaml": &fstest.MapFile{
 					Data: []byte(`
 kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
-				"tests/annotations/test.yaml": &fstest.MapFile{
+				"tests/labels/test.yaml": &fstest.MapFile{
 					Data: []byte(`
 kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
@@ -217,10 +217,10 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want: map[string]*Suite{
-				"tests/labels/test.yaml":      {},
-				"tests/annotations/test.yaml": {},
-				"tests/test.yaml":             {},
+			want: []*Suite{
+				{Path: "tests/annotations/test.yaml"},
+				{Path: "tests/labels/test.yaml"},
+				{Path: "tests/test.yaml"},
 			},
 			wantErr: nil,
 		},
@@ -236,7 +236,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    map[string]*Suite{"tests/labels.yaml/test.yaml": {}},
+			want:    []*Suite{{Path: "tests/labels.yaml/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -275,7 +275,8 @@ tests:
 `),
 				},
 			},
-			want: map[string]*Suite{"test.yaml": {
+			want: []*Suite{{
+				Path: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -314,7 +315,8 @@ tests:
 `),
 				},
 			},
-			want: map[string]*Suite{"test.yaml": {
+			want: []*Suite{{
+				Path: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -348,7 +350,8 @@ tests:
 `),
 				},
 			},
-			want: map[string]*Suite{"test.yaml": {
+			want: []*Suite{{
+				Path: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
