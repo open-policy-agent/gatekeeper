@@ -17,7 +17,7 @@ Generally, design docs are on Google docs:
    * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
 * [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
-* [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
+* [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit?usp=sharing)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
@@ -31,6 +31,7 @@ Generally, design docs are on Google docs:
 * [Logging Design Doc](https://docs.google.com/document/d/1ap7AKOupNcR_42s8mkSh5FV9eteXTd4VCqelKst73VY/edit)
 * [Namespace Exclusion Design doc](https://docs.google.com/document/d/1yHuXFs_HQL5N9yT9QVi6AMyflWPtZS4Pg-uXczdqgZ8/edit?usp=sharing)
 * [Metrics Design Issue](https://github.com/open-policy-agent/gatekeeper/issues/157#issuecomment-553015292)
+* [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
 
 ## Roadmap (in development)
 * See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)
