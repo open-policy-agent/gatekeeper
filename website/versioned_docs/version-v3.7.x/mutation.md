@@ -194,16 +194,17 @@ For example, the following mutator removes an `--alsologtostderr` argument from 
 apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: ModifySet
 metadata:
-  name: add-err-logging
+  name: remove-err-logging
 spec:
   location: "spec.containers[name: *].args"
   parameters:
     operation: prune
     values:
-      - --alsologtostderr
+      fromList:
+        - --alsologtostderr
 ```
 
-- `spec.parameters.values` holds the list of values that will be added or removed.
+- `spec.parameters.values.fromList` holds the list of values that will be added or removed.
 - `operation` can be `merge` to insert values into the list if missing, or `prune` to remove values from the list. `merge` is default.
 
 
