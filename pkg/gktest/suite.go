@@ -11,6 +11,9 @@ type Suite struct {
 	// Tests is a list of Template&Constraint pairs, with tests to run on
 	// each.
 	Tests []Test `json:"tests"`
+
+	// Path is the filepath of this Suite on disk.
+	Path string `json:"-"`
 }
 
 // Test defines a Template&Constraint pair to instantiate, and Cases to

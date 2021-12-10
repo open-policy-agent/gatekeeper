@@ -101,7 +101,7 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gktest.Suite, filter gktest.Filter) error {
 	isFailure := false
 
 	runner, err := gktest.NewRunner(fileSystem, gktest.NewOPAClient)
@@ -112,8 +112,8 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites map[string]*gktest.
 	results := make([]gktest.SuiteResult, len(suites))
 	i := 0
 
-	for path, suite := range suites {
-		suiteResult := runner.Run(ctx, filter, path, suite)
+	for _, suite := range suites {
+		suiteResult := runner.Run(ctx, filter, suite)
 		for _, testResult := range suiteResult.TestResults {
 			if testResult.Error != nil {
 				isFailure = true

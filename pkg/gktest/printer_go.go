@@ -71,6 +71,14 @@ func (p PrinterGo) PrintSuite(w StringWriter, r *SuiteResult, verbose bool) erro
 
 func (p PrinterGo) PrintTest(w StringWriter, r *TestResult, verbose bool) error {
 	if verbose {
+		if r.Skipped {
+			_, err := w.WriteString(fmt.Sprintf("=== SKIP  %s\n", r.Name))
+			if err != nil {
+				return fmt.Errorf("%w: %v", ErrWritingString, err)
+			}
+			return nil
+		}
+
 		_, err := w.WriteString(fmt.Sprintf("=== RUN   %s\n", r.Name))
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrWritingString, err)
@@ -106,6 +114,14 @@ func (p PrinterGo) PrintTest(w StringWriter, r *TestResult, verbose bool) error 
 
 func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error {
 	if verbose {
+		if r.Skipped {
+			_, err := w.WriteString(fmt.Sprintf("    === SKIP  %s\n", r.Name))
+			if err != nil {
+				return fmt.Errorf("%w: %v", ErrWritingString, err)
+			}
+			return nil
+		}
+
 		_, err := w.WriteString(fmt.Sprintf("    === RUN   %s\n", r.Name))
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrWritingString, err)
