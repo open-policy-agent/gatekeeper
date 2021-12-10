@@ -105,8 +105,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	// default ingestion status to error, only change it if we successfully
+	// reconcile without conflicts
 	ingestionStatus := ctrlmutators.MutatorStatusError
-	conflict := true
+
+	// default conflict to false, only set to true if we find a conflict
+	conflict := false
+
 	// Encasing this call in a function prevents the arguments from being evaluated early.
 	id := types.MakeID(mutationObj)
 	defer func() {
@@ -145,7 +150,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Any mutator that's in conflict with another should be in the "error" state.
 	if len(newConflicts) == 0 {
 		ingestionStatus = ctrlmutators.MutatorStatusActive
-		conflict = false
+	} else {
+		conflict = true
 	}
 
 	return reconcile.Result{}, nil
