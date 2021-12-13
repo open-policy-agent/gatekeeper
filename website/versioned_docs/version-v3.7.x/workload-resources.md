@@ -1,0 +1,79 @@
+---
+id: workload-resources
+title: Working with Workload Resources
+---
+
+[Workload resources](https://kubernetes.io/docs/concepts/workloads/) are Kubernetes resources like Deployments or DaemonSets that create Pods by-way-of a controller. Because many Gatekeeper policies are written to enforce against Pods, like those found in the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library), it is important to recognize that Gatekeeper Pod violation messages will not be directly reported to the user when using the library as those Pods are created from workload resources.
+
+## Example
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPPrivilegedContainer
+metadata:
+  name: psp-privileged-container
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+```
+
+The above constraint matches on Pods that pass through the Gatekeeper admission controller. If you create a Deployment with the following PodTemplateSpec, then the Deployment itself will not be blocked, even though the containers in the Deployment violate the constraint.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: i-wont-be-blocked
+  name: i-wont-be-blocked
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: i-wont-be-blocked
+  template:
+    metadata:
+      labels:
+        app: i-wont-be-blocked
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        securityContext:
+          privileged: true
+```
+
+Instead, the Pods that are created from the Deployment will be blocked, and the Gatekeeper denial messages will be found in the workload object responsible for creating the Pods (in this case, the ReplicaSet created by the Deployment). The denial message will eventually make its way into the Deployment's status as well.
+
+```yaml
+  status:
+    conditions:
+    - lastTransitionTime: "2021-12-09T21:17:51Z"
+      message: 'admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container]
+        Privileged container is not allowed: nginx, securityContext: {"privileged":true}'
+```
+
+Gatekeeper violation messages within statuses can be retrieved using a `kubectl` command like the following:
+
+```sh
+$ kubectl get replicaset i-wont-be-blocked-755547df65 -o jsonpath='{ .status.conditions[].message }'
+admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container] Privileged container is not allowed: nginx, securityContext: {"privileged": true}
+```
+
+```sh
+$ kubectl get deploy i-wont-be-blocked -o jsonpath='{ .status.conditions[*].message }'
+Deployment does not have minimum availability. admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container] Privileged container is not allowed: nginx, securityContext: {"privileged": true} ReplicaSet "i-wont-be-blocked-755547df65" has timed out progressing.
+```
+
+Note that adding workload objects to the "kinds" list in the [Gatekeeper policy library constraints](https://www.github.com/open-policy-agent/gatekeeper-library) will not block and alert on workload resources. This is because most of the source Rego code for the library constraints match on the `spec.containers[_]` field instead of the `spec.template.spec.containers[_]` field that is often the format used by the PodTemplateSpec in workload resources.
+
+```yaml
+input_containers[c] { 
+  c := input.review.object.spec.containers[_] 
+} 
+input_containers[c] { 
+  c := input.review.object.spec.initContainers[_] 
+} 
+``` 
