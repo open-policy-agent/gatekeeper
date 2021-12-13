@@ -5,8 +5,12 @@ updates:
     directory: "/website"
     schedule:
       interval: "daily"
+    commit-message:
+      prefix: "chore"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    commit-message:
+      prefix: "chore"
