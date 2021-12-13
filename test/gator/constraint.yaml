@@ -1,0 +1,11 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sFooIs
+metadata:
+  name: foo-is-bar
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["FooIsBar"]
+  parameters:
+    foo: "bar"
