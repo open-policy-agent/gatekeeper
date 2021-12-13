@@ -1,0 +1,29 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sfoois
+  annotations:
+    description: Checks that foo is set to a specified value.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sFooIs
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            foo:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package foo
+
+        violation[{"msg": msg}] {
+          parameters := object.get(input, "parameters", {})
+          wantFoo := object.get(parameters, "foo", "")
+          gotFoo := object.get(input.review.object, "foo", "")
+          wantFoo != gotFoo
+          msg := sprintf("input.foo is %v but want %v", [gotFoo, wantFoo])
+        }
