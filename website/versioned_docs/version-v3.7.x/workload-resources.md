@@ -48,28 +48,28 @@ spec:
 Instead, the Pods that are created from the Deployment will be blocked, and the Gatekeeper denial messages will be found in the workload object responsible for creating the Pods (in this case, the ReplicaSet created by the Deployment). The denial message will eventually make its way into the Deployment's status as well.
 
 ```yaml
-  status:
-    conditions:
-    - lastTransitionTime: "2021-12-09T21:17:51Z"
-      message: 'admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container]
-        Privileged container is not allowed: nginx, securityContext: {"privileged":true}'
+status:
+  conditions:
+  - lastTransitionTime: "2021-12-09T21:17:51Z"
+    message: 'admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container]
+      Privileged container is not allowed: nginx, securityContext: {"privileged":true}'
 ```
 
 Gatekeeper violation messages within statuses can be retrieved using a `kubectl` command like the following:
 
-```sh
+```shell
 $ kubectl get replicaset i-wont-be-blocked-755547df65 -o jsonpath='{ .status.conditions[].message }'
 admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container] Privileged container is not allowed: nginx, securityContext: {"privileged": true}
 ```
 
-```sh
+```shell
 $ kubectl get deploy i-wont-be-blocked -o jsonpath='{ .status.conditions[*].message }'
 Deployment does not have minimum availability. admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container] Privileged container is not allowed: nginx, securityContext: {"privileged": true} ReplicaSet "i-wont-be-blocked-755547df65" has timed out progressing.
 ```
 
 Note that adding workload objects to the "kinds" list in the [Gatekeeper policy library constraints](https://www.github.com/open-policy-agent/gatekeeper-library) will not block and alert on workload resources. This is because most of the source Rego code for the library constraints match on the `spec.containers[_]` field instead of the `spec.template.spec.containers[_]` field that is often the format used by the PodTemplateSpec in workload resources.
 
-```yaml
+```
 input_containers[c] { 
   c := input.review.object.spec.containers[_] 
 } 
