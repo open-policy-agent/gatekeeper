@@ -20,10 +20,6 @@ spec:
   - name: https-webhook-server
     port: 443
     targetPort: webhook-server
-  - name: metrics
-    port: {{ .Values.service.metricsPort }}
-    protocol: TCP
-    targetPort: metrics
   selector:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
