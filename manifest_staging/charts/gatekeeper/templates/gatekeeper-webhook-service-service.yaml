@@ -26,10 +26,6 @@ spec:
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}
   {{- end }}
-  ports:
-  - name: https-webhook-server
-    port: 443
-    targetPort: webhook-server
   selector:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'

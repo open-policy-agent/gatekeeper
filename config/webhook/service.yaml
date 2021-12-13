@@ -4,10 +4,6 @@ metadata:
   name: webhook-service
   namespace: system
 spec:
-  ports:
-    - name: https-webhook-server
-      port: 443
-      targetPort: webhook-server
   selector:
     control-plane: controller-manager
     gatekeeper.sh/operation: webhook
