@@ -83,12 +83,12 @@ var replacements = map[string]string{
 	`HELMSUBST_SERVICE_PORTS: ""`: `{{- if .Values.service.ports }}
   ports:
   - name: https-webhook-server
-	  port: {{ .Values.service.ports.https }}
-	  targetPort: webhook-server
+    port: {{ .Values.service.ports.https }}
+    targetPort: webhook-server
   - name: metrics
-	  port: {{ .Values.service.ports.metrics }}
-	  protocol: TCP
-	  targetPort: metrics
+    port: {{ .Values.service.ports.metrics }}
+    protocol: TCP
+    targetPort: metrics
   {{- end }}`,
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN": `
         {{- range .Values.disabledBuiltins}}
