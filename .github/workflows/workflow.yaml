@@ -101,7 +101,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.20.7", "1.21.1", "1.22.0"]
+        KUBERNETES_VERSION: ["1.21.1", "1.22.0", "1.23.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -148,7 +148,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        HELM_VERSION: ["3.4.2"]
+        HELM_VERSION: ["3.7.2"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
@@ -188,7 +188,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.22.0"]
+        KUBERNETES_VERSION: ["1.23.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
