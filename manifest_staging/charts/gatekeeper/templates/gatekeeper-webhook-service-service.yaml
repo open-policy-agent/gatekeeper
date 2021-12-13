@@ -10,6 +10,16 @@ metadata:
   name: gatekeeper-webhook-service
   namespace: '{{ .Release.Namespace }}'
 spec:
+  {{- if .Values.service.ports }}
+  ports:
+  - name: https-webhook-server
+	  port: {{ .Values.service.ports.https }}
+	  targetPort: webhook-server
+  - name: metrics
+	  port: {{ .Values.service.ports.metrics }}
+	  protocol: TCP
+	  targetPort: metrics
+  {{- end }}
   {{- if .Values.service }}
   type: {{  .Values.service.type | default "ClusterIP" }}
     {{- if .Values.service.loadBalancerIP }}

@@ -89,7 +89,10 @@ crds:
 pdb:
   controllerManager:
     minAvailable: 1
-service: {}
+service:
+  ports:
+    https: 443
+    metrics: 8888
 disabledBuiltins:
 psp:
   enabled: true
