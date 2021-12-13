@@ -340,11 +340,11 @@ func Test_Tracker(t *testing.T) {
 
 	// Verify cache (tracks testdata fixtures)
 	for _, ct := range testTemplates {
-		_, err := opaClient.GetTemplate(ctx, ct)
+		_, err := opaClient.GetTemplate(ct)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for template")
 	}
 	for _, c := range testConstraints {
-		_, err := opaClient.GetConstraint(ctx, c)
+		_, err := opaClient.GetConstraint(c)
 		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
 	}
 	// TODO: Verify data if we add the corresponding API to opa.Client.
@@ -359,15 +359,14 @@ func Test_Tracker(t *testing.T) {
 
 	g.Eventually(func() (bool, error) {
 		// Verify cache (tracks testdata/post fixtures)
-		ctx := context.Background()
 		for _, ct := range postTemplates {
-			_, err := opaClient.GetTemplate(ctx, ct)
+			_, err := opaClient.GetTemplate(ct)
 			if err != nil {
 				return false, err
 			}
 		}
 		for _, c := range postConstraints {
-			_, err := opaClient.GetConstraint(ctx, c)
+			_, err := opaClient.GetConstraint(c)
 			if err != nil {
 				return false, err
 			}

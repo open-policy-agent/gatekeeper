@@ -291,7 +291,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		ctRef := &templates.ConstraintTemplate{}
 		ctRef.SetNamespace(request.Namespace)
 		ctRef.SetName(request.Name)
-		ctUnversioned, err := r.opa.GetTemplate(ctx, ctRef)
+		ctUnversioned, err := r.opa.GetTemplate(ctRef)
 		result := reconcile.Result{}
 		if err != nil {
 			logger.Info("missing constraint template in OPA cache, no deletion necessary")
@@ -330,7 +330,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	unversionedProposedCRD, err := r.opa.CreateCRD(ctx, unversionedCT)
+	unversionedProposedCRD, err := r.opa.CreateCRD(unversionedCT)
 	if err != nil {
 		logger.Error(err, "CRD creation error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
@@ -419,7 +419,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// It's important that opa.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(ctx, unversionedCT); err != nil {
+	if _, err := r.opa.AddTemplate(unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
