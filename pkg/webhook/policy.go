@@ -148,7 +148,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
-	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
+	if userErr, err := h.validateGatekeeperResources(&req); err != nil {
 		var code int32
 		if userErr {
 			code = http.StatusUnprocessableEntity
@@ -315,14 +315,14 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
-func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
+func (h *validationHandler) validateGatekeeperResources(req *admission.Request) (bool, error) {
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
-		return h.validateTemplate(ctx, req)
+		return h.validateTemplate(req)
 	case gvk.Group == "constraints.gatekeeper.sh":
-		return h.validateConstraint(ctx, req)
+		return h.validateConstraint(req)
 	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
 		if err := h.validateConfigResource(req); err != nil {
 			return true, err
@@ -338,7 +338,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 	return false, nil
 }
 
-func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
+func (h *validationHandler) validateTemplate(req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
@@ -347,18 +347,18 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
 		return false, err
 	}
-	if _, err := h.opa.CreateCRD(ctx, unversioned); err != nil {
+	if _, err := h.opa.CreateCRD(unversioned); err != nil {
 		return true, err
 	}
 	return false, nil
 }
 
-func (h *validationHandler) validateConstraint(ctx context.Context, req *admission.Request) (bool, error) {
+func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err != nil {
 		return false, err
 	}
-	if err := h.opa.ValidateConstraint(ctx, obj); err != nil {
+	if err := h.opa.ValidateConstraint(obj); err != nil {
 		return true, err
 	}
 

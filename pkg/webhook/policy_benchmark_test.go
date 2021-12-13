@@ -152,9 +152,9 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	return result, nil
 }
 
-func addTemplates(ctx context.Context, opa *opa.Client, list []templates.ConstraintTemplate) error {
+func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
 	for index := range list {
-		_, err := opa.AddTemplate(ctx, &list[index])
+		_, err := opa.AddTemplate(&list[index])
 		if err != nil {
 			return err
 		}
@@ -298,7 +298,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 			rand.Seed(time.Now().UnixNano())
 
 			// create T templates
-			err = addTemplates(ctx, opa, ctList)
+			err = addTemplates(opa, ctList)
 			if err != nil {
 				b.Errorf("test %s, failed to load templates into OPA: %s", name, err)
 			}
