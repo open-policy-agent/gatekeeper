@@ -278,7 +278,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 		status.Status.ConstraintUID = instance.GetUID()
 		status.Status.ObservedGeneration = instance.GetGeneration()
 		status.Status.Errors = nil
-		if c, err := r.opa.GetConstraint(ctx, instance); err != nil || !constraints.SemanticEqual(instance, c) {
+		if c, err := r.opa.GetConstraint(instance); err != nil || !constraints.SemanticEqual(instance, c) {
 			if err := r.cacheConstraint(ctx, instance); err != nil {
 				r.constraintsCache.addConstraintKey(constraintKey, tags{
 					enforcementAction: enforcementAction,

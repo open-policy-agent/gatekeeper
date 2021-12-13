@@ -1,7 +1,6 @@
 package webhook
 
 import (
-	"context"
 	"testing"
 
 	"github.com/ghodss/yaml"
@@ -114,7 +113,7 @@ spec:
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -363,7 +362,7 @@ spec:
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(context.Background(), review)
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("%s: err = %s; want nil", tt.Name, err)
 			}
