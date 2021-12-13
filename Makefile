@@ -106,6 +106,9 @@ test:
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
+test-gator: bin/gator-${GOOS}-${GOARCH}
+	./bin/gator-${GOOS}-${GOARCH} test test/gator/suite.yaml
+
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap:
 	# Download and install kind
