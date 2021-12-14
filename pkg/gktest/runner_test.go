@@ -155,6 +155,16 @@ metadata:
   name: always-pass
 `
 
+	constraintExcludedNamespace = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    excludedNamespaces: ["excluded"]
+`
+
 	constraintNeverValidate = `
 kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -200,6 +210,21 @@ kind: Object
 apiVersion: v1
 metadata:
   name: object-2
+`
+	objectIncluded = `
+kind: Object
+apiVersion: v1
+metadata:
+  name: object
+  namespace: included
+`
+
+	objectExcluded = `
+kind: Object
+apiVersion: v1
+metadata:
+  name: object
+  namespace: excluded
 `
 
 	objectInvalid = `
@@ -955,6 +980,49 @@ func TestRunner_Run(t *testing.T) {
 						Name: "allow",
 					}, {
 						Name: "deny",
+					}},
+				}},
+			},
+		},
+		{
+			name: "excluded namespace",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "excluded namespace Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "included",
+						Object:     "included.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "excluded",
+						Object:     "excluded.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(templateNeverValidate),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(constraintExcludedNamespace),
+				},
+				"included.yaml": &fstest.MapFile{
+					Data: []byte(objectIncluded),
+				},
+				"excluded.yaml": &fstest.MapFile{
+					Data: []byte(objectExcluded),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "excluded namespace Constraint",
+					CaseResults: []CaseResult{{
+						Name: "included",
+					}, {
+						Name: "excluded",
 					}},
 				}},
 			},
