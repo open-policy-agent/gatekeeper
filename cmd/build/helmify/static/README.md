@@ -118,6 +118,8 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | pdb.controllerManager.minAvailable           | The number of controller manager pods that must still be available after an eviction   | `1`                                                                       |
 | service.type                                 | Service type                                                                           | `ClusterIP`                                                               |
 | service.loadBalancerIP                       | The IP address of LoadBalancer service                                                 | ``                                                                        |
+| service.ports.https                          | Service port for https                                                                 | `443`|
+| service.ports.metrics                        | Service port to expose metrics                                                         | `8888`|
 | rbac.create                                  | Enable the creation of RBAC resources                                                  | `true`                                                                    |
 
 ## Contributing Changes
