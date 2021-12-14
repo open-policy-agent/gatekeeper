@@ -130,7 +130,7 @@ func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (C
 		return nil, fmt.Errorf("%w: %v", ErrCreatingClient, err)
 	}
 
-	err = r.addTemplate(ctx, suiteDir, t.Template, client)
+	err = r.addTemplate(suiteDir, t.Template, client)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath str
 	return nil
 }
 
-func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string, client Client) error {
+func (r *Runner) addTemplate(suiteDir, templatePath string, client Client) error {
 	if templatePath == "" {
 		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
 	}
@@ -170,7 +170,7 @@ func (r *Runner) addTemplate(ctx context.Context, suiteDir, templatePath string,
 		return err
 	}
 
-	_, err = client.AddTemplate(ctx, template)
+	_, err = client.AddTemplate(template)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrAddingTemplate, err)
 	}

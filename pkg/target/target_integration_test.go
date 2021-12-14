@@ -411,7 +411,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			if err := yaml.Unmarshal([]byte(testTemplate), tmpl); err != nil {
 				t.Fatalf("unable to unmarshal template: %s", err)
 			}
-			if _, err := c.AddTemplate(context.Background(), tmpl); err != nil {
+			if _, err := c.AddTemplate(tmpl); err != nil {
 				t.Fatalf("unable to add template: %s", err)
 			}
 			if _, err := c.AddConstraint(context.Background(), tc.constraint); err != nil {

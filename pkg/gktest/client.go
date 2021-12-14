@@ -12,7 +12,7 @@ import (
 type Client interface {
 	// AddTemplate adds a Template to the Client. Templates define the structure
 	// and parameters of potential Constraints.
-	AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error)
+	AddTemplate(templ *templates.ConstraintTemplate) (*types.Responses, error)
 
 	// AddConstraint adds a Constraint to the Client. Must map to one of the
 	// previously-added Templates.

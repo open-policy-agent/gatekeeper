@@ -12,11 +12,11 @@ VERSION := v3.7.0
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.21.1
+KUBERNETES_VERSION ?= 1.23.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
-HELM_VERSION ?= 3.4.2
+HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 
 HELM_ARGS ?=
@@ -105,6 +105,9 @@ test:
 
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
+
+test-gator: bin/gator-${GOOS}-${GOARCH}
+	./bin/gator-${GOOS}-${GOARCH} test test/gator/suite.yaml
 
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap:
