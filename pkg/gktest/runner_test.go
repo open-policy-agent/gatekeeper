@@ -160,6 +160,7 @@ kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
 metadata:
   name: never-validate-namespace
+spec:
   match:
     excludedNamespaces: ["excluded"]
 `
