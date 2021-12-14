@@ -50,8 +50,7 @@ Instead, the Pods that are created from the Deployment will be blocked, and the 
 ```yaml
 status:
   conditions:
-  - lastTransitionTime: "2021-12-09T21:17:51Z"
-    message: 'admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container]
+  - message: 'admission webhook "validation.gatekeeper.sh" denied the request: [psp-privileged-container]
       Privileged container is not allowed: nginx, securityContext: {"privileged":true}'
 ```
 
