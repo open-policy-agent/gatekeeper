@@ -40,7 +40,12 @@ spec:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
-      - args:
+      - {{- if .Values.image.release }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
+        {{- else }}
+        image: {{ .Values.image.repository }}
+        {{- end }}
+        args:
         - --audit-interval={{ .Values.auditInterval }}
         - --log-level={{ .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
@@ -67,7 +72,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         livenessProbe:
           httpGet:
