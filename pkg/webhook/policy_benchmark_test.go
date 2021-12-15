@@ -38,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,7 +73,7 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (f *fakeNsGetter) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -205,7 +204,7 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 	gvr, _ := meta.UnsafeGuessKindToResource(oldRes.GroupVersionKind())
 	return atypes.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
-			UID:                types.UID(uuid.NewUUID()),
+			UID:                uuid.NewUUID(),
 			Kind:               metav1.GroupVersionKind{Group: oldRes.GroupVersionKind().Group, Version: oldRes.GroupVersionKind().Version, Kind: oldRes.GroupVersionKind().Kind},
 			Resource:           metav1.GroupVersionResource{Group: gvr.Group, Version: gvr.Version, Resource: gvr.Resource},
 			SubResource:        "",
@@ -230,22 +229,6 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 }
 
 func BenchmarkValidationHandler(b *testing.B) {
-	// setup test
-	opa, err := makeOpaClient()
-	if err != nil {
-		b.Fatalf("could not initialize OPA: %s", err)
-	}
-
-	c := &fakeNsGetter{scheme: runtimeScheme, NoopClient: testclient.NoopClient{}}
-	cfg := &v1alpha1.Config{
-		Spec: v1alpha1.ConfigSpec{
-			Validation: v1alpha1.Validation{
-				Traces: []v1alpha1.Trace{},
-			},
-		},
-	}
-	h := validationHandler{opa: opa, webhookHandler: webhookHandler{client: c, injectedConfig: cfg}}
-
 	benchmarks := map[string]struct {
 		// description of the test
 		description string
@@ -268,6 +251,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 		},
 		// create template, constraint and resource directories and add a new test case with appropriate load values
 	}
+
 	for name, tc := range benchmarks {
 		// read template
 		ctList, err := readTemplates(tc.templateDir)
@@ -290,20 +274,33 @@ func BenchmarkValidationHandler(b *testing.B) {
 		for _, bm := range tc.load {
 			// remove all data from OPA
 			ctx := context.Background()
-			err = opa.Reset(ctx)
+
+			// setup test
+			opaClient, err := makeOpaClient()
 			if err != nil {
-				b.Errorf("test %s, failed to reset OPA: %s", name, err)
+				b.Fatalf("could not initialize OPA: %s", err)
 			}
+
+			c := &fakeNsGetter{scheme: runtimeScheme, NoopClient: testclient.NoopClient{}}
+			cfg := &v1alpha1.Config{
+				Spec: v1alpha1.ConfigSpec{
+					Validation: v1alpha1.Validation{
+						Traces: []v1alpha1.Trace{},
+					},
+				},
+			}
+			h := validationHandler{opa: opaClient, webhookHandler: webhookHandler{client: c, injectedConfig: cfg}}
+
 			// seed random generator
 			rand.Seed(time.Now().UnixNano())
 
 			// create T templates
-			err = addTemplates(opa, ctList)
+			err = addTemplates(opaClient, ctList)
 			if err != nil {
 				b.Errorf("test %s, failed to load templates into OPA: %s", name, err)
 			}
 			// load constraints into OPA
-			err = addConstraints(ctx, opa, generateConstraints(bm, crList))
+			err = addConstraints(ctx, opaClient, generateConstraints(bm, crList))
 			if err != nil {
 				b.Errorf("test %s, failed to load constraints into OPA: %s", name, err)
 			}
@@ -319,11 +316,6 @@ func BenchmarkValidationHandler(b *testing.B) {
 					}
 				}
 			})
-			// remove all data from OPA
-			err = opa.Reset(ctx)
-			if err != nil {
-				b.Errorf("test %s, failed to reset OPA: %s", name, err)
-			}
 		}
 	}
 }
