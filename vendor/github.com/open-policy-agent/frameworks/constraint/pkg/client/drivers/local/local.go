@@ -70,7 +70,7 @@ type driver struct {
 	providerCache *externaldata.ProviderCache
 }
 
-func (d *driver) Init(ctx context.Context) error {
+func (d *driver) Init() error {
 	if d.providerCache != nil {
 		rego.RegisterBuiltin1(
 			&rego.Function{
@@ -168,7 +168,7 @@ func toModuleSetName(prefix string, idx int) string {
 	return fmt.Sprintf("%s%d", toModuleSetPrefix(prefix), idx)
 }
 
-func (d *driver) PutModule(ctx context.Context, name string, src string) error {
+func (d *driver) PutModule(name string, src string) error {
 	if err := d.checkModuleName(name); err != nil {
 		return err
 	}
@@ -181,12 +181,12 @@ func (d *driver) PutModule(ctx context.Context, name string, src string) error {
 	d.modulesMux.Lock()
 	defer d.modulesMux.Unlock()
 
-	_, err := d.alterModules(ctx, insert, nil)
+	_, err := d.alterModules(insert, nil)
 	return err
 }
 
 // PutModules implements drivers.Driver.
-func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []string) error {
+func (d *driver) PutModules(namePrefix string, srcs []string) error {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return err
 	}
@@ -210,13 +210,13 @@ func (d *driver) PutModules(ctx context.Context, namePrefix string, srcs []strin
 		}
 	}
 
-	_, err := d.alterModules(ctx, insert, remove)
+	_, err := d.alterModules(insert, remove)
 	return err
 }
 
 // DeleteModule deletes a rule from OPA. Returns true if a rule was found and deleted, false
 // if a rule was not found, and any errors.
-func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
+func (d *driver) DeleteModule(name string) (bool, error) {
 	if err := d.checkModuleName(name); err != nil {
 		return false, err
 	}
@@ -228,7 +228,7 @@ func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
 		return false, nil
 	}
 
-	count, err := d.alterModules(ctx, nil, []string{name})
+	count, err := d.alterModules(nil, []string{name})
 
 	return count == 1, err
 }
@@ -236,7 +236,10 @@ func (d *driver) DeleteModule(ctx context.Context, name string) (bool, error) {
 // alterModules alters the modules in the driver by inserting and removing
 // the provided modules then returns the count of modules removed.
 // alterModules expects that the caller is holding the modulesMux lock.
-func (d *driver) alterModules(ctx context.Context, insert insertParam, remove []string) (int, error) {
+func (d *driver) alterModules(insert insertParam, remove []string) (int, error) {
+	// TODO(davis-haba): Remove this Context once it is no longer necessary.
+	ctx := context.TODO()
+
 	updatedModules := copyModules(d.modules)
 	for _, name := range remove {
 		delete(updatedModules, name)
@@ -284,7 +287,7 @@ func (d *driver) alterModules(ctx context.Context, insert insertParam, remove []
 }
 
 // DeleteModules implements drivers.Driver.
-func (d *driver) DeleteModules(ctx context.Context, namePrefix string) (int, error) {
+func (d *driver) DeleteModules(namePrefix string) (int, error) {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return 0, err
 	}
@@ -292,7 +295,7 @@ func (d *driver) DeleteModules(ctx context.Context, namePrefix string) (int, err
 	d.modulesMux.Lock()
 	defer d.modulesMux.Unlock()
 
-	return d.alterModules(ctx, nil, d.listModuleSet(namePrefix))
+	return d.alterModules(nil, d.listModuleSet(namePrefix))
 }
 
 // listModuleSet returns the list of names corresponding to a given module

@@ -1,0 +1,15 @@
+apiVersion: test.gatekeeper.sh/v1alpha1
+kind: Suite
+tests:
+- name: foo-is-bar
+  template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - name: foo-bar
+    object: allow.yaml
+    assertions:
+    - violations: no
+  - name: foo-not-bar
+    object: deny.yaml
+    assertions:
+    - violations: yes

@@ -177,7 +177,8 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.
 		Object: runtime.RawExtension{
 			Raw: resourceJSON,
 		},
-		Name: obj.GetName(),
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 	}
 
 	return req, nil

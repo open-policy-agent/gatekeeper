@@ -1,4 +1,4 @@
-package gktest
+package gator
 
 import (
 	opaclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
