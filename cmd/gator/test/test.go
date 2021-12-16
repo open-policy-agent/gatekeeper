@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gktest"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/spf13/cobra"
 )
 
@@ -89,11 +89,11 @@ func runE(cmd *cobra.Command, args []string) error {
 	}
 	targetPath = strings.Trim(targetPath, "/")
 
-	suites, err := gktest.ReadSuites(fileSystem, targetPath, recursive)
+	suites, err := gator.ReadSuites(fileSystem, targetPath, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}
-	filter, err := gktest.NewFilter(run)
+	filter, err := gator.NewFilter(run)
 	if err != nil {
 		return fmt.Errorf("compiling filter: %w", err)
 	}
@@ -101,15 +101,15 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gktest.Suite, filter gktest.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, filter gator.Filter) error {
 	isFailure := false
 
-	runner, err := gktest.NewRunner(fileSystem, gktest.NewOPAClient)
+	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient)
 	if err != nil {
 		return err
 	}
 
-	results := make([]gktest.SuiteResult, len(suites))
+	results := make([]gator.SuiteResult, len(suites))
 	i := 0
 
 	for _, suite := range suites {
@@ -129,7 +129,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gktest.Suite, fi
 		i++
 	}
 	w := &strings.Builder{}
-	printer := gktest.PrinterGo{}
+	printer := gator.PrinterGo{}
 	err = printer.Print(w, results, verbose)
 	if err != nil {
 		return err

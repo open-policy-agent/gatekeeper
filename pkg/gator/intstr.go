@@ -1,4 +1,4 @@
-package gktest
+package gator
 
 import "k8s.io/apimachinery/pkg/util/intstr"
 
