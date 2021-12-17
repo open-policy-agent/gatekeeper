@@ -29,6 +29,14 @@ postInstall:
       tag: v3.7.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+preUninstall:
+  deleteWebhooks:
+    enabled: false
+    image:
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.7.0
+      pullPolicy: IfNotPresent
+      pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
