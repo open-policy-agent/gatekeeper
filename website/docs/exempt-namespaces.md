@@ -5,7 +5,7 @@ title: Exempting Namespaces
 
 ## Exempting Namespaces from Gatekeeper using config resource
 
-The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](howto.md#constraints) instead.
+The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. An asterisk can be used for wildcard matching (e.g. `kube-*`). To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](howto.md#constraints) instead. 
 
 ```yaml
 apiVersion: config.gatekeeper.sh/v1alpha1
@@ -15,7 +15,7 @@ metadata:
   namespace: "gatekeeper-system"
 spec:
   match:
-    - excludedNamespaces: ["kube-system", "gatekeeper-system"]
+    - excludedNamespaces: ["kube-*", "my-namespace"]
       processes: ["*"]
     - excludedNamespaces: ["audit-excluded-ns"]
       processes: ["audit"]
