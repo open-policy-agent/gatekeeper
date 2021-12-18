@@ -63,10 +63,10 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 ## Parameters
 
 | Parameter                                    | Description                                                                            | Default                                                                   |
-|:---------------------------------------------|:---------------------------------------------------------------------------------------|:--------------------------------------------------------------------------|
+| :------------------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
 | postInstall.labelNamespace.enabled           | Add labels to the namespace during post install hooks                                  | `true`                                                                    |
 | postInstall.labelNamespace.image.repository  | Image with kubectl to label the namespace                                              | `openpolicyagent/gatekeeper-crds`                                         |
-| postInstall.labelNamespace.image.tag         | Image tag                                                                              | Current release version: `v3.7.0`                                  |
+| postInstall.labelNamespace.image.tag         | Image tag                                                                              | Current release version: `v3.7.0`                                         |
 | postInstall.labelNamespace.image.pullPolicy  | Image pullPolicy                                                                       | `IfNotPresent`                                                            |
 | postInstall.labelNamespace.image.pullSecrets | Image pullSecrets                                                                      | `[]`                                                                      |
 | psp.enabled                                  | Enabled PodSecurityPolicy                                                              | `true`                                                                    |
@@ -83,6 +83,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | validatingWebhookCheckIgnoreFailurePolicy    | The failurePolicy for the check-ignore-label validating webhook                        | `Fail`                                                                    |
 | enableDeleteOperations                       | Enable validating webhook for delete operations                                        | `false`                                                                   |
 | enableExternalData                           | Enable external data (alpha feature)                                                   | `false`                                                                   |
+| enableTLSHealthcheck                         | Enable probing webhook API with certificate stored in certDir                          | `false`                                                                   |
 | mutatingWebhookFailurePolicy                 | The failurePolicy for the mutating webhook                                             | `Ignore`                                                                  |
 | mutatingWebhookTimeoutSeconds                | The timeout for the mutating webhook in seconds                                        | `3`                                                                       |
 | emitAdmissionEvents                          | Emit K8s events in gatekeeper namespace for admission violations (alpha feature)       | `false`                                                                   |
@@ -91,7 +92,7 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | logLevel                                     | Minimum log level                                                                      | `INFO`                                                                    |
 | image.pullPolicy                             | The image pull policy                                                                  | `IfNotPresent`                                                            |
 | image.repository                             | Image repository                                                                       | `openpolicyagent/gatekeeper`                                              |
-| image.release                                | The image release tag to use                                                           | Current release version: `v3.7.0`                                  |
+| image.release                                | The image release tag to use                                                           | Current release version: `v3.7.0`                                         |
 | image.pullSecrets                            | Specify an array of imagePullSecrets                                                   | `[]`                                                                      |
 | resources                                    | The resource request/limits for the container image                                    | limits: 1 CPU, 512Mi, requests: 100mCPU, 256Mi                            |
 | nodeSelector                                 | The node selector to use for pod scheduling                                            | `kubernetes.io/os: linux`                                                 |
@@ -104,10 +105,10 @@ _See [Exempting Namespaces](https://open-policy-agent.github.io/gatekeeper/websi
 | controllerManager.exemptNamespaces           | The exact namespaces to exempt by the admission webhook                                | `[]`                                                                      |
 | controllerManager.exemptNamespacePrefixes    | The namespace prefixes to exempt by the admission webhook                              | `[]`                                                                      |
 | controllerManager.hostNetwork                | Enables controllerManager to be deployed on hostNetwork                                | `false`                                                                   |
-| controllerManager.dnsPolicy                  | Set the dnsPolicy for controllerManager pods                                           | `ClusterFirst`                                                                 |
+| controllerManager.dnsPolicy                  | Set the dnsPolicy for controllerManager pods                                           | `ClusterFirst`                                                            |
 | audit.priorityClassName                      | Priority class name for audit controller                                               | `system-cluster-critical`                                                 |
 | audit.hostNetwork                            | Enables audit to be deployed on hostNetwork                                            | `false`                                                                   |
-| audit.dnsPolicy                              | Set the dnsPolicy for audit pods                                                       | `ClusterFirst`                                                                 |
+| audit.dnsPolicy                              | Set the dnsPolicy for audit pods                                                       | `ClusterFirst`                                                            |
 | audit.healthPort                             | Health port for audit                                                                  | `9090`                                                                    |
 | audit.metricsPort                            | Metrics port for audit                                                                 | `8888`                                                                    |
 | replicas                                     | The number of Gatekeeper replicas to deploy for the webhook                            | `3`                                                                       |
