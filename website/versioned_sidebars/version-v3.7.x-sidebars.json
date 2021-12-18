@@ -92,6 +92,10 @@
         {
           "type": "doc",
           "id": "version-v3.7.x/gator"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.7.x/workload-resources"
         }
       ],
       "collapsible": true

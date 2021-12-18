@@ -476,7 +476,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	resp, err := h.opa.Review(ctx, review, opa.Tracing(trace))
-	if trace {
+	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}
 	if dump {

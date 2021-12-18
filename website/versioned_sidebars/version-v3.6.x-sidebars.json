@@ -84,6 +84,10 @@
         {
           "type": "doc",
           "id": "version-v3.6.x/constrainttemplates"
+        },
+        {
+          "type": "doc",
+          "id": "version-v3.6.x/workload-resources"
         }
       ],
       "collapsible": true
