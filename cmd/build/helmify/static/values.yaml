@@ -30,7 +30,7 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
 preUninstall:
-  deleteWebhooks:
+  deleteWebhookConfigurations:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds

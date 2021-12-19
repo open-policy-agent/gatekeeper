@@ -1,8 +1,8 @@
-{{- if and (or (not .Values.disableValidatingWebhook) (not .Values.disableMutation)) .Values.preUninstall.deleteWebhooks.enabled }}
+{{- if and (or (not .Values.disableValidatingWebhook) (not .Values.disableMutation)) .Values.preUninstall.deleteWebhookConfigurations.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gatekeeper-delete-webhooks
+  name: gatekeeper-delete-webhook-configs
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -21,17 +21,17 @@ spec:
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: OnFailure
-      {{- if .Values.preUninstall.deleteWebhooks.image.pullSecrets }}
+      {{- if .Values.preUninstall.deleteWebhookConfigurations.image.pullSecrets }}
       imagePullSecrets:
-      {{- .Values.preUninstall.deleteWebhooks.image.pullSecrets | toYaml | nindent 12 }}
+      {{- .Values.preUninstall.deleteWebhookConfigurations.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      serviceAccount: gatekeeper-delete-webhooks
+      serviceAccount: gatekeeper-delete-webhook-configs
       nodeSelector:
         kubernetes.io/os: linux
       containers:
         - name: kubectl-delete
-          image: "{{ .Values.preUninstall.deleteWebhooks.image.repository }}:{{ .Values.preUninstall.deleteWebhooks.image.tag }}"
-          imagePullPolicy: {{ .Values.preUninstall.deleteWebhooks.image.pullPolicy }}
+          image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
+          imagePullPolicy: {{ .Values.preUninstall.deleteWebhookConfigurations.image.pullPolicy }}
           args:
             - delete
             {{- if not .Values.disableValidatingWebhook }}
@@ -53,7 +53,7 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gatekeeper-delete-webhooks
+  name: gatekeeper-delete-webhook-configs
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -66,7 +66,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: gatekeeper-delete-webhooks
+  name: gatekeeper-delete-webhook-configs
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -101,7 +101,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: gatekeeper-delete-webhooks
+  name: gatekeeper-delete-webhook-configs
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -112,10 +112,10 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: gatekeeper-delete-webhooks
+  name: gatekeeper-delete-webhook-configs
 subjects:
   - kind: ServiceAccount
-    name: gatekeeper-delete-webhooks
+    name: gatekeeper-delete-webhook-configs
     namespace: {{ .Release.Namespace | quote }}
 {{- end }}
 {{- end }}
