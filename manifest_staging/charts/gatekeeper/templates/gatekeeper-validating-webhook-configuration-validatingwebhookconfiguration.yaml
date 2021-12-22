@@ -25,6 +25,12 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    
+    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      value: {{ $value }}
+    {{- end }}
   rules:
   - apiGroups:
     - '*'

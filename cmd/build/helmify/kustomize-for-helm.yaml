@@ -200,6 +200,7 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
   sideEffects: None
   timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
 ---
@@ -216,6 +217,11 @@ webhooks:
       namespace: gatekeeper-system
       path: /v1/admit
   name: validation.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
+    - HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
   rules:
