@@ -9,338 +9,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
-)
-
-const (
-	templateAlwaysValidate = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: alwaysvalidate
-spec:
-  crd:
-    spec:
-      names:
-        kind: AlwaysValidate
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8salwaysvalidate
-        violation[{"msg": msg}] {
-          false
-          msg := "should always pass"
-        }
-`
-
-	templateNeverValidate = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: nevervalidate
-spec:
-  crd:
-    spec:
-      names:
-        kind: NeverValidate
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8snevervalidate
-        violation[{"msg": msg}] {
-          true
-          msg := "never validate"
-        }
-`
-
-	templateNeverValidateTwice = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: nevervalidatetwice
-spec:
-  crd:
-    spec:
-      names:
-        kind: NeverValidateTwice
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8snevervalidate
-        violation[{"msg": msg}] {
-          true
-          msg := "first message"
-        }
-
-        violation[{"msg": msg}] {
-          true
-          msg := "second message"
-        }
-`
-
-	templateUnsupportedVersion = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta2
-metadata:
-  name: unsupportedversion
-spec:
-  crd:
-    spec:
-      names:
-        kind: UnsupportedVersion
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8sdisallowedtags
-        violation[{"msg": msg}] {
-          true
-          msg := "never validate"
-        }
-`
-
-	templateInvalidYAML = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: alwaysvalidate
-  {}: {}
-spec:
-  crd:
-    spec:
-      names:
-        kind: AlwaysValidate
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8sdisallowedtags
-        violation[{"msg": msg}] {
-          true
-          msg := "never validate"
-        }
-`
-
-	templateMarshalError = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: alwaysvalidate
-spec: [a, b, c]
-`
-
-	templateCompileError = `
-kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
-metadata:
-  name: compileerror
-spec:
-  crd:
-    spec:
-      names:
-        kind: CompileError
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8sdisallowedtags
-        violation[{"msg": msg}] {
-          f
-          msg := "never validate"
-        }
-`
-
-	constraintAlwaysValidate = `
-kind: AlwaysValidate
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: always-pass
-`
-
-	constraintExcludedNamespace = `
-kind: NeverValidate
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: never-validate-namespace
-spec:
-  match:
-    excludedNamespaces: ["excluded"]
-`
-
-	constraintNeverValidate = `
-kind: NeverValidate
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: always-fail
-`
-
-	constraintNeverValidateTwice = `
-kind: NeverValidateTwice
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: always-fail-twice
-`
-
-	constraintInvalidYAML = `
-kind: AlwaysValidate
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: always-pass
-  {}: {}
-`
-
-	constraintWrongTemplate = `
-kind: Other
-apiVersion: constraints.gatekeeper.sh/v1beta1
-metadata:
-  name: other
-`
-
-	object = `
-kind: Object
-apiVersion: v1
-metadata:
-  name: object
-`
-	objectMultiple = `
-kind: Object
-apiVersion: v1
-metadata:
-  name: object
----
-kind: Object
-apiVersion: v1
-metadata:
-  name: object-2
-`
-	objectIncluded = `
-kind: Object
-apiVersion: v1
-metadata:
-  name: object
-  namespace: included
-`
-
-	objectExcluded = `
-kind: Object
-apiVersion: v1
-metadata:
-  name: object
-  namespace: excluded
-`
-
-	objectInvalid = `
-kind Object
-apiVersion: v1
-metadata:
-  name: object`
-
-	objectEmpty = ``
-
-	objectInvalidInventory = `
-kind: Object
-metadata:
-  name: object
----
-kind: Object
-apiVersion: v1
-metadata:
-  name: object`
-
-	templateReferential = `
-apiVersion: templates.gatekeeper.sh/v1beta1
-kind: ConstraintTemplate
-metadata:
-  name: k8suniqueserviceselector
-  annotations:
-    description: Requires Services to have unique selectors within a namespace.
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sUniqueServiceSelector
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package k8suniqueserviceselector
-        make_apiversion(kind) = apiVersion {
-          g := kind.group
-          v := kind.version
-          g != ""
-          apiVersion = sprintf("%v/%v", [g, v])
-        }
-        make_apiversion(kind) = apiVersion {
-          kind.group == ""
-          apiVersion = kind.version
-        }
-        identical(obj, review) {
-          obj.metadata.namespace == review.namespace
-          obj.metadata.name == review.name
-          obj.kind == review.kind.kind
-          obj.apiVersion == make_apiversion(review.kind)
-        }
-        flatten_selector(obj) = flattened {
-          selectors := [s | s = concat(":", [key, val]); val = obj.spec.selector[key]]
-          flattened := concat(",", sort(selectors))
-        }
-        violation[{"msg": msg}] {
-          input.review.kind.kind == "Service"
-          input.review.kind.version == "v1"
-          input.review.kind.group == ""
-          input_selector := flatten_selector(input.review.object)
-          other := data.inventory.namespace[namespace][_]["Service"][name]
-          not identical(other, input.review)
-          other_selector := flatten_selector(other)
-          input_selector == other_selector
-          msg := sprintf("same selector as service <%v> in namespace <%v>", [name, namespace])
-        }
-`
-
-	constraintReferential = `
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sUniqueServiceSelector
-metadata:
-  name: unique-service-selector
-  labels:
-    owner: admin.agilebank.demo
-`
-
-	objectReferentialInventory = `
-apiVersion: v1
-kind: Service
-metadata:
-  name: gatekeeper-test-service-example
-  namespace: default
-spec:
-  ports:
-    - port: 443
-  selector:
-    key: value
-`
-
-	objectReferentialAllow = `
-apiVersion: v1
-kind: Service
-metadata:
-  name: gatekeeper-test-service-allowed
-  namespace: default
-spec:
-  ports:
-    - port: 443
-  selector:
-    key: other-value
-`
-
-	objectReferentialDeny = `
-apiVersion: v1
-kind: Service
-metadata:
-  name: gatekeeper-test-service-disallowed
-  namespace: default
-spec:
-  ports:
-    - port: 443
-  selector:
-    key: value
-`
 )
 
 func TestRunner_Run(t *testing.T) {
@@ -388,7 +59,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateInvalidYAML),
+					Data: []byte(fixtures.TemplateInvalidYAML),
 				},
 			},
 			want: SuiteResult{
@@ -406,7 +77,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateMarshalError),
+					Data: []byte(fixtures.TemplateMarshalError),
 				},
 			},
 			want: SuiteResult{
@@ -424,7 +95,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateCompileError),
+					Data: []byte(fixtures.TemplateCompileError),
 				},
 			},
 			want: SuiteResult{
@@ -442,7 +113,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateUnsupportedVersion),
+					Data: []byte(fixtures.TemplateUnsupportedVersion),
 				},
 			},
 			want: SuiteResult{
@@ -460,7 +131,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -478,7 +149,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -508,19 +179,19 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"deny-template.yaml": &fstest.MapFile{
-					Data: []byte(templateNeverValidate),
+					Data: []byte(fixtures.TemplateNeverValidate),
 				},
 				"deny-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintNeverValidate),
+					Data: []byte(fixtures.ConstraintNeverValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(object),
+					Data: []byte(fixtures.Object),
 				},
 			},
 			want: SuiteResult{
@@ -545,13 +216,13 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(objectInvalid),
+					Data: []byte(fixtures.ObjectInvalid),
 				},
 			},
 			want: SuiteResult{
@@ -577,13 +248,13 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(object),
+					Data: []byte(fixtures.Object),
 				},
 				"inventory.yaml": &fstest.MapFile{
 					Data: []byte(""),
@@ -611,13 +282,13 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(objectMultiple),
+					Data: []byte(fixtures.ObjectMultiple),
 				},
 			},
 			want: SuiteResult{
@@ -642,13 +313,13 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(objectEmpty),
+					Data: []byte(fixtures.ObjectEmpty),
 				},
 			},
 			want: SuiteResult{
@@ -674,16 +345,16 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(object),
+					Data: []byte(fixtures.Object),
 				},
 				"inventory.yaml": &fstest.MapFile{
-					Data: []byte(objectInvalidInventory),
+					Data: []byte(fixtures.ObjectInvalidInventory),
 				},
 			},
 			want: SuiteResult{
@@ -704,10 +375,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -724,7 +395,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -743,10 +414,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintInvalidYAML),
+					Data: []byte(fixtures.ConstraintInvalidYAML),
 				},
 			},
 			want: SuiteResult{
@@ -765,10 +436,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"constraint.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -787,10 +458,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintWrongTemplate),
+					Data: []byte(fixtures.ConstraintWrongTemplate),
 				},
 			},
 			want: SuiteResult{
@@ -813,10 +484,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -841,10 +512,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -866,10 +537,10 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 			},
 			want: SuiteResult{
@@ -908,19 +579,19 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"allow-template.yaml": &fstest.MapFile{
-					Data: []byte(templateAlwaysValidate),
+					Data: []byte(fixtures.TemplateAlwaysValidate),
 				},
 				"allow-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintAlwaysValidate),
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
 				},
 				"deny-template.yaml": &fstest.MapFile{
-					Data: []byte(templateNeverValidate),
+					Data: []byte(fixtures.TemplateNeverValidate),
 				},
 				"deny-constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintNeverValidate),
+					Data: []byte(fixtures.ConstraintNeverValidate),
 				},
 				"object.yaml": &fstest.MapFile{
-					Data: []byte(object),
+					Data: []byte(fixtures.Object),
 				},
 			},
 			want: SuiteResult{
@@ -958,19 +629,19 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateReferential),
+					Data: []byte(fixtures.TemplateReferential),
 				},
 				"constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintReferential),
+					Data: []byte(fixtures.ConstraintReferential),
 				},
 				"allow.yaml": &fstest.MapFile{
-					Data: []byte(objectReferentialAllow),
+					Data: []byte(fixtures.ObjectReferentialAllow),
 				},
 				"deny.yaml": &fstest.MapFile{
-					Data: []byte(objectReferentialDeny),
+					Data: []byte(fixtures.ObjectReferentialDeny),
 				},
 				"inventory.yaml": &fstest.MapFile{
-					Data: []byte(objectReferentialInventory),
+					Data: []byte(fixtures.ObjectReferentialInventory),
 				},
 			},
 			want: SuiteResult{
@@ -1004,16 +675,16 @@ func TestRunner_Run(t *testing.T) {
 			},
 			f: fstest.MapFS{
 				"template.yaml": &fstest.MapFile{
-					Data: []byte(templateNeverValidate),
+					Data: []byte(fixtures.TemplateNeverValidate),
 				},
 				"constraint.yaml": &fstest.MapFile{
-					Data: []byte(constraintExcludedNamespace),
+					Data: []byte(fixtures.ConstraintExcludedNamespace),
 				},
 				"included.yaml": &fstest.MapFile{
-					Data: []byte(objectIncluded),
+					Data: []byte(fixtures.ObjectIncluded),
 				},
 				"excluded.yaml": &fstest.MapFile{
-					Data: []byte(objectExcluded),
+					Data: []byte(fixtures.ObjectExcluded),
 				},
 			},
 			want: SuiteResult{
@@ -1101,17 +772,17 @@ func TestRunner_RunCase(t *testing.T) {
 		// Validation successful
 		{
 			name:       "no assertions is error",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: nil,
 			want:       CaseResult{Error: ErrInvalidCase},
 		},
 		{
 			name:       "explicit expect allow boolean",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromStr("no"),
 			}},
@@ -1119,9 +790,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "implicit expect deny fail",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{}},
 			want: CaseResult{
 				Error: ErrNumViolations,
@@ -1129,9 +800,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "explicit expect deny boolean fail",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 			want: CaseResult{
 				Error: ErrNumViolations,
@@ -1139,9 +810,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect allow int",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(0),
 			}},
@@ -1149,9 +820,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect deny int fail",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(1),
 			}},
@@ -1161,9 +832,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect deny message fail",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("first message"),
 			}},
@@ -1174,25 +845,25 @@ func TestRunner_RunCase(t *testing.T) {
 		// Single violation
 		{
 			name:       "implicit expect deny",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{}},
 			want:       CaseResult{},
 		},
 		{
 			name:       "expect deny bool",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
 			want:       CaseResult{},
 		},
 		{
 			name:       "expect deny int",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(1),
 			}},
@@ -1200,9 +871,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect deny int not enough violations",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(2),
 			}},
@@ -1212,9 +883,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect allow bool fail",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromStr("no"),
 			}},
@@ -1224,9 +895,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect allow int fail",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(0),
 			}},
@@ -1236,9 +907,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "expect deny message",
-			template:   templateAlwaysValidate,
-			constraint: constraintAlwaysValidate,
-			object:     object,
+			template:   fixtures.TemplateAlwaysValidate,
+			constraint: fixtures.ConstraintAlwaysValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("never validate"),
 			}},
@@ -1248,9 +919,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "message valid regex",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
 			}},
@@ -1258,9 +929,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "message invalid regex",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("never validate [("),
 			}},
@@ -1270,9 +941,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "message missing regex",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
 			}},
@@ -1283,9 +954,9 @@ func TestRunner_RunCase(t *testing.T) {
 		// Deny multiple violations
 		{
 			name:       "multiple violations count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(2),
 			}},
@@ -1293,9 +964,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "multiple violation both messages implicit count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("first message"),
 			}, {
@@ -1305,9 +976,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "multiple violation both messages explicit count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(1),
 				Message:    pointer.StringPtr("first message"),
@@ -1319,9 +990,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "multiple violation regex implicit count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("[cdefinorst]+ [aegms]+"),
 			}},
@@ -1329,9 +1000,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "multiple violation regex exact count",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: intStrFromInt(2),
 				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
@@ -1340,9 +1011,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "multiple violations and one missing message",
-			template:   templateNeverValidateTwice,
-			constraint: constraintNeverValidateTwice,
-			object:     object,
+			template:   fixtures.TemplateNeverValidateTwice,
+			constraint: fixtures.ConstraintNeverValidateTwice,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Message: pointer.StringPtr("first message"),
 			}, {
@@ -1355,9 +1026,9 @@ func TestRunner_RunCase(t *testing.T) {
 		// Invalid assertions
 		{
 			name:       "invalid IntOrStr",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: &intstr.IntOrString{Type: 3},
 			}},
@@ -1367,9 +1038,9 @@ func TestRunner_RunCase(t *testing.T) {
 		},
 		{
 			name:       "invalid IntOrStr string value",
-			template:   templateNeverValidate,
-			constraint: constraintNeverValidate,
-			object:     object,
+			template:   fixtures.TemplateNeverValidate,
+			constraint: fixtures.ConstraintNeverValidate,
+			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: &intstr.IntOrString{Type: intstr.String, StrVal: "other"},
 			}},
