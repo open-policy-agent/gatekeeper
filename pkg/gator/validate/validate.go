@@ -4,11 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
+
+var scheme *runtime.Scheme
+
+func init() {
+	scheme = runtime.NewScheme()
+	apis.AddToScheme(scheme)
+}
 
 func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	// create the client
@@ -25,7 +34,7 @@ func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		}
 		hasTemplates = true
 
-		templ, err := unstructToTemplate(obj)
+		templ, err := gator.ToTemplate(scheme, obj)
 		if err != nil {
 			return nil, fmt.Errorf("converting unstructured %q to template: %w", obj.GetName(), err)
 		}

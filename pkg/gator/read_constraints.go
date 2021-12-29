@@ -85,9 +85,22 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %v", ErrAddingTemplate, path, err)
 	}
 
+	template, err := ToTemplate(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("path %q: %w", path, err)
+	}
+	return template, nil
+}
+
+// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
+// this function into a location that makes it more obviously a shared resource
+// between `gator test` and `gator validate`
+
+// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
+func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
 	gvk := u.GroupVersionKind()
 	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		return nil, fmt.Errorf("%w: %q", ErrNotATemplate, path)
+		return nil, fmt.Errorf("%w", ErrNotATemplate)
 	}
 
 	t, err := scheme.New(gvk)
