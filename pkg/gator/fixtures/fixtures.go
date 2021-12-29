@@ -183,24 +183,24 @@ metadata:
 
 	Object = `
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object
 `
 	ObjectMultiple = `
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object
 ---
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object-2
 `
 	ObjectIncluded = `
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object
   namespace: included
@@ -208,7 +208,7 @@ metadata:
 
 	ObjectExcluded = `
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object
   namespace: excluded
@@ -216,7 +216,7 @@ metadata:
 
 	ObjectInvalid = `
 kind Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object`
 
@@ -228,7 +228,7 @@ metadata:
   name: object
 ---
 kind: Object
-apiVersion: v1
+apiVersion: group.sh/v1
 metadata:
   name: object`
 
