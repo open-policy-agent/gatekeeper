@@ -4,13 +4,19 @@ import (
 	"os"
 
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
+	"github.com/open-policy-agent/gatekeeper/cmd/gator/validate"
 	"github.com/spf13/cobra"
 )
 
 const version = "alpha"
 
+var commands = []*cobra.Command{
+	test.Cmd,
+	validate.Cmd,
+}
+
 func init() {
-	rootCmd.AddCommand(test.Cmd)
+	rootCmd.AddCommand(commands...)
 }
 
 var rootCmd = &cobra.Command{
