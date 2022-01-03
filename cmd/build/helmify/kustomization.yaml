@@ -77,6 +77,8 @@ patchesJson6902:
         path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
       - op: remove
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
+      - op: remove
+        path: /spec/template/spec/containers/0/image
   - target:
       kind: Deployment
       name: gatekeeper-controller-manager
@@ -91,3 +93,5 @@ patchesJson6902:
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
         path: /spec/template/spec/affinity/podAntiAffinity
+      - op: remove
+        path: /spec/template/spec/containers/0/image

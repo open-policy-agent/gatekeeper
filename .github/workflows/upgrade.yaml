@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  BASE_RELEASE: 3.4.0
-  BASE_BRANCH: release-3.4
+  BASE_RELEASE: 3.5.0
+  BASE_BRANCH: release-3.5
 
 jobs:
   helm_upgrade:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        HELM_VERSION: ["3.4.2"]
+        HELM_VERSION: ["3.7.2"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2

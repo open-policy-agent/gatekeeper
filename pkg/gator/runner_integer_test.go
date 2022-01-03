@@ -1,4 +1,4 @@
-package gktest
+package gator
 
 import (
 	"context"

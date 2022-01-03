@@ -1,4 +1,4 @@
-package gktest
+package gator
 
 // Printer knows how to print the results of running a Suite.
 type Printer interface {

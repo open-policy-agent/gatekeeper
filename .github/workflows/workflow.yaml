@@ -75,6 +75,24 @@ jobs:
           file: ./cover.out
           fail_ci_if_error: false
 
+  gator_test:
+    name: "Test Gator"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Go 1.17
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: gator test
+        run: make test-gator
+
   build_test:
     name: "Build and Test"
     runs-on: ubuntu-latest
@@ -83,7 +101,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.20.7", "1.21.1", "1.22.0"]
+        KUBERNETES_VERSION: ["1.21.1", "1.22.0", "1.23.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
@@ -130,7 +148,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        HELM_VERSION: ["3.4.2"]
+        HELM_VERSION: ["3.7.2"]
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
@@ -170,7 +188,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.22.0"]
+        KUBERNETES_VERSION: ["1.23.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2

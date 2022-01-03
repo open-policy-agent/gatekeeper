@@ -31,7 +31,8 @@ module.exports = {
         'mutation',
         'constrainttemplates',
         'externaldata',
-        'gator'
+        'gator',
+        'workload-resources'
       ],
     },
     {
