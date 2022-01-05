@@ -54,47 +54,43 @@ func run(cmd *cobra.Command, args []string) {
 	// check if stdin has data
 	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
-		fmt.Println(fmt.Errorf("getting info for stdout: %w", err))
-		os.Exit(1)
+		exitf("getting info for stdout: %w", err)
 	}
 
 	// using stdin in combination with flags is not supported
 	if stdinfo.Size() > 0 && len(filenames) > 0 {
-		fmt.Println(fmt.Errorf("stdin cannot be used in combination with %q flag", flagNameFilename))
-		os.Exit(1)
+		exitf("stdin cannot be used in combination with %q flag", flagNameFilename)
 	}
 
 	// if no files specified, read from Stdin
-	if len(filenames) == 0 {
+	if stdinfo.Size() > 0 {
 		us, err := readYAMLSource(os.Stdin)
 		if err != nil {
-			fmt.Println(fmt.Errorf("reading from stdin: %w", err))
-			os.Exit(1)
+			exitf("reading from stdin: %w", err)
 		}
 		unstrucs = append(unstrucs, us...)
-	} else {
+	} else if len(filenames) > 0 {
 		for _, filename := range filenames {
 			file, err := os.Open(filename)
 			if err != nil {
-				fmt.Println(fmt.Errorf("opening file %q: %w", filename, err))
-				os.Exit(1)
+				exitf("opening file %q: %w", filename, err)
 			}
 
 			us, err := readYAMLSource(bufio.NewReader(file))
 			if err != nil {
-				fmt.Println(fmt.Errorf("reading from file %q: %w", filename, err))
-				os.Exit(1)
+				exitf("reading from file %q: %w", filename, err)
 			}
 			file.Close()
 
 			unstrucs = append(unstrucs, us...)
 		}
+	} else {
+		exitf("must include data via either stdin or the %q flag", flagNameFilename)
 	}
 
 	responses, err := validate.Validate(unstrucs)
 	if err != nil {
-		fmt.Printf("auditing objects: %v\n", err)
-		os.Exit(1)
+		exitf("auditing objects: %v\n", err)
 	}
 
 	results := responses.Results()
@@ -105,6 +101,11 @@ func run(cmd *cobra.Command, args []string) {
 
 		os.Exit(1)
 	}
+}
+
+func exitf(format string, a ...interface{}) {
+	fmt.Println(fmt.Errorf(format, a...))
+	os.Exit(1)
 }
 
 // func stdinHasData() (bool, error) {
