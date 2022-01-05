@@ -6,8 +6,13 @@ package validate
 
 import (
 	"fmt"
+	"io"
+	"os"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 // Cmd is the gator validate subcommand.
@@ -21,9 +26,7 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("validate called")
-	},
+	Run: run,
 }
 
 func init() {
@@ -38,8 +41,35 @@ func init() {
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-// func run(cmd *cobra.Command, args []string) error {
-// 	// if input dirs defined, read all the files in from those directories
-//
-// 	// if no input dirs defined, read in from stdin
-// }
+func run(cmd *cobra.Command, args []string) {
+	var objs []*unstructured.Unstructured
+
+	decoder := yaml.NewYAMLOrJSONDecoder(os.Stdin, 1000)
+	for {
+		u := &unstructured.Unstructured{
+			Object: make(map[string]interface{}),
+		}
+		err := decoder.Decode(&u.Object)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Printf("reading chunk: %v\n", err)
+			os.Exit(1)
+		}
+
+		objs = append(objs, u)
+	}
+
+	responses, err := validate.Validate(objs)
+	if err != nil {
+		fmt.Printf("auditing objects: %v\n", err)
+		os.Exit(1)
+	}
+
+	results := responses.Results()
+	if len(results) > 0 {
+		fmt.Printf("results: %v\n", results)
+		os.Exit(1)
+	}
+}
