@@ -31,3 +31,7 @@
     exit 1
   fi
 }
+
+@test "stdin and flag are not supported in combination" {
+  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifest-no-violations.yaml" < "$BATS_TEST_DIRNAME/fixtures/another-manifest-no-violations.yaml"
+}

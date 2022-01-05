@@ -32,6 +32,8 @@ to quickly create a Cobra application.`,
 
 var filenames []string
 
+const flagNameFilename = "filename"
+
 func init() {
 	// Here you will define your flags and configuration settings.
 
@@ -43,11 +45,24 @@ func init() {
 	// is called directly, e.g.:
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
-	Cmd.Flags().StringArrayVarP(&filenames, "filename", "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+	Cmd.Flags().StringArrayVarP(&filenames, flagNameFilename, "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 }
 
 func run(cmd *cobra.Command, args []string) {
 	var unstrucs []*unstructured.Unstructured
+
+	// check if stdin has data
+	stdinfo, err := os.Stdin.Stat()
+	if err != nil {
+		fmt.Println(fmt.Errorf("getting info for stdout: %w", err))
+		os.Exit(1)
+	}
+
+	// using stdin in combination with flags is not supported
+	if stdinfo.Size() > 0 && len(filenames) > 0 {
+		fmt.Println(fmt.Errorf("stdin cannot be used in combination with %q flag", flagNameFilename))
+		os.Exit(1)
+	}
 
 	// if no files specified, read from Stdin
 	if len(filenames) == 0 {
@@ -91,6 +106,15 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 }
+
+// func stdinHasData() (bool, error) {
+// 	info, err := os.Stdin.Stat()
+// 	if err != nil {
+// 		return false, fmt.Errorf("getting info for stdout: %w", err)
+// 	}
+//
+// 	return info.Size() > 0, nil
+// }
 
 func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured
