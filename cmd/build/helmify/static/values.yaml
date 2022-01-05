@@ -10,6 +10,7 @@ validatingWebhookFailurePolicy: Ignore
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 enableExternalData: false
+enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookTimeoutSeconds: 3
 auditChunkSize: 500

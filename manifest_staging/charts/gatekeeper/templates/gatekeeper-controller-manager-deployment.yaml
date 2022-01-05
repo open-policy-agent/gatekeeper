@@ -57,7 +57,6 @@ spec:
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
-        
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
         {{- range .Values.disabledBuiltins}}
