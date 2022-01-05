@@ -5,6 +5,7 @@ Copyright © 2021 NAME HERE <EMAIL ADDRESS>
 package validate
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -29,6 +30,8 @@ to quickly create a Cobra application.`,
 	Run: run,
 }
 
+var filenames []string
+
 func init() {
 	// Here you will define your flags and configuration settings.
 
@@ -39,29 +42,41 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	Cmd.Flags().StringArrayVarP(&filenames, "filename", "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	var objs []*unstructured.Unstructured
+	var unstrucs []*unstructured.Unstructured
 
-	decoder := yaml.NewYAMLOrJSONDecoder(os.Stdin, 1000)
-	for {
-		u := &unstructured.Unstructured{
-			Object: make(map[string]interface{}),
-		}
-		err := decoder.Decode(&u.Object)
-		if err == io.EOF {
-			break
-		}
+	// if no files specified, read from Stdin
+	if len(filenames) == 0 {
+		us, err := readYAMLSource(os.Stdin)
 		if err != nil {
-			fmt.Printf("reading chunk: %v\n", err)
+			fmt.Println(fmt.Errorf("reading from stdin: %w", err))
 			os.Exit(1)
 		}
+		unstrucs = append(unstrucs, us...)
+	} else {
+		for _, filename := range filenames {
+			file, err := os.Open(filename)
+			if err != nil {
+				fmt.Println(fmt.Errorf("opening file %q: %w", filename, err))
+				os.Exit(1)
+			}
 
-		objs = append(objs, u)
+			us, err := readYAMLSource(bufio.NewReader(file))
+			if err != nil {
+				fmt.Println(fmt.Errorf("reading from file %q: %w", filename, err))
+				os.Exit(1)
+			}
+			file.Close()
+
+			unstrucs = append(unstrucs, us...)
+		}
 	}
 
-	responses, err := validate.Validate(objs)
+	responses, err := validate.Validate(unstrucs)
 	if err != nil {
 		fmt.Printf("auditing objects: %v\n", err)
 		os.Exit(1)
@@ -72,4 +87,26 @@ func run(cmd *cobra.Command, args []string) {
 		fmt.Printf("results: %v\n", results)
 		os.Exit(1)
 	}
+}
+
+func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
+	var objs []*unstructured.Unstructured
+
+	decoder := yaml.NewYAMLOrJSONDecoder(r, 1000)
+	for {
+		u := &unstructured.Unstructured{
+			Object: make(map[string]interface{}),
+		}
+		err := decoder.Decode(&u.Object)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading chunk: %w\n", err)
+		}
+
+		objs = append(objs, u)
+	}
+
+	return objs, nil
 }
