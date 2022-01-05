@@ -11,6 +11,7 @@ validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 enableExternalData: false
+enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookTimeoutSeconds: 3

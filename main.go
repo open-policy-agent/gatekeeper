@@ -83,18 +83,19 @@ var (
 )
 
 var (
-	logLevel            = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
-	logLevelKey         = flag.String("log-level-key", "level", "JSON key for the log level field, defaults to `level`")
-	logLevelEncoder     = flag.String("log-level-encoder", "lower", "Encoder for the value of the log level field. Valid values: [`lower`, `capital`, `color`, `capitalcolor`], default: `lower`")
-	healthAddr          = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
-	metricsAddr         = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
-	port                = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
-	certDir             = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
-	disableCertRotation = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
-	enableProfile       = flag.Bool("enable-pprof", false, "enable pprof profiling")
-	profilePort         = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
-	certServiceName     = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
-	disabledBuiltins    = util.NewFlagSet()
+	logLevel             = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
+	logLevelKey          = flag.String("log-level-key", "level", "JSON key for the log level field, defaults to `level`")
+	logLevelEncoder      = flag.String("log-level-encoder", "lower", "Encoder for the value of the log level field. Valid values: [`lower`, `capital`, `color`, `capitalcolor`], default: `lower`")
+	healthAddr           = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
+	metricsAddr          = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
+	port                 = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	certDir              = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
+	disableCertRotation  = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
+	enableProfile        = flag.Bool("enable-pprof", false, "enable pprof profiling")
+	profilePort          = flag.Int("pprof-port", 6060, "port for pprof profiling. defaulted to 6060 if unspecified")
+	certServiceName      = flag.String("cert-service-name", "gatekeeper-webhook-service", "The service name used to generate the TLS cert's hostname. Defaults to gatekeeper-webhook-service")
+	enableTLSHealthcheck = flag.Bool("enable-tls-healthcheck", false, "enable probing webhook API with certificate stored in certDir")
+	disabledBuiltins     = util.NewFlagSet()
 )
 
 func init() {
@@ -218,6 +219,17 @@ func main() {
 		setupLog.Error(err, "unable to create health check")
 		os.Exit(1)
 	}
+
+	// only setup healthcheck when flag is set and available webhook count > 0
+	if len(webhooks) > 0 && *enableTLSHealthcheck {
+		tlsChecker := webhook.NewTLSChecker(*certDir, *port)
+		setupLog.Info("setting up TLS healthcheck probe")
+		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
+			setupLog.Error(err, "unable to create tls health check")
+			os.Exit(1)
+		}
+	}
+
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
 	go setupControllers(mgr, sw, tracker, setupFinished)
 
