@@ -84,7 +84,10 @@ func run(cmd *cobra.Command, args []string) {
 
 	results := responses.Results()
 	if len(results) > 0 {
-		fmt.Printf("results: %v\n", results)
+		for _, result := range results {
+			fmt.Printf("Message: %q", result.Msg)
+		}
+
 		os.Exit(1)
 	}
 }

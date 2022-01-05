@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: tomcat
-      image: tomcat
+      image: openpolicyagent/tomcat
       ports:
         - containerPort: 8080
       livenessProbe:
