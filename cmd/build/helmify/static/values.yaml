@@ -7,11 +7,13 @@ disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
+validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 enableExternalData: false
 enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
+mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookTimeoutSeconds: 3
 auditChunkSize: 500
 logLevel: INFO

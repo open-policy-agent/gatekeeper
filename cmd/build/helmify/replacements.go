@@ -57,11 +57,25 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.mutatingWebhookFailurePolicy }}`,
 
+	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
+    {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      value: {{ $value }}
+    {{- end }}`,
+
 	"HELMSUBST_MUTATING_WEBHOOK_TIMEOUT": `{{ .Values.mutatingWebhookTimeoutSeconds }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
+
+	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
+    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      value: {{ $value }}
+    {{- end }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY": `{{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}`,
 
