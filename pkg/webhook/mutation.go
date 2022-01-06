@@ -186,6 +186,12 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		return admission.Errored(int32(http.StatusInternalServerError), err)
 	}
 
+	// It is possible for the namespace to not be populated on an object.
+	// Assign the namespace from the request object (which will have the appropriate
+	// value), then restore the original value at the end to avoid sending a namespace patch.
+	oldNS := obj.GetNamespace()
+	obj.SetNamespace(req.Namespace)
+
 	mutated, err := h.mutationSystem.Mutate(&obj, ns)
 	if err != nil {
 		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
@@ -194,6 +200,8 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	if !mutated {
 		return admission.Allowed("Resource was not mutated")
 	}
+
+	obj.SetNamespace(oldNS)
 
 	newJSON, err := obj.MarshalJSON()
 	if err != nil {
