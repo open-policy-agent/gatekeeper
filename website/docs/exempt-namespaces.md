@@ -5,7 +5,7 @@ title: Exempting Namespaces
 
 ## Exempting Namespaces from Gatekeeper using config resource
 
-The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. An asterisk can be used for wildcard matching (e.g. `kube-*`). To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](howto.md#constraints) instead. 
+The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. An asterisk can be used for wildcard matching (e.g. `kube-*`). To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](howto.md#constraints) instead.
 
 ```yaml
 apiVersion: config.gatekeeper.sh/v1alpha1
@@ -60,3 +60,11 @@ If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (
 
    3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
       to the label is ignored, so it can be used to annotate the reason for the exemption.
+
+## Difference between exclusion using config resource and `--exempt-namespace` flag
+
+The difference is at what point in the admission process an exemption occurs.
+
+If you use `--exempt-namespace` flag and `admission.gatekeeper.sh/ignore` label, Gatekeeper's webhook will not be called by the API server for any resource in that namespace. That means that Gatekeeper being down should have no effect on requests for that namespace.
+
+If you use the config method, Gatekeeper itself evaluates the exemption. The benefit there is that we have more control over the syntax and can be more fine-grained, but it also means that the API server is still calling the webhook, which means downtime can have an impact.
