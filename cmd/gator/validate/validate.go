@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -16,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
+
+var errLog *log.Logger
 
 // Cmd is the gator validate subcommand.
 // TODO(juliankatz): write the description and add an examples block
@@ -47,6 +50,8 @@ func init() {
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 	Cmd.Flags().StringArrayVarP(&filenames, flagNameFilename, "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+
+	errLog = log.New(os.Stderr, "", 0)
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -55,48 +60,48 @@ func run(cmd *cobra.Command, args []string) {
 	// check if stdin has data
 	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
-		exitf("getting info for stdout: %w", err)
+		errLog.Fatalf("getting info for stdout: %w", err)
 	}
 
 	// using stdin in combination with flags is not supported
 	if stdinfo.Size() > 0 && len(filenames) > 0 {
-		exitf("stdin cannot be used in combination with %q flag", flagNameFilename)
+		errLog.Fatalf("stdin cannot be used in combination with %q flag", flagNameFilename)
 	}
 
 	// if no files specified, read from Stdin
 	if stdinfo.Size() > 0 {
 		us, err := readYAMLSource(os.Stdin)
 		if err != nil {
-			exitf("reading from stdin: %w", err)
+			errLog.Fatalf("reading from stdin: %w", err)
 		}
 		unstrucs = append(unstrucs, us...)
 	} else if len(filenames) > 0 {
 		normalized, err := normalize(filenames)
 		if err != nil {
-			exitf("normalizing: %w", err)
+			errLog.Fatalf("normalizing: %w", err)
 		}
 
 		for _, filename := range normalized {
 			file, err := os.Open(filename)
 			if err != nil {
-				exitf("opening file %q: %w", filename, err)
+				errLog.Fatalf("opening file %q: %w", filename, err)
 			}
 
 			us, err := readYAMLSource(bufio.NewReader(file))
 			if err != nil {
-				exitf("reading from file %q: %w", filename, err)
+				errLog.Fatalf("reading from file %q: %w", filename, err)
 			}
 			file.Close()
 
 			unstrucs = append(unstrucs, us...)
 		}
 	} else {
-		exitf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
+		errLog.Fatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
 	}
 
 	responses, err := validate.Validate(unstrucs)
 	if err != nil {
-		exitf("auditing objects: %v\n", err)
+		errLog.Fatalf("auditing objects: %v\n", err)
 	}
 
 	results := responses.Results()
@@ -132,11 +137,6 @@ func normalize(filenames []string) ([]string, error) {
 	}
 
 	return output, nil
-}
-
-func exitf(format string, a ...interface{}) {
-	fmt.Println(fmt.Errorf(format, a...))
-	os.Exit(1)
 }
 
 func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
