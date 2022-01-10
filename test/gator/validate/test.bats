@@ -47,3 +47,15 @@
 @test "correctly finds violations from objects in a filesystem" {
   ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
 }
+
+@test "returns 1 when no input is specified" {
+  ! bin/gator validate
+}
+
+@test "returns 1 for invalid template" {
+  ! bin/gator --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/template.yaml"
+}
+
+@test "returns 1 for invalid constraint" {
+  ! bin/gator --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/constraint.yaml"
+}
