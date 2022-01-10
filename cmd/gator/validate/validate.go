@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
 	"github.com/spf13/cobra"
@@ -70,7 +71,12 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		unstrucs = append(unstrucs, us...)
 	} else if len(filenames) > 0 {
-		for _, filename := range filenames {
+		normalized, err := normalize(filenames)
+		if err != nil {
+			exitf("normalizing: %w", err)
+		}
+
+		for _, filename := range normalized {
 			file, err := os.Open(filename)
 			if err != nil {
 				exitf("opening file %q: %w", filename, err)
@@ -103,19 +109,35 @@ func run(cmd *cobra.Command, args []string) {
 	}
 }
 
+func normalize(filenames []string) ([]string, error) {
+	var output []string
+
+	for _, filename := range filenames {
+		err := filepath.Walk(filename, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// only add files to the normalized output
+			if info.IsDir() {
+				return nil
+			}
+
+			output = append(output, path)
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("walking %q: %w", filename, err)
+		}
+	}
+
+	return output, nil
+}
+
 func exitf(format string, a ...interface{}) {
 	fmt.Println(fmt.Errorf(format, a...))
 	os.Exit(1)
 }
-
-// func stdinHasData() (bool, error) {
-// 	info, err := os.Stdin.Stat()
-// 	if err != nil {
-// 		return false, fmt.Errorf("getting info for stdout: %w", err)
-// 	}
-//
-// 	return info.Size() > 0, nil
-// }
 
 func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured

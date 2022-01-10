@@ -35,3 +35,15 @@
 @test "stdin and flag are not supported in combination" {
   ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml" < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations-2.yaml"
 }
+
+@test "correctly returns no violations from objects in a filesystem" {
+  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/no-violations.yaml"
+  if [ "$?" -ne 0 ]; then
+    printf "ERROR: got exit status %s but wanted 0\n" "$?"
+    exit 1
+  fi
+}
+
+@test "correctly finds violations from objects in a filesystem" {
+  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
+}
