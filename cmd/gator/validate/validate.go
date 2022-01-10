@@ -91,7 +91,7 @@ func run(cmd *cobra.Command, args []string) {
 			unstrucs = append(unstrucs, us...)
 		}
 	} else {
-		exitf("must include data via either stdin or the %q flag", flagNameFilename)
+		exitf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
 	}
 
 	responses, err := validate.Validate(unstrucs)
@@ -152,7 +152,7 @@ func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("reading chunk: %w\n", err)
+			return nil, fmt.Errorf("reading yaml source: %w\n", err)
 		}
 
 		objs = append(objs, u)

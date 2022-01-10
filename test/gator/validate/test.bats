@@ -48,14 +48,35 @@
   ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
 }
 
-@test "returns 1 when no input is specified" {
-  ! bin/gator validate
+@test "expects user to input data" {
+  run bin/gator validate
+  [ "$status" -eq 1 ]
+  err_substring="no input data"
+  if ! [[ "${output[*]}" =~ .*"$err_substring".* ]]; then
+    printf "ERROR: expected output to contain substring '%s'\n" "$err_substring"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
 }
 
-@test "returns 1 for invalid template" {
-  ! bin/gator --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/template.yaml"
+@test "disallows invalid template" {
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/template.yaml"
+  [ "$status" -eq 1 ]
+  err_substring="reading yaml source"
+  if ! [[ "${output[*]}" =~ .*"$err_substring".* ]]; then
+    printf "ERROR: expected output to contain substring '%s'\n" "$err_substring"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
 }
 
-@test "returns 1 for invalid constraint" {
-  ! bin/gator --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/constraint.yaml"
+@test "disallows invalid constraint" {
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/constraint.yaml"
+  [ "$status" -eq 1 ]
+  err_substring="reading yaml source"
+  if ! [[ "${output[*]}" =~ .*"$err_substring".* ]]; then
+    printf "ERROR: expected output to contain substring '%s'\n" "$err_substring"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
 }
