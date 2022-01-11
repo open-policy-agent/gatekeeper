@@ -6,6 +6,7 @@ package validate
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,11 +15,15 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/yaml"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
-var errLog *log.Logger
+var (
+	errLog *log.Logger
+	outLog *log.Logger
+)
 
 // Cmd is the gator validate subcommand.
 // TODO(juliankatz): write the description and add an examples block
@@ -34,9 +39,17 @@ to quickly create a Cobra application.`,
 	Run: run,
 }
 
-var filenames []string
+var (
+	flagFilenames []string
+	flagYAML      bool
+	flagJSON      bool
+)
 
-const flagNameFilename = "filename"
+const (
+	flagNameFilename = "filename"
+	flagNameJSON     = "json"
+	flagNameYAML     = "yaml"
+)
 
 func init() {
 	// Here you will define your flags and configuration settings.
@@ -49,9 +62,12 @@ func init() {
 	// is called directly, e.g.:
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
-	Cmd.Flags().StringArrayVarP(&filenames, flagNameFilename, "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+	Cmd.Flags().BoolVar(&flagYAML, flagNameYAML, false, "print validation information as yaml.")
+	Cmd.Flags().BoolVar(&flagJSON, flagNameJSON, false, "print validation information as json.")
 
 	errLog = log.New(os.Stderr, "", 0)
+	outLog = log.New(os.Stdout, "", 0)
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -60,11 +76,11 @@ func run(cmd *cobra.Command, args []string) {
 	// check if stdin has data
 	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
-		errLog.Fatalf("getting info for stdout: %w", err)
+		errLog.Fatalf("getting info for stdout: %s", err)
 	}
 
 	// using stdin in combination with flags is not supported
-	if stdinfo.Size() > 0 && len(filenames) > 0 {
+	if stdinfo.Size() > 0 && len(flagFilenames) > 0 {
 		errLog.Fatalf("stdin cannot be used in combination with %q flag", flagNameFilename)
 	}
 
@@ -72,24 +88,24 @@ func run(cmd *cobra.Command, args []string) {
 	if stdinfo.Size() > 0 {
 		us, err := readYAMLSource(os.Stdin)
 		if err != nil {
-			errLog.Fatalf("reading from stdin: %w", err)
+			errLog.Fatalf("reading from stdin: %s", err)
 		}
 		unstrucs = append(unstrucs, us...)
-	} else if len(filenames) > 0 {
-		normalized, err := normalize(filenames)
+	} else if len(flagFilenames) > 0 {
+		normalized, err := normalize(flagFilenames)
 		if err != nil {
-			errLog.Fatalf("normalizing: %w", err)
+			errLog.Fatalf("normalizing: %s", err)
 		}
 
 		for _, filename := range normalized {
 			file, err := os.Open(filename)
 			if err != nil {
-				errLog.Fatalf("opening file %q: %w", filename, err)
+				errLog.Fatalf("opening file %q: %s", filename, err)
 			}
 
 			us, err := readYAMLSource(bufio.NewReader(file))
 			if err != nil {
-				errLog.Fatalf("reading from file %q: %w", filename, err)
+				errLog.Fatalf("reading from file %q: %s", filename, err)
 			}
 			file.Close()
 
@@ -105,9 +121,30 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	results := responses.Results()
+
+	if flagYAML && flagJSON {
+		errLog.Fatalf("cannot use --%s and --%s in combination", flagNameJSON, flagNameYAML)
+	}
+
+	if flagJSON {
+		b, err := json.MarshalIndent(results, "", "    ")
+		if err != nil {
+			errLog.Fatalf("marshaling validation json results: %s", err)
+		}
+		outLog.Fatal(string(b))
+	}
+
+	if flagYAML {
+		b, err := yaml.Marshal(results)
+		if err != nil {
+			errLog.Fatalf("marshaling validation yaml results: %s", err)
+		}
+		outLog.Fatal(string(b))
+	}
+
 	if len(results) > 0 {
 		for _, result := range results {
-			fmt.Printf("Message: %q", result.Msg)
+			outLog.Printf("Message: %q", result.Msg)
 		}
 
 		os.Exit(1)
@@ -142,7 +179,7 @@ func normalize(filenames []string) ([]string, error) {
 func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured
 
-	decoder := yaml.NewYAMLOrJSONDecoder(r, 1000)
+	decoder := k8syaml.NewYAMLOrJSONDecoder(r, 1000)
 	for {
 		u := &unstructured.Unstructured{
 			Object: make(map[string]interface{}),
