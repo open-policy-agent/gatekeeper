@@ -60,7 +60,7 @@
 }
 
 @test "disallows invalid template" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/template.yaml"
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/template.yaml"
   [ "$status" -eq 1 ]
   err_substring="reading yaml source"
   if ! [[ "${output[*]}" =~ .*"$err_substring".* ]]; then
@@ -71,7 +71,7 @@
 }
 
 @test "disallows invalid constraint" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid/constraint.yaml"
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/constraint.yaml"
   [ "$status" -eq 1 ]
   err_substring="reading yaml source"
   if ! [[ "${output[*]}" =~ .*"$err_substring".* ]]; then
@@ -96,8 +96,23 @@
   run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" -o=yaml
   [ "$status" -eq 1 ]
   # yq (https://github.com/mikefarah/yq/) version 4.16.2
+  # TODO (juliankatz): Turn this section into a function and use it to improve checks in other test cases
   if ! (echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
     printf "ERROR: expected output to be valid yaml\n"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+}
+
+@test "correctly ingests files of different extensions, skipping bad extensions, and producing correct violations" {
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/different-extensions" -o=yaml
+  [ "$status" -eq 1 ]
+
+  got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status)
+  want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
+
+  if  [ "$got" != "$want" ]; then
+    printf "ERROR: expected violation message '%s'\n" "$want"
     printf "OUTPUT: %s\n" "${output[*]}"
     exit 1
   fi
