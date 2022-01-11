@@ -25,18 +25,28 @@ var (
 	outLog *log.Logger
 )
 
-// Cmd is the gator validate subcommand.
-// TODO(juliankatz): write the description and add an examples block
-var Cmd = &cobra.Command{
-	Use:   "validate",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+const (
+	examples = `  # Validate a manifest containing Kubernetes objects, Constraint Templates, and Constraints
+  gator validate --filename="manifest.yaml"
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: run,
+  # Validate a directory
+  gator validate --filename="config-and-policies/"
+
+  # Use multiple inputs
+  gator validate --filename="manifest.yaml" --filename="templates-and-constraints/"
+
+  # Receive input from stdin
+  cat manifest.yaml | gator validate
+
+  # Output structured violations data
+  gator validate --filename="manifest.yaml" --json`
+)
+
+var Cmd = &cobra.Command{
+	Use:     "validate",
+	Short:   "validate resources against templates and constraints",
+	Example: examples,
+	Run:     run,
 }
 
 var (
@@ -62,7 +72,7 @@ func init() {
 	// is called directly, e.g.:
 	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
-	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file containing yaml kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 	Cmd.Flags().BoolVar(&flagYAML, flagNameYAML, false, "print validation information as yaml.")
 	Cmd.Flags().BoolVar(&flagJSON, flagNameJSON, false, "print validation information as json.")
 
@@ -92,6 +102,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		unstrucs = append(unstrucs, us...)
 	} else if len(flagFilenames) > 0 {
+		// normalize directories by listing their files
 		normalized, err := normalize(flagFilenames)
 		if err != nil {
 			errLog.Fatalf("normalizing: %s", err)

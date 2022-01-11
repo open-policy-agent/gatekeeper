@@ -47,7 +47,7 @@ func init() {
 // Cmd is the gator test subcommand.
 var Cmd = &cobra.Command{
 	Use:     "test path [--run=name]",
-	Short:   "test runs suites of tests on Gatekeeper Constraints",
+	Short:   "runs suites of tests on Gatekeeper Constraints",
 	Example: examples,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runE,
