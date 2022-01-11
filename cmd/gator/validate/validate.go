@@ -85,13 +85,14 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	// if no files specified, read from Stdin
-	if stdinfo.Size() > 0 {
+	switch {
+	case stdinfo.Size() > 0:
 		us, err := readYAMLSource(os.Stdin)
 		if err != nil {
 			errLog.Fatalf("reading from stdin: %s", err)
 		}
 		unstrucs = append(unstrucs, us...)
-	} else if len(flagFilenames) > 0 {
+	case len(flagFilenames) > 0:
 		// normalize directories by listing their files
 		normalized, err := normalize(flagFilenames)
 		if err != nil {
@@ -112,7 +113,7 @@ func run(cmd *cobra.Command, args []string) {
 
 			unstrucs = append(unstrucs, us...)
 		}
-	} else {
+	default:
 		errLog.Fatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
 	}
 
@@ -190,7 +191,7 @@ func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("reading yaml source: %w\n", err)
+			return nil, fmt.Errorf("reading yaml source: %w", err)
 		}
 
 		objs = append(objs, u)

@@ -16,7 +16,10 @@ var scheme *runtime.Scheme
 
 func init() {
 	scheme = runtime.NewScheme()
-	apis.AddToScheme(scheme)
+	err := apis.AddToScheme(scheme)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
