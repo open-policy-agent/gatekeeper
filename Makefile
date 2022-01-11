@@ -101,7 +101,7 @@ test:
 	cp -r * .staging/test
 	-rm .staging/test/Dockerfile
 	cp test/Dockerfile .staging/test/Dockerfile
-	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
+	docker build --pull .staging/test -t gatekeeper-test && docker run -it gatekeeper-test
 
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
