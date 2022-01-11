@@ -120,7 +120,7 @@ e2e-dependencies:
 	# Download and install bats
 	curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && tar -zxvf v${BATS_VERSION}.tar.gz && bash bats-core-${BATS_VERSION}/install.sh ${GITHUB_WORKSPACE}
 	# Install yq
-	wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY} -O ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
+	wget https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -O ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
 
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap: e2e-dependencies
