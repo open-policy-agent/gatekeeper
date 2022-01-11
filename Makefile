@@ -108,6 +108,7 @@ test-e2e:
 
 test-gator: bin/gator-${GOOS}-${GOARCH}
 	./bin/gator-${GOOS}-${GOARCH} test test/gator/test/suite.yaml
+	$(MAKE) test-gator-validate
 
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap:
