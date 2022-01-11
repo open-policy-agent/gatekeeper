@@ -3,6 +3,7 @@ package gator
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 type versionless interface {
@@ -166,4 +168,29 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	}
 
 	return u, nil
+}
+
+// ReadK8sResources reads JSON or YAML k8s resources from an io.Reader,
+// decoding them into Unstructured objects and returning those objects as a
+// slice.
+func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
+	var objs []*unstructured.Unstructured
+
+	decoder := yaml.NewYAMLOrJSONDecoder(r, 1000)
+	for {
+		u := &unstructured.Unstructured{
+			Object: make(map[string]interface{}),
+		}
+		err := decoder.Decode(&u.Object)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading yaml source: %w", err)
+		}
+
+		objs = append(objs, u)
+	}
+
+	return objs, nil
 }

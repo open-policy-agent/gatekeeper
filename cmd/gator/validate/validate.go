@@ -8,16 +8,15 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
 var (
@@ -87,7 +86,7 @@ func run(cmd *cobra.Command, args []string) {
 	// if no files specified, read from Stdin
 	switch {
 	case stdinfo.Size() > 0:
-		us, err := readYAMLSource(os.Stdin)
+		us, err := gator.ReadK8sResources(os.Stdin)
 		if err != nil {
 			errLog.Fatalf("reading from stdin: %s", err)
 		}
@@ -105,7 +104,7 @@ func run(cmd *cobra.Command, args []string) {
 				errLog.Fatalf("opening file %q: %s", filename, err)
 			}
 
-			us, err := readYAMLSource(bufio.NewReader(file))
+			us, err := gator.ReadK8sResources(bufio.NewReader(file))
 			if err != nil {
 				errLog.Fatalf("reading from file %q: %s", filename, err)
 			}
@@ -170,26 +169,4 @@ func normalize(filenames []string) ([]string, error) {
 	}
 
 	return output, nil
-}
-
-func readYAMLSource(r io.Reader) ([]*unstructured.Unstructured, error) {
-	var objs []*unstructured.Unstructured
-
-	decoder := k8syaml.NewYAMLOrJSONDecoder(r, 1000)
-	for {
-		u := &unstructured.Unstructured{
-			Object: make(map[string]interface{}),
-		}
-		err := decoder.Decode(&u.Object)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading yaml source: %w", err)
-		}
-
-		objs = append(objs, u)
-	}
-
-	return objs, nil
 }
