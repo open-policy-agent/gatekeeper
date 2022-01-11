@@ -123,6 +123,8 @@ func run(cmd *cobra.Command, args []string) {
 
 	results := responses.Results()
 
+	// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1787): Add
+	// `-ojson` and `-oyaml` flags
 	switch flagOutput {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
