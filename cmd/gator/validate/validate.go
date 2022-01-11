@@ -51,20 +51,20 @@ var Cmd = &cobra.Command{
 
 var (
 	flagFilenames []string
-	flagYAML      bool
-	flagJSON      bool
+	flagOutput    string
 )
 
 const (
 	flagNameFilename = "filename"
-	flagNameJSON     = "json"
-	flagNameYAML     = "yaml"
+	flagNameOutput   = "output"
+
+	stringJSON = "json"
+	stringYAML = "yaml"
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
-	Cmd.Flags().BoolVar(&flagYAML, flagNameYAML, false, "print validation information as yaml.")
-	Cmd.Flags().BoolVar(&flagJSON, flagNameJSON, false, "print validation information as json.")
+	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 
 	errLog = log.New(os.Stderr, "", 0)
 	outLog = log.New(os.Stdout, "", 0)
@@ -124,32 +124,26 @@ func run(cmd *cobra.Command, args []string) {
 
 	results := responses.Results()
 
-	if flagYAML && flagJSON {
-		errLog.Fatalf("cannot use --%s and --%s in combination", flagNameJSON, flagNameYAML)
-	}
-
-	if flagJSON {
+	switch flagOutput {
+	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
 			errLog.Fatalf("marshaling validation json results: %s", err)
 		}
 		outLog.Fatal(string(b))
-	}
-
-	if flagYAML {
+	case stringYAML:
 		b, err := yaml.Marshal(results)
 		if err != nil {
 			errLog.Fatalf("marshaling validation yaml results: %s", err)
 		}
 		outLog.Fatal(string(b))
-	}
-
-	if len(results) > 0 {
-		for _, result := range results {
-			outLog.Printf("Message: %q", result.Msg)
+	default:
+		if len(results) > 0 {
+			for _, result := range results {
+				outLog.Printf("Message: %q", result.Msg)
+			}
+			os.Exit(1)
 		}
-
-		os.Exit(1)
 	}
 }
 

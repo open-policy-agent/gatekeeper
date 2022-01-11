@@ -82,7 +82,7 @@
 }
 
 @test "outputs valid json when flag is specified" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" --json
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" --output=json
   [ "$status" -eq 1 ]
   # uses jq version `jq-1.6`
   if ! (echo -n "${output[*]}" | jq); then
@@ -93,10 +93,10 @@
 }
 
 @test "outputs valid yaml when flag is specified" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" --yaml
+  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" -o=yaml
   [ "$status" -eq 1 ]
   # yq (https://github.com/mikefarah/yq/) version 4.16.2
-  if ! (echo -n "${output[*]}" | yq eval); then
+  if ! (echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
     printf "ERROR: expected output to be valid yaml\n"
     printf "OUTPUT: %s\n" "${output[*]}"
     exit 1
