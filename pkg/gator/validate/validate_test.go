@@ -3,18 +3,56 @@ package validate
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
-	y3 "gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
+
+var (
+	constraintNeverValidate    *unstructured.Unstructured
+	constraintReferential      *unstructured.Unstructured
+	object                     *unstructured.Unstructured
+	objectReferentialInventory *unstructured.Unstructured
+	objectReferentialDeny      *unstructured.Unstructured
+)
+
+func init() {
+	var err error
+	constraintNeverValidate, err = readUnstructured([]byte(fixtures.ConstraintNeverValidate))
+	if err != nil {
+		panic(err)
+	}
+
+	constraintReferential, err = readUnstructured([]byte(fixtures.ConstraintReferential))
+	if err != nil {
+		panic(err)
+	}
+
+	object, err = readUnstructured([]byte(fixtures.Object))
+	if err != nil {
+		panic(err)
+	}
+
+	objectReferentialInventory, err = readUnstructured([]byte(fixtures.ObjectReferentialInventory))
+	if err != nil {
+		panic(err)
+	}
+
+	objectReferentialDeny, err = readUnstructured([]byte(fixtures.ObjectReferentialDeny))
+	if err != nil {
+		panic(err)
+	}
+}
 
 func TestValidate(t *testing.T) {
 	tcs := []struct {
 		name   string
 		inputs []string
-		want   int
-		err    bool
+		want   []*types.Result
+		err    error
 	}{
 		{
 			name: "basic no violation",
@@ -22,7 +60,6 @@ func TestValidate(t *testing.T) {
 				fixtures.TemplateAlwaysValidate,
 				fixtures.ConstraintAlwaysValidate,
 				fixtures.Object,
-				fixtures.ObjectIncluded,
 			},
 		},
 		{
@@ -31,9 +68,14 @@ func TestValidate(t *testing.T) {
 				fixtures.TemplateNeverValidate,
 				fixtures.ConstraintNeverValidate,
 				fixtures.Object,
-				fixtures.ObjectIncluded,
 			},
-			want: 2,
+			want: []*types.Result{
+				{
+					Msg:        "never validate",
+					Constraint: constraintNeverValidate,
+					Resource:   object,
+				},
+			},
 		},
 		{
 			name: "referential constraint with violation",
@@ -43,7 +85,18 @@ func TestValidate(t *testing.T) {
 				fixtures.ObjectReferentialInventory,
 				fixtures.ObjectReferentialDeny,
 			},
-			want: 2,
+			want: []*types.Result{
+				{
+					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
+					Constraint: constraintReferential,
+					Resource:   objectReferentialInventory,
+				},
+				{
+					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
+					Constraint: constraintReferential,
+					Resource:   objectReferentialDeny,
+				},
+			},
 		},
 		{
 			name: "referential constraint without violation",
@@ -53,7 +106,7 @@ func TestValidate(t *testing.T) {
 				fixtures.ObjectReferentialInventory,
 				fixtures.ObjectReferentialAllow,
 			},
-			want: 0,
+			want: nil,
 		},
 	}
 
@@ -70,9 +123,10 @@ func TestValidate(t *testing.T) {
 			}
 
 			resps, err := Validate(objs)
-			if tc.err {
+			if tc.err != nil {
+				// If we're checking for specific errors, use errors.Is() to verify
 				if err == nil {
-					t.Errorf("got nil err, want err")
+					t.Errorf("got nil err, want %v", tc.err)
 				}
 			} else {
 				if err != nil {
@@ -80,14 +134,11 @@ func TestValidate(t *testing.T) {
 				}
 			}
 
-			got := len(resps.Results())
-			if got != tc.want {
-				t.Errorf("got %v results, want: %v", got, tc.want)
-				for _, result := range resps.Results() {
-					y, _ := y3.Marshal(result)
-					t.Errorf("result: \n%s", string(y))
-				}
-				t.FailNow()
+			got := resps.Results()
+
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction", "Review"))
+			if diff != "" {
+				t.Errorf("diff in Result objects (-want +got):\n%s", diff)
 			}
 		})
 	}
