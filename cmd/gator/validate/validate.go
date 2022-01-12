@@ -164,23 +164,37 @@ func normalize(filenames []string) ([]string, error) {
 	var output []string
 
 	for _, filename := range filenames {
-		err := filepath.Walk(filename, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			// only add files to the normalized output
-			if info.IsDir() {
-				return nil
-			}
-
-			output = append(output, path)
-			return nil
-		})
+		paths, err := filesBelow(filename)
 		if err != nil {
-			return nil, fmt.Errorf("walking %q: %w", filename, err)
+			return nil, fmt.Errorf("filename %q: %w", filename, err)
 		}
+		output = append(output, paths...)
 	}
 
 	return output, nil
+}
+
+// filesBelow walks the filetree from startPath and below, collecting a list of
+// all the filepaths.  Directories are excluded.
+func filesBelow(startPath string) ([]string, error) {
+	var files []string
+
+	err := filepath.Walk(startPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// only add files to the normalized output
+		if info.IsDir() {
+			return nil
+		}
+
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walking: %w", err)
+	}
+
+	return files, nil
 }

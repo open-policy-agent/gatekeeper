@@ -18,6 +18,11 @@ type versionless interface {
 	ToVersionless() (*templates.ConstraintTemplate, error)
 }
 
+// jsonLookaheadBytes is the number of bytes the JSON and YAML decoder will
+// look into the data it's reading to determine if the document is JSON or
+// YAML.  1024 was a guess that's worked so far.
+const jsonLookaheadBytes int = 1024
+
 // clean removes the following from yaml:
 // 1) Empty lines
 // 2) Lines with only space characters
@@ -176,7 +181,7 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 	var objs []*unstructured.Unstructured
 
-	decoder := yaml.NewYAMLOrJSONDecoder(r, 1000)
+	decoder := yaml.NewYAMLOrJSONDecoder(r, jsonLookaheadBytes)
 	for {
 		u := &unstructured.Unstructured{
 			Object: make(map[string]interface{}),
