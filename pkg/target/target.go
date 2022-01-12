@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -421,4 +422,8 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 		return nil, errors.Wrap(err, "Could not convert JSON to LabelSelector")
 	}
 	return obj, nil
+}
+
+func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
+	panic("not implemented")
 }
