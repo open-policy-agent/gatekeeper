@@ -92,26 +92,11 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		unstrucs = append(unstrucs, us...)
 	case len(flagFilenames) > 0:
-		// normalize directories by listing their files
-		normalized, err := normalize(flagFilenames)
+		us, err := readFiles(flagFilenames)
 		if err != nil {
-			errLog.Fatalf("normalizing: %s", err)
+			errLog.Fatalf("reading from filenames: %s", err)
 		}
-
-		for _, filename := range normalized {
-			file, err := os.Open(filename)
-			if err != nil {
-				errLog.Fatalf("opening file %q: %s", filename, err)
-			}
-
-			us, err := gator.ReadK8sResources(bufio.NewReader(file))
-			if err != nil {
-				errLog.Fatalf("reading from file %q: %s", filename, err)
-			}
-			file.Close()
-
-			unstrucs = append(unstrucs, us...)
-		}
+		unstrucs = append(unstrucs, us...)
 	default:
 		errLog.Fatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
 	}
@@ -146,6 +131,33 @@ func run(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 	}
+}
+
+func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
+	var unstrucs []*unstructured.Unstructured
+
+	// normalize directories by listing their files
+	normalized, err := normalize(filenames)
+	if err != nil {
+		return nil, fmt.Errorf("normalizing: %w", err)
+	}
+
+	for _, filename := range normalized {
+		file, err := os.Open(filename)
+		if err != nil {
+			return nil, fmt.Errorf("opening file %q: %w", filename, err)
+		}
+
+		us, err := gator.ReadK8sResources(bufio.NewReader(file))
+		if err != nil {
+			return nil, fmt.Errorf("reading from file %q: %w", filename, err)
+		}
+		file.Close()
+
+		unstrucs = append(unstrucs, us...)
+	}
+
+	return unstrucs, nil
 }
 
 func normalize(filenames []string) ([]string, error) {
