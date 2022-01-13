@@ -12,8 +12,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -105,7 +107,6 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		errLog.Fatalf("auditing objects: %v\n", err)
 	}
-
 	results := responses.Results()
 
 	// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1787): Add
@@ -116,21 +117,38 @@ func run(cmd *cobra.Command, args []string) {
 		if err != nil {
 			errLog.Fatalf("marshaling validation json results: %s", err)
 		}
-		outLog.Fatal(string(b))
+		outLog.Print(string(b))
 	case stringYAML:
 		b, err := yaml.Marshal(results)
 		if err != nil {
 			errLog.Fatalf("marshaling validation yaml results: %s", err)
 		}
-		outLog.Fatal(string(b))
+		outLog.Print(string(b))
 	default:
 		if len(results) > 0 {
 			for _, result := range results {
 				outLog.Printf("Message: %q", result.Msg)
 			}
-			os.Exit(1)
 		}
 	}
+
+	// Whether or not we return non-zero depends on whether we have a `denv`
+	// enforcementAction on one of the violated constraints
+	exitCode := 0
+	if enforceableFailure(results) {
+		exitCode = 1
+	}
+	os.Exit(exitCode)
+}
+
+func enforceableFailure(results []*types.Result) bool {
+	for _, result := range results {
+		if result.EnforcementAction == string(util.Deny) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {

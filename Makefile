@@ -411,4 +411,4 @@ bin/gator-$(GOOS)-$(GOARCH):
 
 .PHONY: test-gator-validate
 test-gator-validate: gator
-	test/gator/validate/test.bats
+	bats test/gator/validate

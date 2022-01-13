@@ -37,7 +37,7 @@
 }
 
 @test "correctly returns no violations from objects in a filesystem" {
-  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/no-violations.yaml"
+  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
     printf "ERROR: got exit status %s but wanted 0\n" "$?"
     exit 1
@@ -45,7 +45,7 @@
 }
 
 @test "correctly finds violations from objects in a filesystem" {
-  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
+  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
 }
 
 @test "expects user to input data" {
@@ -109,6 +109,101 @@
   [ "$status" -eq 1 ]
 
   got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status)
+  want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
+
+  if  [ "$got" != "$want" ]; then
+    printf "ERROR: expected violation message '%s'\n" "$want"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+}
+
+@test "enforcementAction=deny causes 1 exit status and violations output" {
+  run bin/gator validate \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/deny.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  # Confirm we still get our violation output
+  if ! got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
+    printf "ERROR: failed to evaluate output\n"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+  want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
+
+  if  [ "$got" != "$want" ]; then
+    printf "ERROR: expected violation message '%s'\n" "$want"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+}
+
+@test "enforcementAction=warn causes 0 exit status and violations output" {
+  run bin/gator validate -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/warn.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 0 ]
+
+  # Confirm we still get our violation output
+  if ! got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
+    printf "ERROR: failed to evaluate output\n"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+  want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
+
+  if  [ "$got" != "$want" ]; then
+    printf "ERROR: expected violation message '%s'\n" "$want"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+}
+
+@test "enforcementAction=dryrun causes 0 exit status and violations output" {
+  run bin/gator validate \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/dryrun.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 0 ]
+
+  # Confirm we still get our violation output
+  if ! got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
+    printf "ERROR: failed to evaluate output\n"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+  want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
+
+  if  [ "$got" != "$want" ]; then
+    printf "ERROR: expected violation message '%s'\n" "$want"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
+}
+
+@test "enforcementAction=[anything else] causes 0 exit status and violations output" {
+  run bin/gator validate \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/foo.yaml" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
+    -o=yaml
+
+  [ "$status" -eq 0 ]
+
+  # Confirm we still get our violation output
+  if ! got=$(echo -n "${output[*]}" | yq eval '.[0].msg' - --exit-status); then
+    printf "ERROR: failed to evaluate output\n"
+    printf "OUTPUT: %s\n" "${output[*]}"
+    exit 1
+  fi
   want="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
 
   if  [ "$got" != "$want" ]; then
