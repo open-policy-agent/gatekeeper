@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -138,22 +139,26 @@ func TestReconcile(t *testing.T) {
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 
 	recFn, requests := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, recFn)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
@@ -161,12 +166,16 @@ func TestReconcile(t *testing.T) {
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
 		ctx := context.Background()
 		err = c.Delete(ctx, instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
@@ -184,7 +193,10 @@ func TestReconcile(t *testing.T) {
 	ns.SetName("testns")
 	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 	ns.SetGroupVersionKind(nsGvk)
-	g.Expect(c.Create(ctx, ns)).NotTo(gomega.HaveOccurred())
+	err = c.Create(ctx, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fooNS := &unstructured.Unstructured{}
 	fooNS.SetName("foo")
@@ -255,12 +267,16 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 	ctx := context.Background()
 	err := c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
 		ctx := context.Background()
 		err = c.Delete(ctx, instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 
 	// create the pod that is a sync only resource in config obj
@@ -277,27 +293,33 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		},
 	}
 
-	g.Expect(c.Create(ctx, pod)).NotTo(gomega.HaveOccurred())
+	err = c.Create(ctx, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// set up tracker
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// events channel will be used to receive events from dynamic watches
 	events := make(chan event.GenericEvent, 1024)
 
 	// set up controller and add it to the manager
 	err = setupController(mgr, wm, tracker, events)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// start manager that will start tracker and controller
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	defer func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}()
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
@@ -315,7 +337,10 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// delete the pod , the delete event will be reconciled by sync controller
 	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(ctx, pod)).NotTo(gomega.HaveOccurred())
+	err = c.Delete(ctx, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// register events for the pod to go in the event channel
 	podObj := fakes.Pod(
@@ -385,21 +410,25 @@ func TestConfig_CacheContents(t *testing.T) {
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
@@ -438,9 +467,13 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	defer func() {
 		err = c.Delete(ctx, cm)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = c.Delete(ctx, cm2)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 
 	expected := map[opaKey]interface{}{
@@ -525,13 +558,18 @@ func TestConfig_Retries(t *testing.T) {
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Use our special hookReader to inject controlled failures
 	failPlease := make(chan string, 1)
@@ -552,12 +590,11 @@ func TestConfig_Retries(t *testing.T) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 

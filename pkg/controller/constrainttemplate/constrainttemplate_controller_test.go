@@ -133,7 +133,10 @@ violation[{"msg": "denied!"}] {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
+	err := createGatekeeperNamespace(mgr.GetConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -150,7 +153,9 @@ violation[{"msg": "denied!"}] {
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
@@ -161,7 +166,10 @@ violation[{"msg": "denied!"}] {
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
 
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cstr := newDenyAllCstr()
 
@@ -171,7 +179,10 @@ violation[{"msg": "denied!"}] {
 	// Clean up to remove the crd, constraint and constraint template
 	t.Cleanup(func() {
 		crd := &apiextensionsv1.CustomResourceDefinition{}
-		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
+		err := c.Get(ctx, crdKey, crd)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		g.Expect(deleteObjectAndConfirm(ctx, c, cstr, timeout)).To(gomega.BeNil())
 		g.Expect(deleteObjectAndConfirm(ctx, c, crd, timeout)).To(gomega.BeNil())
@@ -181,7 +192,9 @@ violation[{"msg": "denied!"}] {
 	logger.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
 		err = c.Create(ctx, instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
 		g.Eventually(func() error {
@@ -205,7 +218,9 @@ violation[{"msg": "denied!"}] {
 	logger.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
 		err = c.Create(ctx, cstr)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		constraintEnforced(ctx, c, g, timeout)
 	})
 
@@ -227,7 +242,9 @@ violation[{"msg": "denied!"}] {
 			Object:    runtime.RawExtension{Object: ns},
 		}
 		resp, err := opaClient.Review(ctx, req)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(resp.Results()) != 1 {
 			fmt.Println(resp.TraceDump())
 			fmt.Println(opaClient.Dump(ctx))
@@ -238,10 +255,16 @@ violation[{"msg": "denied!"}] {
 	logger.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
 		crd := &apiextensionsv1.CustomResourceDefinition{}
-		g.Expect(c.Get(ctx, crdKey, crd)).NotTo(gomega.HaveOccurred())
+		err := c.Get(ctx, crdKey, crd)
+		if err != nil {
+			t.Fatal(err)
+		}
 		origUID := crd.GetUID()
 		crd.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
-		g.Expect(c.Delete(ctx, crd)).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, crd)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		g.Eventually(func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -308,7 +331,9 @@ violation[{"msg": "denied!"}] {
 		}
 
 		err = c.Create(ctx, instanceInvalidRego)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO: Test if this removal is necessary.
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
@@ -365,7 +390,9 @@ violation[{"msg": "denied!"}] {
 			Object:    runtime.RawExtension{Object: ns},
 		}
 		resp, err := opaClient.Review(ctx, req)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(resp.Results()) != 1 {
 			fmt.Println(resp.TraceDump())
 			fmt.Println(opaClient.Dump(ctx))
@@ -427,7 +454,9 @@ violation[{"msg": "denied!"}] {
 	}
 
 	err := c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// TODO: Test if this removal is necessary.
 	// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
@@ -447,15 +476,22 @@ violation[{"msg": "denied!"}] {
 	// Create the constraint for constraint template
 	cstr := newDenyAllCstr()
 	err = c.Create(ctx, cstr)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).NotTo(gomega.HaveOccurred())
+	err = createGatekeeperNamespace(mgr.GetConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Set up tracker
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -479,7 +515,10 @@ violation[{"msg": "denied!"}] {
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// get the object tracker for the constraint
 	ot := tracker.For(gvk)
@@ -494,7 +533,10 @@ violation[{"msg": "denied!"}] {
 
 	// Delete the constraint , the delete event will be reconciled by controller
 	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(ctx, cstr)).NotTo(gomega.HaveOccurred())
+	err = c.Delete(ctx, cstr)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// set event channel to receive request for constraint
 	events <- event.GenericEvent{

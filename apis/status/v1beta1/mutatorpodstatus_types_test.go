@@ -21,8 +21,15 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+	err := AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := fakes.Pod(
 		fakes.WithNamespace(podNS),
@@ -40,12 +47,22 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 			MutatorKindLabel: "DummyMutator",
 			PodLabel:         podName,
 		})
-	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
+
+	err = controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
-	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	g.Expect(status).To(Equal(expectedStatus))
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())
-	g.Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	g.Expect(status.Name).To(Equal(cmVal))
 }

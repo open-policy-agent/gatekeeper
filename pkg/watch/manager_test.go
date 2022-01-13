@@ -557,7 +557,9 @@ func TestRegistrar_Duplicates_Rejected(t *testing.T) {
 	t.Cleanup(cancel)
 
 	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
 	g.Expect(err).To(gomega.HaveOccurred(), "expected duplicate error")
 }
@@ -594,9 +596,13 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	t.Cleanup(cancel)
 
 	r1, err := wm.NewRegistrar("r1", make(chan event.GenericEvent))
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	r2, err := wm.NewRegistrar("r2", make(chan event.GenericEvent))
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
 	volume := schema.GroupVersionKind{Version: "v1", Kind: "Volume"}

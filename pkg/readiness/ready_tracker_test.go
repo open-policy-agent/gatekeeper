@@ -293,7 +293,9 @@ func Test_Provider(t *testing.T) {
 	// Verify that the Provider is present in the cache
 	for _, tp := range testProvider {
 		instance, err := providerCache.Get(tp.Name)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Expect(instance.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
 			URL:     "http://demo",
 			Timeout: 1,

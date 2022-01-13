@@ -133,7 +133,6 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 // Verifies that controller-runtime interleaves reconcile errors in backoff and
 // other events within the same work queue.
 func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mgr, _ := setupManager(t)
 	ctrl.SetLogger(logf.NullLogger{})
 
@@ -183,7 +182,9 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 		},
 		&handler.EnqueueRequestForObject{},
 	)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for the error resource to reconcile
 	// before setting up another watch.
@@ -195,7 +196,9 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 		&source.Kind{Type: &corev1.Namespace{}},
 		&handler.EnqueueRequestForObject{},
 	)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	expectNames := map[string]bool{"error": true, "default": true, "kube-system": true}
 loop:
@@ -338,10 +341,14 @@ func Test_Registrar_Replay(t *testing.T) {
 			},
 			&handler.EnqueueRequestForObject{},
 		)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		err = r.AddWatch(gvk)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		return requests
 	}
