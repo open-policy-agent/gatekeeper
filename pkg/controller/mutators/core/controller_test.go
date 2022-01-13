@@ -117,7 +117,9 @@ func TestReconcile(t *testing.T) {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
+	if err := createGatekeeperNamespace(mgr.GetConfig()); err != nil {
+		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
+	}
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
 

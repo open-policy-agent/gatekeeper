@@ -546,7 +546,6 @@ func TestRegistrar_Replay_Async(t *testing.T) {
 
 // Verifies that registrar names must be unique.
 func TestRegistrar_Duplicates_Rejected(t *testing.T) {
-	g := gomega.NewWithT(t)
 	informer := &fakeCacheInformer{}
 	c := &fakeRemovableCache{informer: informer}
 	wm, cancel, err := setupWatchManager(c)
@@ -561,7 +560,9 @@ func TestRegistrar_Duplicates_Rejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = wm.NewRegistrar("dup", make(chan event.GenericEvent, 1))
-	g.Expect(err).To(gomega.HaveOccurred(), "expected duplicate error")
+	if err == nil {
+		t.Fatalf("expected duplicate error")
+	}
 }
 
 // Verify ReplaceWatch replaces the set of watched resources for a registrar. New watches will be added,
@@ -612,18 +613,30 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	secret := schema.GroupVersionKind{Version: "v1", Kind: "Secret"}
 
 	err = r1.AddWatch(pod)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial pod watch")
+	if err != nil {
+		t.Fatalf("initial pod watch: %v", err)
+	}
 	err = r1.AddWatch(volume)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial volume watch")
+	if err != nil {
+		t.Fatalf("initial volume watch: %v", err)
+	}
 	err = r1.AddWatch(deploy)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial deployment watch")
+	if err != nil {
+		t.Fatalf("initial deployment watch: %v", err)
+	}
 
 	err = r2.AddWatch(volume)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial volume watch")
+	if err != nil {
+		t.Fatalf("initial volume watch: %v", err)
+	}
 	err = r2.AddWatch(configMap)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial configmap watch")
+	if err != nil {
+		t.Fatalf("initial configmap watch: %v", err)
+	}
 	err = r2.AddWatch(secret)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "initial secret watch")
+	if err != nil {
+		t.Fatalf("initial secret watch: %v", err)
+	}
 
 	// Check initial counters
 	func() {
@@ -644,7 +657,9 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	// Pod overlaps between r1 and r2. Secret is retained. ConfigMap is swapped for Service.
 	// Volume originally overlapped between r1 and r2, but will be removed from r2.
 	err = r2.ReplaceWatch([]schema.GroupVersionKind{pod, service, secret})
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "calling replaceWatch")
+	if err != nil {
+		t.Fatalf("calling replaceWatch: %v", err)
+	}
 
 	// Check final counters
 	func() {

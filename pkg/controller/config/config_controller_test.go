@@ -479,12 +479,16 @@ func TestConfig_CacheContents(t *testing.T) {
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
 	err = c.Create(ctx, cm)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
+	if err != nil {
+		t.Fatalf("creating configMap config-test-1: %v", err)
+	}
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
 	cm2.SetNamespace("kube-system")
 	err = c.Create(ctx, cm2)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-2")
+	if err != nil {
+		t.Fatalf("creating configMap config-test-2: %v", err)
+	}
 
 	defer func() {
 		err = c.Delete(ctx, cm)
@@ -507,7 +511,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Sanity
-	g.Expect(opaClient.HasGVK(nsGVK)).To(gomega.BeTrue())
+	if !opaClient.HasGVK(nsGVK) {
+		t.Fatal("want opaClient.HasGVK(nsGVK) to be true but got false")
+	}
 
 	// Reconfigure to drop the namespace watches
 	instance = configFor([]schema.GroupVersionKind{configMapGVK})
@@ -659,7 +665,9 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
 	_, err = opaClient.RemoveData(ctx, target.WipeData{})
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
+	if err != nil {
+		t.Fatalf("wiping opa cache: %v", err)
+	}
 	if opaClient.Contains(expected) {
 		t.Fatal("wipe failed")
 	}

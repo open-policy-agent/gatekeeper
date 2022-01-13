@@ -184,9 +184,15 @@ violation[{"msg": "denied!"}] {
 			t.Fatal(err)
 		}
 
-		g.Expect(deleteObjectAndConfirm(ctx, c, cstr, timeout)).To(gomega.BeNil())
-		g.Expect(deleteObjectAndConfirm(ctx, c, crd, timeout)).To(gomega.BeNil())
-		g.Expect(deleteObjectAndConfirm(ctx, c, instance, timeout)).To(gomega.BeNil())
+		if err := deleteObjectAndConfirm(ctx, c, cstr, timeout); err != nil {
+			t.Fatalf("want deleteObjectAndConfirm(ctx, c, cstr, timeout) error = nil, got %v", err)
+		}
+		if err := deleteObjectAndConfirm(ctx, c, crd, timeout); err != nil {
+			t.Fatalf("want deleteObjectAndConfirm(ctx, c, crd, timeout) error = nil, got %v", err)
+		}
+		if err := deleteObjectAndConfirm(ctx, c, instance, timeout); err != nil {
+			t.Fatalf("want deleteObjectAndConfirm(ctx, c, instance, timeout) error = nil, got %v", err)
+		}
 	})
 
 	logger.Info("Running test: CRD Gets Created")
@@ -245,11 +251,13 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(resp.Results()) != 1 {
+
+		gotResults := resp.Results()
+		if len(gotResults) != 1 {
 			fmt.Println(resp.TraceDump())
 			fmt.Println(opaClient.Dump(ctx))
+			t.Fatalf("want 1 result, got %v", gotResults)
 		}
-		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
 	})
 
 	logger.Info("Running test: Deleted constraint CRDs are recreated")
@@ -471,7 +479,9 @@ violation[{"msg": "denied!"}] {
 	// Install constraint CRD
 	crd := makeCRD(gvk, "denyall")
 	err = applyCRD(ctx, g, c, gvk, crd)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying CRD")
+	if err != nil {
+		t.Fatalf("applying CRD: %v", err)
+	}
 
 	// Create the constraint for constraint template
 	cstr := newDenyAllCstr()

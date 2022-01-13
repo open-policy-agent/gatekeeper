@@ -98,7 +98,9 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 		return rt.Populated()
 	}, "10s").Should(gomega.BeTrue())
 
-	g.Expect(rt.Satisfied()).NotTo(gomega.BeTrue(), "tracker with 0 retries should not be satisfied")
+	if rt.Satisfied() {
+		t.Fatal("tracker with 0 retries should not be satisfied")
+	}
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 0 retries --> DELETE
 
@@ -138,15 +140,21 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 		return rt.Populated()
 	}, "10s").Should(gomega.BeTrue())
 
-	g.Expect(rt.Satisfied()).NotTo(gomega.BeTrue(), "tracker with 2 retries should not be satisfied")
+	if rt.Satisfied() {
+		t.Fatal("tracker with 2 retries should not be satisfied")
+	}
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 2 --> 1 retries
 
-	g.Expect(rt.Satisfied()).NotTo(gomega.BeTrue(), "tracker with 1 retries should not be satisfied")
+	if rt.Satisfied() {
+		t.Fatal("tracker with 1 retries should not be satisfied")
+	}
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 1 --> 0 retries
 
-	g.Expect(rt.Satisfied()).NotTo(gomega.BeTrue(), "tracker with 0 retries should not be satisfied")
+	if rt.Satisfied() {
+		t.Fatal("tracker with 0 retries should not be satisfied")
+	}
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 0 retries --> DELETE
 

@@ -161,7 +161,12 @@ func TestReconcile(t *testing.T) {
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 		_, err = pc.Get("my-provider")
-		g.Expect(err.Error()).Should(gomega.Equal("key is not found in provider cache"))
+		// TODO(willbeason): Make an error in frameworks for this test to check against
+		//  so we don't rely on exact string matching.
+		wantErr := "key is not found in provider cache"
+		if err.Error() != wantErr {
+			t.Fatalf("got error %v, want %v", err.Error(), wantErr)
+		}
 	})
 
 	testMgrStopped()
