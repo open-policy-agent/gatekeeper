@@ -405,7 +405,14 @@ func Test_Tracker(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	t.Cleanup(cancel)
-	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
+
+	ready, err := probeIsReady(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ready {
+		t.Fatal("probe should become ready after adding additional constraints")
+	}
 }
 
 // Verifies that a Config resource referencing bogus (unregistered) GVKs will not halt readiness.
@@ -517,37 +524,41 @@ func Test_CollectDeleted(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		var tt readiness.Expectations
-		if tc.tracker != nil {
-			tt = tc.tracker
-		} else {
-			tt = tracker.For(tc.gvk)
-		}
-
-		g.Eventually(func() (bool, error) {
-			return tt.Populated() && !tt.Satisfied(), nil
-		}, 20*time.Second, 1*time.Second).
-			Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly", tc.description)
-
-		ul := &unstructured.UnstructuredList{}
-		ul.SetGroupVersionKind(tc.gvk)
-		err = lister.List(ctx, ul)
-		if err != nil {
-			t.Fatalf("deleting all %s", tc.description)
-		}
-		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
-
-		for index := range ul.Items {
-			err = client.Delete(ctx, &ul.Items[index])
-			if err != nil {
-				t.Fatalf("deleting %s %s", tc.description, ul.Items[index].GetName())
+		t.Run(tc.description, func(t *testing.T) {
+			var tt readiness.Expectations
+			if tc.tracker != nil {
+				tt = tc.tracker
+			} else {
+				tt = tracker.For(tc.gvk)
 			}
-		}
 
-		g.Eventually(func() (bool, error) {
-			return tt.Satisfied(), nil
-		}, 20*time.Second, 1*time.Second).
-			Should(gomega.BeTrue(), "checking the tracker collects deletes of %s", tc.description)
+			g.Eventually(func() (bool, error) {
+				return tt.Populated() && !tt.Satisfied(), nil
+			}, 20*time.Second, 1*time.Second).
+				Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly")
+
+			ul := &unstructured.UnstructuredList{}
+			ul.SetGroupVersionKind(tc.gvk)
+			err = lister.List(ctx, ul)
+			if err != nil {
+				t.Fatalf("deleting all %s", tc.description)
+			}
+			if len(ul.Items) == 0 {
+				t.Fatal("want items to be nonempty")
+			}
+
+			for index := range ul.Items {
+				err = client.Delete(ctx, &ul.Items[index])
+				if err != nil {
+					t.Fatalf("deleting %s %s", tc.description, ul.Items[index].GetName())
+				}
+			}
+
+			g.Eventually(func() (bool, error) {
+				return tt.Satisfied(), nil
+			}, 20*time.Second, 1*time.Second).
+				Should(gomega.BeTrue(), "checking the tracker collects deletes of %s")
+		})
 	}
 }
 

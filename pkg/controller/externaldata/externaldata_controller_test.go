@@ -152,10 +152,14 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+
+		wantSpec := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://my-provider:8080",
 			Timeout: 20,
-		}))
+		}
+		if diff := cmp.Diff(wantSpec, entry.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("Can delete a Provider object", func(t *testing.T) {

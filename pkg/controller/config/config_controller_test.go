@@ -554,7 +554,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "kube-system namespace is excluded. kube-system/config-test-2 should not be in opa cache")
 
 	// Delete the config resource - expect opa to empty out.
-	g.Expect(opaClient.Len()).ToNot(gomega.BeZero(), "sanity")
+	if opaClient.Len() == 0 {
+		t.Fatal("sanity")
+	}
 	err = c.Delete(ctx, instance)
 	if err != nil {
 		t.Fatalf("deleting Config resource: %v", err)
