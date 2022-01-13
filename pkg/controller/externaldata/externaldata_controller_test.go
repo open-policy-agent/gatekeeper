@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -127,10 +128,14 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+
+		want := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://my-provider:8080",
 			Timeout: 10,
-		}))
+		}
+		if diff := cmp.Diff(want, entry.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("Can update a Provider object", func(t *testing.T) {

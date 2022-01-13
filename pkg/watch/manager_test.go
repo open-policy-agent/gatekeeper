@@ -290,7 +290,6 @@ func TestRegistrar_RemoveWatch_Idempotent(t *testing.T) {
 
 // Verify that existing items are replayed when joining an existing watched resource.
 func TestRegistrar_Replay(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 
@@ -347,7 +346,11 @@ func TestRegistrar_Replay(t *testing.T) {
 					t.Errorf("channel closed while waiting for resources [%s]", entry.r.parentName)
 					return
 				}
-				g.Expect(event.Object.GetName()).To(gomega.Equal(resources[i].GetName()), entry.r.parentName)
+				gotName := event.Object.GetName()
+				wantName := resources[i].GetName()
+				if gotName != wantName {
+					t.Fatalf("got name %v, want %v", gotName, wantName)
+				}
 			}
 		}
 	}
@@ -365,7 +368,6 @@ func TestRegistrar_Replay(t *testing.T) {
 
 // Verify that event replay can retry upon error.
 func TestRegistrar_Replay_Retry(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 
@@ -432,7 +434,12 @@ func TestRegistrar_Replay_Retry(t *testing.T) {
 				t.Errorf("channel closed while waiting for resources")
 				return
 			}
-			g.Expect(event.Object.GetName()).To(gomega.Equal(resources[i].GetName()))
+
+			gotName := event.Object.GetName()
+			wantName := resources[i].GetName()
+			if gotName != wantName {
+				t.Fatalf("got object name %q, want %q", gotName, wantName)
+			}
 		}
 	}
 
@@ -643,15 +650,29 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		// There should only be a single GetInformer call, even with multiple watchers
-		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "initial pod informer count")
-		g.Expect(getInformerCalls[volume]).To(gomega.Equal(1), "initial configmap informer count")
-		g.Expect(getInformerCalls[deploy]).To(gomega.Equal(1), "initial deployment informer count")
-		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "initial configmap informer count")
-		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "initial secret informer count")
-		g.Expect(getInformerCalls[service]).To(gomega.Equal(0), "initial service informer count")
+		if getInformerCalls[pod] != 1 {
+			t.Fatalf("got getInformerCalls[pod] = %v, want %v", getInformerCalls[pod], 1)
+		}
+		if getInformerCalls[volume] != 1 {
+			t.Fatalf("got getInformerCalls[volume] = %v, want %v", getInformerCalls[volume], 1)
+		}
+		if getInformerCalls[deploy] != 1 {
+			t.Fatalf("got getInformerCalls[deploy] = %v, want %v", getInformerCalls[deploy], 1)
+		}
+		if getInformerCalls[configMap] != 1 {
+			t.Fatalf("got getInformerCalls[configMap] = %v, want %v", getInformerCalls[configMap], 1)
+		}
+		if getInformerCalls[secret] != 1 {
+			t.Fatalf("got getInformerCalls[secret] = %v, want %v", getInformerCalls[secret], 1)
+		}
+		if getInformerCalls[service] != 0 {
+			t.Fatalf("got getInformerCalls[service] = %v, want %v", getInformerCalls[service], 0)
+		}
 
 		// When a second registrar watches the same resource, it will trigger a replay (and thus a List request)
-		g.Expect(listCalls[pod]).To(gomega.Equal(0), "initial pod replay count")
+		if listCalls[pod] != 0 {
+			t.Fatalf("got listCalls[pod] = %v, want %v", listCalls[pod], 0)
+		}
 	}()
 
 	// Pod overlaps between r1 and r2. Secret is retained. ConfigMap is swapped for Service.
@@ -665,12 +686,24 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	func() {
 		mu.Lock()
 		defer mu.Unlock()
-		g.Expect(getInformerCalls[pod]).To(gomega.Equal(1), "final pod informer count")
-		g.Expect(getInformerCalls[volume]).To(gomega.Equal(1), "final volume informer count")
-		g.Expect(getInformerCalls[deploy]).To(gomega.Equal(1), "final deployment informer count")
-		g.Expect(getInformerCalls[configMap]).To(gomega.Equal(1), "final configmap informer count")
-		g.Expect(getInformerCalls[service]).To(gomega.Equal(1), "final service informer count")
-		g.Expect(getInformerCalls[secret]).To(gomega.Equal(1), "final secret informer count")
+		if getInformerCalls[pod] != 1 {
+			t.Fatalf("got getInformerCalls[pod] = %v, want %v", getInformerCalls[pod], 1)
+		}
+		if getInformerCalls[volume] != 1 {
+			t.Fatalf("got getInformerCalls[volume] = %v, want %v", getInformerCalls[volume], 1)
+		}
+		if getInformerCalls[deploy] != 1 {
+			t.Fatalf("got getInformerCalls[deploy] = %v, want %v", getInformerCalls[deploy], 1)
+		}
+		if getInformerCalls[configMap] != 1 {
+			t.Fatalf("got getInformerCalls[configMap] = %v, want %v", getInformerCalls[configMap], 1)
+		}
+		if getInformerCalls[service] != 1 {
+			t.Fatalf("got getInformerCalls[service] = %v, want %v", getInformerCalls[service], 1)
+		}
+		if getInformerCalls[secret] != 1 {
+			t.Fatalf("got getInformerCalls[secret] = %v, want %v", getInformerCalls[secret], 1)
+		}
 	}()
 	g.Eventually(func() int {
 		mu.Lock()
@@ -698,7 +731,9 @@ func TestRegistrar_ReplaceWatch(t *testing.T) {
 	defer wm.watchedMux.Unlock()
 	for gvk, count := range registrarCounts {
 		registrars := wm.watchedKinds[gvk].registrars
-		g.Expect(registrars).To(gomega.HaveLen(count), "registrar count for %v", gvk)
+		if len(registrars) != count {
+			t.Fatalf("got registrar %v count %v, want %v", gvk, len(registrars), count)
+		}
 	}
 }
 

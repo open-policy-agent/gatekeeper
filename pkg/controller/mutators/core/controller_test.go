@@ -215,10 +215,12 @@ func TestReconcile(t *testing.T) {
 		g.Eventually(func() error {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-			g.Expect(func() error {
-				_, err := mSys.Mutate(u, nil)
-				return err
-			}()).NotTo(gomega.HaveOccurred())
+
+			_, err := mSys.Mutate(u, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")
 			if err != nil {
 				return err

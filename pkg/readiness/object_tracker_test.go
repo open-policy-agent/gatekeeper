@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -262,7 +262,6 @@ func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
 // Verifies the kinds internal method and that it retains it values even after
 // the circuit-breaker trips (which releases memory it depends on).
 func Test_ObjectTracker_kinds(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 
 	const count = 10
@@ -273,17 +272,22 @@ func Test_ObjectTracker_kinds(t *testing.T) {
 	ot.ExpectationsDone()
 
 	kindsBefore := ot.kinds()
+	if len(kindsBefore) == 0 {
+		t.Fatal("kindsBefore should not be empty")
+	}
 
 	for i := 0; i < len(ct); i++ {
 		ot.Observe(ct[i])
 	}
 
-	g.Expect(ot.Satisfied()).Should(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 
 	kindsAfter := ot.kinds()
-
-	g.Expect(kindsBefore).ShouldNot(gomega.BeEmpty(), "expected non-empty kinds")
-	g.Expect(kindsAfter).Should(gomega.Equal(kindsBefore), "expected kinds to match")
+	if diff := cmp.Diff(kindsBefore, kindsAfter); diff != "" {
+		t.Fatal(diff)
+	}
 }
 
 // Verify that TryCancelExpect functions the same as regular CancelExpect if readinessRetries is set to 0.

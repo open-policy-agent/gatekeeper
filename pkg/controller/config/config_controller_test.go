@@ -522,7 +522,9 @@ func TestConfig_CacheContents(t *testing.T) {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "updating Config resource")
+	if err != nil {
+		t.Fatalf("updating Config resource: %v", err)
+	}
 
 	// Expect namespaces to go away from cache
 	g.Eventually(func() bool {
@@ -554,7 +556,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	// Delete the config resource - expect opa to empty out.
 	g.Expect(opaClient.Len()).ToNot(gomega.BeZero(), "sanity")
 	err = c.Delete(ctx, instance)
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "deleting Config resource")
+	if err != nil {
+		t.Fatalf("deleting Config resource: %v", err)
+	}
 
 	// The cache will be cleared out.
 	g.Eventually(func() int {
@@ -682,7 +686,9 @@ func TestConfig_Retries(t *testing.T) {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "updating Config resource")
+	if err != nil {
+		t.Fatalf("updating Config resource: %v", err)
+	}
 
 	// Despite the transient error, we expect the cache to eventually be repopulated.
 	g.Eventually(func() bool {

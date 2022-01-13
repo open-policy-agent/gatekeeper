@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -214,7 +215,9 @@ func Test_ModifySet(t *testing.T) {
 	for _, am := range testModifySet {
 		id := mutationtypes.MakeID(am)
 		expectedMutator := mutationSystem.Get(id)
-		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
 	}
 }
 
@@ -252,7 +255,9 @@ func Test_Assign(t *testing.T) {
 	for _, am := range testAssign {
 		id := mutationtypes.MakeID(am)
 		expectedMutator := mutationSystem.Get(id)
-		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
 	}
 }
 
@@ -302,10 +307,14 @@ func Test_Provider(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Expect(instance.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+
+		want := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://demo",
 			Timeout: 1,
-		}))
+		}
+		if diff := cmp.Diff(want, instance.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	}
 }
 

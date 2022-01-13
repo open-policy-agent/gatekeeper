@@ -401,12 +401,19 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		gotResults := resp.Results()
 		if len(resp.Results()) != 1 {
 			fmt.Println(resp.TraceDump())
 			fmt.Println(opaClient.Dump(ctx))
+			t.Fatalf("did not get 1 result: %v", gotResults)
 		}
-		g.Expect(len(resp.Results())).Should(gomega.Equal(1))
-		g.Expect(c.Delete(ctx, instance.DeepCopy())).Should(gomega.BeNil())
+
+		err = c.Delete(ctx, instance.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		g.Eventually(func() error {
 			resp, err := opaClient.Review(ctx, req)
 			if err != nil {
