@@ -3,7 +3,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -14,7 +14,6 @@ import (
 )
 
 func TestNewMutatorStatusForPod(t *testing.T) {
-	g := NewGomegaWithT(t)
 	podName := "some-gk-pod-m"
 	podNS := "a-gk-namespace-m"
 	mutator := testhelpers.NewDummyMutator("a-mutator", "spec.value", nil)
@@ -58,11 +57,15 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.Expect(status).To(Equal(expectedStatus))
+	if diff := cmp.Diff(expectedStatus, status); diff != "" {
+		t.Fatal(diff)
+	}
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	g.Expect(status.Name).To(Equal(cmVal))
+	if status.Name != cmVal {
+		t.Fatalf("got status name %q, want %q", status.Name, cmVal)
+	}
 }

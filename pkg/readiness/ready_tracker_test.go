@@ -448,7 +448,9 @@ func Test_CollectDeleted(t *testing.T) {
 
 	client := mgr.GetClient()
 
-	g.Expect(tracker.Satisfied()).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
+	if tracker.Satisfied() {
+		t.Fatal("checking the overall tracker is unsatisfied")
+	}
 
 	// set up expected GVKs for tests
 	cgvk := schema.GroupVersionKind{

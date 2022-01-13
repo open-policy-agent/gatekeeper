@@ -660,7 +660,9 @@ func TestConfig_Retries(t *testing.T) {
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
 	_, err = opaClient.RemoveData(ctx, target.WipeData{})
 	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
-	g.Expect(opaClient.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
+	if opaClient.Contains(expected) {
+		t.Fatal("wipe failed")
+	}
 
 	// Make List fail once for ConfigMaps as the replay occurs following the reconfig below.
 	failPlease <- "ConfigMapList"

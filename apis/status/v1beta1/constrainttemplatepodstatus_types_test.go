@@ -3,7 +3,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -13,7 +13,6 @@ import (
 )
 
 func TestNewConstraintTemplateStatusForPod(t *testing.T) {
-	g := NewGomegaWithT(t)
 	podName := "some-gk-pod"
 	podNS := "a-gk-namespace"
 	templateName := "a-template"
@@ -55,10 +54,14 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g.Expect(status).To(Equal(expectedStatus))
+	if diff := cmp.Diff(expectedStatus, status); diff != "" {
+		t.Fatal(diff)
+	}
 	n, err := KeyForConstraintTemplate(podName, templateName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g.Expect(status.Name).To(Equal(n))
+	if status.Name != n {
+		t.Fatal("got status.Name != n, want equal")
+	}
 }
