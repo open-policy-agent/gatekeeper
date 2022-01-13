@@ -194,7 +194,6 @@ func Test_ObjectTracker_CancelBeforeExpect(t *testing.T) {
 // Verify that the allSatisfied circuit breaker keeps Satisfied==true and
 // no other operations have any impact.
 func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 
 	const count = 10
@@ -246,10 +245,18 @@ func Test_ObjectTracker_CircuitBreaker(t *testing.T) {
 	// Peek at internals - we should not be accruing memory from the post-circuit-breaker operations
 	ot.mu.RLock()
 	defer ot.mu.RUnlock()
-	g.Expect(ot.canceled).To(gomega.BeEmpty())
-	g.Expect(ot.expect).To(gomega.BeEmpty())
-	g.Expect(ot.seen).To(gomega.BeEmpty())
-	g.Expect(ot.satisfied).To(gomega.BeEmpty())
+	if len(ot.canceled) != 0 {
+		t.Fatalf("want ot.canceled to be empty but got %v", ot.canceled)
+	}
+	if len(ot.expect) != 0 {
+		t.Fatalf("want ot.expect to be empty but got %v", ot.expect)
+	}
+	if len(ot.seen) != 0 {
+		t.Fatalf("want ot.seen to be empty but got %v", ot.seen)
+	}
+	if len(ot.satisfied) != 0 {
+		t.Fatalf("want ot.satisfied to be empty but got %v", ot.satisfied)
+	}
 }
 
 // Verifies the kinds internal method and that it retains it values even after

@@ -190,23 +190,21 @@ func TestReconcile(t *testing.T) {
 	t.Run("System mutates a resource", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-		g.Expect(func() error {
-			_, err := mSys.Mutate(u, nil)
-			return err
-		}()).NotTo(gomega.HaveOccurred())
-		g.Expect(func() error {
-			v, exists, err := unstructured.NestedString(u.Object, "spec", "test")
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.New("mutated value is missing")
-			}
-			if v != "works" {
-				return errors.Errorf(`value = %s, expected "works"`, v)
-			}
-			return nil
-		}()).NotTo(gomega.HaveOccurred())
+		_, err := mSys.Mutate(u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		v, exists, err := unstructured.NestedString(u.Object, "spec", "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !exists {
+			t.Fatal("mutated value is missing")
+		}
+		if v != "works" {
+			t.Fatalf(`value = %s, expected "works"`, v)
+		}
 	})
 
 	t.Run("Mutation deletion is honored", func(t *testing.T) {
