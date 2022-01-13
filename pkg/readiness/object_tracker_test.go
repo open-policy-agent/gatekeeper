@@ -51,10 +51,11 @@ func Test_ObjectTracker_Unpopulated_Is_Unsatisfied(t *testing.T) {
 
 // Verify that an populated tracker with no expectations is satisfied.
 func Test_ObjectTracker_No_Expectations(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 	ot.ExpectationsDone()
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "populated tracker with no expectations should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("populated tracker with no expectations should be satisfied")
+	}
 }
 
 // Verify that that multiple expectations are tracked correctly.
@@ -75,7 +76,9 @@ func Test_ObjectTracker_Multiple_Expectations(t *testing.T) {
 		g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "should not be satisfied before observations are done")
 		ot.Observe(ct[i])
 	}
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that observations can precede expectations.
@@ -88,19 +91,22 @@ func Test_ObjectTracker_Seen_Before_Expect(t *testing.T) {
 	ot.Expect(ct)
 
 	ot.ExpectationsDone()
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should have been satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should have been satisfied")
+	}
 }
 
 // Verify that terminated resources are ignored when calling Expect.
 func Test_ObjectTracker_Terminated_Expect(t *testing.T) {
-	g := gomega.NewWithT(t)
 	ot := newObjTracker(schema.GroupVersionKind{}, nil)
 	ct := makeCT("test-ct")
 	now := metav1.Now()
 	ct.ObjectMeta.DeletionTimestamp = &now
 	ot.Expect(ct)
 	ot.ExpectationsDone()
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that that expectations can be canceled.
@@ -127,7 +133,9 @@ func Test_ObjectTracker_Canceled_Expectations(t *testing.T) {
 	g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "one expectation remains")
 
 	ot.CancelExpect(ct[1])
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that that duplicate expectations only need a single observation.
@@ -148,7 +156,9 @@ func Test_ObjectTracker_Duplicate_Expectations(t *testing.T) {
 		g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "should not be satisfied before observations are done")
 		ot.Observe(ct[i])
 	}
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that an expectation can be canceled before it's first expected.
@@ -271,7 +281,9 @@ func Test_ObjectTracker_TryCancelExpect_Default(t *testing.T) {
 	g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "one expectation remains")
 
 	ot.TryCancelExpect(ct[1])
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that TryCancelExpect must be called multiple times before an expectation is canceled.
@@ -303,7 +315,9 @@ func Test_ObjectTracker_TryCancelExpect_WithRetries(t *testing.T) {
 	g.Expect(ot.Satisfied()).NotTo(gomega.BeTrue(), "one expectation remains with zero retries")
 
 	ot.TryCancelExpect(ct[0])
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that TryCancelExpect can be called many times without the tracker ever being satisfied,
@@ -357,7 +371,9 @@ func Test_ObjectTracker_TryCancelExpect_CancelBeforeExpected(t *testing.T) {
 
 	ot.TryCancelExpect(ct) // 0 retries --> DELETE
 
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "should be satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("should be satisfied")
+	}
 }
 
 // Verify that unexpected observations do not prevent the tracker from reaching its satisfied state.
@@ -373,5 +389,7 @@ func Test_ObjectTracker_Unexpected_Does_Not_Prevent_Satisfied(t *testing.T) {
 	// ** Do not expect the above observation **
 
 	ot.ExpectationsDone()
-	g.Expect(ot.Satisfied()).To(gomega.BeTrue(), "Nothing expected and ExpectationsDone(): should have been satisfied")
+	if !ot.Satisfied() {
+		t.Fatal("Nothing expected and ExpectationsDone(): should have been satisfied")
+	}
 }

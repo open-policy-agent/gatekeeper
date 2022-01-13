@@ -17,11 +17,11 @@ package config
 
 import (
 	"fmt"
-	"sort"
 	gosync "sync"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -182,12 +182,13 @@ func TestReconcile(t *testing.T) {
 	gvks := wm.GetManagedGVK()
 	g.Eventually(len(gvks), timeout).ShouldNot(gomega.Equal(0))
 
-	sort.Slice(gvks, func(i, j int) bool { return gvks[i].Kind < gvks[j].Kind })
-
-	g.Expect(gvks).Should(gomega.Equal([]schema.GroupVersionKind{
+	wantGVKs := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Namespace"},
 		{Group: "", Version: "v1", Kind: "Pod"},
-	}))
+	}
+	if diff := cmp.Diff(wantGVKs, gvks); diff != "" {
+		t.Fatal(diff)
+	}
 
 	ns := &unstructured.Unstructured{}
 	ns.SetName("testns")
@@ -202,18 +203,28 @@ func TestReconcile(t *testing.T) {
 	fooNS.SetName("foo")
 	fooNS.SetGroupVersionKind(nsGvk)
 	auditExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooNS)
-	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
+	if !auditExcludedNS {
+		t.Fatal("got false but want true")
+	}
 	syncExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooNS)
-	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
+	if !syncExcludedNS {
+		t.Fatal("got false but want true")
+	}
 	webhookExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooNS)
-	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
+	if !webhookExcludedNS {
+		t.Fatal("got false but want true")
+	}
 
 	barNS := &unstructured.Unstructured{}
 	barNS.SetName("bar")
 	barNS.SetGroupVersionKind(nsGvk)
 	syncNotExcludedNS, err := processExcluder.IsNamespaceExcluded(process.Sync, barNS)
-	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
-	g.Expect(err).To(gomega.BeNil())
+	if syncNotExcludedNS {
+		t.Fatal("got true but want false")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fooPod := &unstructured.Unstructured{}
 	fooPod.SetName("foo")
@@ -221,19 +232,29 @@ func TestReconcile(t *testing.T) {
 	podGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	fooPod.SetGroupVersionKind(podGvk)
 	auditExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooPod)
-	g.Expect(auditExcludedPod).Should(gomega.BeTrue())
+	if !auditExcludedPod {
+		t.Fatal("got false but want true")
+	}
 	syncExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooPod)
-	g.Expect(syncExcludedPod).Should(gomega.BeTrue())
+	if !syncExcludedPod {
+		t.Fatal("got false but want true")
+	}
 	webhookExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooPod)
-	g.Expect(webhookExcludedPod).Should(gomega.BeTrue())
+	if !webhookExcludedPod {
+		t.Fatal("got false but want true")
+	}
 
 	barPod := &unstructured.Unstructured{}
 	barPod.SetName("bar")
 	barPod.SetNamespace("bar")
 	barPod.SetGroupVersionKind(podGvk)
 	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
-	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
-	g.Expect(err).To(gomega.BeNil())
+	if syncNotExcludedPod {
+		t.Fatal("got true but want false")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testMgrStopped()
 	cs.Stop()

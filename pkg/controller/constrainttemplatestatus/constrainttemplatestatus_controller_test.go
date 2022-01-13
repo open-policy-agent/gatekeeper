@@ -173,7 +173,9 @@ violation[{"msg": "denied!"}] {
 	fakePod.SetName("fake-pod")
 	t.Run("Multiple constraint template statuses are reported", func(t *testing.T) {
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 
 		// TODO: Test if this removal is necessary.
@@ -194,9 +196,13 @@ violation[{"msg": "denied!"}] {
 
 	t.Run("Multiple constraint statuses are reported", func(t *testing.T) {
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = c.Create(ctx, fakeCStatus)
 		if err != nil {
 			t.Fatal(err)
@@ -262,7 +268,9 @@ violation[{"msg": "denied!"}] {
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 		err = c.Create(ctx, fakeTStatus)
 		if err != nil {
@@ -274,7 +282,9 @@ violation[{"msg": "denied!"}] {
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
 		err = c.Create(ctx, fakeCStatus)
 		if err != nil {

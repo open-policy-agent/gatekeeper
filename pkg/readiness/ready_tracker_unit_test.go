@@ -102,7 +102,9 @@ func Test_ReadyTracker_TryCancelTemplate_No_Retries(t *testing.T) {
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 0 retries --> DELETE
 
-	g.Expect(rt.Satisfied()).To(gomega.BeTrue(), "tracker with 0 retries and cancellation should be satisfied")
+	if !rt.Satisfied() {
+		t.Fatal("tracker with 0 retries and cancellation should be satisfied")
+	}
 }
 
 // Verify that TryCancelTemplate must be called enough times to remove all retries before canceling a template.
@@ -148,5 +150,7 @@ func Test_ReadyTracker_TryCancelTemplate_Retries(t *testing.T) {
 
 	rt.TryCancelTemplate(&testConstraintTemplate) // 0 retries --> DELETE
 
-	g.Expect(rt.Satisfied()).To(gomega.BeTrue(), "tracker with 0 retries and cancellation should be satisfied")
+	if !rt.Satisfied() {
+		t.Fatal("tracker with 0 retries and cancellation should be satisfied")
+	}
 }
