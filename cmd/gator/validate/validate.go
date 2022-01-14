@@ -123,7 +123,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Whether or not we return non-zero depends on whether we have a `denv`
+	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
 	exitCode := 0
 	if enforceableFailure(results) {
