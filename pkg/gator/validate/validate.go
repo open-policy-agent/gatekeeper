@@ -70,13 +70,8 @@ func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		return nil, fmt.Errorf("must included constraints in Validate input")
 	}
 
-	// finally, add all the data.  Filter out templates and constraints, as we
-	// can't write policy about those.
+	// finally, add all the data.
 	for _, obj := range objs {
-		if isTemplate(obj) || isConstraint(obj) {
-			continue
-		}
-
 		_, err := client.AddData(context.Background(), obj)
 		if err != nil {
 			return nil, fmt.Errorf("adding data of GVK %q: %w", obj.GroupVersionKind().String(), err)

@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	templateNeverValidate      *unstructured.Unstructured
 	constraintNeverValidate    *unstructured.Unstructured
 	constraintReferential      *unstructured.Unstructured
 	object                     *unstructured.Unstructured
@@ -21,6 +22,11 @@ var (
 
 func init() {
 	var err error
+	templateNeverValidate, err = readUnstructured([]byte(fixtures.TemplateNeverValidate))
+	if err != nil {
+		panic(err)
+	}
+
 	constraintNeverValidate, err = readUnstructured([]byte(fixtures.ConstraintNeverValidate))
 	if err != nil {
 		panic(err)
@@ -73,7 +79,17 @@ func TestValidate(t *testing.T) {
 				{
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
+					Resource:   constraintNeverValidate,
+				},
+				{
+					Msg:        "never validate",
+					Constraint: constraintNeverValidate,
 					Resource:   object,
+				},
+				{
+					Msg:        "never validate",
+					Constraint: constraintNeverValidate,
+					Resource:   templateNeverValidate,
 				},
 			},
 		},
