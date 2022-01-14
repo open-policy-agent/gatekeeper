@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -19,11 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-)
-
-var (
-	errLog *log.Logger
-	outLog *log.Logger
 )
 
 const (
@@ -66,9 +60,6 @@ const (
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
-
-	errLog = log.New(os.Stderr, "", 0)
-	outLog = log.New(os.Stdout, "", 0)
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -77,12 +68,12 @@ func run(cmd *cobra.Command, args []string) {
 	// check if stdin has data
 	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
-		errLog.Fatalf("getting info for stdout: %s", err)
+		errFatalf("getting info for stdout: %s", err)
 	}
 
 	// using stdin in combination with flags is not supported
 	if stdinfo.Size() > 0 && len(flagFilenames) > 0 {
-		errLog.Fatalf("stdin cannot be used in combination with %q flag", flagNameFilename)
+		errFatalf("stdin cannot be used in combination with %q flag", flagNameFilename)
 	}
 
 	// if no files specified, read from Stdin
@@ -90,22 +81,22 @@ func run(cmd *cobra.Command, args []string) {
 	case stdinfo.Size() > 0:
 		us, err := gator.ReadK8sResources(os.Stdin)
 		if err != nil {
-			errLog.Fatalf("reading from stdin: %s", err)
+			errFatalf("reading from stdin: %s", err)
 		}
 		unstrucs = append(unstrucs, us...)
 	case len(flagFilenames) > 0:
 		us, err := readFiles(flagFilenames)
 		if err != nil {
-			errLog.Fatalf("reading from filenames: %s", err)
+			errFatalf("reading from filenames: %s", err)
 		}
 		unstrucs = append(unstrucs, us...)
 	default:
-		errLog.Fatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
+		errFatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
 	}
 
 	responses, err := validate.Validate(unstrucs)
 	if err != nil {
-		errLog.Fatalf("auditing objects: %v\n", err)
+		errFatalf("auditing objects: %v\n", err)
 	}
 	results := responses.Results()
 
@@ -115,19 +106,19 @@ func run(cmd *cobra.Command, args []string) {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
-			errLog.Fatalf("marshaling validation json results: %s", err)
+			errFatalf("marshaling validation json results: %s", err)
 		}
-		outLog.Print(string(b))
+		fmt.Print(string(b))
 	case stringYAML:
 		b, err := yaml.Marshal(results)
 		if err != nil {
-			errLog.Fatalf("marshaling validation yaml results: %s", err)
+			errFatalf("marshaling validation yaml results: %s", err)
 		}
-		outLog.Print(string(b))
+		fmt.Print(string(b))
 	default:
 		if len(results) > 0 {
 			for _, result := range results {
-				outLog.Printf("Message: %q", result.Msg)
+				fmt.Printf("Message: %q", result.Msg)
 			}
 		}
 	}
@@ -215,4 +206,9 @@ func filesBelow(startPath string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+func errFatalf(format string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, format, a...)
+	os.Exit(1)
 }
