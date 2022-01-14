@@ -20,13 +20,16 @@ match_substring () {
 
 # match_yaml_msg checks that the gator validate full yaml output (arg1)
 # contains the `msg: ` field and then matches that `msg` field against the
-# "want" message (arg2).  If either of these checks fail, helpful errors will
-# be printed and the program will exit 1.
+# "want" message (arg2).  Multiple error messages can be checked by passing in
+# a violation index (arg3).  arg3 defaults to `0` for use when there is a
+# single violation. If either of these checks fail, helpful errors will be
+# printed and the program will exit 1.
 match_yaml_msg () {
   yaml_output="${1}"
   want_msg="${2}"
+  violation_index="${3:-0}"
 
-  if ! got=$(echo -n "$yaml_output" | yq eval '.[0].msg' - --exit-status); then
+  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].msg" - --exit-status); then
     printf "ERROR: failed to evaluate output\n"
     printf "GOT: %s\n" "$yaml_output"
     exit 1
@@ -75,8 +78,13 @@ match_yaml_msg () {
   fi
 }
 
-@test "stdin and flag are not supported in combination" {
-  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml" < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations-2.yaml"
+@test "stdin and flag are supported in combination" {
+  output=$(! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml")
+  # since the `run` command doesn't support redirects, it's impractical to
+  # confirm the `1` exit code.  We'll instead just confirm the violation is
+  # working, and rely on other tests to confirm that `1` is being returned when
+  # violations are found.
+  match_yaml_msg "$output" "Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>"
 }
 
 @test "correctly returns no violations from objects in a filesystem" {
@@ -94,7 +102,7 @@ match_yaml_msg () {
 @test "expects user to input data" {
   run bin/gator validate
   [ "$status" -eq 1 ]
-  err_substring="no input data"
+  err_substring="no input data identified"
   match_substring "${output[*]}" "${err_substring}"
 }
 

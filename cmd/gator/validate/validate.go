@@ -63,35 +63,12 @@ func init() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	var unstrucs []*unstructured.Unstructured
-
-	// check if stdin has data
-	stdinfo, err := os.Stdin.Stat()
+	unstrucs, err := readSources(flagFilenames)
 	if err != nil {
-		errFatalf("getting info for stdout: %s", err)
+		errFatalf("reading: %v", err)
 	}
-
-	// using stdin in combination with flags is not supported
-	if stdinfo.Size() > 0 && len(flagFilenames) > 0 {
-		errFatalf("stdin cannot be used in combination with %q flag", flagNameFilename)
-	}
-
-	// if no files specified, read from Stdin
-	switch {
-	case stdinfo.Size() > 0:
-		us, err := gator.ReadK8sResources(os.Stdin)
-		if err != nil {
-			errFatalf("reading from stdin: %s", err)
-		}
-		unstrucs = append(unstrucs, us...)
-	case len(flagFilenames) > 0:
-		us, err := readFiles(flagFilenames)
-		if err != nil {
-			errFatalf("reading from filenames: %s", err)
-		}
-		unstrucs = append(unstrucs, us...)
-	default:
-		errFatalf("no input data: must include data via either stdin or the %q flag", flagNameFilename)
+	if len(unstrucs) == 0 {
+		errFatalf("no input data identified")
 	}
 
 	responses, err := validate.Validate(unstrucs)
@@ -142,6 +119,26 @@ func enforceableFailure(results []*types.Result) bool {
 	return false
 }
 
+func readSources(filenames []string) ([]*unstructured.Unstructured, error) {
+	var unstrucs []*unstructured.Unstructured
+
+	// read from flags if available
+	us, err := readFiles(filenames)
+	if err != nil {
+		return nil, fmt.Errorf("reading from filenames: %s", err)
+	}
+	unstrucs = append(unstrucs, us...)
+
+	// check if stdin has data.  Read if so.
+	us, err = readStdin()
+	if err != nil {
+		return nil, fmt.Errorf("reading from stdin: %w", err)
+	}
+	unstrucs = append(unstrucs, us...)
+
+	return unstrucs, nil
+}
+
 func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 	var unstrucs []*unstructured.Unstructured
 
@@ -159,7 +156,7 @@ func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 
 		us, err := gator.ReadK8sResources(bufio.NewReader(file))
 		if err != nil {
-			return nil, fmt.Errorf("reading from file %q: %w", filename, err)
+			return nil, fmt.Errorf("reading file %q: %w", filename, err)
 		}
 		file.Close()
 
@@ -167,6 +164,24 @@ func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 	}
 
 	return unstrucs, nil
+}
+
+func readStdin() ([]*unstructured.Unstructured, error) {
+	stdinfo, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("getting info: %w", err)
+	}
+
+	if stdinfo.Size() == 0 {
+		return nil, nil
+	}
+
+	us, err := gator.ReadK8sResources(os.Stdin)
+	if err != nil {
+		return nil, fmt.Errorf("reading: %w", err)
+	}
+
+	return us, nil
 }
 
 func normalize(filenames []string) ([]string, error) {
