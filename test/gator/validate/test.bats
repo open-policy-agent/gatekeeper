@@ -162,33 +162,6 @@ match_yaml_msg () {
   match_yaml_msg "${output[*]}" "${want_msg}"
 }
 
-@test "enforcementAction=warn causes 0 exit status and violations output" {
-  run bin/gator validate -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
-    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/warn.yaml" \
-    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
-    -o=yaml
-
-  [ "$status" -eq 0 ]
-
-  # Confirm we still get our violation output
-  want_msg="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
-  match_yaml_msg "${output[*]}" "${want_msg}"
-}
-
-@test "enforcementAction=dryrun causes 0 exit status and violations output" {
-  run bin/gator validate \
-    -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
-    -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/dryrun.yaml" \
-    -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
-    -o=yaml
-
-  [ "$status" -eq 0 ]
-
-  # Confirm we still get our violation output
-  want_msg="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
-  match_yaml_msg "${output[*]}" "${want_msg}"
-}
-
 @test "enforcementAction=[anything else] causes 0 exit status and violations output" {
   run bin/gator validate \
     -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
