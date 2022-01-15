@@ -4,7 +4,7 @@ metadata:
   name: test-pod1
 spec:
   containers:
-  # note how this is malformed. we're counting on gator validate to skip ingesting it due to the lack of a [.yaml, .json, .yml] extension
+  # note how this is malformed
   - 
     - name: {}
       image: openpolicyagent/tomcat
