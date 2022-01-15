@@ -30,12 +30,10 @@ func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	}
 
 	// search for templates, add them if they exist
-	hasTemplates := false
 	for _, obj := range objs {
 		if !isTemplate(obj) {
 			continue
 		}
-		hasTemplates = true
 
 		templ, err := gator.ToTemplate(scheme, obj)
 		if err != nil {
@@ -47,27 +45,18 @@ func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
 			return nil, fmt.Errorf("adding template %q: %w", templ.GetName(), err)
 		}
 	}
-	if !hasTemplates {
-		return nil, fmt.Errorf("must included templates in Validate input")
-	}
 
 	// add all constraints.  A constraint must be added after its associated
 	// template or OPA will return an error
-	hasConstraints := false
 	for _, obj := range objs {
 		if !isConstraint(obj) {
 			continue
 		}
 
-		hasConstraints = true
-
 		_, err := client.AddConstraint(context.Background(), obj)
 		if err != nil {
 			return nil, fmt.Errorf("adding constraint %q: %w", obj.GetName(), err)
 		}
-	}
-	if !hasConstraints {
-		return nil, fmt.Errorf("must included constraints in Validate input")
 	}
 
 	// finally, add all the data.

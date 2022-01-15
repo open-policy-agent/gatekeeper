@@ -1,10 +1,12 @@
 package validate
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -122,7 +124,30 @@ func TestValidate(t *testing.T) {
 				fixtures.ObjectReferentialInventory,
 				fixtures.ObjectReferentialAllow,
 			},
-			want: nil,
+		},
+		{
+			name:   "no data of any kind",
+			inputs: []string{},
+		},
+		{
+			name: "objects with no policy",
+			inputs: []string{
+				fixtures.ObjectReferentialInventory,
+				fixtures.ObjectReferentialAllow,
+			},
+		},
+		{
+			name: "template with no objects or constraints",
+			inputs: []string{
+				fixtures.TemplateReferential,
+			},
+		},
+		{
+			name: "constraint with no template causes error",
+			inputs: []string{
+				fixtures.ConstraintReferential,
+			},
+			err: client.ErrMissingConstraintTemplate,
 		},
 	}
 
@@ -143,6 +168,9 @@ func TestValidate(t *testing.T) {
 				// If we're checking for specific errors, use errors.Is() to verify
 				if err == nil {
 					t.Errorf("got nil err, want %v", tc.err)
+				}
+				if !errors.Is(err, tc.err) {
+					t.Errorf("got err %q, want %q", err, tc.err)
 				}
 			} else {
 				if err != nil {
