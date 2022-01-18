@@ -172,10 +172,8 @@ func TestValidate(t *testing.T) {
 				if !errors.Is(err, tc.err) {
 					t.Errorf("got err %q, want %q", err, tc.err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("got err '%v', want nil", err)
-				}
+			} else if err != nil {
+				t.Errorf("got err '%v', want nil", err)
 			}
 
 			got := resps.Results()
