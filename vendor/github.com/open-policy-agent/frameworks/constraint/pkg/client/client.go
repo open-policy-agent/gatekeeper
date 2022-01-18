@@ -227,10 +227,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 		return nil, fmt.Errorf("failed to validate targets for template %s: %w", templ.Name, err)
 	}
 
-	sch, err := c.backend.crd.createSchema(templ, targetHandler)
-	if err != nil {
-		return nil, err
-	}
+	sch := c.backend.crd.createSchema(templ, targetHandler)
 
 	crd, err := c.backend.crd.createCRD(templ, sch)
 	if err != nil {
@@ -751,31 +748,6 @@ func (c *Client) init() error {
 		}
 	}
 
-	return nil
-}
-
-// Reset the state of OPA.
-func (c *Client) Reset(ctx context.Context) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	for name := range c.targets {
-		if _, err := c.backend.driver.DeleteData(ctx, fmt.Sprintf("/external/%s", name)); err != nil {
-			return err
-		}
-		if _, err := c.backend.driver.DeleteData(ctx, fmt.Sprintf("/constraints/%s", name)); err != nil {
-			return err
-		}
-	}
-	for name, v := range c.templates {
-		for _, t := range v.Targets {
-			if _, err := c.backend.driver.DeleteModule(fmt.Sprintf(`templates["%s"]["%s"]`, t, name)); err != nil {
-				return err
-			}
-		}
-	}
-	c.templates = make(map[templateKey]*templateEntry)
-	c.constraints = make(map[schema.GroupKind]map[string]*unstructured.Unstructured)
 	return nil
 }
 

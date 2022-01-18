@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -16,6 +17,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,58 +94,88 @@ func TestReconcile(t *testing.T) {
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, true)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	rec := newReconciler(mgr, opa, pc, tracker)
 
 	recFn, requests := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, recFn)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
 	defer testMgrStopped()
 
 	t.Run("Can add a Provider object", func(t *testing.T) {
-		g.Expect(c.Create(ctx, instance)).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 		entry, err := pc.Get("my-provider")
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		want := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://my-provider:8080",
 			Timeout: 10,
-		}))
+		}
+		if diff := cmp.Diff(want, entry.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("Can update a Provider object", func(t *testing.T) {
 		newInstance := instance.DeepCopy()
 		newInstance.Spec.Timeout = 20
 
-		g.Expect(c.Update(ctx, newInstance)).NotTo(gomega.HaveOccurred())
+		err := c.Update(ctx, newInstance)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 		entry, err := pc.Get("my-provider")
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(entry.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		wantSpec := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://my-provider:8080",
 			Timeout: 20,
-		}))
+		}
+		if diff := cmp.Diff(wantSpec, entry.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	})
 
 	t.Run("Can delete a Provider object", func(t *testing.T) {
-		g.Expect(c.Delete(ctx, instance)).NotTo(gomega.HaveOccurred())
+		err := c.Delete(ctx, instance)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-		_, err := pc.Get("my-provider")
-		g.Expect(err.Error()).Should(gomega.Equal("key is not found in provider cache"))
+		_, err = pc.Get("my-provider")
+		// TODO(willbeason): Make an error in frameworks for this test to check against
+		//  so we don't rely on exact string matching.
+		wantErr := "key is not found in provider cache"
+		if err.Error() != wantErr {
+			t.Fatalf("got error %v, want %v", err.Error(), wantErr)
+		}
 	})
 
 	testMgrStopped()
