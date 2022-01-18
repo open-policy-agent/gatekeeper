@@ -3,7 +3,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 )
 
 var dashingTestCases = []struct {
@@ -89,19 +89,25 @@ var dashingTestCases = []struct {
 }
 
 func TestDashPacker(t *testing.T) {
-	g := NewGomegaWithT(t)
 	for _, tc := range dashingTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			g.Expect(dashPacker(tc.extracted...)).To(Equal(tc.packed))
+			gotPacked, err := dashPacker(tc.extracted...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.packed, gotPacked); diff != "" {
+				t.Fatal("got dashPacker(tc.extracted...) != tc.packed, want equal")
+			}
 		})
 	}
 }
 
 func TestDashExtractor(t *testing.T) {
-	g := NewGomegaWithT(t)
 	for _, tc := range dashingTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			g.Expect(dashExtractor(tc.packed)).To(Equal(tc.extracted))
+			if diff := cmp.Diff(tc.extracted, dashExtractor(tc.packed)); diff != "" {
+				t.Fatal(diff)
+			}
 		})
 	}
 }

@@ -3,7 +3,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -14,15 +14,21 @@ import (
 )
 
 func TestNewMutatorStatusForPod(t *testing.T) {
-	g := NewGomegaWithT(t)
 	podName := "some-gk-pod-m"
 	podNS := "a-gk-namespace-m"
 	mutator := testhelpers.NewDummyMutator("a-mutator", "spec.value", nil)
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+	err := AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := fakes.Pod(
 		fakes.WithNamespace(podNS),
@@ -40,12 +46,26 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 			MutatorKindLabel: "DummyMutator",
 			PodLabel:         podName,
 		})
-	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
+
+	err = controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status).To(Equal(expectedStatus))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(expectedStatus, status); diff != "" {
+		t.Fatal(diff)
+	}
 	cmVal, err := KeyForMutatorID(podName, mutator.ID())
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status.Name).To(Equal(cmVal))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if status.Name != cmVal {
+		t.Fatalf("got status name %q, want %q", status.Name, cmVal)
+	}
 }

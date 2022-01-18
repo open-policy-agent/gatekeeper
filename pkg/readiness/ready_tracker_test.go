@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -187,7 +188,9 @@ func Test_ModifySet(t *testing.T) {
 
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -212,7 +215,9 @@ func Test_ModifySet(t *testing.T) {
 	for _, am := range testModifySet {
 		id := mutationtypes.MakeID(am)
 		expectedMutator := mutationSystem.Get(id)
-		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
 	}
 }
 
@@ -223,7 +228,9 @@ func Test_Assign(t *testing.T) {
 
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -248,7 +255,9 @@ func Test_Assign(t *testing.T) {
 	for _, am := range testAssign {
 		id := mutationtypes.MakeID(am)
 		expectedMutator := mutationSystem.Get(id)
-		g.Expect(expectedMutator).NotTo(gomega.BeNil(), "expected mutator was not found")
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
 	}
 }
 
@@ -271,7 +280,9 @@ func Test_Provider(t *testing.T) {
 	}
 	// Apply fixtures *before* the controllers are setup.
 	err = applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -293,11 +304,17 @@ func Test_Provider(t *testing.T) {
 	// Verify that the Provider is present in the cache
 	for _, tp := range testProvider {
 		instance, err := providerCache.Get(tp.Name)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(instance.Spec).Should(gomega.Equal(externaldatav1alpha1.ProviderSpec{
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		want := externaldatav1alpha1.ProviderSpec{
 			URL:     "http://demo",
 			Timeout: 1,
-		}))
+		}
+		if diff := cmp.Diff(want, instance.Spec); diff != "" {
+			t.Fatal(diff)
+		}
 	}
 }
 
@@ -315,7 +332,9 @@ func Test_Tracker(t *testing.T) {
 
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -330,7 +349,9 @@ func Test_Tracker(t *testing.T) {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
+	if err := createGatekeeperNamespace(mgr.GetConfig()); err != nil {
+		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
+	}
 
 	g.Eventually(func() (bool, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -341,21 +362,28 @@ func Test_Tracker(t *testing.T) {
 	// Verify cache (tracks testdata fixtures)
 	for _, ct := range testTemplates {
 		_, err := opaClient.GetTemplate(ct)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for template")
+		if err != nil {
+			t.Fatalf("checking cache for template: %v", err)
+		}
 	}
 	for _, c := range testConstraints {
 		_, err := opaClient.GetConstraint(c)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
+		if err != nil {
+			t.Fatalf("checking cache for constraint: %v", err)
+		}
 	}
 	// TODO: Verify data if we add the corresponding API to opa.Client.
 	// for _, d := range testData {
 	// 	_, err := opaClient.GetData(ctx, c)
-	// 	g.Expect(err).NotTo(gomega.HaveOccurred(), "checking cache for constraint")
+	// 	if err != nil {
+	// t.Fatalf("checking cache for constraint: %v", err)
 	// }
 
 	// Add additional templates/constraints and verify that we remain satisfied
 	err = applyFixtures("testdata/post")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying post fixtures")
+	if err != nil {
+		t.Fatalf("applying post fixtures: %v", err)
+	}
 
 	g.Eventually(func() (bool, error) {
 		// Verify cache (tracks testdata/post fixtures)
@@ -377,7 +405,14 @@ func Test_Tracker(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	t.Cleanup(cancel)
-	g.Expect(probeIsReady(ctx)).Should(gomega.BeTrue(), "became unready after adding additional constraints")
+
+	ready, err := probeIsReady(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ready {
+		t.Fatal("probe should become ready after adding additional constraints")
+	}
 }
 
 // Verifies that a Config resource referencing bogus (unregistered) GVKs will not halt readiness.
@@ -388,11 +423,15 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 
 	// Apply fixtures *before* the controllers are setup.
 	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	// Apply config resource with bogus GVK reference
 	err = applyFixtures("testdata/bogus-config")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying config")
+	if err != nil {
+		t.Fatalf("applying config: %v", err)
+	}
 
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
@@ -426,7 +465,9 @@ func Test_CollectDeleted(t *testing.T) {
 	g := gomega.NewWithT(t)
 
 	err := applyFixtures("testdata")
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying fixtures")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
 
 	mgr, _ := setupManager(t)
 
@@ -439,14 +480,18 @@ func Test_CollectDeleted(t *testing.T) {
 	err = mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		return tracker.Run(ctx)
 	}))
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "setting up tracker")
+	if err != nil {
+		t.Fatalf("setting up tracker: %v", err)
+	}
 
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
 	client := mgr.GetClient()
 
-	g.Expect(tracker.Satisfied()).To(gomega.BeFalse(), "checking the overall tracker is unsatisfied")
+	if tracker.Satisfied() {
+		t.Fatal("checking the overall tracker is unsatisfied")
+	}
 
 	// set up expected GVKs for tests
 	cgvk := schema.GroupVersionKind{
@@ -457,12 +502,16 @@ func Test_CollectDeleted(t *testing.T) {
 
 	cm := &corev1.ConfigMap{}
 	cmgvk, err := apiutil.GVKForObject(cm, mgr.GetScheme())
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "retrieving ConfigMap GVK")
+	if err != nil {
+		t.Fatalf("retrieving ConfigMap GVK: %v", err)
+	}
 	cmtracker := tracker.ForData(cmgvk)
 
 	ct := &v1beta1.ConstraintTemplate{}
 	ctgvk, err := apiutil.GVKForObject(ct, mgr.GetScheme())
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "retrieving ConstraintTemplate GVK")
+	if err != nil {
+		t.Fatalf("retrieving ConstraintTemplate GVK: %v", err)
+	}
 
 	// note: state can leak between these test cases because we do not reset the environment
 	// between them to keep the test short. Trackers are mostly independent per GVK.
@@ -475,33 +524,41 @@ func Test_CollectDeleted(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		var tt readiness.Expectations
-		if tc.tracker != nil {
-			tt = tc.tracker
-		} else {
-			tt = tracker.For(tc.gvk)
-		}
+		t.Run(tc.description, func(t *testing.T) {
+			var tt readiness.Expectations
+			if tc.tracker != nil {
+				tt = tc.tracker
+			} else {
+				tt = tracker.For(tc.gvk)
+			}
 
-		g.Eventually(func() (bool, error) {
-			return tt.Populated() && !tt.Satisfied(), nil
-		}, 20*time.Second, 1*time.Second).
-			Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly", tc.description)
+			g.Eventually(func() (bool, error) {
+				return tt.Populated() && !tt.Satisfied(), nil
+			}, 20*time.Second, 1*time.Second).
+				Should(gomega.BeTrue(), "checking the tracker is tracking %s correctly")
 
-		ul := &unstructured.UnstructuredList{}
-		ul.SetGroupVersionKind(tc.gvk)
-		err = lister.List(ctx, ul)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting all %s", tc.description)
-		g.Expect(len(ul.Items)).To(gomega.BeNumerically(">=", 1), "expecting nonzero %s", tc.description)
+			ul := &unstructured.UnstructuredList{}
+			ul.SetGroupVersionKind(tc.gvk)
+			err = lister.List(ctx, ul)
+			if err != nil {
+				t.Fatalf("deleting all %s", tc.description)
+			}
+			if len(ul.Items) == 0 {
+				t.Fatal("want items to be nonempty")
+			}
 
-		for index := range ul.Items {
-			err = client.Delete(ctx, &ul.Items[index])
-			g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting %s %s", tc.description, ul.Items[index].GetName())
-		}
+			for index := range ul.Items {
+				err = client.Delete(ctx, &ul.Items[index])
+				if err != nil {
+					t.Fatalf("deleting %s %s", tc.description, ul.Items[index].GetName())
+				}
+			}
 
-		g.Eventually(func() (bool, error) {
-			return tt.Satisfied(), nil
-		}, 20*time.Second, 1*time.Second).
-			Should(gomega.BeTrue(), "checking the tracker collects deletes of %s", tc.description)
+			g.Eventually(func() (bool, error) {
+				return tt.Satisfied(), nil
+			}, 20*time.Second, 1*time.Second).
+				Should(gomega.BeTrue(), "checking the tracker collects deletes of %s")
+		})
 	}
 }
 

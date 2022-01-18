@@ -24,7 +24,7 @@ type Driver interface {
 	PutModule(name string, src string) error
 	// PutModules upserts a number of modules under a given prefix.
 	PutModules(namePrefix string, srcs []string) error
-	DeleteModule(name string) (bool, error)
+
 	// DeleteModules deletes all modules under a given prefix and returns the
 	// count of modules deleted.  Deletion of non-existing prefix will
 	// result in 0, nil being returned.

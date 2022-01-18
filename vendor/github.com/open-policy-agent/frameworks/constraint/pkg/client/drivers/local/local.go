@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown"
+	"github.com/open-policy-agent/opa/topdown/print"
 	opatypes "github.com/open-policy-agent/opa/types"
 	"k8s.io/utils/pointer"
 )
@@ -67,6 +68,8 @@ type driver struct {
 	storage       storage.Store
 	capabilities  *ast.Capabilities
 	traceEnabled  bool
+	printEnabled  bool
+	printHook     print.Hook
 	providerCache *externaldata.ProviderCache
 }
 
@@ -214,25 +217,6 @@ func (d *driver) PutModules(namePrefix string, srcs []string) error {
 	return err
 }
 
-// DeleteModule deletes a rule from OPA. Returns true if a rule was found and deleted, false
-// if a rule was not found, and any errors.
-func (d *driver) DeleteModule(name string) (bool, error) {
-	if err := d.checkModuleName(name); err != nil {
-		return false, err
-	}
-
-	d.modulesMux.Lock()
-	defer d.modulesMux.Unlock()
-
-	if _, found := d.modules[name]; !found {
-		return false, nil
-	}
-
-	count, err := d.alterModules(nil, []string{name})
-
-	return count == 1, err
-}
-
 // alterModules alters the modules in the driver by inserting and removing
 // the provided modules then returns the count of modules removed.
 // alterModules expects that the caller is holding the modulesMux lock.
@@ -262,7 +246,8 @@ func (d *driver) alterModules(insert insertParam, remove []string) (int, error) 
 	}
 
 	c := ast.NewCompiler().WithPathConflictsCheck(storage.NonEmpty(ctx, d.storage, txn)).
-		WithCapabilities(d.capabilities)
+		WithCapabilities(d.capabilities).
+		WithEnablePrintStatements(d.printEnabled)
 
 	if c.Compile(updatedModules); c.Failed() {
 		d.storage.Abort(ctx, txn)
@@ -410,6 +395,8 @@ func (d *driver) eval(ctx context.Context, path string, input interface{}, cfg *
 		rego.Store(d.storage),
 		rego.Input(input),
 		rego.Query(path),
+		rego.EnablePrintStatements(d.printEnabled),
+		rego.PrintHook(d.printHook),
 	}
 
 	buf := topdown.NewBufferTracer()

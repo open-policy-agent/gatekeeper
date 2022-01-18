@@ -117,12 +117,16 @@ func TestReconcile(t *testing.T) {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
+	if err := createGatekeeperNamespace(mgr.GetConfig()); err != nil {
+		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
+	}
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
 
 	tracker, err := readiness.SetupTracker(mgr, true, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	pod := fakes.Pod(
@@ -145,15 +149,25 @@ func TestReconcile(t *testing.T) {
 	rec := newReconciler(mgr, mSys, tracker, func(ctx context.Context) (*corev1.Pod, error) { return pod, nil }, kind, newObj, newMutator, events)
 	adder := Adder{EventsSource: &source.Channel{Source: events}}
 
-	g.Expect(adder.add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = adder.add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	statusAdder := &mutatorstatus.Adder{}
-	g.Expect(statusAdder.Add(mgr)).NotTo(gomega.HaveOccurred())
+	err = statusAdder.Add(mgr)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
 	t.Run("Can add a mutator", func(t *testing.T) {
-		g.Expect(c.Create(ctx, mutator.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, mutator.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("Mutator is reported as enforced", func(t *testing.T) {
@@ -176,34 +190,37 @@ func TestReconcile(t *testing.T) {
 	t.Run("System mutates a resource", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-		g.Expect(func() error {
-			_, err := mSys.Mutate(u, nil)
-			return err
-		}()).NotTo(gomega.HaveOccurred())
-		g.Expect(func() error {
-			v, exists, err := unstructured.NestedString(u.Object, "spec", "test")
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.New("mutated value is missing")
-			}
-			if v != "works" {
-				return errors.Errorf(`value = %s, expected "works"`, v)
-			}
-			return nil
-		}()).NotTo(gomega.HaveOccurred())
+		_, err := mSys.Mutate(u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		v, exists, err := unstructured.NestedString(u.Object, "spec", "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !exists {
+			t.Fatal("mutated value is missing")
+		}
+		if v != "works" {
+			t.Fatalf(`value = %s, expected "works"`, v)
+		}
 	})
 
 	t.Run("Mutation deletion is honored", func(t *testing.T) {
-		g.Expect(c.Delete(ctx, mutator.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err := c.Delete(ctx, mutator.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(func() error {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-			g.Expect(func() error {
-				_, err := mSys.Mutate(u, nil)
-				return err
-			}()).NotTo(gomega.HaveOccurred())
+
+			_, err := mSys.Mutate(u, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			_, exists, err := unstructured.NestedString(u.Object, "spec", "test")
 			if err != nil {
 				return err
@@ -223,8 +240,15 @@ func TestReconcile(t *testing.T) {
 		mBar2 := newAssign("bar-2", "spec.bar.qux", "value-3")
 		mBar2ID := types.MakeID(mBar2)
 
-		g.Expect(c.Create(ctx, mFoo.DeepCopy())).NotTo(gomega.HaveOccurred())
-		g.Expect(c.Create(ctx, mBar1.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, mFoo.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = c.Create(ctx, mBar1.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		g.Eventually(func() error {
 			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
@@ -235,7 +259,10 @@ func TestReconcile(t *testing.T) {
 			return podStatusMatches(ctx, c, pod, mBar1ID, hasStatusErrors(nil))
 		})
 
-		g.Expect(c.Create(ctx, mBar2.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, mBar2.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		g.Eventually(func() error {
 			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))
@@ -261,7 +288,10 @@ func TestReconcile(t *testing.T) {
 			}}))
 		}, timeout).Should(gomega.Succeed())
 
-		g.Expect(c.Delete(ctx, mBar1.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, mBar1.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		g.Eventually(func() error {
 			err := podStatusMatches(ctx, c, pod, mFooID, hasStatusErrors(nil))

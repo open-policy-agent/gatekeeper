@@ -3,7 +3,7 @@ package v1beta1
 import (
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -13,7 +13,6 @@ import (
 )
 
 func TestNewConstraintTemplateStatusForPod(t *testing.T) {
-	g := NewGomegaWithT(t)
 	podName := "some-gk-pod"
 	podNS := "a-gk-namespace"
 	templateName := "a-template"
@@ -21,8 +20,15 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+	err := AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := fakes.Pod(
 		fakes.WithNamespace(podNS),
@@ -38,12 +44,24 @@ func TestNewConstraintTemplateStatusForPod(t *testing.T) {
 		ConstraintTemplateNameLabel: templateName,
 		PodLabel:                    podName,
 	})
-	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
+
+	err = controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	status, err := NewConstraintTemplateStatusForPod(pod, templateName, scheme)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status).To(Equal(expectedStatus))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(expectedStatus, status); diff != "" {
+		t.Fatal(diff)
+	}
 	n, err := KeyForConstraintTemplate(podName, templateName)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status.Name).To(Equal(n))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Name != n {
+		t.Fatal("got status.Name != n, want equal")
+	}
 }
