@@ -5,6 +5,7 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/storage/inmem"
+	"github.com/open-policy-agent/opa/topdown/print"
 	opatypes "github.com/open-policy-agent/opa/types"
 )
 
@@ -42,6 +43,18 @@ func Defaults() Arg {
 func Tracing(enabled bool) Arg {
 	return func(d *driver) {
 		d.traceEnabled = enabled
+	}
+}
+
+func PrintEnabled(enabled bool) Arg {
+	return func(d *driver) {
+		d.printEnabled = enabled
+	}
+}
+
+func PrintHook(hook print.Hook) Arg {
+	return func(d *driver) {
+		d.printHook = hook
 	}
 }
 

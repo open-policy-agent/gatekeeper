@@ -45,7 +45,7 @@ func validateTargets(templ *templates.ConstraintTemplate) error {
 
 // createSchema combines the schema of the match target and the ConstraintTemplate parameters
 // to form the schema of the actual constraint resource.
-func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvider) (*apiextensions.JSONSchemaProps, error) {
+func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvider) *apiextensions.JSONSchemaProps {
 	props := map[string]apiextensions.JSONSchemaProps{
 		"match":             target.MatchSchema(),
 		"enforcementAction": {Type: "string"},
@@ -77,8 +77,7 @@ func (h *crdHelper) createSchema(templ *templates.ConstraintTemplate, target Mat
 			},
 		},
 	}
-
-	return schema, nil
+	return schema
 }
 
 // crdHelper builds the scheme for handling CRDs. It is necessary to build crdHelper at runtime as
@@ -133,6 +132,20 @@ func (h *crdHelper) createCRD(
 					Name:    v1alpha1.SchemeGroupVersion.Version,
 					Storage: false,
 					Served:  true,
+				},
+			},
+			AdditionalPrinterColumns: []apiextensions.CustomResourceColumnDefinition{
+				{
+					Name:        "enforcement-action",
+					Description: "Type of enforcement action",
+					JSONPath:    ".spec.enforcementAction",
+					Type:        "string",
+				},
+				{
+					Name:        "total-violations",
+					Description: "Total number of violations",
+					JSONPath:    ".status.totalViolations",
+					Type:        "integer",
 				},
 			},
 		},

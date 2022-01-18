@@ -2,8 +2,10 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"text/template"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -12,6 +14,10 @@ import (
 var _ TargetHandler = &handler{}
 
 type handler struct{}
+
+func (h *handler) ToMatcher(_ *unstructured.Unstructured) (constraints.Matcher, error) {
+	return nil, errors.New("unimplemented")
+}
 
 func (h *handler) GetName() string {
 	return "test.target"

@@ -20,15 +20,12 @@ import (
 	stdlog "log"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
-	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -58,17 +55,6 @@ func TestMain(m *testing.M) {
 		stdlog.Printf("error while trying to stop server: %v", err)
 	}
 	os.Exit(code)
-}
-
-// StartTestManager adds recFn.
-func StartTestManager(ctx context.Context, mgr manager.Manager, g *gomega.GomegaWithT) *sync.WaitGroup {
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		g.Expect(mgr.Start(ctx)).NotTo(gomega.HaveOccurred())
-	}()
-	return wg
 }
 
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
