@@ -3,13 +3,11 @@ package util
 import (
 	"testing"
 
-	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestGetUniqueKey(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	gvk := schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
 		Version: "v1beta1",
@@ -26,5 +24,8 @@ func TestGetUniqueKey(t *testing.T) {
 		kind:     "myTemplate",
 		resource: "myConstraint",
 	}
-	g.Expect(key).To(gomega.Equal(expected))
+
+	if key != expected {
+		t.Fatalf("got key %q, want %q", key, expected)
+	}
 }

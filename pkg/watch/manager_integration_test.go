@@ -104,7 +104,6 @@ func setupController(mgr manager.Manager, r reconcile.Reconciler, events chan ev
 
 // Verify that an unknown resource will return an error when adding a watch.
 func TestRegistrar_AddUnknown(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -117,14 +116,18 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 
 	events := make(chan event.GenericEvent)
 	r, err := wm.NewRegistrar("test", events)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating registrar")
+	if err != nil {
+		t.Fatalf("creating registrar: %v", err)
+	}
 
 	err = r.AddWatch(schema.GroupVersionKind{
 		Group:   "i",
 		Version: "donot",
 		Kind:    "exist",
 	})
-	g.Expect(err).To(gomega.HaveOccurred(), "AddWatch should have failed due to unknown GVK")
+	if err == nil {
+		t.Fatalf("AddWatch should have failed due to unknown GVK")
+	}
 
 	cancel()
 	_ = grp.Wait()
@@ -133,7 +136,6 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 // Verifies that controller-runtime interleaves reconcile errors in backoff and
 // other events within the same work queue.
 func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mgr, _ := setupManager(t)
 	ctrl.SetLogger(logf.NullLogger{})
 
@@ -183,7 +185,9 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 		},
 		&handler.EnqueueRequestForObject{},
 	)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for the error resource to reconcile
 	// before setting up another watch.
@@ -195,7 +199,9 @@ func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 		&source.Kind{Type: &corev1.Namespace{}},
 		&handler.EnqueueRequestForObject{},
 	)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	expectNames := map[string]bool{"error": true, "default": true, "kube-system": true}
 loop:
@@ -237,7 +243,9 @@ func TestRegistrar_Reconnect(t *testing.T) {
 
 	events := make(chan event.GenericEvent)
 	r, err := wm.NewRegistrar("test", events)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating registrar")
+	if err != nil {
+		t.Fatalf("creating registrar: %v", err)
+	}
 
 	req := make(chan reconcile.Request)
 	rec := reconcile.Func(func(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -248,7 +256,9 @@ func TestRegistrar_Reconnect(t *testing.T) {
 		return reconcile.Result{}, nil
 	})
 	err = setupController(mgr, rec, events)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating controller")
+	if err != nil {
+		t.Fatalf("creating controller: %v", err)
+	}
 
 	gvk := schema.GroupVersionKind{
 		Group:   "com.tests",
@@ -258,41 +268,58 @@ func TestRegistrar_Reconnect(t *testing.T) {
 	const plural = "testresources"
 	crd := makeCRD(gvk, plural)
 	err = applyCRD(ctx, g, c, gvk, crd)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "applying CRD")
+	if err != nil {
+		t.Fatalf("applying CRD: %v", err)
+	}
 
 	err = r.AddWatch(gvk)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "adding watch")
+	if err != nil {
+		t.Fatalf("adding watch: %v", err)
+	}
 
 	// Create watched resources
 	u := unstructuredFor(gvk, "test-add")
 	err = c.Create(ctx, u)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating watched resource")
+	if err != nil {
+		t.Fatalf("creating watched resource: %v", err)
+	}
 
 	// Wait for create event
 	<-req
 
 	// Delete the CRD with an active watch still enabled
 	err = c.Delete(ctx, crd)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "deleting CRD")
+	if err != nil {
+		t.Fatalf("deleting CRD: %v", err)
+	}
 
 	// We'll get a delete event for the resource (cascade delete from the parent CRD). Consume it.
 	<-req
 
 	// Verify the CRD is gone
 	err = waitForCRDToUnregister(ctx, mgr.GetConfig(), gvk, plural)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "waiting for CRD to unregister")
+	if err != nil {
+		t.Fatalf("waiting for CRD to unregister: %v", err)
+	}
 
 	// Create the CRD and resource again, expect our previous watch to pick them up automatically.
 	crd = makeCRD(gvk, plural)
 	err = applyCRD(ctx, g, c, gvk, crd)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "reapplying CRD")
+	if err != nil {
+		t.Fatalf("reapplying CRD: %v", err)
+	}
 	u = unstructuredFor(gvk, "test-add-again")
 	err = c.Create(ctx, u)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "recreating watched resource")
+	if err != nil {
+		t.Fatalf("recreating watched resource: %v", err)
+	}
 
 	// Wait for create event picked, up by our previous watch.
 	result := <-req
-	g.Expect(result.Name).Should(gomega.ContainSubstring("test-add-again"))
+	wantSubstr := "test-add-again"
+	if !strings.Contains(result.Name, wantSubstr) {
+		t.Fatalf("got result.Name = %q but want to contain %q", result, wantSubstr)
+	}
 
 	cancel()
 	_ = grp.Wait()
@@ -300,7 +327,6 @@ func TestRegistrar_Reconnect(t *testing.T) {
 
 // Verifies joined watches receive replayed events.
 func Test_Registrar_Replay(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
@@ -314,7 +340,9 @@ func Test_Registrar_Replay(t *testing.T) {
 		events := make(chan event.GenericEvent, 1024)
 
 		r, err := wm.NewRegistrar(name, events)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), "creating registrar")
+		if err != nil {
+			t.Fatalf("creating registrar: %v", err)
+		}
 
 		requests := make(chan reconcile.Request)
 		rec := func(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -338,10 +366,14 @@ func Test_Registrar_Replay(t *testing.T) {
 			},
 			&handler.EnqueueRequestForObject{},
 		)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		err = r.AddWatch(gvk)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		return requests
 	}
@@ -366,7 +398,9 @@ func Test_Registrar_Replay(t *testing.T) {
 			t.Fatalf("timout while creating fixtures")
 		}
 		err := c.Create(ctx, obj)
-		g.Expect(err).NotTo(gomega.HaveOccurred(), fmt.Sprintf("creating fixture: %s", obj.GetName()))
+		if err != nil {
+			t.Fatalf("creating fixture: %s", obj.GetName())
+		}
 	}
 
 	// These should be received via watch events
