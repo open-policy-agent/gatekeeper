@@ -379,21 +379,24 @@ matches_namespaces(match) {
   nss[ns]
 }
 
-# Prefix-based matching
+# Prefix or suffix based matching
 matches_namespaces(match) {
   has_field(match, "namespaces")
   not always_match_ns_selectors
   get_ns_name[ns]
   wild_nss := wildcard_tokens(match.namespaces)
-  prefix_glob_match(wild_nss, ns)
+  glob_match(wild_nss, ns)
 }
 
 wildcard_tokens(token_array) = out {
-  out := [ wld_tokens | endswith(token_array[i], "*")
-                         wld_tokens := token_array[i] ]
+  out := [wld_tokens |
+    any([startswith(token_array[i], "*"), endswith(token_array[i], "*")])
+
+    wld_tokens := token_array[i]
+  ]
 }
 
-prefix_glob_match(matchables, subject) {
+glob_match(matchables, subject) {
   glob.match(matchables[_], [], subject)
 }
 
@@ -415,9 +418,9 @@ does_not_match_excludednamespaces(match) {
   # This is vulnerable to a value of "false", but as we're dealing with strings it's ok
   not nss[ns]
 
-  # Check for prefix matches
+  # Check for prefix or suffix matches
   wild_ex_nss := wildcard_tokens(match.excludedNamespaces)
-  not prefix_glob_match(wild_ex_nss, ns)
+  not glob_match(wild_ex_nss, ns)
 }
 
 matches_nsselector(match) {

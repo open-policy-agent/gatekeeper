@@ -6,16 +6,16 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
-func TestExactOrPrefixMatch(t *testing.T) {
+func TestExactOrPrefixSuffixMatch(t *testing.T) {
 	tcs := []struct {
 		name     string
-		nsMap    map[util.PrefixWildcard]bool
+		nsMap    map[util.Wildcard]bool
 		ns       string
 		excluded bool
 	}{
 		{
 			name: "exact text match",
-			nsMap: map[util.PrefixWildcard]bool{
+			nsMap: map[util.Wildcard]bool{
 				"kube-system": true,
 				"foobar":      true,
 			},
@@ -24,7 +24,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 		},
 		{
 			name: "wildcard prefix match",
-			nsMap: map[util.PrefixWildcard]bool{
+			nsMap: map[util.Wildcard]bool{
 				"kube-*": true,
 				"foobar": true,
 			},
@@ -32,8 +32,17 @@ func TestExactOrPrefixMatch(t *testing.T) {
 			excluded: true,
 		},
 		{
+			name: "wildcard suffix match",
+			nsMap: map[util.Wildcard]bool{
+				"*-system": true,
+				"foobar":   true,
+			},
+			ns:       "kube-system",
+			excluded: true,
+		},
+		{
 			name: "lack of asterisk prevents globbing",
-			nsMap: map[util.PrefixWildcard]bool{
+			nsMap: map[util.Wildcard]bool{
 				"kube-": true,
 			},
 			ns:       "kube-system",
@@ -43,7 +52,7 @@ func TestExactOrPrefixMatch(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if exactOrPrefixMatch(tc.nsMap, tc.ns) != tc.excluded {
+			if exactOrPrefixSuffixMatch(tc.nsMap, tc.ns) != tc.excluded {
 				if tc.excluded {
 					t.Errorf("Expected ns '%v' to match map: %v", tc.ns, tc.nsMap)
 				} else {

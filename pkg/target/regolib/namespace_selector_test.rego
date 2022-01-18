@@ -36,6 +36,18 @@ test_prefix_no_match {
     with input.review.namespace as "back-end"
 }
 
+test_suffix_match {
+  matches_namespaces({"namespaces": ["taco", "burrito", "*-system"]})
+    with input.review.kind as pod_kind
+    with input.review.namespace as "kube-system"
+}
+
+test_suffix_no_match {
+  not matches_namespaces({"namespaces": ["taco", "burrito", "*-system"]})
+    with input.review.kind as pod_kind
+    with input.review.namespace as "kube-public"
+}
+
 test_sideload_match {
   matches_nsselector({"namespaceSelector": {"matchLabels": {"hi": "there"}}})
     with input.review.kind as pod_kind
