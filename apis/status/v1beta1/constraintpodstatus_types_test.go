@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/onsi/gomega"
+	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -16,7 +16,6 @@ import (
 )
 
 func TestNewConstraintStatusForPod(t *testing.T) {
-	g := NewGomegaWithT(t)
 	podName := "some-gk-pod"
 	podNS := "a-gk-namespace"
 	cstrName := "a-constraint"
@@ -24,8 +23,15 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).NotTo(HaveOccurred())
-	g.Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+	err := AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = corev1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pod := fakes.Pod(
 		fakes.WithNamespace(podNS),
@@ -36,24 +42,39 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	cstr.SetGroupVersionKind(schema.GroupVersionKind{Group: ConstraintsGroup, Version: "v1beta1", Kind: cstrKind})
 	cstr.SetName(cstrName)
 
-	expectedStatus := &ConstraintPodStatus{}
-	expectedStatus.SetName("some--gk--pod-aconstraintkind-a--constraint")
-	expectedStatus.SetNamespace(podNS)
-	expectedStatus.Status.ID = podName
-	expectedStatus.Status.Operations = operations.AssignedStringList()
-	expectedStatus.SetLabels(
+	wantStatus := &ConstraintPodStatus{}
+	wantStatus.SetName("some--gk--pod-aconstraintkind-a--constraint")
+	wantStatus.SetNamespace(podNS)
+	wantStatus.Status.ID = podName
+	wantStatus.Status.Operations = operations.AssignedStringList()
+	wantStatus.SetLabels(
 		map[string]string{
 			ConstraintNameLabel:         "a-constraint",
 			ConstraintKindLabel:         "AConstraintKind",
 			PodLabel:                    podName,
 			ConstraintTemplateNameLabel: strings.ToLower(cstrKind),
 		})
-	g.Expect(controllerutil.SetOwnerReference(pod, expectedStatus, scheme)).NotTo(HaveOccurred())
 
-	status, err := NewConstraintStatusForPod(pod, cstr, scheme)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status).To(Equal(expectedStatus))
+	err = controllerutil.SetOwnerReference(pod, wantStatus, scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotStatus, err := NewConstraintStatusForPod(pod, cstr, scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(wantStatus, gotStatus); diff != "" {
+		t.Fatal(diff)
+	}
+
 	cmVal, err := KeyForConstraint(podName, cstr)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(status.Name).To(Equal(cmVal))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cmVal != gotStatus.Name {
+		t.Errorf("got Constraint key %q, want %q", cmVal, gotStatus.Name)
+	}
 }

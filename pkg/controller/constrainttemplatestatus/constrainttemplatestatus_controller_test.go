@@ -103,7 +103,9 @@ violation[{"msg": "denied!"}] {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	g.Expect(createGatekeeperNamespace(mgr.GetConfig())).To(gomega.BeNil())
+	if err := createGatekeeperNamespace(mgr.GetConfig()); err != nil {
+		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
+	}
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
@@ -120,7 +122,9 @@ violation[{"msg": "denied!"}] {
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	pod := fakes.Pod(
 		fakes.WithNamespace("gatekeeper-system"),
 		fakes.WithName("no-pod"),
@@ -133,7 +137,10 @@ violation[{"msg": "denied!"}] {
 		Tracker:          tracker,
 		GetPod:           func(context.Context) (*corev1.Pod, error) { return pod, nil },
 	}
-	g.Expect(adder.Add(mgr)).NotTo(gomega.HaveOccurred())
+	err = adder.Add(mgr)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
@@ -145,7 +152,10 @@ violation[{"msg": "denied!"}] {
 	templateCpy := template.DeepCopy()
 	t.Run("Constraint template status gets created and reported", func(t *testing.T) {
 		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
-		g.Expect(c.Create(ctx, templateCpy)).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, templateCpy)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
@@ -153,7 +163,10 @@ violation[{"msg": "denied!"}] {
 	constraint := newDenyAllConstraint()
 	t.Run("Constraint status gets created and reported", func(t *testing.T) {
 		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
-		g.Expect(c.Create(ctx, constraint)).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
@@ -162,77 +175,123 @@ violation[{"msg": "denied!"}] {
 	fakePod.SetName("fake-pod")
 	t.Run("Multiple constraint template statuses are reported", func(t *testing.T) {
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
 
 		// TODO: Test if this removal is necessary.
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
-		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
-		g.Expect(c.Delete(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
 
 	t.Run("Multiple constraint statuses are reported", func(t *testing.T) {
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
-		g.Expect(err).To(gomega.BeNil())
-		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.Create(ctx, fakeCStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO: Test if this removal is necessary.
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeCStatus))
 
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
-		g.Expect(c.Delete(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, fakeCStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
 
 	t.Run("Deleting a constraint deletes its status", func(t *testing.T) {
-		g.Expect(c.Delete(ctx, constraint)).NotTo(gomega.HaveOccurred())
+		err := c.Delete(ctx, constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
 		constraint = newDenyAllConstraint()
-		g.Expect(c.Create(ctx, constraint)).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
 
 	t.Run("Deleting a constraint template deletes all statuses", func(t *testing.T) {
-		g.Expect(c.Delete(ctx, template.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err := c.Delete(ctx, template.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
 		// need to manually delete constraint currently as garbage collection does not run on the test API server
-		g.Expect(c.Delete(ctx, newDenyAllConstraint())).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, newDenyAllConstraint())
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	templateCpy = template.DeepCopy()
 	constraint = newDenyAllConstraint()
 	t.Run("Deleting a constraint template deletes all statuses for the current pod", func(t *testing.T) {
 		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
-		g.Expect(c.Create(ctx, templateCpy)).NotTo(gomega.HaveOccurred())
+		err := c.Create(ctx, templateCpy)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
-		g.Expect(c.Create(ctx, constraint)).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 
 		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeTStatus.Status.TemplateUID = templateCpy.UID
-		g.Expect(c.Create(ctx, fakeTStatus)).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO: Test if this removal is necessary.
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
 
 		fakeCStatus, err := podstatus.NewConstraintStatusForPod(fakePod, newDenyAllConstraint(), mgr.GetScheme())
-		g.Expect(err).To(gomega.BeNil())
+		if err != nil {
+			t.Fatal(err)
+		}
 		fakeCStatus.Status.ConstraintUID = constraint.GetUID()
-		g.Expect(c.Create(ctx, fakeCStatus)).NotTo(gomega.HaveOccurred())
+		err = c.Create(ctx, fakeCStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO: Test if this removal is necessary.
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
@@ -240,7 +299,10 @@ violation[{"msg": "denied!"}] {
 
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), 30*timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
-		g.Expect(c.Delete(ctx, template.DeepCopy())).NotTo(gomega.HaveOccurred())
+		err = c.Delete(ctx, template.DeepCopy())
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})

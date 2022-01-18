@@ -17,11 +17,11 @@ package config
 
 import (
 	"fmt"
-	"sort"
 	gosync "sync"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -33,6 +33,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -138,22 +139,26 @@ func TestReconcile(t *testing.T) {
 
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
 
 	recFn, requests := SetupTestReconcile(rec)
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, recFn)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
@@ -161,47 +166,65 @@ func TestReconcile(t *testing.T) {
 
 	// Create the Config object and expect the Reconcile to be created
 	err = c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
 		ctx := context.Background()
 		err = c.Delete(ctx, instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
 	gvks := wm.GetManagedGVK()
 	g.Eventually(len(gvks), timeout).ShouldNot(gomega.Equal(0))
 
-	sort.Slice(gvks, func(i, j int) bool { return gvks[i].Kind < gvks[j].Kind })
-
-	g.Expect(gvks).Should(gomega.Equal([]schema.GroupVersionKind{
+	wantGVKs := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Namespace"},
 		{Group: "", Version: "v1", Kind: "Pod"},
-	}))
+	}
+	if diff := cmp.Diff(wantGVKs, gvks); diff != "" {
+		t.Fatal(diff)
+	}
 
 	ns := &unstructured.Unstructured{}
 	ns.SetName("testns")
 	nsGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Namespace"}
 	ns.SetGroupVersionKind(nsGvk)
-	g.Expect(c.Create(ctx, ns)).NotTo(gomega.HaveOccurred())
+	err = c.Create(ctx, ns)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fooNS := &unstructured.Unstructured{}
 	fooNS.SetName("foo")
 	fooNS.SetGroupVersionKind(nsGvk)
 	auditExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooNS)
-	g.Expect(auditExcludedNS).Should(gomega.BeTrue())
+	if !auditExcludedNS {
+		t.Fatal("got false but want true")
+	}
 	syncExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooNS)
-	g.Expect(syncExcludedNS).Should(gomega.BeTrue())
+	if !syncExcludedNS {
+		t.Fatal("got false but want true")
+	}
 	webhookExcludedNS, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooNS)
-	g.Expect(webhookExcludedNS).Should(gomega.BeTrue())
+	if !webhookExcludedNS {
+		t.Fatal("got false but want true")
+	}
 
 	barNS := &unstructured.Unstructured{}
 	barNS.SetName("bar")
 	barNS.SetGroupVersionKind(nsGvk)
 	syncNotExcludedNS, err := processExcluder.IsNamespaceExcluded(process.Sync, barNS)
-	g.Expect(syncNotExcludedNS).Should(gomega.BeFalse())
-	g.Expect(err).To(gomega.BeNil())
+	if syncNotExcludedNS {
+		t.Fatal("got true but want false")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fooPod := &unstructured.Unstructured{}
 	fooPod.SetName("foo")
@@ -209,19 +232,29 @@ func TestReconcile(t *testing.T) {
 	podGvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 	fooPod.SetGroupVersionKind(podGvk)
 	auditExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Audit, fooPod)
-	g.Expect(auditExcludedPod).Should(gomega.BeTrue())
+	if !auditExcludedPod {
+		t.Fatal("got false but want true")
+	}
 	syncExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Sync, fooPod)
-	g.Expect(syncExcludedPod).Should(gomega.BeTrue())
+	if !syncExcludedPod {
+		t.Fatal("got false but want true")
+	}
 	webhookExcludedPod, _ := processExcluder.IsNamespaceExcluded(process.Webhook, fooPod)
-	g.Expect(webhookExcludedPod).Should(gomega.BeTrue())
+	if !webhookExcludedPod {
+		t.Fatal("got false but want true")
+	}
 
 	barPod := &unstructured.Unstructured{}
 	barPod.SetName("bar")
 	barPod.SetNamespace("bar")
 	barPod.SetGroupVersionKind(podGvk)
 	syncNotExcludedPod, err := processExcluder.IsNamespaceExcluded(process.Sync, barPod)
-	g.Expect(syncNotExcludedPod).Should(gomega.BeFalse())
-	g.Expect(err).To(gomega.BeNil())
+	if syncNotExcludedPod {
+		t.Fatal("got true but want false")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testMgrStopped()
 	cs.Stop()
@@ -255,12 +288,16 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 	ctx := context.Background()
 	err := c.Create(ctx, instance)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
 		ctx := context.Background()
 		err = c.Delete(ctx, instance)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 
 	// create the pod that is a sync only resource in config obj
@@ -277,27 +314,33 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 		},
 	}
 
-	g.Expect(c.Create(ctx, pod)).NotTo(gomega.HaveOccurred())
+	err = c.Create(ctx, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// set up tracker
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// events channel will be used to receive events from dynamic watches
 	events := make(chan event.GenericEvent, 1024)
 
 	// set up controller and add it to the manager
 	err = setupController(mgr, wm, tracker, events)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// start manager that will start tracker and controller
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	defer func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}()
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
@@ -315,7 +358,10 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 	// delete the pod , the delete event will be reconciled by sync controller
 	// to cancel the expectation set for it by tracker
-	g.Expect(c.Delete(ctx, pod)).NotTo(gomega.HaveOccurred())
+	err = c.Delete(ctx, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// register events for the pod to go in the event channel
 	podObj := fakes.Pod(
@@ -385,21 +431,25 @@ func TestConfig_CacheContents(t *testing.T) {
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
@@ -429,18 +479,26 @@ func TestConfig_CacheContents(t *testing.T) {
 	cm := unstructuredFor(configMapGVK, "config-test-1")
 	cm.SetNamespace("default")
 	err = c.Create(ctx, cm)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-1")
+	if err != nil {
+		t.Fatalf("creating configMap config-test-1: %v", err)
+	}
 
 	cm2 := unstructuredFor(configMapGVK, "config-test-2")
 	cm2.SetNamespace("kube-system")
 	err = c.Create(ctx, cm2)
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "creating configMap config-test-2")
+	if err != nil {
+		t.Fatalf("creating configMap config-test-2: %v", err)
+	}
 
 	defer func() {
 		err = c.Delete(ctx, cm)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = c.Delete(ctx, cm2)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 
 	expected := map[opaKey]interface{}{
@@ -453,7 +511,9 @@ func TestConfig_CacheContents(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Sanity
-	g.Expect(opaClient.HasGVK(nsGVK)).To(gomega.BeTrue())
+	if !opaClient.HasGVK(nsGVK) {
+		t.Fatal("want opaClient.HasGVK(nsGVK) to be true but got false")
+	}
 
 	// Reconfigure to drop the namespace watches
 	instance = configFor([]schema.GroupVersionKind{configMapGVK})
@@ -462,7 +522,9 @@ func TestConfig_CacheContents(t *testing.T) {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "updating Config resource")
+	if err != nil {
+		t.Fatalf("updating Config resource: %v", err)
+	}
 
 	// Expect namespaces to go away from cache
 	g.Eventually(func() bool {
@@ -492,9 +554,13 @@ func TestConfig_CacheContents(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "kube-system namespace is excluded. kube-system/config-test-2 should not be in opa cache")
 
 	// Delete the config resource - expect opa to empty out.
-	g.Expect(opaClient.Len()).ToNot(gomega.BeZero(), "sanity")
+	if opaClient.Len() == 0 {
+		t.Fatal("sanity")
+	}
 	err = c.Delete(ctx, instance)
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "deleting Config resource")
+	if err != nil {
+		t.Fatalf("deleting Config resource: %v", err)
+	}
 
 	// The cache will be cleared out.
 	g.Eventually(func() int {
@@ -525,13 +591,18 @@ func TestConfig_Retries(t *testing.T) {
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
 	tracker, err := readiness.SetupTracker(mgr, false, false)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
 	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
-	g.Expect(add(mgr, rec)).NotTo(gomega.HaveOccurred())
+	err = add(mgr, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Use our special hookReader to inject controlled failures
 	failPlease := make(chan string, 1)
@@ -552,12 +623,11 @@ func TestConfig_Retries(t *testing.T) {
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	mgrStopped := StartTestManager(ctx, mgr, g)
+	testutils.StartManager(ctx, t, mgr)
 	once := gosync.Once{}
 	testMgrStopped := func() {
 		once.Do(func() {
 			cancelFunc()
-			mgrStopped.Wait()
 		})
 	}
 
@@ -601,8 +671,12 @@ func TestConfig_Retries(t *testing.T) {
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
 	_, err = opaClient.RemoveData(ctx, target.WipeData{})
-	g.Expect(err).NotTo(gomega.HaveOccurred(), "wiping opa cache")
-	g.Expect(opaClient.Contains(expected)).To(gomega.BeFalse(), "wipe failed")
+	if err != nil {
+		t.Fatalf("wiping opa cache: %v", err)
+	}
+	if opaClient.Contains(expected) {
+		t.Fatal("wipe failed")
+	}
 
 	// Make List fail once for ConfigMaps as the replay occurs following the reconfig below.
 	failPlease <- "ConfigMapList"
@@ -614,7 +688,9 @@ func TestConfig_Retries(t *testing.T) {
 		forUpdate.Spec = instance.Spec
 		return nil
 	})
-	g.Expect(err).ToNot(gomega.HaveOccurred(), "updating Config resource")
+	if err != nil {
+		t.Fatalf("updating Config resource: %v", err)
+	}
 
 	// Despite the transient error, we expect the cache to eventually be repopulated.
 	g.Eventually(func() bool {

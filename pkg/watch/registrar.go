@@ -17,6 +17,7 @@ package watch
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -190,6 +191,10 @@ func (r *recordKeeper) GetGVK() []schema.GroupVersionKind {
 	for gvk := range g {
 		gvks = append(gvks, gvk)
 	}
+
+	sort.Slice(gvks, func(i, j int) bool {
+		return gvks[i].String() < gvks[j].String()
+	})
 	return gvks
 }
 
