@@ -3,6 +3,7 @@ package client
 import (
 	"text/template"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -91,6 +92,12 @@ type TargetHandler interface {
 	// This allows for semantic validation beyond OpenAPI validation given by the
 	// spec from MatchSchema().
 	ValidateConstraint(constraint *unstructured.Unstructured) error
+
+	// ToMatcher converts a Constraint to its corresponding Matcher.
+	// CURRENTLY UNIMPLEMENTED.
+	// Allows caching Constraint-specific logic for matching objects under
+	// review.
+	ToMatcher(constraint *unstructured.Unstructured) (constraints.Matcher, error)
 }
 
 type MatchSchemaProvider interface {
