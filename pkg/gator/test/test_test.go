@@ -1,4 +1,4 @@
-package validate
+package test
 
 import (
 	"errors"
@@ -55,7 +55,7 @@ func init() {
 	}
 }
 
-func TestValidate(t *testing.T) {
+func TestTest(t *testing.T) {
 	tcs := []struct {
 		name   string
 		inputs []string
@@ -163,7 +163,7 @@ func TestValidate(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Validate(objs)
+			resps, err := Test(objs)
 			if tc.err != nil {
 				// If we're checking for specific errors, use errors.Is() to verify
 				if err == nil {

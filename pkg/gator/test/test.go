@@ -1,4 +1,4 @@
-package validate
+package test
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func init() {
 	}
 }
 
-func Validate(objs []*unstructured.Unstructured) (*types.Responses, error) {
+func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	// create the client
 	client, err := gator.NewOPAClient()
 	if err != nil {

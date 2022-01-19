@@ -101,7 +101,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 
 // TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
 // this function into a location that makes it more obviously a shared resource
-// between `gator test` and `gator validate`
+// between `gator test` and `gator verify`
 
 // ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
 func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {

@@ -2,7 +2,7 @@
 Copyright © 2021 NAME HERE <EMAIL ADDRESS>
 
 */
-package validate
+package test
 
 import (
 	"bufio"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator/validate"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -21,25 +21,25 @@ import (
 )
 
 const (
-	examples = `  # Validate a manifest containing Kubernetes objects, Constraint Templates, and Constraints
-  gator validate --filename="manifest.yaml"
+	examples = `  # test a manifest containing Kubernetes objects, Constraint Templates, and Constraints
+  gator test --filename="manifest.yaml"
 
-  # Validate a directory
-  gator validate --filename="config-and-policies/"
+  # test a directory
+  gator test --filename="config-and-policies/"
 
   # Use multiple inputs
-  gator validate --filename="manifest.yaml" --filename="templates-and-constraints/"
+  gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
 
   # Receive input from stdin
-  cat manifest.yaml | gator validate
+  cat manifest.yaml | gator test
 
   # Output structured violations data
-  gator validate --filename="manifest.yaml" --json`
+  gator test --filename="manifest.yaml" --json`
 )
 
 var Cmd = &cobra.Command{
-	Use:     "validate",
-	Short:   "validate resources against templates and constraints",
+	Use:     "test",
+	Short:   "test resources against templates and constraints",
 	Example: examples,
 	Run:     run,
 }
@@ -71,7 +71,7 @@ func run(cmd *cobra.Command, args []string) {
 		errFatalf("no input data identified")
 	}
 
-	responses, err := validate.Validate(unstrucs)
+	responses, err := test.Test(unstrucs)
 	if err != nil {
 		errFatalf("auditing objects: %v\n", err)
 	}

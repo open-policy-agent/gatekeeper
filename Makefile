@@ -103,12 +103,20 @@ test:
 	cp test/Dockerfile .staging/test/Dockerfile
 	docker build --pull .staging/test -t gatekeeper-test && docker run -it gatekeeper-test
 
+.PHONY: test-e2e
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
-test-gator: bin/gator-${GOOS}-${GOARCH}
-	./bin/gator-${GOOS}-${GOARCH} verify test/gator/verify/suite.yaml
-	$(MAKE) test-gator-validate
+.PHONY: test-gator
+test-gator: test-gator-verify test-gator-test
+
+.PHONY: test-gator-verify
+test-gator-verify: gator
+	./bin/gator verify test/gator/verify/suite.yaml
+
+.PHONY: test-gator-test
+test-gator-test: gator
+	bats test/gator/test
 
 e2e-dependencies: 
 	# Download and install kind
@@ -408,7 +416,3 @@ gator: bin/gator-$(GOOS)-$(GOARCH)
 
 bin/gator-$(GOOS)-$(GOARCH):
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH) -ldflags $(LDFLAGS) ./cmd/gator
-
-.PHONY: test-gator-validate
-test-gator-validate: gator
-	bats test/gator/validate

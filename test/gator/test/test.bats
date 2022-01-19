@@ -18,7 +18,7 @@ match_substring () {
   fi
 }
 
-# match_yaml_msg checks that the gator validate full yaml output (arg1)
+# match_yaml_msg checks that the gator test full yaml output (arg1)
 # contains the `msg: ` field and then matches that `msg` field against the
 # "want" message (arg2).  Multiple error messages can be checked by passing in
 # a violation index (arg3).  arg3 defaults to `0` for use when there is a
@@ -47,7 +47,7 @@ match_yaml_msg () {
 ####################################################################################################
 
 @test "manifest with no violations piped to stdin returns 0 exit status" {
-  bin/gator validate < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
+  bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
     printf "ERROR: got exit status %s but wanted 0\n" "$?"
     exit 1
@@ -55,11 +55,11 @@ match_yaml_msg () {
 }
 
 @test "manifest with violations piped to stdin returns 1 exit status" {
-  ! bin/gator validate < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
+  ! bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
 }
 
 @test "manifest with no violations included as flag returns 0 exit status" {
-  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
+  bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
     printf "ERROR: got exit status %s but wanted 0\n" "$?"
     exit 1
@@ -67,11 +67,11 @@ match_yaml_msg () {
 }
 
 @test "manifest with violations included as flag returns 1 exit status" {
-  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
+  ! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
 }
 
 @test "multiple files passed in flags is supported" {
-  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations-2.yaml"
+  bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations-2.yaml"
   if [ "$?" -ne 0 ]; then
     printf "ERROR: got exit status %s but wanted 0\n" "$?"
     exit 1
@@ -79,7 +79,7 @@ match_yaml_msg () {
 }
 
 @test "stdin and flag are supported in combination" {
-  output=$(! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml")
+  output=$(! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml")
   # since the `run` command doesn't support redirects, it's impractical to
   # confirm the `1` exit code.  We'll instead just confirm the violation is
   # working, and rely on other tests to confirm that `1` is being returned when
@@ -88,7 +88,7 @@ match_yaml_msg () {
 }
 
 @test "correctly returns no violations from objects in a filesystem" {
-  bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/no-violations.yaml"
+  bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
     printf "ERROR: got exit status %s but wanted 0\n" "$?"
     exit 1
@@ -96,32 +96,32 @@ match_yaml_msg () {
 }
 
 @test "correctly finds violations from objects in a filesystem" {
-  ! bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
+  ! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml"
 }
 
 @test "expects user to input data" {
-  run bin/gator validate
+  run bin/gator test
   [ "$status" -eq 1 ]
   err_substring="no input data identified"
   match_substring "${output[*]}" "${err_substring}"
 }
 
 @test "disallows invalid template" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/template.yaml"
+  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/template.yaml"
   [ "$status" -eq 1 ]
   err_substring="reading yaml source"
   match_substring "${output[*]}" "${err_substring}"
 }
 
 @test "disallows invalid constraint" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/constraint.yaml"
+  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/invalid-resources/constraint.yaml"
   [ "$status" -eq 1 ]
   err_substring="reading yaml source"
   match_substring "${output[*]}" "${err_substring}"
 }
 
 @test "outputs valid json when flag is specified" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" --output=json
+  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" --output=json
   [ "$status" -eq 1 ]
   # uses jq version `jq-1.6`
   if ! (echo -n "${output[*]}" | jq); then
@@ -132,7 +132,7 @@ match_yaml_msg () {
 }
 
 @test "outputs valid yaml when flag is specified" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" -o=yaml
+  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" -o=yaml
   [ "$status" -eq 1 ]
   # Confirm we still get our violation output
   want_msg="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
@@ -140,7 +140,7 @@ match_yaml_msg () {
 }
 
 @test "correctly ingests files of different extensions, skipping bad extensions, and producing correct violations" {
-  run bin/gator validate --filename="$BATS_TEST_DIRNAME/fixtures/manifests/different-extensions" -o=yaml
+  run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/different-extensions" -o=yaml
   [ "$status" -eq 1 ]
 
   # Confirm we still get our violation output
@@ -149,7 +149,7 @@ match_yaml_msg () {
 }
 
 @test "enforcementAction=deny causes 1 exit status and violations output" {
-  run bin/gator validate \
+  run bin/gator test \
     -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
     -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/deny.yaml" \
     -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
@@ -163,7 +163,7 @@ match_yaml_msg () {
 }
 
 @test "enforcementAction=[anything else] causes 0 exit status and violations output" {
-  run bin/gator validate \
+  run bin/gator test \
     -f="$BATS_TEST_DIRNAME/fixtures/policies/default/template_k8srequiredprobes.yaml" \
     -f="$BATS_TEST_DIRNAME/fixtures/policies/enforcement_action/k8srequiredprobes/foo.yaml" \
     -f="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" \
