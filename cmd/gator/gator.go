@@ -3,14 +3,14 @@ package main
 import (
 	"os"
 
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
+	"github.com/open-policy-agent/gatekeeper/cmd/gator/verify"
 	"github.com/spf13/cobra"
 )
 
 const version = "alpha"
 
 func init() {
-	rootCmd.AddCommand(test.Cmd)
+	rootCmd.AddCommand(verify.Cmd)
 }
 
 var rootCmd = &cobra.Command{

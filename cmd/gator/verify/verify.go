@@ -1,4 +1,4 @@
-package test
+package verify
 
 import (
 	"context"
@@ -16,20 +16,20 @@ import (
 
 const (
 	examples = `  # Run all tests in label-tests.yaml
-  gator test label-tests.yaml
+  gator verify label-tests.yaml
 
   # Run all tests whose names contain "forbid-labels".
-  gator test tests/... --run forbid-labels//
+  gator verify tests/... --run forbid-labels//
 
   # Run all cases whose names contain "nginx-deployment".
-  gator test tests/... --run //nginx-deployment
+  gator verify tests/... --run //nginx-deployment
 
   # Run all cases whose names exactly match "nginx-deployment".
-  gator test tests/... --run '//^nginx-deployment$'
+  gator verify tests/... --run '//^nginx-deployment$'
 
   # Run all cases that are either named "forbid-labels" or are
   # in tests named "forbid-labels".
-  gator test tests/... --run '^forbid-labels$'`
+  gator verify tests/... --run '^forbid-labels$'`
 )
 
 var (
@@ -44,10 +44,10 @@ func init() {
 		`print extended test output`)
 }
 
-// Cmd is the gator test subcommand.
+// Cmd is the gator verify subcommand.
 var Cmd = &cobra.Command{
-	Use:     "test path [--run=name]",
-	Short:   "test runs suites of tests on Gatekeeper Constraints",
+	Use:     "verify path [--run=name]",
+	Short:   "verify runs suites of tests on Gatekeeper Constraints",
 	Example: examples,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runE,
