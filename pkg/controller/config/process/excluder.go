@@ -97,13 +97,13 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
-		return exactOrPrefixSuffixMatch(s.excludedNamespaces[process], meta.GetName()), nil
+		return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetName()), nil
 	}
 
-	return exactOrPrefixSuffixMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
+	return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
 }
 
-func exactOrPrefixSuffixMatch(boolMap map[util.Wildcard]bool, ns string) bool {
+func exactOrWildcardMatch(boolMap map[util.Wildcard]bool, ns string) bool {
 	for k := range boolMap {
 		if k.Matches(ns) {
 			return true

@@ -6,7 +6,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 )
 
-func TestExactOrPrefixSuffixMatch(t *testing.T) {
+func TestExactOrWildcardMatch(t *testing.T) {
 	tcs := []struct {
 		name     string
 		nsMap    map[util.Wildcard]bool
@@ -52,7 +52,7 @@ func TestExactOrPrefixSuffixMatch(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if exactOrPrefixSuffixMatch(tc.nsMap, tc.ns) != tc.excluded {
+			if exactOrWildcardMatch(tc.nsMap, tc.ns) != tc.excluded {
 				if tc.excluded {
 					t.Errorf("Expected ns '%v' to match map: %v", tc.ns, tc.nsMap)
 				} else {
