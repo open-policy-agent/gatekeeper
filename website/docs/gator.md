@@ -6,7 +6,7 @@ title: The gator CLI
 The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
 Constraints in a local environment.
 
-For now, the only subcommand is `gator test`, which allows writing unit tests
+For now, the only subcommand is `gator verify`, which allows writing unit tests
 for Constraints. We plan on adding more subcommands in the future.
 
 ## Installation
@@ -20,11 +20,11 @@ To build from source:
 go get github.com/open-policy-agent/gatekeeper/cmd/gator
 ```
 
-## The `gator test` subcommand
+## The `gator verify` subcommand
 
 ### Writing Test Suites
 
-`gator test` organizes tests into three levels: Suites, Tests, and Cases:
+`gator verify` organizes tests into three levels: Suites, Tests, and Cases:
 
 - A Suite is a file which defines Tests.
 - A Test declares a ConstraintTemplate, a Constraint, and Cases to test the
@@ -46,7 +46,7 @@ kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
 ```
 
-`gator test` silently ignores files which do not declare these. A Suite may
+`gator verify` silently ignores files which do not declare these. A Suite may
 declare multiple Tests, each containing different Templates and Constraints.
 Each Test in a Suite is independent.
 
@@ -125,7 +125,7 @@ the below is valid:
 This Case specifies that there is at least one violation, and no violations
 contain the string "foobar".
 
-More examples of working `gator test` suites are available in the
+More examples of working `gator verify` suites are available in the
 [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library)
 repository.
 
@@ -133,23 +133,23 @@ repository.
 
 To run a specific suite:
 ```
-gator test suite.yaml
+gator verify suite.yaml
 ```
 
 To run all suites in the current directory and all child directories
 recursively
 ```
-gator test ./...
+gator verify ./...
 ```
 
 To only run tests whose full names contain a match for a regular expression, use
 the `run` flag:
 
 ```
-gator test path/to/suites/... --run "disallowed"
+gator verify path/to/suites/... --run "disallowed"
 ```
 
-Run `gator test --help` for more information.
+Run `gator verify --help` for more information.
 
 ## Gotchas
 
@@ -177,7 +177,7 @@ to keep from specifying templates which will fail in a real cluster.
 use `gator` on other systems, let us know by replying to
 [this issue](https://github.com/open-policy-agent/gatekeeper/issues/1655).
 
-`gator test` has been manually tested on Windows and works as of
+`gator verify` has been manually tested on Windows and works as of
 [this commit](https://github.com/open-policy-agent/gatekeeper/commit/b3ed94406583c85f3102c54a32f362d27f76da96).
 Continued functionality is not guaranteed.
 
