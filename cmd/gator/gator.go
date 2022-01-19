@@ -3,15 +3,15 @@ package main
 import (
 	"os"
 
-	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/validate"
+	"github.com/open-policy-agent/gatekeeper/cmd/gator/verify"
 	"github.com/spf13/cobra"
 )
 
 const version = "alpha"
 
 var commands = []*cobra.Command{
-	test.Cmd,
+	verify.Cmd,
 	validate.Cmd,
 }
 

@@ -107,7 +107,7 @@ test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
 test-gator: bin/gator-${GOOS}-${GOARCH}
-	./bin/gator-${GOOS}-${GOARCH} test test/gator/test/suite.yaml
+	./bin/gator-${GOOS}-${GOARCH} verify test/gator/verify/suite.yaml
 	$(MAKE) test-gator-validate
 
 e2e-dependencies: 
