@@ -31,9 +31,11 @@ import (
 //   - A typical namespace must end in an alphanumeric character.  A prefixed wildcard
 //     can end in "*" (like `kube*`) or "-*" (like `kube-*`), and a suffixed wildcard
 //     can start with "*" (like `*system`) or "*-" (like `*-system`).
-//   - To implement this, we add the following (\*|\*-)? as a prefix and (\*|-\*)? as a suffix.
+//   - To implement this, we add either (\*|\*-)? as a prefix or (\*|-\*)? as a suffix.
+//     Using both prefixed wildcards and suffixed wildcards at once is not supported.  Therefore,
+//     this _does not_ allow the value to start _and_ end in a wildcard (like `*-*`).
 //   - Crucially, this _does not_ allow the value to start or end in a dash (like `-system` or `kube-`).
-//     That is not a valid namespace and not a wildcard, so it's disallowed
+//     That is not a valid namespace and not a wildcard, so it's disallowed.
 //
 //   Notably, this disallows other uses of the "*" character like:
 //   - *
