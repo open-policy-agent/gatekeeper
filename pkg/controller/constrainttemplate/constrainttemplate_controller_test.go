@@ -61,6 +61,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+var constantRetry = wait.Backoff{
+	Steps:    1000,
+	Duration: 10 * time.Millisecond,
+}
+
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
@@ -193,10 +198,7 @@ func TestReconcile(t *testing.T) {
 		createThenCleanup(ctx, t, c, constraintTemplate)
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
-		err = retry.OnError(wait.Backoff{
-			Steps:    1000,
-			Duration: 10 * time.Millisecond,
-		}, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -228,7 +230,7 @@ func TestReconcile(t *testing.T) {
 		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, crdToDelete))
 		createThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(retry.DefaultBackoff, func(error) bool {
+		err = retry.OnError(constantRetry, func(error) bool {
 			return true
 		}, func() error {
 			return c.Create(ctx, cstr)
@@ -281,7 +283,7 @@ func TestReconcile(t *testing.T) {
 		createThenCleanup(ctx, t, c, constraintTemplate)
 
 		var crd *apiextensionsv1.CustomResourceDefinition
-		err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd = &apiextensionsv1.CustomResourceDefinition{}
@@ -298,10 +300,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(wait.Backoff{
-			Steps:    1000,
-			Duration: 10 * time.Millisecond,
-		}, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -615,6 +614,9 @@ violation[{"msg": "denied!"}] {
 		}
 		return nil
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Delete the constraint , the delete event will be reconciled by controller
 	// to cancel the expectation set for it by tracker
@@ -629,10 +631,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Check readiness tracker is satisfied post-reconcile
-	err = retry.OnError(wait.Backoff{
-		Duration: 10 * time.Millisecond,
-		Steps:    1000,
-	}, func(err error) bool {
+	err = retry.OnError(constantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		satisfied := tracker.For(gvk).Satisfied()
@@ -647,10 +646,7 @@ violation[{"msg": "denied!"}] {
 }
 
 func constraintEnforced(ctx context.Context, c client.Client) error {
-	return retry.OnError(wait.Backoff{
-		Steps:    1000,
-		Duration: 10 * time.Millisecond,
-	}, func(err error) bool {
+	return retry.OnError(constantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr()
