@@ -92,12 +92,12 @@ func (in *Match) DeepCopyInto(out *Match) {
 	}
 	if in.Namespaces != nil {
 		in, out := &in.Namespaces, &out.Namespaces
-		*out = make([]util.PrefixWildcard, len(*in))
+		*out = make([]util.Wildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
-		*out = make([]util.PrefixWildcard, len(*in))
+		*out = make([]util.Wildcard, len(*in))
 		copy(*out, *in)
 	}
 	if in.LabelSelector != nil {

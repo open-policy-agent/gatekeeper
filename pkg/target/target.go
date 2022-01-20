@@ -27,20 +27,22 @@ import (
 //   - These are defined by this pattern: [a-z0-9]([-a-z0-9]*[a-z0-9])?
 //   - You'll see that this is the first two-thirds or so of the pattern below
 //
-//   PREFIX-BASED WILDCARDS
+//   PREFIX OR SUFFIX BASED WILDCARDS
 //   - A typical namespace must end in an alphanumeric character.  A prefixed wildcard
-//     can end in "*" (like `kube*`) or "-*" (like `kube-*`).
-//   - To implement this, we add the following: (\*|-\*)?
-//   - Crucially, this _does not_ allow the value to end in a dash (like `kube-`).  That is
-//     not a valid namespace and not a wildcard, so it's disallowed
+//     can end in "*" (like `kube*`) or "-*" (like `kube-*`), and a suffixed wildcard
+//     can start with "*" (like `*system`) or "*-" (like `*-system`).
+//   - To implement this, we add either (\*|\*-)? as a prefix or (\*|-\*)? as a suffix.
+//     Using both prefixed wildcards and suffixed wildcards at once is not supported.  Therefore,
+//     this _does not_ allow the value to start _and_ end in a wildcard (like `*-*`).
+//   - Crucially, this _does not_ allow the value to start or end in a dash (like `-system` or `kube-`).
+//     That is not a valid namespace and not a wildcard, so it's disallowed.
 //
 //   Notably, this disallows other uses of the "*" character like:
 //   - *
-//   - *-system
 //   - k*-system
 //
-// See the following regexr to test this regex: https://regexr.com/60t2o
-const wildcardNSPattern = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+// See the following regexr to test this regex: https://regexr.com/6dgdj
+const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
 var _ client.TargetHandler = &K8sValidationTarget{}
 

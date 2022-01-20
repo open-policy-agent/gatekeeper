@@ -14,7 +14,11 @@ teardown() {
 
 teardown_file() {
   kubectl label ns ${GATEKEEPER_NAMESPACE} admission.gatekeeper.sh/ignore=no-self-managing --overwrite || true
-  kubectl delete ns gatekeeper-test-playground gatekeeper-excluded-namespace || true
+  kubectl delete ns \
+    gatekeeper-test-playground \
+    gatekeeper-excluded-namespace \
+    gatekeeper-excluded-prefix-match-namespace \
+    gatekeeper-excluded-suffix-match-namespace || true
   kubectl delete "$(kubectl api-resources --api-group=constraints.gatekeeper.sh -o name | tr "\n" "," | sed -e 's/,$//')" -l gatekeeper.sh/tests=yes || true
   kubectl delete ConstraintTemplates -l gatekeeper.sh/tests=yes || true
   kubectl delete configs.config.gatekeeper.sh -n ${GATEKEEPER_NAMESPACE} -l gatekeeper.sh/tests=yes || true
@@ -81,6 +85,8 @@ teardown_file() {
 # creating namespaces and audit constraints early so they will have time to reconcile
 @test "create basic resources" {
   kubectl create ns gatekeeper-excluded-namespace
+  kubectl create ns gatekeeper-excluded-prefix-match-namespace
+  kubectl create ns gatekeeper-excluded-suffix-match-namespace
   kubectl apply -f ${BATS_TESTS_DIR}/good/playground_ns.yaml
   kubectl apply -f ${BATS_TESTS_DIR}/good/no_dupe_cm.yaml
   kubectl apply -f ${BATS_TESTS_DIR}/bad/bad_cm_audit.yaml
@@ -206,16 +212,40 @@ __required_labels_audit_test() {
   [[ "$events" -ge 1 ]]
 }
 
-@test "config namespace exclusion test" {
+__namespace_exclusion_test() {
+  local exclusion_config="$1"
+  local excluded_namespace="$2"
+
+  # applying default sync config
+  kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync.yaml
+
   kubectl apply -f ${BATS_TESTS_DIR}/constraints/all_cm_must_have_gatekeeper.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels cm-must-have-gk"
 
-  run kubectl create configmap should-fail -n gatekeeper-excluded-namespace
+  run kubectl create configmap should-fail -n "${excluded_namespace}"
   assert_match 'denied the request' "${output}"
   assert_failure
 
-  kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/sync_with_exclusion.yaml
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl create configmap should-succeed -n gatekeeper-excluded-namespace"
+  kubectl apply -n ${GATEKEEPER_NAMESPACE} -f ${BATS_TESTS_DIR}/${exclusion_config}
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl create configmap should-succeed -n ${excluded_namespace}"
+}
+
+@test "config namespace exclusion test (exact match)" {
+  local exclusion_config="sync_with_exclusion_exact_match.yaml"
+  local excluded_namespace="gatekeeper-excluded-namespace"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "__namespace_exclusion_test ${exclusion_config} ${excluded_namespace}"
+}
+
+@test "config namespace exclusion test (prefix match)" {
+  local exclusion_config="sync_with_exclusion_prefix_match.yaml"
+  local excluded_namespace="gatekeeper-excluded-prefix-match-namespace"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "__namespace_exclusion_test ${exclusion_config} ${excluded_namespace}"
+}
+
+@test "config namespace exclusion test (suffix match)" {
+  local exclusion_config="sync_with_exclusion_suffix_match.yaml"
+  local excluded_namespace="gatekeeper-excluded-suffix-match-namespace"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "__namespace_exclusion_test ${exclusion_config} ${excluded_namespace}"
 }
 
 @test "disable http.send" {
