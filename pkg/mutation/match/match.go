@@ -50,15 +50,17 @@ type Match struct {
 	Scope apiextensionsv1.ResourceScope `json:"scope,omitempty"`
 	// Namespaces is a list of namespace names. If defined, a constraint only
 	// applies to resources in a listed namespace.  Namespaces also supports a
-	// prefix-based glob.  For example, `namespaces: [kube-*]` matches both
-	// `kube-system` and `kube-public`.
-	Namespaces []util.PrefixWildcard `json:"namespaces,omitempty"`
+	// prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both
+	// `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both
+	// `kube-system` and `gatekeeper-system`.
+	Namespaces []util.Wildcard `json:"namespaces,omitempty"`
 	// ExcludedNamespaces is a list of namespace names. If defined, a
 	// constraint only applies to resources not in a listed namespace.
-	// ExcludedNamespaces also supports a prefix-based glob.  For example,
+	// ExcludedNamespaces also supports a prefix or suffix based glob.  For example,
 	// `excludedNamespaces: [kube-*]` matches both `kube-system` and
-	// `kube-public`.
-	ExcludedNamespaces []util.PrefixWildcard `json:"excludedNamespaces,omitempty"`
+	// `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and
+	// `gatekeeper-system`.
+	ExcludedNamespaces []util.Wildcard `json:"excludedNamespaces,omitempty"`
 	// LabelSelector is the combination of two optional fields: `matchLabels`
 	// and `matchExpressions`.  These two fields provide different methods of
 	// selecting or excluding k8s objects based on the label keys and values
@@ -70,9 +72,9 @@ type Match struct {
 	// namespace or the object itself, if the object is a namespace.
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 	// Name is the name of an object.  If defined, it will match against objects with the specified
-	// name.  Name also supports a prefix-based glob.  For example, `name: pod-*` would match both
-	// `pod-a` and `pod-b`.
-	Name util.PrefixWildcard `json:"name,omitempty"`
+	// name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
+	// both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
+	Name util.Wildcard `json:"name,omitempty"`
 }
 
 // Kinds accepts a list of objects with apiGroups and kinds fields

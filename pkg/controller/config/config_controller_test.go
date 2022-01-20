@@ -110,11 +110,11 @@ func TestReconcile(t *testing.T) {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.PrefixWildcard{"foo"},
+					ExcludedNamespaces: []util.Wildcard{"foo"},
 					Processes:          []string{"*"},
 				},
 				{
-					ExcludedNamespaces: []util.PrefixWildcard{"bar"},
+					ExcludedNamespaces: []util.Wildcard{"bar"},
 					Processes:          []string{"audit", "webhook"},
 				},
 			},
@@ -722,7 +722,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			},
 			Match: []configv1alpha1.MatchEntry{
 				{
-					ExcludedNamespaces: []util.PrefixWildcard{"kube-system"},
+					ExcludedNamespaces: []util.Wildcard{"kube-system"},
 					Processes:          []string{"sync"},
 				},
 			},

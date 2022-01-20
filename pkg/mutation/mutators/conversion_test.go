@@ -241,7 +241,7 @@ func TestAssignMetadataHasDiff(t *testing.T) {
 		{
 			"differentMatch",
 			func(a *mutationsunversioned.AssignMetadata) {
-				a.Spec.Match.Namespaces = []util.PrefixWildcard{"foo", "bar"}
+				a.Spec.Match.Namespaces = []util.Wildcard{"foo", "bar"}
 			},
 			true,
 		},

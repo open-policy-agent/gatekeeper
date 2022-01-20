@@ -63,8 +63,8 @@ type SyncOnlyEntry struct {
 }
 
 type MatchEntry struct {
-	Processes          []string              `json:"processes,omitempty"`
-	ExcludedNamespaces []util.PrefixWildcard `json:"excludedNamespaces,omitempty"`
+	Processes          []string        `json:"processes,omitempty"`
+	ExcludedNamespaces []util.Wildcard `json:"excludedNamespaces,omitempty"`
 }
 
 type ReadinessSpec struct {

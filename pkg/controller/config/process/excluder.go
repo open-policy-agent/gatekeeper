@@ -25,7 +25,7 @@ const (
 
 type Excluder struct {
 	mux                sync.RWMutex
-	excludedNamespaces map[Process]map[util.PrefixWildcard]bool
+	excludedNamespaces map[Process]map[util.Wildcard]bool
 }
 
 var allProcesses = []Process{
@@ -36,7 +36,7 @@ var allProcesses = []Process{
 }
 
 var processExcluder = &Excluder{
-	excludedNamespaces: make(map[Process]map[util.PrefixWildcard]bool),
+	excludedNamespaces: make(map[Process]map[util.Wildcard]bool),
 }
 
 func Get() *Excluder {
@@ -45,7 +45,7 @@ func Get() *Excluder {
 
 func New() *Excluder {
 	return &Excluder{
-		excludedNamespaces: make(map[Process]map[util.PrefixWildcard]bool),
+		excludedNamespaces: make(map[Process]map[util.Wildcard]bool),
 	}
 }
 
@@ -60,13 +60,13 @@ func (s *Excluder) Add(entry []configv1alpha1.MatchEntry) {
 				if Process(op) == Star {
 					for _, o := range allProcesses {
 						if s.excludedNamespaces[o] == nil {
-							s.excludedNamespaces[o] = make(map[util.PrefixWildcard]bool)
+							s.excludedNamespaces[o] = make(map[util.Wildcard]bool)
 						}
 						s.excludedNamespaces[o][ns] = true
 					}
 				} else {
 					if s.excludedNamespaces[Process(op)] == nil {
-						s.excludedNamespaces[Process(op)] = make(map[util.PrefixWildcard]bool)
+						s.excludedNamespaces[Process(op)] = make(map[util.Wildcard]bool)
 					}
 					s.excludedNamespaces[Process(op)][ns] = true
 				}
@@ -97,13 +97,13 @@ func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (boo
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
-		return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetName()), nil
+		return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetName()), nil
 	}
 
-	return exactOrPrefixMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
+	return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
 }
 
-func exactOrPrefixMatch(boolMap map[util.PrefixWildcard]bool, ns string) bool {
+func exactOrWildcardMatch(boolMap map[util.Wildcard]bool, ns string) bool {
 	for k := range boolMap {
 		if k.Matches(ns) {
 			return true
