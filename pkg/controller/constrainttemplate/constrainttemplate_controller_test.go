@@ -62,7 +62,7 @@ import (
 )
 
 var constantRetry = wait.Backoff{
-	Steps:    1000,
+	Steps:    3000,
 	Duration: 10 * time.Millisecond,
 }
 
