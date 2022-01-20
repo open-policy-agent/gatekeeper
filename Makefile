@@ -108,7 +108,7 @@ test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
 .PHONY: test-gator
-test-gator: test-gator-verify test-gator-test
+test-gator: gator test-gator-verify test-gator-test
 
 .PHONY: test-gator-verify
 test-gator-verify: gator
