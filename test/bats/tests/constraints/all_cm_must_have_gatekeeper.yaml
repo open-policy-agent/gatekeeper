@@ -6,7 +6,11 @@ metadata:
     gatekeeper.sh/tests: "yes"
 spec:
   match:
-    namespaces: ["gatekeeper-test-playground", "gatekeeper-excluded-namespace"]
+    namespaces:
+      - "gatekeeper-test-playground"
+      - "gatekeeper-excluded-namespace"
+      - "gatekeeper-excluded-prefix-match-namespace"
+      - "gatekeeper-excluded-suffix-match-namespace"
     kinds:
       - apiGroups: [""]
         kinds: ["ConfigMap"]

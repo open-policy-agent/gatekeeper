@@ -1,0 +1,21 @@
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  labels:
+    gatekeeper.sh/tests: "yes"
+spec:
+  match:
+    - excludedNamespaces: ["*-excluded-suffix-match-namespace"] # gatekeeper-excluded-suffix-match-namespace
+      processes: ["*"]
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "ConfigMap"
+      - group: ""
+        version: "v1"
+        kind: "Pod"
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
