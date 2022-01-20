@@ -44,6 +44,8 @@ var Cmd = &cobra.Command{
 	Run:     run,
 }
 
+var allowedExtensions = []string{".yaml", ".yml", ".json"}
+
 var (
 	flagFilenames []string
 	flagOutput    string
@@ -213,6 +215,11 @@ func filesBelow(startPath string) ([]string, error) {
 			return nil
 		}
 
+		// make sure the file extension is valid
+		if !allowedExtension(path) {
+			return nil
+		}
+
 		files = append(files, path)
 		return nil
 	})
@@ -221,6 +228,16 @@ func filesBelow(startPath string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+func allowedExtension(path string) bool {
+	for _, ext := range allowedExtensions {
+		if ext == filepath.Ext(path) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func errFatalf(format string, a ...interface{}) {
