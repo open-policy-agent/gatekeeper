@@ -7,10 +7,8 @@ import (
 var (
 	ErrCreatingBackend           = errors.New("unable to create backend")
 	ErrCreatingClient            = errors.New("unable to create client")
-	ErrInvalidConstraintTemplate = errors.New("invalid ConstraintTemplate")
-	ErrInvalidConstraint         = errors.New("invalid Constraint")
-	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
 	ErrMissingConstraint         = errors.New("missing Constraint")
+	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
 	ErrInvalidModule             = errors.New("invalid module")
 )
 

@@ -446,6 +446,8 @@ github.com/open-policy-agent/cert-controller v0.2.0 h1:Z+IPOYDor28l6cjEo2WvTZY6B
 github.com/open-policy-agent/cert-controller v0.2.0/go.mod h1:SWS7Ame8oKHF11cDsQCFlULrrOMV5Z59FIGEAF/M6YI=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20220112212921-4b0a3de16086 h1:yjCfThAQ3UZQ60jiwgHWYX7/i8DuNFkqQbJv64J7SVo=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20220112212921-4b0a3de16086/go.mod h1:lAGAD//QC+TeKFBt0N96YathTnKi8jb6qDAQFlgYOrE=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220120153431-cb432286548a h1:rcNHb+N2soB1nPIL0/Pev/gRhowZ73ocfpFzsWURJqY=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220120153431-cb432286548a/go.mod h1:lAGAD//QC+TeKFBt0N96YathTnKi8jb6qDAQFlgYOrE=
 github.com/open-policy-agent/opa v0.35.0 h1:wsXkq/3JJucRUN4h46pn9Zv6cC6fnHWrVxjgoykxM7o=
 github.com/open-policy-agent/opa v0.35.0/go.mod h1:xEmekKlk6/c+so5HF9wtPnGPXDfBuBsrMGhSHOHEF+U=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=

@@ -12,4 +12,7 @@ var (
 	ErrWrite        = errors.New("error writing data")
 	ErrRead         = errors.New("error reading data")
 	ErrTransaction  = errors.New("error committing data")
+
+	ErrInvalidConstraintTemplate = errors.New("invalid ConstraintTemplate")
+	ErrInvalidModule             = errors.New("invalid module")
 )

@@ -8,9 +8,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -27,6 +31,8 @@ import (
 const (
 	moduleSetPrefix = "__modset_"
 	moduleSetSep    = "_idx_"
+	libRoot         = "data.lib"
+	violation       = "violation"
 )
 
 type module struct {
@@ -47,7 +53,7 @@ func (i insertParam) add(name string, src string) error {
 }
 
 func New(args ...Arg) drivers.Driver {
-	d := &driver{}
+	d := &Driver{}
 	for _, arg := range args {
 		arg(d)
 	}
@@ -59,9 +65,9 @@ func New(args ...Arg) drivers.Driver {
 	return d
 }
 
-var _ drivers.Driver = &driver{}
+var _ drivers.Driver = &Driver{}
 
-type driver struct {
+type Driver struct {
 	modulesMux    sync.RWMutex
 	compiler      *ast.Compiler
 	modules       map[string]*ast.Module
@@ -71,9 +77,10 @@ type driver struct {
 	printEnabled  bool
 	printHook     print.Hook
 	providerCache *externaldata.ProviderCache
+	externs       []string
 }
 
-func (d *driver) Init() error {
+func (d *Driver) Init() error {
 	if d.providerCache != nil {
 		rego.RegisterBuiltin1(
 			&rego.Function{
@@ -137,7 +144,7 @@ func copyModules(modules map[string]*ast.Module) map[string]*ast.Module {
 	return m
 }
 
-func (d *driver) checkModuleName(name string) error {
+func (d *Driver) checkModuleName(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w: module %q has no name",
 			ErrModuleName, name)
@@ -151,7 +158,7 @@ func (d *driver) checkModuleName(name string) error {
 	return nil
 }
 
-func (d *driver) checkModuleSetName(name string) error {
+func (d *Driver) checkModuleSetName(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w: modules name prefix cannot be empty", ErrModulePrefix)
 	}
@@ -171,7 +178,7 @@ func toModuleSetName(prefix string, idx int) string {
 	return fmt.Sprintf("%s%d", toModuleSetPrefix(prefix), idx)
 }
 
-func (d *driver) PutModule(name string, src string) error {
+func (d *Driver) PutModule(name string, src string) error {
 	if err := d.checkModuleName(name); err != nil {
 		return err
 	}
@@ -188,8 +195,8 @@ func (d *driver) PutModule(name string, src string) error {
 	return err
 }
 
-// PutModules implements drivers.Driver.
-func (d *driver) PutModules(namePrefix string, srcs []string) error {
+// putModules upserts a number of modules under a given prefix.
+func (d *Driver) putModules(namePrefix string, srcs []string) error {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return err
 	}
@@ -220,7 +227,7 @@ func (d *driver) PutModules(namePrefix string, srcs []string) error {
 // alterModules alters the modules in the driver by inserting and removing
 // the provided modules then returns the count of modules removed.
 // alterModules expects that the caller is holding the modulesMux lock.
-func (d *driver) alterModules(insert insertParam, remove []string) (int, error) {
+func (d *Driver) alterModules(insert insertParam, remove []string) (int, error) {
 	// TODO(davis-haba): Remove this Context once it is no longer necessary.
 	ctx := context.TODO()
 
@@ -271,8 +278,10 @@ func (d *driver) alterModules(insert insertParam, remove []string) (int, error) 
 	return len(remove), nil
 }
 
-// DeleteModules implements drivers.Driver.
-func (d *driver) DeleteModules(namePrefix string) (int, error) {
+// deleteModules deletes all modules under a given prefix and returns the
+// count of modules deleted.  Deletion of non-existing prefix will
+// result in 0, nil being returned.
+func (d *Driver) deleteModules(namePrefix string) (int, error) {
 	if err := d.checkModuleSetName(namePrefix); err != nil {
 		return 0, err
 	}
@@ -285,7 +294,7 @@ func (d *driver) DeleteModules(namePrefix string) (int, error) {
 
 // listModuleSet returns the list of names corresponding to a given module
 // prefix.
-func (d *driver) listModuleSet(namePrefix string) []string {
+func (d *Driver) listModuleSet(namePrefix string) []string {
 	prefix := toModuleSetPrefix(namePrefix)
 
 	var names []string
@@ -310,7 +319,7 @@ func parsePath(path string) ([]string, error) {
 	return p, nil
 }
 
-func (d *driver) PutData(ctx context.Context, path string, data interface{}) error {
+func (d *Driver) PutData(ctx context.Context, path string, data interface{}) error {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
 
@@ -357,7 +366,7 @@ func (d *driver) PutData(ctx context.Context, path string, data interface{}) err
 
 // DeleteData deletes data from OPA and returns true if data was found and deleted, false
 // if data was not found, and any errors.
-func (d *driver) DeleteData(ctx context.Context, path string) (bool, error) {
+func (d *Driver) DeleteData(ctx context.Context, path string) (bool, error) {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
 
@@ -386,7 +395,7 @@ func (d *driver) DeleteData(ctx context.Context, path string) (bool, error) {
 	return true, nil
 }
 
-func (d *driver) eval(ctx context.Context, path string, input interface{}, cfg *drivers.QueryCfg) (rego.ResultSet, *string, error) {
+func (d *Driver) eval(ctx context.Context, path string, input interface{}, cfg *drivers.QueryCfg) (rego.ResultSet, *string, error) {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
 
@@ -417,7 +426,7 @@ func (d *driver) eval(ctx context.Context, path string, input interface{}, cfg *
 	return res, t, err
 }
 
-func (d *driver) Query(ctx context.Context, path string, input interface{}, opts ...drivers.QueryOpt) (*types.Response, error) {
+func (d *Driver) Query(ctx context.Context, path string, input interface{}, opts ...drivers.QueryOpt) (*types.Response, error) {
 	cfg := &drivers.QueryCfg{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -456,7 +465,7 @@ func (d *driver) Query(ctx context.Context, path string, input interface{}, opts
 	}, nil
 }
 
-func (d *driver) Dump(ctx context.Context) (string, error) {
+func (d *Driver) Dump(ctx context.Context) (string, error) {
 	d.modulesMux.RLock()
 	defer d.modulesMux.RUnlock()
 
@@ -497,4 +506,191 @@ func (d *driver) Dump(ctx context.Context) (string, error) {
 	}
 
 	return string(b), nil
+}
+
+// ValidateConstraintTemplate validates the rego in template target by parsing
+// rego modules.
+func (d *Driver) ValidateConstraintTemplate(templ *templates.ConstraintTemplate) (string, []string, error) {
+	if err := validateTargets(templ); err != nil {
+		return "", nil, err
+	}
+	targetSpec := templ.Spec.Targets[0]
+	targetHandler := targetSpec.Target
+	kind := templ.Spec.CRD.Spec.Names.Kind
+	pkgPrefix := templateLibPrefix(targetHandler, kind)
+
+	rr, err := regorewriter.New(
+		regorewriter.NewPackagePrefixer(pkgPrefix),
+		[]string{libRoot},
+		d.externs)
+	if err != nil {
+		return "", nil, fmt.Errorf("creating rego rewriter: %w", err)
+	}
+
+	namePrefix := createTemplatePath(targetHandler, kind)
+	entryPoint, err := parseModule(namePrefix, templ.Spec.Targets[0].Rego)
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: %v", ErrInvalidConstraintTemplate, err)
+	}
+
+	if entryPoint == nil {
+		return "", nil, fmt.Errorf("%w: failed to parse module for unknown reason",
+			ErrInvalidConstraintTemplate)
+	}
+
+	if err = rewriteModulePackage(namePrefix, entryPoint); err != nil {
+		return "", nil, err
+	}
+
+	req := map[string]struct{}{violation: {}}
+
+	if err = requireModuleRules(entryPoint, req); err != nil {
+		return "", nil, fmt.Errorf("%w: invalid rego: %v",
+			ErrInvalidConstraintTemplate, err)
+	}
+
+	rr.AddEntryPointModule(namePrefix, entryPoint)
+	for idx, libSrc := range targetSpec.Libs {
+		libPath := fmt.Sprintf(`%s["lib_%d"]`, pkgPrefix, idx)
+		if err = rr.AddLib(libPath, libSrc); err != nil {
+			return "", nil, fmt.Errorf("%w: %v",
+				ErrInvalidConstraintTemplate, err)
+		}
+	}
+
+	sources, err := rr.Rewrite()
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: %v",
+			ErrInvalidConstraintTemplate, err)
+	}
+
+	var mods []string
+	err = sources.ForEachModule(func(m *regorewriter.Module) error {
+		content, err2 := m.Content()
+		if err2 != nil {
+			return err2
+		}
+		mods = append(mods, string(content))
+		return nil
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: %v",
+			ErrInvalidConstraintTemplate, err)
+	}
+	return namePrefix, mods, nil
+}
+
+// AddTemplate implements drivers.Driver.
+func (d *Driver) AddTemplate(templ *templates.ConstraintTemplate) error {
+	namePrefix, mods, err := d.ValidateConstraintTemplate(templ)
+	if err != nil {
+		return err
+	}
+	if err = d.putModules(namePrefix, mods); err != nil {
+		return fmt.Errorf("%w: %v", ErrCompile, err)
+	}
+	return nil
+}
+
+// RemoveTemplate implements driver.Driver.
+func (d *Driver) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) error {
+	if err := validateTargets(templ); err != nil {
+		return nil
+	}
+	targetHandler := templ.Spec.Targets[0].Target
+	kind := templ.Spec.CRD.Spec.Names.Kind
+	namePrefix := createTemplatePath(targetHandler, kind)
+	_, err := d.deleteModules(namePrefix)
+	return err
+}
+
+// templateLibPrefix returns the new lib prefix for the libs that are specified in the CT.
+func templateLibPrefix(target, name string) string {
+	return fmt.Sprintf("libs.%s.%s", target, name)
+}
+
+// createTemplatePath returns the package path for a given template: templates.<target>.<name>.
+func createTemplatePath(target, name string) string {
+	return fmt.Sprintf(`templates["%s"]["%s"]`, target, name)
+}
+
+// parseModule parses the module and also fails empty modules.
+func parseModule(path, rego string) (*ast.Module, error) {
+	module, err := ast.ParseModule(path, rego)
+	if err != nil {
+		return nil, err
+	}
+
+	if module == nil {
+		return nil, fmt.Errorf("%w: module %q is empty",
+			ErrInvalidModule, path)
+	}
+
+	return module, nil
+}
+
+// rewriteModulePackage rewrites the module's package path to path.
+func rewriteModulePackage(path string, module *ast.Module) error {
+	pathParts, err := ast.ParseRef(path)
+	if err != nil {
+		return err
+	}
+
+	packageRef := ast.Ref([]*ast.Term{ast.VarTerm("data")})
+	newPath := packageRef.Extend(pathParts)
+	module.Package.Path = newPath
+	return nil
+}
+
+// requireModuleRules makes sure the module contains all of the specified
+// requiredRules.
+func requireModuleRules(module *ast.Module, requiredRules map[string]struct{}) error {
+	ruleSets := make(map[string]struct{}, len(module.Rules))
+	for _, rule := range module.Rules {
+		ruleSets[string(rule.Head.Name)] = struct{}{}
+	}
+
+	var missing []string
+	for name := range requiredRules {
+		_, ok := ruleSets[name]
+		if !ok {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: missing required rules: %v",
+			ErrInvalidModule, missing)
+	}
+
+	return nil
+}
+
+// validateTargets ensures that the targets field has the appropriate values.
+func validateTargets(templ *templates.ConstraintTemplate) error {
+	if templ == nil {
+		return fmt.Errorf(`%w: ConstraintTemplate is nil`,
+			ErrInvalidConstraintTemplate)
+	}
+	targets := templ.Spec.Targets
+	if targets == nil {
+		return fmt.Errorf(`%w: field "targets" not specified in ConstraintTemplate spec`,
+			ErrInvalidConstraintTemplate)
+	}
+
+	switch len(targets) {
+	case 0:
+		return fmt.Errorf("%w: no targets specified: ConstraintTemplate must specify one target",
+			ErrInvalidConstraintTemplate)
+	case 1:
+		return nil
+	default:
+		return fmt.Errorf("%w: multi-target templates are not currently supported",
+			ErrInvalidConstraintTemplate)
+	}
+}
+
+func (d *Driver) SetExterns(fields []string) {
+	d.externs = fields
 }
