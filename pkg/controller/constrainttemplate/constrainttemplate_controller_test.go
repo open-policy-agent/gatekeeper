@@ -61,6 +61,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// constantRetry makes 3,000 attempts at a rate of 100 per second. Since this
+// is a test instance and not a "real" cluster, this is fine and there's no need
+// to increase the wait time each iteration.
 var constantRetry = wait.Backoff{
 	Steps:    3000,
 	Duration: 10 * time.Millisecond,
@@ -324,7 +327,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			sList := &podstatus.ConstraintPodStatusList{}
@@ -340,7 +343,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			return c.Create(ctx, newDenyAllCstr())
@@ -394,7 +397,7 @@ func TestReconcile(t *testing.T) {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
-		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			ct := &v1beta1.ConstraintTemplate{}
@@ -467,7 +470,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			resp, err := opaClient.Review(ctx, req)
@@ -605,7 +608,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unexpected tracker, got %T", ot)
 	}
 	// ensure that expectations are set for the constraint gvk
-	err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+	err = retry.OnError(constantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		gotExpected := tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
@@ -761,7 +764,7 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	return retry.OnError(retry.DefaultRetry, func(err error) bool {
+	return retry.OnError(constantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		if ctx.Err() != nil {
@@ -793,7 +796,7 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			// Get the object name
