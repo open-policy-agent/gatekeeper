@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/onsi/gomega"
+	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -41,6 +41,7 @@ import (
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -52,6 +53,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -92,10 +94,12 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	return mgr, wm
 }
 
-func TestReconcile(t *testing.T) {
-	crdKey := types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}
-	g := gomega.NewGomegaWithT(t)
-	instance := &v1beta1.ConstraintTemplate{
+func makeReconcileConstrainTemplate() *v1beta1.ConstraintTemplate {
+	return &v1beta1.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConstraintTemplate",
+			APIVersion: templatesv1.SchemeGroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
 		Spec: v1beta1.ConstraintTemplateSpec{
 			CRD: v1beta1.CRD{
@@ -119,6 +123,13 @@ violation[{"msg": "denied!"}] {
 			},
 		},
 	}
+}
+
+func TestReconcile(t *testing.T) {
+	crdKey := types.NamespacedName{Name: "denyall.constraints.gatekeeper.sh"}
+	crdToDelete := &apiextensions.CustomResourceDefinition{}
+	crdToDelete.SetName(crdKey.Name)
+	crdToDelete.SetGroupVersionKind(apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 
 	// Uncommenting the below enables logging of K8s internals like watch.
 	// fs := flag.NewFlagSet("", flag.PanicOnError)
@@ -164,46 +175,32 @@ violation[{"msg": "denied!"}] {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, opaClient, wm, cs, tracker, events, events, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cstr := newDenyAllCstr()
-
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	// Clean up to remove the crd, constraint and constraint template
-	t.Cleanup(func() {
-		crd := &apiextensionsv1.CustomResourceDefinition{}
-		err := c.Get(ctx, crdKey, crd)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := deleteObjectAndConfirm(ctx, c, cstr, timeout); err != nil {
-			t.Fatalf("want deleteObjectAndConfirm(ctx, c, cstr, timeout) error = nil, got %v", err)
-		}
-		if err := deleteObjectAndConfirm(ctx, c, crd, timeout); err != nil {
-			t.Fatalf("want deleteObjectAndConfirm(ctx, c, crd, timeout) error = nil, got %v", err)
-		}
-		if err := deleteObjectAndConfirm(ctx, c, instance, timeout); err != nil {
-			t.Fatalf("want deleteObjectAndConfirm(ctx, c, instance, timeout) error = nil, got %v", err)
-		}
-	})
-
-	logger.Info("Running test: CRD Gets Created")
 	t.Run("CRD Gets Created", func(t *testing.T) {
-		err = c.Create(ctx, instance)
-		if err != nil {
-			t.Fatal(err)
-		}
+		logger.Info("Running test: CRD Gets Created")
+		constraintTemplate := makeReconcileConstrainTemplate()
+		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, crdToDelete))
+		createThenCleanup(ctx, t, c, constraintTemplate)
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
-		g.Eventually(func() error {
+		err = retry.OnError(wait.Backoff{
+			Steps:    1000,
+			Duration: 10 * time.Millisecond,
+		}, func(err error) bool {
+			return true
+		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
 			if err := c.Get(ctx, crdKey, crd); err != nil {
 				return err
@@ -218,20 +215,35 @@ violation[{"msg": "denied!"}] {
 				}
 			}
 			return errors.New("DenyAll not found")
-		}, timeout).Should(gomega.BeNil())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	logger.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
-		err = c.Create(ctx, cstr)
+		constraintTemplate := makeReconcileConstrainTemplate()
+		cstr := newDenyAllCstr()
+
+		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, crdToDelete))
+		createThenCleanup(ctx, t, c, constraintTemplate)
+
+		err = retry.OnError(retry.DefaultBackoff, func(error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, cstr)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		constraintEnforced(ctx, c, g, timeout)
-	})
 
-	logger.Info("Running test: Constraint actually enforced")
-	t.Run("Constraint actually enforced", func(t *testing.T) {
+		err = constraintEnforced(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "testns",
@@ -262,11 +274,25 @@ violation[{"msg": "denied!"}] {
 
 	logger.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
-		crd := &apiextensionsv1.CustomResourceDefinition{}
-		err := c.Get(ctx, crdKey, crd)
+		// Clean up to remove the crd, constraint and constraint template
+		constraintTemplate := makeReconcileConstrainTemplate()
+		cstr := newDenyAllCstr()
+
+		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, crdToDelete))
+		createThenCleanup(ctx, t, c, constraintTemplate)
+
+		var crd *apiextensionsv1.CustomResourceDefinition
+		err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+			return true
+		}, func() error {
+			crd = &apiextensionsv1.CustomResourceDefinition{}
+			return c.Get(ctx, crdKey, crd)
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		origUID := crd.GetUID()
 		crd.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
 		err = c.Delete(ctx, crd)
@@ -274,7 +300,12 @@ violation[{"msg": "denied!"}] {
 			t.Fatal(err)
 		}
 
-		g.Eventually(func() error {
+		err = retry.OnError(wait.Backoff{
+			Steps:    1000,
+			Duration: 10 * time.Millisecond,
+		}, func(err error) bool {
+			return true
+		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
 			if err := c.Get(ctx, crdKey, crd); err != nil {
 				return err
@@ -291,9 +322,14 @@ violation[{"msg": "denied!"}] {
 				}
 			}
 			return errors.New("not established")
-		}, timeout, time.Second).Should(gomega.BeNil())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		g.Eventually(func() error {
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return true
+		}, func() error {
 			sList := &podstatus.ConstraintPodStatusList{}
 			if err := c.List(ctx, sList); err != nil {
 				return err
@@ -302,11 +338,25 @@ violation[{"msg": "denied!"}] {
 				return fmt.Errorf("remaining status items: %+v", sList.Items)
 			}
 			return nil
-		}, timeout).Should(gomega.BeNil())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		g.Eventually(func() error { return c.Create(ctx, newDenyAllCstr()) }, timeout).Should(gomega.BeNil())
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return true
+		}, func() error {
+			return c.Create(ctx, newDenyAllCstr())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// we need a longer timeout because deleting the CRD interrupts the watch
-		constraintEnforced(ctx, c, g, 50*timeout)
+		err = constraintEnforced(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	logger.Info("Running test: Templates with Invalid Rego throw errors")
@@ -347,7 +397,9 @@ violation[{"msg": "denied!"}] {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
-		g.Eventually(func() error {
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return true
+		}, func() error {
 			ct := &v1beta1.ConstraintTemplate{}
 			if err := c.Get(ctx, types.NamespacedName{Name: "invalidrego"}, ct); err != nil {
 				return err
@@ -371,13 +423,16 @@ violation[{"msg": "denied!"}] {
 				return fmt.Errorf("InvalidRego template should contain an error: %q", s)
 			}
 
-			if status.Errors[0].Code != ErrCreateCode {
+			if status.Errors[0].Code != ErrIngestCode {
 				return fmt.Errorf("InvalidRego template returning unexpected error %q, got error %+v",
 					status.Errors[0].Code, status.Errors)
 			}
 
 			return nil
-		}, timeout).Should(gomega.BeNil())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	logger.Info("Running test: Deleted constraint templates not enforced")
@@ -403,18 +458,21 @@ violation[{"msg": "denied!"}] {
 		}
 
 		gotResults := resp.Results()
-		if len(resp.Results()) != 1 {
+		if len(resp.Results()) != 0 {
 			fmt.Println(resp.TraceDump())
 			fmt.Println(opaClient.Dump(ctx))
-			t.Fatalf("did not get 1 result: %v", gotResults)
+			t.Fatalf("did not get 0 results: %v", gotResults)
 		}
 
-		err = c.Delete(ctx, instance.DeepCopy())
-		if err != nil {
+		constraintTemplate := makeReconcileConstrainTemplate()
+		err = c.Delete(ctx, constraintTemplate)
+		if err != nil && !apierrors.IsNotFound(err) {
 			t.Fatal(err)
 		}
 
-		g.Eventually(func() error {
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return true
+		}, func() error {
 			resp, err := opaClient.Review(ctx, req)
 			if err != nil {
 				return err
@@ -424,15 +482,16 @@ violation[{"msg": "denied!"}] {
 				return fmt.Errorf("Results not yet zero\nOPA DUMP:\n%s", dump)
 			}
 			return nil
-		}, timeout).Should(gomega.BeNil())
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 }
 
 // Tests that expectations for constraints are canceled if the corresponding constraint is deleted.
 func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	logger.Info("Running test: Cancel the expectations when constraint gets deleted")
-
-	g := gomega.NewGomegaWithT(t)
 
 	// Setup the Manager
 	mgr, wm := setupManager(t)
@@ -442,7 +501,8 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	ctx := context.Background()
 	testutils.StartManager(ctx, t, mgr)
 
-	// Create the constraint template object and expect the Reconcile to be created when controller starts
+	// Create the constraint template object and expect Reconcile to be called
+	// when the controller starts.
 	instance := &v1beta1.ConstraintTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
 		Spec: v1beta1.ConstraintTemplateSpec{
@@ -485,7 +545,7 @@ violation[{"msg": "denied!"}] {
 
 	// Install constraint CRD
 	crd := makeCRD(gvk, "denyall")
-	err = applyCRD(ctx, g, c, gvk, crd)
+	err = applyCRD(ctx, c, gvk, crd)
 	if err != nil {
 		t.Fatalf("applying CRD: %v", err)
 	}
@@ -531,7 +591,11 @@ violation[{"msg": "denied!"}] {
 
 	// events will be used to receive events from dynamic watches registered
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	rec, err := newReconciler(mgr, opaClient, wm, cs, tracker, events, nil, func(context.Context) (*corev1.Pod, error) { return pod, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -544,9 +608,15 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unexpected tracker, got %T", ot)
 	}
 	// ensure that expectations are set for the constraint gvk
-	g.Eventually(func() bool {
-		return tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
-	}, timeout).Should(gomega.BeTrue(), "waiting for expectations")
+	err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+		return true
+	}, func() error {
+		gotExpected := tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
+		if !gotExpected {
+			return errors.New("waiting for expectations")
+		}
+		return nil
+	})
 
 	// Delete the constraint , the delete event will be reconciled by controller
 	// to cancel the expectation set for it by tracker
@@ -561,13 +631,30 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Check readiness tracker is satisfied post-reconcile
-	g.Eventually(func() bool {
-		return tracker.For(gvk).Satisfied()
-	}, timeout).Should(gomega.BeTrue())
+	err = retry.OnError(wait.Backoff{
+		Duration: 10 * time.Millisecond,
+		Steps:    1000,
+	}, func(err error) bool {
+		return true
+	}, func() error {
+		satisfied := tracker.For(gvk).Satisfied()
+		if !satisfied {
+			return errors.New("not satisfied")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func constraintEnforced(ctx context.Context, c client.Client, g *gomega.GomegaWithT, timeout time.Duration) {
-	g.Eventually(func() error {
+func constraintEnforced(ctx context.Context, c client.Client) error {
+	return retry.OnError(wait.Backoff{
+		Steps:    1000,
+		Duration: 10 * time.Millisecond,
+	}, func(err error) bool {
+		return true
+	}, func() error {
 		cstr := newDenyAllCstr()
 		err := c.Get(ctx, types.NamespacedName{Name: "denyallconstraint"}, cstr)
 		if err != nil {
@@ -583,7 +670,7 @@ func constraintEnforced(ctx context.Context, c client.Client, g *gomega.GomegaWi
 			return fmt.Errorf("constraint not enforced: \n%s", obj)
 		}
 		return nil
-	}, timeout).Should(gomega.BeNil())
+	})
 }
 
 func newDenyAllCstr() *unstructured.Unstructured {
@@ -672,7 +759,7 @@ func makeCRD(gvk schema.GroupVersionKind, plural string) *apiextensionsv1.Custom
 }
 
 // applyCRD applies a CRD and waits for it to register successfully.
-func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
+func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersionKind, crd client.Object) error {
 	err := client.Create(ctx, crd)
 	if err != nil {
 		return err
@@ -680,40 +767,78 @@ func applyCRD(ctx context.Context, g *gomega.GomegaWithT, client client.Client, 
 
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	g.Eventually(func() error {
+	return retry.OnError(retry.DefaultRetry, func(err error) bool {
+		return true
+	}, func() error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		return client.List(ctx, u)
-	}, 5*time.Second, 100*time.Millisecond).ShouldNot(gomega.HaveOccurred())
-	return nil
+	})
 }
 
-func deleteObjectAndConfirm(ctx context.Context, c client.Client, obj client.Object, timeout time.Duration) error {
-	key := client.ObjectKeyFromObject(obj)
+func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, obj client.Object) func() {
+	t.Helper()
 
-	err := c.Delete(ctx, obj)
-	if apierrors.IsNotFound(err) {
-		return nil
-	} else if err != nil {
-		return err
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	namespace := obj.GetNamespace()
+	name := obj.GetName()
+	if gvk.Empty() {
+		t.Fatalf("gvk for %v/%v %T is empty",
+			namespace, name, obj)
 	}
 
-	err = wait.Poll(10*time.Millisecond, timeout, func() (bool, error) {
-		// Get the object name
-		err2 := c.Get(ctx, key, obj)
-		if err2 != nil {
-			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
-				return true, nil
-			}
-			return false, err2
+	return func() {
+		t.Helper()
+
+		toDelete := makeUnstructured(gvk, namespace, name)
+		err := c.Delete(ctx, toDelete)
+		if apierrors.IsNotFound(err) {
+			return
+		} else if err != nil {
+			t.Fatal(err)
 		}
-		return false, err2
-	})
-	return err
+
+		err = retry.OnError(retry.DefaultRetry, func(err error) bool {
+			return true
+		}, func() error {
+			// Get the object name
+			toGet := makeUnstructured(gvk, namespace, name)
+			key := client.ObjectKey{Namespace: namespace, Name: name}
+			err2 := c.Get(ctx, key, toGet)
+			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
+				return nil
+			}
+			return fmt.Errorf("found %v %v", gvk, key)
+		})
+
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
+}
+
+func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj client.Object) {
+	t.Helper()
+	err := c.Create(ctx, obj.DeepCopyObject().(client.Object))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(deleteObjectAndConfirm(ctx, t, c, obj))
+}
+
+func makeUnstructured(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{
+		Object: make(map[string]interface{}),
+	}
+	u.SetGroupVersionKind(gvk)
+	u.SetNamespace(namespace)
+	u.SetName(name)
+	return u
 }
