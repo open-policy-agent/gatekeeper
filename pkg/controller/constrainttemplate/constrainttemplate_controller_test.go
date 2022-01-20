@@ -806,7 +806,9 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
 				return nil
 			}
-			return fmt.Errorf("found %v %v", gvk, key)
+
+			s, _ := json.MarshalIndent(toGet, "", "  ")
+			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
 		})
 
 		if err != nil {
