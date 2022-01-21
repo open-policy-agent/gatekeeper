@@ -7,8 +7,8 @@ import (
 	"path"
 	"text/template"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -44,7 +44,7 @@ import (
 // See the following regexr to test this regex: https://regexr.com/6dgdj
 const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
-var _ client.TargetHandler = &K8sValidationTarget{}
+var _ handler.TargetHandler = &K8sValidationTarget{}
 
 type K8sValidationTarget struct{}
 

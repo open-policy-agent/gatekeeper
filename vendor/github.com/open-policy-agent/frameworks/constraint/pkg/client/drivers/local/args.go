@@ -9,10 +9,10 @@ import (
 	opatypes "github.com/open-policy-agent/opa/types"
 )
 
-type Arg func(*driver)
+type Arg func(*Driver)
 
 func Defaults() Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		if d.compiler == nil {
 			d.compiler = ast.NewCompiler()
 		}
@@ -41,43 +41,43 @@ func Defaults() Arg {
 }
 
 func Tracing(enabled bool) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.traceEnabled = enabled
 	}
 }
 
 func PrintEnabled(enabled bool) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.printEnabled = enabled
 	}
 }
 
 func PrintHook(hook print.Hook) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.printHook = hook
 	}
 }
 
 func Modules(modules map[string]*ast.Module) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.modules = modules
 	}
 }
 
 func Storage(s storage.Store) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.storage = s
 	}
 }
 
 func AddExternalDataProviderCache(providerCache *externaldata.ProviderCache) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		d.providerCache = providerCache
 	}
 }
 
 func DisableBuiltins(builtins ...string) Arg {
-	return func(d *driver) {
+	return func(d *Driver) {
 		if d.capabilities == nil {
 			d.capabilities = ast.CapabilitiesForThisVersion()
 		}

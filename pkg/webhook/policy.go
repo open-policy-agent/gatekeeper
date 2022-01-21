@@ -347,7 +347,7 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
 		return false, err
 	}
-	if _, err := h.opa.CreateCRD(unversioned); err != nil {
+	if err := h.opa.ValidateConstraintTemplate(unversioned); err != nil {
 		return true, err
 	}
 	return false, nil
