@@ -228,9 +228,6 @@ func (d *Driver) putModules(namePrefix string, srcs []string) error {
 // the provided modules then returns the count of modules removed.
 // alterModules expects that the caller is holding the modulesMux lock.
 func (d *Driver) alterModules(insert insertParam, remove []string) (int, error) {
-	// TODO(davis-haba): Remove this Context once it is no longer necessary.
-	ctx := context.TODO()
-
 	updatedModules := copyModules(d.modules)
 	for _, name := range remove {
 		delete(updatedModules, name)
@@ -240,36 +237,12 @@ func (d *Driver) alterModules(insert insertParam, remove []string) (int, error) 
 		updatedModules[name] = mod.parsed
 	}
 
-	txn, err := d.storage.NewTransaction(ctx, storage.WriteParams)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, name := range remove {
-		if err := d.storage.DeletePolicy(ctx, txn, name); err != nil {
-			d.storage.Abort(ctx, txn)
-			return 0, err
-		}
-	}
-
-	c := ast.NewCompiler().WithPathConflictsCheck(storage.NonEmpty(ctx, d.storage, txn)).
+	c := ast.NewCompiler().
 		WithCapabilities(d.capabilities).
 		WithEnablePrintStatements(d.printEnabled)
 
 	if c.Compile(updatedModules); c.Failed() {
-		d.storage.Abort(ctx, txn)
 		return 0, fmt.Errorf("%w: %v", ErrCompile, c.Errors)
-	}
-
-	for name, mod := range insert {
-		if err := d.storage.UpsertPolicy(ctx, txn, name, []byte(mod.text)); err != nil {
-			d.storage.Abort(ctx, txn)
-			return 0, err
-		}
-	}
-
-	if err := d.storage.Commit(ctx, txn); err != nil {
-		return 0, err
 	}
 
 	d.compiler = c
