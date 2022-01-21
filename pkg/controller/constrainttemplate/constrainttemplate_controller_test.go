@@ -224,8 +224,8 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	logger.Info("Running test: Constraint is marked as enforced")
 	t.Run("Constraint is marked as enforced", func(t *testing.T) {
+		logger.Info("Running test: Constraint is marked as enforced")
 		constraintTemplate := makeReconcileConstrainTemplate()
 		cstr := newDenyAllCstr()
 
@@ -275,8 +275,8 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	logger.Info("Running test: Deleted constraint CRDs are recreated")
 	t.Run("Deleted constraint CRDs are recreated", func(t *testing.T) {
+		logger.Info("Running test: Deleted constraint CRDs are recreated")
 		// Clean up to remove the crd, constraint and constraint template
 		constraintTemplate := makeReconcileConstrainTemplate()
 		cstr := newDenyAllCstr()
@@ -359,8 +359,8 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	logger.Info("Running test: Templates with Invalid Rego throw errors")
 	t.Run("Templates with Invalid Rego throw errors", func(t *testing.T) {
+		logger.Info("Running test: Templates with Invalid Rego throw errors")
 		// Create template with invalid rego, should populate parse error in status
 		instanceInvalidRego := &v1beta1.ConstraintTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "invalidrego"},
@@ -435,8 +435,8 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	logger.Info("Running test: Deleted constraint templates not enforced")
 	t.Run("Deleted constraint templates not enforced", func(t *testing.T) {
+		logger.Info("Running test: Deleted constraint templates not enforced")
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "testns",
@@ -774,13 +774,27 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 	})
 }
 
+// deleteObjectAndConfirm returns a callback which deletes obj from the passed
+// Client. Does result in mutations to obj. The callback includes a cached copy
+// of all information required to delete obj in the callback, so it is safe to
+// mutate obj afterwards. Similarly - client.Delete mutates its input, but
+// the callback does not call client.Delete on obj. Instead, it creates a
+// single-purpose Unstructured for this purpose. Thus, obj is not mutated after
+// the callback is run.
 func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, obj client.Object) func() {
 	t.Helper()
 
+	// Cache the identifying information from obj. We refer to this cached
+	// information in the callback, and not obj itself.
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	namespace := obj.GetNamespace()
 	name := obj.GetName()
+
 	if gvk.Empty() {
+		// We can't send a proper delete request with an Unstructured without
+		// filling in GVK. The alternative would be to require tests to construct
+		// a valid Scheme or provide a factory method for the type to delete - this
+		// is easier.
 		t.Fatalf("gvk for %v/%v %T is empty",
 			namespace, name, obj)
 	}
@@ -788,6 +802,7 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 	return func() {
 		t.Helper()
 
+		// Construct a single-use Unstructured to send the Delete request.
 		toDelete := makeUnstructured(gvk, namespace, name)
 		err := c.Delete(ctx, toDelete)
 		if apierrors.IsNotFound(err) {
@@ -799,7 +814,8 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
-			// Get the object name
+			// Construct a single-use Unstructured to send the Get request. It isn't
+			// safe to reuse Unstructureds for each retry as Get modifies its input.
 			toGet := makeUnstructured(gvk, namespace, name)
 			key := client.ObjectKey{Namespace: namespace, Name: name}
 			err2 := c.Get(ctx, key, toGet)
@@ -807,6 +823,8 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 				return nil
 			}
 
+			// Marshal the currently-gotten object, so it can be printed in test
+			// failure output.
 			s, _ := json.MarshalIndent(toGet, "", "  ")
 			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
 		})
@@ -822,6 +840,9 @@ type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
 }
 
+// createThenCleanup creates obj in Client, and then registers obj to be deleted
+// at the end of the test. The passed obj is safely deepcopied before being
+// passed to client.Create, so it is not mutated by this call.
 func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj client.Object) {
 	t.Helper()
 	err := c.Create(ctx, obj.DeepCopyObject().(client.Object))
@@ -829,6 +850,8 @@ func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj c
 		t.Fatal(err)
 	}
 
+	// It is unnecessary to deepcopy obj as deleteObjectAndConfirm does not pass
+	// obj to any Client calls.
 	t.Cleanup(deleteObjectAndConfirm(ctx, t, c, obj))
 }
 
