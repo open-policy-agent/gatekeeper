@@ -3,6 +3,7 @@ package drivers
 import (
 	"context"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
@@ -20,20 +21,14 @@ func Tracing(enabled bool) QueryOpt {
 
 type Driver interface {
 	Init() error
-
 	PutModule(name string, src string) error
-	// PutModules upserts a number of modules under a given prefix.
-	PutModules(namePrefix string, srcs []string) error
 
-	// DeleteModules deletes all modules under a given prefix and returns the
-	// count of modules deleted.  Deletion of non-existing prefix will
-	// result in 0, nil being returned.
-	DeleteModules(namePrefix string) (int, error)
-
+	// AddTemplate adds the template source code to OPA
+	AddTemplate(ct *templates.ConstraintTemplate) error
+	// RemoveTemplate removes the template source code from OPA
+	RemoveTemplate(ctx context.Context, ct *templates.ConstraintTemplate) error
 	PutData(ctx context.Context, path string, data interface{}) error
 	DeleteData(ctx context.Context, path string) (bool, error)
-
 	Query(ctx context.Context, path string, input interface{}, opts ...QueryOpt) (*types.Response, error)
-
 	Dump(ctx context.Context) (string, error)
 }
