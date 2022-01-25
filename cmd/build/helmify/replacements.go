@@ -65,6 +65,19 @@ var replacements = map[string]string{
     {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_TIMEOUT": `{{ .Values.mutatingWebhookTimeoutSeconds }}`,
+	"- HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES": `{{- if .Values.mutatingWebhookCustomRules }}
+  {{- toYaml .Values.mutatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
+  - apiGroups:
+    - '*'
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - '*'
+  {{- end }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT": `{{ .Values.validatingWebhookTimeoutSeconds }}`,
 
@@ -81,12 +94,22 @@ var replacements = map[string]string{
 
 	"HELMSUBST_RESOURCEQUOTA_POD_LIMIT": `{{ .Values.podCountLimit }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES": `
+	"- HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES": `{{- if .Values.validatingWebhookCustomRules }}
+  {{- toYaml .Values.validatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
+  - apiGroups:
+    - '*'
+    apiVersions:
+    - '*'
+    operations:
     - CREATE
     - UPDATE
     {{- if .Values.enableDeleteOperations }}
     - DELETE
-    {{- end}}`,
+    {{- end }}
+    resources:
+    - '*'
+  {{- end }}`,
 
 	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
 
