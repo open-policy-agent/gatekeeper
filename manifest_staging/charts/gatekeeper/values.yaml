@@ -9,12 +9,14 @@ validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
+validatingWebhookCustomRules: {}
 enableDeleteOperations: false
 enableExternalData: false
 enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookTimeoutSeconds: 3
+mutatingWebhookCustomRules: {}
 auditChunkSize: 500
 logLevel: INFO
 logDenies: false

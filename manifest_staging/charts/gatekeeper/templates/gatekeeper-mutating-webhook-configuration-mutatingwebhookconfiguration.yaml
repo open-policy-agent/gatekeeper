@@ -32,6 +32,9 @@ webhooks:
       value: {{ $value }}
     {{- end }}
   rules:
+  {{- if .Values.mutatingWebhookCustomRules }}
+  {{- toYaml .Values.mutatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
   - apiGroups:
     - '*'
     apiVersions:
@@ -41,6 +44,7 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}
 {{- end }}
