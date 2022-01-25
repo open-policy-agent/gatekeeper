@@ -7,6 +7,8 @@ import (
 	"path"
 	"text/template"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -426,6 +428,51 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 	return obj, nil
 }
 
-func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
-	panic("not implemented")
+// TODO: can we use generic for Unmarshal after go 1.18?
+func convertToMatch(object map[string]interface{}) (*match.Match, error) {
+	j, err := json.Marshal(object)
+	if err != nil {
+		return nil, errors.Wrap(err, "Could not convert unknown object to JSON")
+	}
+	obj := &match.Match{}
+	if err := json.Unmarshal(j, obj); err != nil {
+		return nil, errors.Wrap(err, "Could not convert JSON to Match")
+	}
+	return obj, nil
 }
+
+// ToMatcher converts .spec.match in mutators to Matcher.
+func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
+	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
+	if err != nil {
+		return nil, err
+	}
+	if found && obj != nil {
+		match, err := convertToMatch(obj)
+		if err != nil {
+			return nil, err
+		}
+		return &Matcher{match}, nil
+	}
+	return nil, fmt.Errorf("%s %s has no match found", u.GetKind(), u.GetName())
+}
+
+type Matcher struct {
+	match *match.Match
+}
+
+func (m *Matcher) Match(review interface{}) (bool, error) {
+	switch req := review.(type) {
+	case *gkReview:
+		obj := unstructured.Unstructured{}
+		err := obj.UnmarshalJSON(req.Object.Raw)
+		if err != nil {
+			return false, fmt.Errorf("failed to unmarshal AdmissionRequest object %s", string(req.Object.Raw))
+		}
+		return match.Matches(m.match, &obj, req.Unstable.Namespace)
+	default:
+		return false, fmt.Errorf("expect gkReview, got %T", review)
+	}
+}
+
+var _ constraints.Matcher = &Matcher{}
