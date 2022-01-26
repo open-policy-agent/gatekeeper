@@ -91,7 +91,7 @@ func run(cmd *cobra.Command, args []string) {
 	case stringYAML:
 		jsonb, err := json.Marshal(results)
 		if err != nil {
-			errFatalf("pre-marshalling results to json: %v", err)
+			errFatalf("pre-marshaling results to json: %v", err)
 		}
 
 		unmarshalled := []*types.Result{}
