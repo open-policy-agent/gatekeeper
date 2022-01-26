@@ -87,7 +87,7 @@ Note that if multiple matchers are specified, a resource must satisfy each top-l
 
 ### The parameters field
 
-The `parameters` field describes the intent of a constraint as parameterized and configured by the operator. It can be referenced by the ConstraintTemplate's rego using `input.parameters` as part of the policy evaluation. Gatekeeper populates `input.parameters` with values passed into the `parameters` field in the Constraint.
+The `parameters` field describes the intent of a constraint. It can be referenced as `input.parameters` by the ConstraintTemplate's Rego source code. Gatekeeper populates `input.parameters` with values passed into the `parameters` field in the Constraint.
 
 Example:
 ```yaml
