@@ -34,7 +34,7 @@ const (
   cat manifest.yaml | gator test
 
   # Output structured violations data
-  gator test --filename="manifest.yaml" --json`
+  gator test --filename="manifest.yaml" --output=json`
 )
 
 var Cmd = &cobra.Command{
