@@ -195,6 +195,8 @@ webhooks:
       namespace: gatekeeper-system
       path: /v1/mutate
   failurePolicy: HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY
+  rules:
+  - HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES
   matchPolicy: Exact
   name: mutation.gatekeeper.sh
   namespaceSelector:
@@ -226,13 +228,7 @@ webhooks:
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
   rules:
-  - apiGroups:
-    - "*"
-    apiVersions:
-    - '*'
-    operations: HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
-    resources:
-    - '*'
+  - HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
 - clientConfig:
     service:
       name: gatekeeper-webhook-service

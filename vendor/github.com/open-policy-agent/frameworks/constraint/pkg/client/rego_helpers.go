@@ -12,8 +12,8 @@ var validDataFields = map[string]bool{
 	"inventory": true,
 }
 
-// parseModule parses the module and also fails empty modules.
-func parseModule(path, rego string) (*ast.Module, error) {
+// ParseModule parses the module and also fails empty modules.
+func ParseModule(path, rego string) (*ast.Module, error) {
 	module, err := ast.ParseModule(path, rego)
 	if err != nil {
 		return nil, err
@@ -40,9 +40,9 @@ func rewriteModulePackage(path string, module *ast.Module) error {
 	return nil
 }
 
-// requireModuleRules makes sure the module contains all of the specified
+// RequireModuleRules makes sure the module contains all of the specified
 // requiredRules.
-func requireModuleRules(module *ast.Module, requiredRules map[string]struct{}) error {
+func RequireModuleRules(module *ast.Module, requiredRules map[string]struct{}) error {
 	ruleSets := make(map[string]struct{}, len(module.Rules))
 	for _, rule := range module.Rules {
 		ruleSets[string(rule.Head.Name)] = struct{}{}

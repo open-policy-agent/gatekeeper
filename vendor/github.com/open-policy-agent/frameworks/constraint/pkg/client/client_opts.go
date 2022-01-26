@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+
+	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 )
 
 type Opt func(*Client) error
@@ -13,9 +15,9 @@ type Opt func(*Client) error
 var targetNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9.]*$`)
 
 // Targets defines the targets Client will pass review requests to.
-func Targets(ts ...TargetHandler) Opt {
+func Targets(ts ...handler.TargetHandler) Opt {
 	return func(c *Client) error {
-		handlers := make(map[string]TargetHandler, len(ts))
+		handlers := make(map[string]handler.TargetHandler, len(ts))
 
 		invalid := validateTargetNames(ts)
 		if len(invalid) > 0 {
@@ -34,7 +36,7 @@ func Targets(ts ...TargetHandler) Opt {
 
 // validateTargetNames returns the invalid target names from the passed
 // TargetHandlers.
-func validateTargetNames(ts []TargetHandler) []string {
+func validateTargetNames(ts []handler.TargetHandler) []string {
 	var invalid []string
 
 	for _, t := range ts {
@@ -53,7 +55,7 @@ func validateTargetNames(ts []TargetHandler) []string {
 // the system can be enabled.
 func AllowedDataFields(fields ...string) Opt {
 	return func(c *Client) error {
-		c.allowedDataFields = fields
+		c.AllowedDataFields = fields
 		return nil
 	}
 }

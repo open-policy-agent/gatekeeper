@@ -1,6 +1,7 @@
 package regorewriter
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -41,3 +42,11 @@ func (errs Errors) Format(s fmt.State, verb rune) {
 		_, _ = fmt.Fprintf(s, "%q", errs.Error())
 	}
 }
+
+var (
+	ErrInvalidModule  = errors.New("invalid module")
+	ErrInvalidImport  = errors.New("invalid import")
+	ErrInvalidLibs    = errors.New("invalid lib prefix")
+	ErrDataReferences = errors.New("invalid data references")
+	ErrReadingFile    = errors.New("error reading file")
+)

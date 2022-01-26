@@ -1,16 +1,16 @@
-package client
+package handler
 
 import (
 	"text/template"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/crds"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type TargetHandler interface {
-	MatchSchemaProvider
+	crds.MatchSchemaProvider
 
 	// GetName returns name of the target. Must match `^[a-zA-Z][a-zA-Z0-9.]*$`
 	// This will be the exact name of the field in the ConstraintTemplate
@@ -98,9 +98,4 @@ type TargetHandler interface {
 	// Allows caching Constraint-specific logic for matching objects under
 	// review.
 	ToMatcher(constraint *unstructured.Unstructured) (constraints.Matcher, error)
-}
-
-type MatchSchemaProvider interface {
-	// MatchSchema returns the JSON Schema for the `match` field of a constraint
-	MatchSchema() apiextensions.JSONSchemaProps
 }
