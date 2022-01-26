@@ -85,15 +85,26 @@ func run(cmd *cobra.Command, args []string) {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
-			errFatalf("marshaling validation json results: %s", err)
+			errFatalf("marshaling validation json results: %v", err)
 		}
 		fmt.Print(string(b))
 	case stringYAML:
-		b, err := yaml.Marshal(results)
+		jsonb, err := json.Marshal(results)
 		if err != nil {
-			errFatalf("marshaling validation yaml results: %s", err)
+			errFatalf("pre-marshalling results to json: %v", err)
 		}
-		fmt.Print(string(b))
+
+		unmarshalled := []*types.Result{}
+		err = json.Unmarshal(jsonb, &unmarshalled)
+		if err != nil {
+			errFatalf("pre-unmarshaling results from json: %v", err)
+		}
+
+		yamlb, err := yaml.Marshal(unmarshalled)
+		if err != nil {
+			errFatalf("marshaling validation yaml results: %v", err)
+		}
+		fmt.Print(string(yamlb))
 	default:
 		if len(results) > 0 {
 			for _, result := range results {
