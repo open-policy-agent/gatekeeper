@@ -7,6 +7,8 @@ import (
 	"path"
 	"text/template"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
@@ -464,15 +466,29 @@ type Matcher struct {
 func (m *Matcher) Match(review interface{}) (bool, error) {
 	switch req := review.(type) {
 	case *gkReview:
-		obj := unstructured.Unstructured{}
-		err := obj.UnmarshalJSON(req.Object.Raw)
+		obj, ns, err := gkReviewToObject(req)
 		if err != nil {
-			return false, fmt.Errorf("failed to unmarshal AdmissionRequest object %s", string(req.Object.Raw))
+			return false, err
 		}
-		return match.Matches(m.match, &obj, req.Unstable.Namespace)
+		return match.Matches(m.match, obj, ns)
+	case gkReview:
+		obj, ns, err := gkReviewToObject(&req)
+		if err != nil {
+			return false, err
+		}
+		return match.Matches(m.match, obj, ns)
 	default:
 		return false, fmt.Errorf("expect gkReview, got %T", review)
 	}
+}
+
+func gkReviewToObject(req *gkReview) (client.Object, *corev1.Namespace, error) {
+	obj := unstructured.Unstructured{}
+	err := obj.UnmarshalJSON(req.Object.Raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal gkReview object %s", string(req.Object.Raw))
+	}
+	return &obj, req.Unstable.Namespace, nil
 }
 
 var _ constraints.Matcher = &Matcher{}

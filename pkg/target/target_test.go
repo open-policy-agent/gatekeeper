@@ -5,10 +5,18 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1 "k8s.io/api/admission/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -426,6 +434,147 @@ func TestProcessData(t *testing.T) {
 				if err == nil {
 					t.Errorf("err = nil; want non-nil")
 				}
+			}
+		})
+	}
+}
+
+var fooMatch = match.Match{
+	Kinds: []match.Kinds{
+		{
+			Kinds:     []string{"Thing"},
+			APIGroups: []string{"some"},
+		},
+	},
+	Scope:              "Namespaced",
+	Namespaces:         []util.Wildcard{"my-ns"},
+	ExcludedNamespaces: nil,
+	LabelSelector: &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"obj": "label",
+		},
+	},
+	NamespaceSelector: &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"ns": "label",
+		},
+	},
+	Name: "",
+}
+
+var fooConstraint = makeConstraint(
+	setKinds([]string{"some"}, []string{"Thing"}),
+	setScope("Namespaced"),
+	setNamespaceName("my-ns"),
+	setLabelSelector("obj", "label"),
+	setNamespaceSelector("ns", "label"),
+)
+
+func TestToMatcher(t *testing.T) {
+	unstructAssign, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(&unversioned.Assign{
+		TypeMeta:   metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: unversioned.AssignSpec{
+			Match: fooMatch,
+		},
+	})
+	tests := []struct {
+		name       string
+		constraint *unstructured.Unstructured
+		want       constraints.Matcher
+		wantErr    bool
+	}{
+		{
+			name:       "constraint with no match fields",
+			constraint: makeConstraint(),
+			wantErr:    true,
+		},
+		{
+			name:       "constraint with match fields",
+			constraint: fooConstraint,
+			want: &Matcher{
+				&fooMatch,
+			},
+		},
+		{
+			name: "mutator with match fields",
+			constraint: &unstructured.Unstructured{
+				Object: unstructAssign,
+			},
+			want: &Matcher{
+				&fooMatch,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &K8sValidationTarget{}
+			got, err := h.ToMatcher(tt.constraint)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatcher_Match(t *testing.T) {
+	objData, err := json.Marshal(fooConstraint.Object)
+	if err != nil {
+		t.Fatalf("unable to marshal obj: %s", err)
+	}
+	tests := []struct {
+		name    string
+		match   *match.Match
+		req     interface{}
+		wantErr bool
+	}{
+		{
+			name:    "AdmissionRequest not supported",
+			req:     admissionv1.AdmissionRequest{},
+			wantErr: true,
+		},
+		{
+			name:    "unstructured.Unstructured not supported",
+			req:     makeResource("some", "Thing"),
+			wantErr: true,
+		},
+		{
+			name: "AugmentedReview is supported",
+			req: &AugmentedReview{
+				Namespace: makeNamespace("my-ns"),
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: objData},
+				},
+			},
+			match: &fooMatch,
+		},
+		{
+			name: "AugmentedUnstructured is supported",
+			req: &AugmentedUnstructured{
+				Namespace: makeNamespace("my-ns"),
+				Object:    *fooConstraint,
+			},
+			match: &fooMatch,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := &K8sValidationTarget{}
+			m := &Matcher{
+				match: tt.match,
+			}
+			handled, review, err := target.HandleReview(tt.req)
+			if !handled || err != nil {
+				t.Fatalf("failed to handle review %v", err)
+			}
+			_, err = m.Match(review)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 		})
 	}
