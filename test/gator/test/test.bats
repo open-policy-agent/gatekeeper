@@ -71,15 +71,13 @@ match_yaml_msg () {
 }
 
 @test "multiple files passed in flags is supported" {
-  bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml" --filename="$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations-2.yaml"
-  if [ "$?" -ne 0 ]; then
-    printf "ERROR: got exit status %s but wanted 0\n" "$?"
-    exit 1
-  fi
+ run bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml" --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -oyaml
+  [ "$status" -eq 1 ]
+  match_yaml_msg "$output" "Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>"
 }
 
 @test "stdin and flag are supported in combination" {
-  output=$(! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml")
+  output=$(! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml")
   # since the `run` command doesn't support redirects, it's impractical to
   # confirm the `1` exit code.  We'll instead just confirm the violation is
   # working, and rely on other tests to confirm that `1` is being returned when
