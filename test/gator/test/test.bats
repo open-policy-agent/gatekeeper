@@ -76,6 +76,16 @@ match_yaml_msg () {
   match_yaml_msg "$output" "Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>"
 }
 
+@test "reports error if provided file is not a directory and has disallowed extension" {
+  tmp_manifest=$(mktemp) 
+  cp "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" "$tmp_manifest"
+
+  run bin/gator test --filename="$tmp_manifest" -o=yaml
+  [ "$status" -eq 1 ]
+  err_substring="must be of extensions: [.yaml .yml .json]"
+  match_substring "${output[*]}" "${err_substring}"
+}
+
 @test "stdin and flag are supported in combination" {
   output=$(! bin/gator test --filename="$BATS_TEST_DIRNAME/fixtures/policies/default" -o=yaml < "$BATS_TEST_DIRNAME/fixtures/manifests/no-policies/with-violations.yaml")
   # since the `run` command doesn't support redirects, it's impractical to

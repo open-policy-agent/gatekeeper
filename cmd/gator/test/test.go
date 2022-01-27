@@ -155,6 +155,24 @@ func readSources(filenames []string) ([]*unstructured.Unstructured, error) {
 func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 	var unstrucs []*unstructured.Unstructured
 
+	// verify that the filenames aren't themselves disallowed extensions.  This
+	// yields a much better user experience when the user mis-uses the
+	// --filename flag.
+	for _, name := range filenames {
+		// make sure it's a file, not a directory
+		fileInfo, err := os.Stat(name)
+		if err != nil {
+			return nil, fmt.Errorf("stat on path %q: %w", name, err)
+		}
+
+		if fileInfo.IsDir() {
+			continue
+		}
+		if !allowedExtension(name) {
+			return nil, fmt.Errorf("path %q must be of extensions: %v", name, allowedExtensions)
+		}
+	}
+
 	// normalize directories by listing their files
 	normalized, err := normalize(filenames)
 	if err != nil {
@@ -166,12 +184,12 @@ func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 		if err != nil {
 			return nil, fmt.Errorf("opening file %q: %w", filename, err)
 		}
+		defer file.Close()
 
 		us, err := gator.ReadK8sResources(bufio.NewReader(file))
 		if err != nil {
 			return nil, fmt.Errorf("reading file %q: %w", filename, err)
 		}
-		file.Close()
 
 		unstrucs = append(unstrucs, us...)
 	}
