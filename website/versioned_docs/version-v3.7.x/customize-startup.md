@@ -15,7 +15,7 @@ The `--enable-pprof` flag enables a HTTP server for profiling using the [pprof](
 
 ## Disable certificate generation and rotation for Gatekeeper's webhook
 
-By default, Gatekeepr uses [`open-policy-agent/cert-controller`](https://github.com/open-policy-agent/cert-controller) to handle the webhook's certificate rotation and generation by. If you want to use a third-party solution, you may disable the cert-controller feature using `--disable-cert-rotation`.
+By default, Gatekeeper uses [`open-policy-agent/cert-controller`](https://github.com/open-policy-agent/cert-controller) to handle the webhook's certificate rotation and generation by. If you want to use a third-party solution, you may disable the cert-controller feature using `--disable-cert-rotation`.
 
 ## [Alpha] Emit admission and audit events
 
