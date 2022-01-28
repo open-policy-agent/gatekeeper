@@ -1,7 +1,3 @@
-/*
-Copyright © 2021 NAME HERE <EMAIL ADDRESS>
-
-*/
 package test
 
 import (
@@ -39,7 +35,7 @@ const (
 
 var Cmd = &cobra.Command{
 	Use:     "test",
-	Short:   "test resources against templates and constraints",
+	Short:   "test evaluates resources against policies as defined by constraint templates and constraints",
 	Example: examples,
 	Run:     run,
 }
@@ -79,8 +75,6 @@ func run(cmd *cobra.Command, args []string) {
 	}
 	results := responses.Results()
 
-	// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1787): Add
-	// `-ojson` and `-oyaml` flags
 	switch flagOutput {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
@@ -138,7 +132,7 @@ func readSources(filenames []string) ([]*unstructured.Unstructured, error) {
 	// read from flags if available
 	us, err := readFiles(filenames)
 	if err != nil {
-		return nil, fmt.Errorf("reading from filenames: %s", err)
+		return nil, fmt.Errorf("reading from filenames: %w", err)
 	}
 	unstrucs = append(unstrucs, us...)
 
