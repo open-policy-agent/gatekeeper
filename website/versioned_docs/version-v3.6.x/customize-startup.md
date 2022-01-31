@@ -11,19 +11,29 @@ The `--readiness-retries` flag defines the number of retry attempts allowed for 
 
 ## Enable profiling using `pprof`
 
-The `--enable-pprof` flag enables a HTTP server for profiling using the [pprof](https://pkg.go.dev/net/http/pprof) library. By default, it serves to `localhost:6060` but the port can be customized with the `--pprof-port` flag.
+The `--enable-pprof` flag enables an HTTP server for profiling using the [pprof](https://pkg.go.dev/net/http/pprof) library. By default, it serves to `localhost:6060` but the port can be customized with the `--pprof-port` flag.
 
 ## Disable certificate generation and rotation for Gatekeeper's webhook
 
-By default, Gatekeeper uses [`open-policy-agent/cert-controller`](https://github.com/open-policy-agent/cert-controller) to handle the webhook's certificate rotation and generation by. If you want to use a third-party solution, you may disable the cert-controller feature using `--disable-cert-rotation`.
+By default, Gatekeeper uses [`open-policy-agent/cert-controller`](https://github.com/open-policy-agent/cert-controller) to handle the webhook's certificate rotation and generation. If you want to use a third-party solution, you may disable the cert-controller feature using `--disable-cert-rotation`.
 
 ## [Alpha] Emit admission and audit events
 
-The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events in the Gatekeeper namespace. This flag in alpha stage and it is set to `false` by default.
+The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events in the Gatekeeper namespace. This flag is in alpha stage and it is set to `false` by default.
 
-The `--emit-audit-events` flag enables the emission of all audit violation as Kubernetes events in the Gatekeeper namespace. This flag in alpha stage and it is set to `false` by default.
+The `--emit-audit-events` flag enables the emission of all audit violation as Kubernetes events in the Gatekeeper namespace. This flag is in alpha stage and it is set to `false` by default.
 
-> Note: if the same constraint/audit was violated for more than 10 times in a 10-minute period, the Kubernetes event recorder will aggregate the events, e.g.
+There are three types of events that are emitted by Gatekeeper when the above flags are enabled:
+
+| Event              | Description                                                             |
+| ------------------ | ----------------------------------------------------------------------- |
+| `FailedAdmission`  | The Gatekeeper webhook denied the admission request (default behavior). |
+| `WarningAdmission` | When `enforcementAction: warn` is specified in the constraint.          |
+| `DryrunViolation`  | When `enforcementAction: dryrun` is specified in the constraint.        |
+| `AuditViolation`   | A violation is detected during an audit.                                |
+
+> ❗ Warning: if the same constraint and violating resource tuple was emitted for [more than 10 times in a 10-minute rolling interval](https://github.com/kubernetes/kubernetes/blob/v1.23.3/staging/src/k8s.io/client-go/tools/record/events_cache.go#L429-L438), the Kubernetes event recorder will aggregate the events, e.g.
 > ```
 > 39s         Warning   FailedAdmission   namespace/test      (combined from similar events):  Admission webhook "validation.gatekeeper.sh" denied request, Resource Namespace: , Constraint: ns-must-have-gk, Message: you must provide labels: {"gatekeeper"}
 > ```
+> Gatekeeper might burst 25 events about an object, but limit the refill rate to 1 new event every 5 minutes. This will help control the long-tail of events for resources that are always violating the constraint.
