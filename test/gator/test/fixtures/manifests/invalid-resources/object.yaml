@@ -1,0 +1,4 @@
+kind Object
+apiVersion: group.sh/v1
+metadata:
+  name: object

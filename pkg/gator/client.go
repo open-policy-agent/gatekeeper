@@ -30,4 +30,9 @@ type Client interface {
 
 	// Review runs all Constraints against obj.
 	Review(ctx context.Context, obj interface{}, opts ...client.QueryOpt) (*types.Responses, error)
+
+	// Audit makes sure the cached state of the system satisfies all stored constraints.
+	// On error, the responses return value will still be populated so that
+	// partial results can be analyzed.
+	Audit(ctx context.Context, opts ...client.QueryOpt) (*types.Responses, error)
 }
