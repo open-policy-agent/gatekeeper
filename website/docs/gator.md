@@ -6,9 +6,6 @@ title: The gator CLI
 The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
 Constraints in a local environment.
 
-For now, the only subcommand is `gator verify`, which allows writing unit tests
-for Constraints. We plan on adding more subcommands in the future.
-
 ## Installation
 
 To install `gator`, you may either
@@ -18,6 +15,71 @@ relevant to your system or build it directly from source.
 To build from source:
 ```
 go get github.com/open-policy-agent/gatekeeper/cmd/gator
+```
+
+## The `gator test` subcommand
+
+`gator test` allows users to test a set of Kubernetes objects against a set of
+Templates and Constraints.  The command returns violations when found and
+communicates success or failure via its exit status.
+
+### Usage
+
+#### Specifying inputs
+
+`gator test` supports inputs through the `--filename` flag and via stdin.  The
+two methods of input can be in combination or individually.
+
+The `--filename` flag can specify a single file or a directory.  If a file is
+specified, that file must end in one of the following extensions: `.json`,
+`.yaml`, `.yml`.  Directories will be walked, and any files of extensions other
+than the aforementioned three will be skipped.
+
+For example, to verify a manifest (piped via stdin) against a folder of policies:
+
+```
+cat my-manifest.yaml | gator test --filename=template-and-constraints/
+```
+
+Or you can specify both as flags:
+
+```
+gator test -f=my-manifest.yaml -f=templates-and-constraints/
+```
+
+#### Exit Codes
+
+`gator test` will return a `0` exit status when the objects, Templates, and
+Constraints are successfully ingested, no errors occur during evaluation, and
+no violations are found.
+
+An error during evaluation, for example a failure to read a file, will result
+in a `1` exit status with an error message printed to stderr.
+
+Policy violations will generate a `1` exit status as well, but violation
+information will be printed to stdout.
+
+##### Enforcement Actions
+
+While violation data will always be returned when an object is found to be
+violating a Constraint, the exit status can vary.  A constraint with
+`spec.enforcementAction: ""` or `spec.enforcementAction: deny` will produce a
+`1` exit code, but other enforcement actions like `dryrun` will not.  This is
+meant to make the exit code of `1` consistent with rejection of the object by
+Gatekeeper's webhook.  A Constraint set to `warn` would not trigger a rejection
+in the webhook, but _would_ produce a violation message.  The same is true for
+that constraint when used in `gator test`.
+
+#### Output Formatting
+
+`gator test` supports a `--output` flag that allows the user to specify a
+structured data format for the violation data.  This information is printed to
+stdout.
+
+The allowed values are `yaml` and `json`, specified like:
+
+```
+gator test --filename=manifests-and-policies/ --output=json
 ```
 
 ## The `gator verify` subcommand

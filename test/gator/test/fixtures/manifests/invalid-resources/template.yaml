@@ -1,0 +1,18 @@
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1
+metadata:
+  name: alwaysvalidate
+  {}: {}
+spec:
+  crd:
+    spec:
+      names:
+        kind: AlwaysValidate
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowedtags
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
+        }

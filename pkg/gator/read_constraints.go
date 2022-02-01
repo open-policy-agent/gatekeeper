@@ -3,6 +3,7 @@ package gator
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 
@@ -10,11 +11,17 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 type versionless interface {
 	ToVersionless() (*templates.ConstraintTemplate, error)
 }
+
+// jsonLookaheadBytes is the number of bytes the JSON and YAML decoder will
+// look into the data it's reading to determine if the document is JSON or
+// YAML.  1024 was a guess that's worked so far.
+const jsonLookaheadBytes int = 1024
 
 // clean removes the following from yaml:
 // 1) Empty lines
@@ -85,9 +92,22 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %v", ErrAddingTemplate, path, err)
 	}
 
+	template, err := ToTemplate(scheme, u)
+	if err != nil {
+		return nil, fmt.Errorf("path %q: %w", path, err)
+	}
+	return template, nil
+}
+
+// TODO (https://github.com/open-policy-agent/gatekeeper/issues/1779): Move
+// this function into a location that makes it more obviously a shared resource
+// between `gator test` and `gator verify`
+
+// ToTemplate converts an unstructured template into a versionless ConstraintTemplate struct.
+func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
 	gvk := u.GroupVersionKind()
 	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		return nil, fmt.Errorf("%w: %q", ErrNotATemplate, path)
+		return nil, fmt.Errorf("%w", ErrNotATemplate)
 	}
 
 	t, err := scheme.New(gvk)
@@ -153,4 +173,29 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	}
 
 	return u, nil
+}
+
+// ReadK8sResources reads JSON or YAML k8s resources from an io.Reader,
+// decoding them into Unstructured objects and returning those objects as a
+// slice.
+func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
+	var objs []*unstructured.Unstructured
+
+	decoder := yaml.NewYAMLOrJSONDecoder(r, jsonLookaheadBytes)
+	for {
+		u := &unstructured.Unstructured{
+			Object: make(map[string]interface{}),
+		}
+		err := decoder.Decode(&u.Object)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading yaml source: %w", err)
+		}
+
+		objs = append(objs, u)
+	}
+
+	return objs, nil
 }

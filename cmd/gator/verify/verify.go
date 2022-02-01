@@ -47,7 +47,7 @@ func init() {
 // Cmd is the gator verify subcommand.
 var Cmd = &cobra.Command{
 	Use:     "verify path [--run=name]",
-	Short:   "verify runs suites of tests on Gatekeeper Constraints",
+	Short:   "verify suites of tests on Gatekeeper Constraints",
 	Example: examples,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runE,

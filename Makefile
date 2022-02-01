@@ -18,6 +18,7 @@ BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
+YQ_VERSION ?= 4.2.0
 
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
@@ -103,14 +104,22 @@ test:
 	cp test/Dockerfile .staging/test/Dockerfile
 	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
 
+.PHONY: test-e2e
 test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
-test-gator: bin/gator-${GOOS}-${GOARCH}
-	./bin/gator-${GOOS}-${GOARCH} verify test/gator/suite.yaml
+.PHONY: test-gator
+test-gator: gator test-gator-verify test-gator-test
 
-KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
-e2e-bootstrap:
+.PHONY: test-gator-verify
+test-gator-verify: gator
+	./bin/gator verify test/gator/verify/suite.yaml
+
+.PHONY: test-gator-test
+test-gator-test: gator
+	bats test/gator/test
+
+e2e-dependencies: 
 	# Download and install kind
 	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output ${GITHUB_WORKSPACE}/bin/kind && chmod +x ${GITHUB_WORKSPACE}/bin/kind
 	# Download and install kubectl
@@ -119,6 +128,11 @@ e2e-bootstrap:
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && tar -zxvf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize ${GITHUB_WORKSPACE}/bin/kustomize
 	# Download and install bats
 	curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && tar -zxvf v${BATS_VERSION}.tar.gz && bash bats-core-${BATS_VERSION}/install.sh ${GITHUB_WORKSPACE}
+	# Install yq
+	curl -L https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
+
+KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
+e2e-bootstrap: e2e-dependencies
 	# Check for existing kind cluster
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi
 	# Create a new kind cluster
