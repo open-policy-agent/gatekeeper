@@ -18,6 +18,7 @@ BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
+YQ_VERSION ?= 4.2.0
 
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
@@ -128,7 +129,7 @@ e2e-dependencies:
 	# Download and install bats
 	curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && tar -zxvf v${BATS_VERSION}.tar.gz && bash bats-core-${BATS_VERSION}/install.sh ${GITHUB_WORKSPACE}
 	# Install yq
-	curl -L https://github.com/mikefarah/yq/releases/download/v4.2.0/yq_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
+	curl -L https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
 
 KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap: e2e-dependencies
