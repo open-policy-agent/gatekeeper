@@ -56,7 +56,7 @@ const (
 )
 
 func init() {
-	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
+	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 }
 
@@ -170,7 +170,7 @@ func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 	// normalize directories by listing their files
 	normalized, err := normalize(filenames)
 	if err != nil {
-		return nil, fmt.Errorf("normalizing: %w", err)
+		return nil, fmt.Errorf("normalizing filenames: %w", err)
 	}
 
 	for _, filename := range normalized {
@@ -194,7 +194,7 @@ func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 func readStdin() ([]*unstructured.Unstructured, error) {
 	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("getting info: %w", err)
+		return nil, fmt.Errorf("getting stdin info: %w", err)
 	}
 
 	if stdinfo.Size() == 0 {
