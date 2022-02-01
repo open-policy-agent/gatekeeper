@@ -1,5 +1,5 @@
 kind: ConstraintTemplate
-apiVersion: templates.gatekeeper.sh/v1beta1
+apiVersion: templates.gatekeeper.sh/v1
 metadata:
   name: alwaysvalidate
   {}: {}
