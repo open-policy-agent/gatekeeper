@@ -1,0 +1,5 @@
+kind: AlwaysValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-pass
+  {}: {}
