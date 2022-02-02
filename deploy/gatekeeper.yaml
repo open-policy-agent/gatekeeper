@@ -2036,6 +2036,7 @@ spec:
   - projected
   - secret
   - downwardAPI
+  - emptyDir
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -2325,7 +2326,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.7.0
+        image: openpolicyagent/gatekeeper:v3.7.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -2428,7 +2429,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.7.0
+        image: openpolicyagent/gatekeeper:v3.7.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

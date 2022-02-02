@@ -23,13 +23,13 @@ postInstall:
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.7.0
+      tag: v3.7.1
       pullPolicy: IfNotPresent
       pullSecrets: []
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.7.0
+  release: v3.7.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
@@ -41,7 +41,7 @@ controllerManager:
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
-  dnsPolicy: Default
+  dnsPolicy: ClusterFirst
   port: 8443
   metricsPort: 8888
   healthPort: 9090
@@ -69,7 +69,7 @@ controllerManager:
       memory: 256Mi
 audit:
   hostNetwork: false
-  dnsPolicy: Default
+  dnsPolicy: ClusterFirst
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
