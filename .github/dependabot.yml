@@ -14,3 +14,15 @@ updates:
       interval: "daily"
     commit-message:
       prefix: "chore"
+
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+        - "version-update:semver-major"
+        - "version-update:semver-minor"
