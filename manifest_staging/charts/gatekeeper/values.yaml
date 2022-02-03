@@ -103,6 +103,8 @@ pdb:
   controllerManager:
     minAvailable: 1
 service: {}
+  # # Add health port to allow healthcheck probes to webhook service
+  # healthzPort: 9090
 disabledBuiltins:
 psp:
   enabled: true
