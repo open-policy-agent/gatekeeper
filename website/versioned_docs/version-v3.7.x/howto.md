@@ -72,7 +72,9 @@ You can install this Constraint with the following command:
 kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/constraints/all_ns_must_have_gatekeeper.yaml
 ```
 
-Note the `match` field, which defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
+### The match field
+
+The `match` field defines the scope of objects to which a given constraint will be applied. It supports the following matchers:
 
    * `kinds` accepts a list of objects with `apiGroups` and `kinds` fields that list the groups/kinds of objects to which the constraint will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
    * `scope` determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
@@ -83,6 +85,49 @@ Note the `match` field, which defines the scope of objects to which a given cons
    * `name` is the name of an object.  If defined, it matches against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` matches both `pod-a` and `pod-b`.
 
 Note that if multiple matchers are specified, a resource must satisfy each top-level matcher (`kinds`, `namespaces`, etc.) to be in scope. Each top-level matcher has its own semantics for what qualifies as a match. An empty matcher is deemed to be inclusive (matches everything). Also understand `namespaces`, `excludedNamespaces`, and `namespaceSelector` will match on cluster scoped resources which are not namespaced. To avoid this adjust the `scope` to `Namespaced`.
+
+### The parameters field
+
+The `parameters` field describes the intent of a constraint. It can be referenced as `input.parameters` by the ConstraintTemplate's Rego source code. Gatekeeper populates `input.parameters` with values passed into the `parameters` field in the Constraint.
+
+Example:
+```yaml
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+```
+The schema for the input Constraint `parameters` is defined in the ConstraintTemplate. The API server will reject a Constraint with an incorrect parameters field if the data types do not match.
+
+Example:
+```shell
+# Apply the Constraint with incorrect parameters schema
+$ cat << EOF | kubectl apply -f -
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    # Note that "labels" is now an array item, rather than an object
+    - labels: ["gatekeeper"]
+EOF
+The K8sRequiredLabels "ns-must-have-gk" is invalid: spec.parameters: Invalid value: "array": spec.parameters in body must be of type object: "array"
+```
+
+### The enforcementAction field
+
+The `enforcementAction` field defines the action for handling Constraint violations. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation. Other supported enforcementActions include `dryrun` and `warn`. Refer to [Handling Constraint Violations](violations.md) for more details. 
 
 ### Listing constraints
 You can list all constraints in a cluster with the following command:
