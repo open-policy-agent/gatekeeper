@@ -2,15 +2,9 @@ package target
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
-
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	admissionv1 "k8s.io/api/admission/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
@@ -18,7 +12,13 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1 "k8s.io/api/admission/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestFrameworkInjection(t *testing.T) {
@@ -439,61 +439,65 @@ func TestProcessData(t *testing.T) {
 	}
 }
 
-var fooMatch = match.Match{
-	Kinds: []match.Kinds{
-		{
-			Kinds:     []string{"Thing"},
-			APIGroups: []string{"some"},
+func fooMatch() *match.Match {
+	return &match.Match{
+		Kinds: []match.Kinds{
+			{
+				Kinds:     []string{"Thing"},
+				APIGroups: []string{"some"},
+			},
 		},
-	},
-	Scope:              "Namespaced",
-	Namespaces:         []util.Wildcard{"my-ns"},
-	ExcludedNamespaces: nil,
-	LabelSelector: &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"obj": "label",
+		Scope:              "Namespaced",
+		Namespaces:         []util.Wildcard{"my-ns"},
+		ExcludedNamespaces: nil,
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"obj": "label",
+			},
 		},
-	},
-	NamespaceSelector: &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"ns": "label",
+		NamespaceSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"ns": "label",
+			},
 		},
-	},
-	Name: "",
+		Name: "",
+	}
 }
 
-var fooConstraint = makeConstraint(
-	setKinds([]string{"some"}, []string{"Thing"}),
-	setScope("Namespaced"),
-	setNamespaceName("my-ns"),
-	setLabelSelector("obj", "label"),
-	setNamespaceSelector("ns", "label"),
-)
+func fooConstraint() *unstructured.Unstructured {
+	return makeConstraint(
+		setKinds([]string{"some"}, []string{"Thing"}),
+		setScope("Namespaced"),
+		setNamespaceName("my-ns"),
+		setLabelSelector("obj", "label"),
+		setNamespaceSelector("ns", "label"),
+	)
+}
 
 func TestToMatcher(t *testing.T) {
 	unstructAssign, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(&unversioned.Assign{
 		TypeMeta:   metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: unversioned.AssignSpec{
-			Match: fooMatch,
+			Match: *fooMatch(),
 		},
 	})
 	tests := []struct {
 		name       string
 		constraint *unstructured.Unstructured
 		want       constraints.Matcher
-		wantErr    bool
+		wantErr    error
 	}{
 		{
 			name:       "constraint with no match fields",
 			constraint: makeConstraint(),
-			wantErr:    true,
+			wantErr:    ErrCreatingMather,
 		},
 		{
 			name:       "constraint with match fields",
-			constraint: fooConstraint,
+			constraint: fooConstraint(),
 			want: &Matcher{
-				&fooMatch,
+				fooMatch(),
 			},
 		},
 		{
@@ -502,7 +506,7 @@ func TestToMatcher(t *testing.T) {
 				Object: unstructAssign,
 			},
 			want: &Matcher{
-				&fooMatch,
+				fooMatch(),
 			},
 		},
 	}
@@ -510,55 +514,143 @@ func TestToMatcher(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &K8sValidationTarget{}
 			got, err := h.ToMatcher(tt.constraint)
-			if (err != nil) != tt.wantErr {
+			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(Matcher{})); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
+func matchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
+	return objData
+}
+
+func unmatchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("another", "thing").Object)
+	return objData
+}
+
 func TestMatcher_Match(t *testing.T) {
-	objData, err := json.Marshal(fooConstraint.Object)
-	if err != nil {
-		t.Fatalf("unable to marshal obj: %s", err)
-	}
+	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
 	tests := []struct {
 		name    string
 		match   *match.Match
 		req     interface{}
-		wantErr bool
+		wantErr error
+		want    bool
 	}{
 		{
 			name:    "AdmissionRequest not supported",
 			req:     admissionv1.AdmissionRequest{},
-			wantErr: true,
+			wantErr: ErrReviewFormat,
 		},
 		{
 			name:    "unstructured.Unstructured not supported",
 			req:     makeResource("some", "Thing"),
-			wantErr: true,
+			wantErr: ErrReviewFormat,
+		},
+		{
+			name: "Raw object doesn't unmarshal",
+			req: &AugmentedUnstructured{
+				Namespace: makeNamespace("my-ns"),
+				Object: unstructured.Unstructured{Object: map[string]interface{}{
+					"key": "Some invalid json",
+				}},
+			},
+			wantErr: ErrRequestObject,
 		},
 		{
 			name: "AugmentedReview is supported",
 			req: &AugmentedReview{
-				Namespace: makeNamespace("my-ns"),
+				Namespace: ns,
 				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{Raw: objData},
+					Object: runtime.RawExtension{Raw: matchedRawData()},
 				},
 			},
-			match: &fooMatch,
+			match: fooMatch(),
+			want:  true,
 		},
 		{
 			name: "AugmentedUnstructured is supported",
 			req: &AugmentedUnstructured{
-				Namespace: makeNamespace("my-ns"),
-				Object:    *fooConstraint,
+				Namespace: ns,
+				Object:    *makeResource("some", "Thing", map[string]string{"obj": "label"}),
 			},
-			match: &fooMatch,
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "Both object and old object are matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: matchedRawData()},
+					OldObject: runtime.RawExtension{Raw: matchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is matched, old object is not matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: matchedRawData()},
+					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is not matched, old object is matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
+					OldObject: runtime.RawExtension{Raw: matchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is matched, old object is not matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
+					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  false,
+		},
+		{
+			name: "new object is not matched, old object is not specified",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  false,
+		},
+		{
+			name: "neither new or old object is specified",
+			req: &AugmentedReview{
+				Namespace:        ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{},
+			},
+			match:   fooMatch(),
+			wantErr: ErrRequestObject,
 		},
 	}
 	for _, tt := range tests {
@@ -571,10 +663,13 @@ func TestMatcher_Match(t *testing.T) {
 			if !handled || err != nil {
 				t.Fatalf("failed to handle review %v", err)
 			}
-			_, err = m.Match(review)
-			if (err != nil) != tt.wantErr {
+			got, err := m.Match(review)
+			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if got != tt.want {
+				t.Errorf("want %v matched, got %v", tt.want, got)
 			}
 		})
 	}
