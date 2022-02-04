@@ -431,11 +431,11 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 	j, err := json.Marshal(object)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not convert unknown object to JSON")
+		return nil, errors.Wrap(err, "could not convert unknown object to JSON")
 	}
 	obj := &match.Match{}
 	if err := json.Unmarshal(j, obj); err != nil {
-		return nil, errors.Wrap(err, "Could not convert JSON to Match")
+		return nil, errors.Wrap(err, "could not convert JSON to Match")
 	}
 	return obj, nil
 }
@@ -481,19 +481,19 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	}
 }
 
-func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (matched bool, err error) {
+func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
 	nilObj := 0
 	for _, obj := range objs {
-		if obj.Object != nil {
-			matched, err = match.Matches(m.match, obj, ns)
-			if err != nil {
-				return false, fmt.Errorf("%w: %v", ErrMatching, err)
-			}
-			if matched {
-				return matched, nil
-			}
-		} else {
+		if obj.Object == nil {
 			nilObj++
+			continue
+		}
+		matched, err := match.Matches(m.match, obj, ns)
+		if err != nil {
+			return false, fmt.Errorf("%w: %v", ErrMatching, err)
+		}
+		if matched {
+			return true, nil
 		}
 	}
 	if nilObj == len(objs) {

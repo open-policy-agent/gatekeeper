@@ -536,6 +536,8 @@ func unmatchedRawData() []byte {
 }
 
 func TestMatcher_Match(t *testing.T) {
+	nsData, _ := json.Marshal(makeResource("", "Namespace").Object)
+
 	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
 	tests := []struct {
 		name    string
@@ -563,6 +565,16 @@ func TestMatcher_Match(t *testing.T) {
 				}},
 			},
 			wantErr: ErrRequestObject,
+		},
+		{
+			name: "Match error",
+			req: &AugmentedReview{
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: nsData},
+				},
+			},
+			match:   fooMatch(),
+			wantErr: ErrMatching,
 		},
 		{
 			name: "AugmentedReview is supported",
