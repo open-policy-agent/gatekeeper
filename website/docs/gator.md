@@ -23,6 +23,10 @@ go get github.com/open-policy-agent/gatekeeper/cmd/gator
 Templates and Constraints.  The command returns violations when found and
 communicates success or failure via its exit status.
 
+Note: The `gator verify` command was first called `gator test`.  These names
+were changed to better align `gator` with other projects in the
+open-policy-agent space.
+
 ### Usage
 
 #### Specifying inputs

@@ -35,7 +35,7 @@ const (
 
 var Cmd = &cobra.Command{
 	Use:     "test",
-	Short:   "test evaluates resources against policies as defined by constraint templates and constraints",
+	Short:   "test evaluates resources against policies as defined by constraint templates and constraints. Note: The alpha `gator test` has been renamed to `gator verify`.",
 	Example: examples,
 	Run:     run,
 }
