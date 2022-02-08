@@ -30,7 +30,9 @@ const (
   cat manifest.yaml | gator test
 
   # Output structured violations data
-  gator test --filename="manifest.yaml" --output=json`
+  gator test --filename="manifest.yaml" --output=json
+
+  Note: The alpha "gator test" has been renamed to "gator verify"`
 )
 
 var Cmd = &cobra.Command{
@@ -38,6 +40,7 @@ var Cmd = &cobra.Command{
 	Short:   "test evaluates resources against policies as defined by constraint templates and constraints. Note: The alpha `gator test` has been renamed to `gator verify`.",
 	Example: examples,
 	Run:     run,
+	Args:    cobra.NoArgs,
 }
 
 var allowedExtensions = []string{".yaml", ".yml", ".json"}
