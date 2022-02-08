@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -426,6 +427,95 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 	return obj, nil
 }
 
-func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
-	panic("not implemented")
+// TODO: can we use generic for Unmarshal after go 1.18?
+func convertToMatch(object map[string]interface{}) (*match.Match, error) {
+	j, err := json.Marshal(object)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not convert unknown object to JSON")
+	}
+	obj := &match.Match{}
+	if err := json.Unmarshal(j, obj); err != nil {
+		return nil, errors.Wrap(err, "could not convert JSON to Match")
+	}
+	return obj, nil
 }
+
+// ToMatcher converts .spec.match in mutators to Matcher.
+func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
+	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+	}
+	if found && obj != nil {
+		match, err := convertToMatch(obj)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+		}
+		return &Matcher{match}, nil
+	}
+	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMather, u.GetKind(), u.GetName())
+}
+
+// Matcher implements constraint.Matcher.
+// TODO: add cache when handler.Cache interface is available.
+type Matcher struct {
+	match *match.Match
+}
+
+func (m *Matcher) Match(review interface{}) (bool, error) {
+	switch req := review.(type) {
+	case *gkReview:
+		obj, oldObj, ns, err := gkReviewToObject(req)
+		if err != nil {
+			return false, err
+		}
+		return matchAny(m, ns, &obj, &oldObj)
+	case gkReview:
+		obj, oldObj, ns, err := gkReviewToObject(&req)
+		if err != nil {
+			return false, err
+		}
+		return matchAny(m, ns, &obj, &oldObj)
+	default:
+		return false, fmt.Errorf("%w: expect gkReview, got %T", ErrReviewFormat, review)
+	}
+}
+
+func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
+	nilObj := 0
+	for _, obj := range objs {
+		if obj.Object == nil {
+			nilObj++
+			continue
+		}
+		matched, err := match.Matches(m.match, obj, ns)
+		if err != nil {
+			return false, fmt.Errorf("%w: %v", ErrMatching, err)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	if nilObj == len(objs) {
+		return false, fmt.Errorf("%w: neither object nor old object are defined", ErrRequestObject)
+	}
+	return false, nil
+}
+
+func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns *corev1.Namespace, err error) {
+	if req.Object.Raw != nil {
+		err = obj.UnmarshalJSON(req.Object.Raw)
+		if err != nil {
+			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview object %s", ErrRequestObject, string(req.Object.Raw))
+		}
+	}
+	if req.OldObject.Raw != nil {
+		err = oldObj.UnmarshalJSON(req.OldObject.Raw)
+		if err != nil {
+			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.Object.Raw))
+		}
+	}
+	return obj, oldObj, req.Unstable.Namespace, nil
+}
+
+var _ constraints.Matcher = &Matcher{}
