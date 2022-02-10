@@ -2517,6 +2517,7 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+  reinvocationPolicy: Never
   rules:
   - apiGroups:
     - '*'

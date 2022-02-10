@@ -195,6 +195,7 @@ webhooks:
       namespace: gatekeeper-system
       path: /v1/mutate
   failurePolicy: HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY
+  reinvocationPolicy: HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY
   rules:
   - HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES
   matchPolicy: Exact
