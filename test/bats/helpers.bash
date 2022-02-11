@@ -50,6 +50,14 @@ assert_not_match() {
   fi
 }
 
+assert_len() {
+  if [[ "$1" != "${#2}" ]]; then
+    echo "expected len: $1"
+    echo "actual len: ${#2} ($2)"
+    return 1
+  fi
+}
+
 wait_for_process() {
   wait_time="$1"
   sleep_time="$2"
@@ -88,7 +96,7 @@ constraint_enforced() {
     echo "Gatekeeper pod count is < 1"
     return 2
   fi
-  
+
   local cstr="$(kubectl get ${kind} ${name} -ojson)"
   if [[ $? -ne 0 ]]; then
     echo "Error gathering constraint ${kind} ${name}"
@@ -117,7 +125,7 @@ mutator_enforced() {
     echo "Gatekeeper pod count is < 1"
     return 2
   fi
-  
+
   local cstr="$(kubectl get ${kind} ${name} -ojson)"
   if [[ $? -ne 0 ]]; then
     echo "Error gathering mutator ${kind} ${name}"

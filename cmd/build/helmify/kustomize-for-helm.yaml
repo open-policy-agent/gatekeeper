@@ -79,6 +79,8 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --log-mutations={{ .Values.logMutations }}
+            - --mutation-annotations={{ .Values.mutationAnnotations }}
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
