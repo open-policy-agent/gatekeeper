@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -72,7 +72,7 @@ func init() {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !operations.IsAssigned(operations.Webhook) {
 		return nil
 	}
@@ -116,7 +116,7 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa       *opa.Client
+	opa       *constraintclient.Client
 	semaphore chan struct{}
 }
 
@@ -475,7 +475,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		review.Namespace = ns
 	}
 
-	resp, err := h.opa.Review(ctx, review, opa.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, constraintclient.Tracing(trace))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}

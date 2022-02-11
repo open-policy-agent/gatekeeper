@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
 )
 
@@ -55,7 +56,22 @@ func validateTargetNames(ts []handler.TargetHandler) []string {
 // the system can be enabled.
 func AllowedDataFields(fields ...string) Opt {
 	return func(c *Client) error {
+		for _, field := range fields {
+			if !validDataFields[field] {
+				return fmt.Errorf("%w: invalid data field %q; allowed fields are: %v",
+					ErrCreatingClient, field, validDataFields)
+			}
+		}
+
 		c.AllowedDataFields = fields
+		return nil
+	}
+}
+
+// Driver defines the Rego execution environment.
+func Driver(d drivers.Driver) Opt {
+	return func(client *Client) error {
+		client.driver = d
 		return nil
 	}
 }

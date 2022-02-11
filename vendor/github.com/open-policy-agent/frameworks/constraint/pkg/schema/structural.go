@@ -41,5 +41,5 @@ func CRDSchema(sch *runtime.Scheme, version string) (*schema.Structural, error) 
 		return structural, nil
 	}
 
-	return nil, fmt.Errorf("No CRD version '%q'", version)
+	return nil, fmt.Errorf("no CRD version %q", version)
 }

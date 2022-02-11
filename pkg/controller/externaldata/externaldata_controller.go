@@ -4,7 +4,7 @@ import (
 	"context"
 
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -35,12 +35,12 @@ var (
 )
 
 type Adder struct {
-	Opa           *opa.Client
+	Opa           *constraintclient.Client
 	ProviderCache *frameworksexternaldata.ProviderCache
 	Tracker       *readiness.Tracker
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
+func (a *Adder) InjectOpa(o *constraintclient.Client) {
 	a.Opa = o
 }
 
@@ -68,13 +68,13 @@ func (a *Adder) Add(mgr manager.Manager) error {
 // Reconciler reconciles a ExternalData object.
 type Reconciler struct {
 	client.Client
-	opa           *opa.Client
+	opa           *constraintclient.Client
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
 }
 
 // newReconciler returns a new reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, opa *opa.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
+func newReconciler(mgr manager.Manager, opa *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
 	r := &Reconciler{opa: opa, providerCache: providerCache, Client: mgr.GetClient(), tracker: tracker}
 	return r
 }

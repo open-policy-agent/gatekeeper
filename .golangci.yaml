@@ -8,6 +8,11 @@ linters-settings:
   gosec:
     excludes:
     - G108
+  importas:
+    no-unaliased: true
+    alias:
+      - pkg: "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+        alias: constraintclient
   lll:
     line-length: 200
 
@@ -33,6 +38,7 @@ linters:
     - gosec
     - gosimple
     - govet
+    - importas
     - ineffassign
     - misspell
     - revive # replacement for golint

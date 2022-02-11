@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -52,7 +52,7 @@ func init() {
 // +kubebuilder:rbac:resourceNames=gatekeeper-mutating-webhook-configuration,groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;update;patch
 
 // AddMutatingWebhook registers the mutating webhook server with the manager.
-func AddMutatingWebhook(mgr manager.Manager, client *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddMutatingWebhook(mgr manager.Manager, client *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !operations.IsAssigned(operations.MutationWebhook) {
 		return nil
 	}

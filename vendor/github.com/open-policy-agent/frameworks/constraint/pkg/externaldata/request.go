@@ -24,7 +24,7 @@ type Request struct {
 	Keys []string `json:"keys,omitempty"`
 }
 
-// NewRequest creates a new request for the external data provider.
+// NewProviderRequest creates a new request for the external data provider.
 func NewProviderRequest(keys []string) *ProviderRequest {
 	return &ProviderRequest{
 		APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
@@ -35,6 +35,7 @@ func NewProviderRequest(keys []string) *ProviderRequest {
 	}
 }
 
+// ProviderKind strings are special string constants for Providers.
 // +kubebuilder:validation:Enum=ProviderRequestKind;ProviderResponseKind
 type ProviderKind string
 
