@@ -210,11 +210,7 @@ func TestTemplateValidation(t *testing.T) {
 				},
 			}
 
-			validated, err := handler.validateGatekeeperResources(review)
-			if !validated {
-				t.Fatal("got not handled, want handled")
-			}
-
+			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}

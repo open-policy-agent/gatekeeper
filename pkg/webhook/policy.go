@@ -338,6 +338,10 @@ func (h *validationHandler) validateGatekeeperResources(req *admission.Request) 
 	return false, nil
 }
 
+// validateTemplate validates the ConstraintTemplate in the Request.
+// Returns an error if the ConstraintTemplate fails validation.
+// The returned boolean is only true if error is non-nil and is a result of user
+// error.
 func (h *validationHandler) validateTemplate(req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
@@ -353,7 +357,7 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 		return true, err
 	}
 
-	return true, nil
+	return false, nil
 }
 
 func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
