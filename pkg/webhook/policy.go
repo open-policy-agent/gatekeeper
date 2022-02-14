@@ -343,14 +343,17 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 	if err != nil {
 		return false, err
 	}
+
 	unversioned := &templates.ConstraintTemplate{}
 	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
 		return false, err
 	}
+
 	if err := h.opa.ValidateConstraintTemplate(unversioned); err != nil {
 		return true, err
 	}
-	return false, nil
+
+	return true, nil
 }
 
 func (h *validationHandler) validateConstraint(req *admission.Request) (bool, error) {
