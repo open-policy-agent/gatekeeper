@@ -54,7 +54,7 @@ applyTo:
 match:
   scope: Namespaced | Cluster
   kinds:
-  - APIGroups: []
+  - apiGroups: []
     kinds: []
   labelSelector: []
   namespaces: []

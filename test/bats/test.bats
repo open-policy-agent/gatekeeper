@@ -64,6 +64,11 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_cm.yaml"
   run kubectl get cm mutate-cm -o jsonpath="{.metadata.labels.owner}"
   assert_equal 'gatekeeper' "${output}"
+  run kubectl get cm mutate-cm -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutation\-id}"
+  # uuid has a length of 36
+  assert_len 36 "${output}"
+  run kubectl get cm mutate-cm -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutations}"
+  assert_equal 'AssignMetadata//k8sownerlabel:1' "${output}"
 
   kubectl delete --ignore-not-found cm mutate-cm
 
@@ -72,6 +77,10 @@ teardown_file() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/mutate_svc.yaml"
   run kubectl get svc mutate-svc -o jsonpath="{.spec.externalIPs}"
   assert_equal "" "${output}"
+  run kubectl get svc mutate-svc -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutation\-id}"
+  assert_len 36 "${output}"
+  run kubectl get svc mutate-svc -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutations}"
+  assert_equal 'Assign//k8sexternalip:1' "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc
   kubectl delete --ignore-not-found assignmetadata k8sownerlabel

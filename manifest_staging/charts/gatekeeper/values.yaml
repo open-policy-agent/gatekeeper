@@ -17,9 +17,11 @@ mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookTimeoutSeconds: 3
 mutatingWebhookCustomRules: {}
+mutationAnnotations: false
 auditChunkSize: 500
 logLevel: INFO
 logDenies: false
+logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
