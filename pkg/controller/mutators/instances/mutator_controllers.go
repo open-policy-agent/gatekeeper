@@ -3,7 +3,7 @@ package instances
 import (
 	"context"
 
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
@@ -107,7 +107,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return assignMetadata.Add(mgr)
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {}
+func (a *Adder) InjectOpa(o *constraintclient.Client) {}
 
 func (a *Adder) InjectWatchManager(w *watch.Manager) {}
 

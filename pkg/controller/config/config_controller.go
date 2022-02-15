@@ -19,7 +19,7 @@ import (
 	"context"
 	"fmt"
 
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -52,7 +52,7 @@ const (
 var log = logf.Log.WithName("controller").WithValues("kind", "Config")
 
 type Adder struct {
-	Opa              *opa.Client
+	Opa              *constraintclient.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
@@ -73,7 +73,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
+func (a *Adder) InjectOpa(o *constraintclient.Client) {
 	a.Opa = o
 }
 

@@ -27,7 +27,7 @@ import (
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -87,14 +87,10 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	return mgr, wm
 }
 
-func setupOpa(t *testing.T) *opa.Client {
+func setupOpa(t *testing.T) *constraintclient.Client {
 	// initialize OPA
 	driver := local.New(local.Tracing(false))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("setting up OPA backend: %v", err)
-	}
-	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("setting up OPA client: %v", err)
 	}
@@ -104,7 +100,7 @@ func setupOpa(t *testing.T) *opa.Client {
 func setupController(
 	mgr manager.Manager,
 	wm *watch.Manager,
-	opa *opa.Client,
+	opa *constraintclient.Client,
 	mutationSystem *mutation.System,
 	providerCache *frameworksexternaldata.ProviderCache) error {
 	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil, providerCache != nil)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplate"
@@ -109,11 +109,7 @@ violation[{"msg": "denied!"}] {
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("unable to set up OPA backend: %s", err)
-	}
-	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}

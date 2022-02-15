@@ -22,7 +22,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -52,7 +52,7 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {}
+func (a *Adder) InjectOpa(o *constraintclient.Client) {}
 
 func (a *Adder) InjectWatchManager(w *watch.Manager) {}
 

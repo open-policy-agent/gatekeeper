@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -21,18 +21,18 @@ func ValidateTargets(templ *templates.ConstraintTemplate) error {
 	targets := templ.Spec.Targets
 	if targets == nil {
 		return fmt.Errorf(`%w: field "targets" not specified in ConstraintTemplate spec`,
-			local.ErrInvalidConstraintTemplate)
+			clienterrors.ErrInvalidConstraintTemplate)
 	}
 
 	switch len(targets) {
 	case 0:
 		return fmt.Errorf("%w: no targets specified: ConstraintTemplate must specify one target",
-			local.ErrInvalidConstraintTemplate)
+			clienterrors.ErrInvalidConstraintTemplate)
 	case 1:
 		return nil
 	default:
 		return fmt.Errorf("%w: multi-target templates are not currently supported",
-			local.ErrInvalidConstraintTemplate)
+			clienterrors.ErrInvalidConstraintTemplate)
 	}
 }
 

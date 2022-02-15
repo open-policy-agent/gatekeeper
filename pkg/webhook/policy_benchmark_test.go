@@ -26,7 +26,7 @@ import (
 	"time"
 
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
@@ -151,7 +151,7 @@ func readDirHelper(dir string) ([]unstructured.Unstructured, error) {
 	return result, nil
 }
 
-func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
+func addTemplates(opa *constraintclient.Client, list []templates.ConstraintTemplate) error {
 	for index := range list {
 		_, err := opa.AddTemplate(&list[index])
 		if err != nil {
@@ -161,7 +161,7 @@ func addTemplates(opa *opa.Client, list []templates.ConstraintTemplate) error {
 	return nil
 }
 
-func addConstraints(ctx context.Context, opa *opa.Client, list []unstructured.Unstructured) error {
+func addConstraints(ctx context.Context, opa *constraintclient.Client, list []unstructured.Unstructured) error {
 	for index := range list {
 		_, err := opa.AddConstraint(ctx, &list[index])
 		if err != nil {

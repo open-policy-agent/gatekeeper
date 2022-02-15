@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -128,11 +128,7 @@ func TestReconcile(t *testing.T) {
 
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("unable to set up OPA backend: %s", err)
-	}
-	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
@@ -382,12 +378,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events <-chan event.GenericEvent) error {
 	// initialize OPA
 	driver := local.New(local.Tracing(true))
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		return fmt.Errorf("unable to set up OPA backend: %w", err)
-	}
-
-	opaClient, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		return fmt.Errorf("unable to set up OPA backend client: %w", err)
 	}

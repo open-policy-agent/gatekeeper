@@ -42,7 +42,7 @@ type Response struct {
 	SystemError string `json:"systemError,omitempty"`
 }
 
-// Items is the struct that contains the key, value or error from a provider response.
+// Item is the struct that contains the key, value or error from a provider response.
 type Item struct {
 	// Key is the request from the provider.
 	Key string `json:"key,omitempty"`
