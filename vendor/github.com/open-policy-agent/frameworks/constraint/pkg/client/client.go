@@ -14,6 +14,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/crds"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/regolib"
 	constraintlib "github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
@@ -32,12 +33,13 @@ type templateEntry struct {
 }
 
 type Client struct {
-	backend *Backend
+	driver  drivers.Driver
 	targets map[string]handler.TargetHandler
 
 	// mtx guards access to both templates and constraints.
-	mtx         sync.RWMutex
-	templates   map[templateKey]*templateEntry
+	mtx       sync.RWMutex
+	templates map[templateKey]*templateEntry
+	// TODO: https://github.com/open-policy-agent/frameworks/issues/187
 	constraints map[schema.GroupKind]map[string]*unstructured.Unstructured
 
 	AllowedDataFields []string
@@ -56,8 +58,10 @@ func createDataPath(target, subpath string) string {
 // On error, the responses return value will still be populated so that
 // partial results can be analyzed.
 func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Responses, error) {
+	// TODO(#189): Make AddData atomic across all Drivers/Targets.
+
 	resp := types.NewResponses()
-	errMap := make(ErrorMap)
+	errMap := make(clienterrors.ErrorMap)
 	for target, h := range c.targets {
 		handled, relPath, processedData, err := h.ProcessData(data)
 		if err != nil {
@@ -67,12 +71,40 @@ func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Response
 		if !handled {
 			continue
 		}
-		if err := c.backend.driver.PutData(ctx, createDataPath(target, relPath), processedData); err != nil {
+
+		var cache handler.Cache
+		if cacher, ok := h.(handler.Cacher); ok {
+			cache = cacher.GetCache()
+		}
+
+		// Add to the target cache first because cache.Remove cannot fail. Thus, we
+		// can prevent the system from getting into an inconsistent state.
+		if cache != nil {
+			err = cache.Add(relPath, processedData)
+			if err != nil {
+				// Use a different key than the driver to avoid clobbering errors.
+				errMap[target] = err
+
+				continue
+			}
+		}
+
+		// paths passed to driver must be specific to the target to prevent key
+		// collisions.
+		driverPath := createDataPath(target, relPath)
+		err = c.driver.PutData(ctx, driverPath, processedData)
+		if err != nil {
 			errMap[target] = err
+
+			if cache != nil {
+				cache.Remove(relPath)
+			}
 			continue
 		}
+
 		resp.Handled[target] = true
 	}
+
 	if len(errMap) == 0 {
 		return resp, nil
 	}
@@ -84,7 +116,7 @@ func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Response
 // partial results can be analyzed.
 func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Responses, error) {
 	resp := types.NewResponses()
-	errMap := make(ErrorMap)
+	errMap := make(clienterrors.ErrorMap)
 	for target, h := range c.targets {
 		handled, relPath, _, err := h.ProcessData(data)
 		if err != nil {
@@ -94,15 +126,24 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 		if !handled {
 			continue
 		}
-		if _, err := c.backend.driver.DeleteData(ctx, createDataPath(target, relPath)); err != nil {
+
+		if _, err := c.driver.DeleteData(ctx, createDataPath(target, relPath)); err != nil {
 			errMap[target] = err
 			continue
 		}
 		resp.Handled[target] = true
+
+		if cacher, ok := h.(handler.Cacher); ok {
+			cache := cacher.GetCache()
+
+			cache.Remove(relPath)
+		}
 	}
+
 	if len(errMap) == 0 {
 		return resp, nil
 	}
+
 	return resp, &errMap
 }
 
@@ -124,7 +165,7 @@ func (c *Client) validateTargets(templ *templates.ConstraintTemplate) (*template
 		knownTargets := c.knownTargets()
 
 		return nil, nil, fmt.Errorf("%w: target %q not recognized, known targets %v",
-			local.ErrInvalidConstraintTemplate, targetSpec.Target, knownTargets)
+			clienterrors.ErrInvalidConstraintTemplate, targetSpec.Target, knownTargets)
 	}
 
 	return targetSpec, targetHandler, nil
@@ -157,7 +198,7 @@ func (a *rawCTArtifacts) Key() templateKey {
 // complex tasks like rewriting Rego. Provides minimal validation.
 func (c *Client) createRawTemplateArtifacts(templ *templates.ConstraintTemplate) (*rawCTArtifacts, error) {
 	if templ.GetName() == "" {
-		return nil, fmt.Errorf("%w: missing name", local.ErrInvalidConstraintTemplate)
+		return nil, fmt.Errorf("%w: missing name", clienterrors.ErrInvalidConstraintTemplate)
 	}
 
 	return &rawCTArtifacts{template: templ}, nil
@@ -210,7 +251,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 	}
 
 	if err = crds.ValidateCRD(crd); err != nil {
-		return nil, fmt.Errorf("%w: %v", local.ErrInvalidConstraintTemplate, err)
+		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
 	}
 
 	entryPointPath := createTemplatePath(targetHandler.GetName(), templ.Spec.CRD.Spec.Names.Kind)
@@ -229,7 +270,7 @@ func (c *Client) createBasicTemplateArtifacts(templ *templates.ConstraintTemplat
 func (c *Client) CreateCRD(templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
 	if templ == nil {
 		return nil, fmt.Errorf("%w: got nil ConstraintTemplate",
-			local.ErrInvalidConstraintTemplate)
+			clienterrors.ErrInvalidConstraintTemplate)
 	}
 
 	artifacts, err := c.createBasicTemplateArtifacts(templ)
@@ -243,12 +284,12 @@ func (c *Client) ValidateConstraintTemplateBasic(templ *templates.ConstraintTemp
 	kind := templ.Spec.CRD.Spec.Names.Kind
 	if kind == "" {
 		return nil, nil, fmt.Errorf("%w: ConstraintTemplate %q does not specify CRD Kind",
-			local.ErrInvalidConstraintTemplate, templ.GetName())
+			clienterrors.ErrInvalidConstraintTemplate, templ.GetName())
 	}
 
 	if !strings.EqualFold(templ.ObjectMeta.Name, kind) {
 		return nil, nil, fmt.Errorf("%w: the ConstraintTemplate's name %q is not equal to the lowercase of CRD's Kind: %q",
-			local.ErrInvalidConstraintTemplate, templ.ObjectMeta.Name, strings.ToLower(kind))
+			clienterrors.ErrInvalidConstraintTemplate, templ.ObjectMeta.Name, strings.ToLower(kind))
 	}
 
 	targetSpec, targetHandler, err := c.validateTargets(templ)
@@ -261,16 +302,16 @@ func (c *Client) ValidateConstraintTemplateBasic(templ *templates.ConstraintTemp
 func (c *Client) ValidateConstraintTemplate(templ *templates.ConstraintTemplate) error {
 	if templ == nil {
 		return fmt.Errorf(`%w: ConstraintTemplate is nil`,
-			local.ErrInvalidConstraintTemplate)
+			clienterrors.ErrInvalidConstraintTemplate)
 	}
 	if _, _, err := c.ValidateConstraintTemplateBasic(templ); err != nil {
 		return err
 	}
-	if dr, ok := c.backend.driver.(*local.Driver); ok {
+	if dr, ok := c.driver.(*local.Driver); ok {
 		_, _, err := dr.ValidateConstraintTemplate(templ)
 		return err
 	}
-	return fmt.Errorf("driver %T is not supported", c.backend.driver)
+	return fmt.Errorf("driver %T is not supported", c.driver)
 }
 
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
@@ -293,7 +334,7 @@ func (c *Client) AddTemplate(templ *templates.ConstraintTemplate) (*types.Respon
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if err = c.backend.driver.AddTemplate(templ); err != nil {
+	if err = c.driver.AddTemplate(templ); err != nil {
 		return resp, err
 	}
 	cpy := templ.DeepCopy()
@@ -339,7 +380,7 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 		return resp, err
 	}
 
-	if err := c.backend.driver.RemoveTemplate(ctx, templ); err != nil {
+	if err := c.driver.RemoveTemplate(templ); err != nil {
 		return resp, err
 	}
 
@@ -351,7 +392,7 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 	delete(c.constraints, artifacts.gk)
 	// Also clean up root path to avoid memory leaks
 	constraintRoot := createConstraintGKPath(artifacts.targetHandler.GetName(), artifacts.gk)
-	if _, err := c.backend.driver.DeleteData(ctx, constraintRoot); err != nil {
+	if _, err := c.driver.DeleteData(ctx, constraintRoot); err != nil {
 		return resp, err
 	}
 	delete(c.templates, artifacts.Key())
@@ -413,15 +454,6 @@ func createConstraintGKPath(target string, gk schema.GroupKind) string {
 	return constraintPathMerge(target, createConstraintGKSubPath(gk))
 }
 
-// createConstraintPath returns the storage path for a given constraint: constraints.<target>.cluster.<group>.<kind>.<name>.
-func createConstraintPath(target string, constraint *unstructured.Unstructured) (string, error) {
-	p, err := createConstraintSubPath(constraint)
-	if err != nil {
-		return "", err
-	}
-	return constraintPathMerge(target, p), nil
-}
-
 // constraintPathMerge is a shared function for creating constraint paths to
 // ensure uniformity, it is not meant to be called directly.
 func constraintPathMerge(target, subpath string) string {
@@ -469,7 +501,6 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 	defer c.mtx.Unlock()
 
 	resp := types.NewResponses()
-	errMap := make(ErrorMap)
 	entry, err := c.getTemplateEntry(constraint, false)
 	if err != nil {
 		return resp, err
@@ -492,27 +523,14 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 	if err := c.validateConstraint(constraint, false); err != nil {
 		return resp, err
 	}
+	if err := c.driver.AddConstraint(ctx, constraint); err != nil {
+		return resp, err
+	}
 	for _, target := range entry.Targets {
-		relPath, err := createConstraintPath(target, constraint)
-		// If we ever create multi-target constraints we will need to handle this more cleverly.
-		// the short-circuiting question, cleanup, etc.
-		if err != nil {
-			errMap[target] = err
-			continue
-		}
-		if err := c.backend.driver.PutData(ctx, relPath, constraint.Object); err != nil {
-			errMap[target] = err
-			continue
-		}
 		resp.Handled[target] = true
 	}
-
-	if len(errMap) == 0 {
-		c.constraints[constraint.GroupVersionKind().GroupKind()][subPath] = constraint.DeepCopy()
-		return resp, nil
-	}
-
-	return resp, &errMap
+	c.constraints[constraint.GroupVersionKind().GroupKind()][subPath] = constraint.DeepCopy()
+	return resp, nil
 }
 
 // RemoveConstraint removes a constraint from OPA. On error, the responses
@@ -526,7 +544,6 @@ func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.
 
 func (c *Client) removeConstraintNoLock(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error) {
 	resp := types.NewResponses()
-	errMap := make(ErrorMap)
 	entry, err := c.getTemplateEntry(constraint, false)
 	if err != nil {
 		return resp, err
@@ -535,26 +552,14 @@ func (c *Client) removeConstraintNoLock(ctx context.Context, constraint *unstruc
 	if err != nil {
 		return resp, err
 	}
+	if err := c.driver.RemoveConstraint(ctx, constraint); err != nil {
+		return resp, err
+	}
 	for _, target := range entry.Targets {
-		relPath, err := createConstraintPath(target, constraint)
-		// If we ever create multi-target constraints we will need to handle this more cleverly.
-		// the short-circuiting question, cleanup, etc.
-		if err != nil {
-			errMap[target] = err
-			continue
-		}
-		if _, err := c.backend.driver.DeleteData(ctx, relPath); err != nil {
-			errMap[target] = err
-		}
 		resp.Handled[target] = true
 	}
-	if len(errMap) == 0 {
-		// If we ever create multi-target constraints we will need to handle this more cleverly.
-		// the short-circuiting question, cleanup, etc.
-		delete(c.constraints[constraint.GroupVersionKind().GroupKind()], subPath)
-		return resp, nil
-	}
-	return resp, &errMap
+	delete(c.constraints[constraint.GroupVersionKind().GroupKind()], subPath)
+	return resp, nil
 }
 
 // getConstraintNoLock gets the currently recognized constraint without the lock.
@@ -618,7 +623,7 @@ func (c *Client) init() error {
 		}
 
 		builtinPath := fmt.Sprintf("%s.hooks_builtin", hooks)
-		err := c.backend.driver.PutModule(builtinPath, libBuiltin.String())
+		err := c.driver.PutModule(builtinPath, libBuiltin.String())
 		if err != nil {
 			return err
 		}
@@ -667,20 +672,20 @@ func (c *Client) init() error {
 				ErrCreatingClient, err)
 		}
 
-		err = c.backend.driver.PutModule(modulePath, string(src))
+		err = c.driver.PutModule(modulePath, string(src))
 		if err != nil {
 			return fmt.Errorf("%w: error %s from compiled source:\n%s",
 				ErrCreatingClient, err, src)
 		}
 	}
-	if d, ok := c.backend.driver.(*local.Driver); ok {
+	if d, ok := c.driver.(*local.Driver); ok {
 		var externs []string
 		for _, field := range c.AllowedDataFields {
 			externs = append(externs, fmt.Sprintf("data.%s", field))
 		}
 		d.SetExterns(externs)
 	} else {
-		return fmt.Errorf("%w: driver %T is not supported", ErrCreatingClient, c.backend.driver)
+		return fmt.Errorf("%w: driver %T is not supported", ErrCreatingClient, c.driver)
 	}
 	return nil
 }
@@ -694,7 +699,7 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...QueryOpt) 
 		opt(cfg)
 	}
 	responses := types.NewResponses()
-	errMap := make(ErrorMap)
+	errMap := make(clienterrors.ErrorMap)
 TargetLoop:
 	for name, target := range c.targets {
 		handled, review, err := target.HandleReview(obj)
@@ -707,7 +712,7 @@ TargetLoop:
 			continue
 		}
 		input := map[string]interface{}{"review": review}
-		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].violation`, name), input, drivers.Tracing(cfg.enableTracing))
+		resp, err := c.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].violation`, name), input, drivers.Tracing(cfg.enableTracing))
 		if err != nil {
 			errMap[name] = err
 			continue
@@ -736,11 +741,11 @@ func (c *Client) Audit(ctx context.Context, opts ...QueryOpt) (*types.Responses,
 		opt(cfg)
 	}
 	responses := types.NewResponses()
-	errMap := make(ErrorMap)
+	errMap := make(clienterrors.ErrorMap)
 TargetLoop:
 	for name, target := range c.targets {
 		// Short-circuiting question applies here as well
-		resp, err := c.backend.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil, drivers.Tracing(cfg.enableTracing))
+		resp, err := c.driver.Query(ctx, fmt.Sprintf(`hooks["%s"].audit`, name), nil, drivers.Tracing(cfg.enableTracing))
 		if err != nil {
 			errMap[name] = err
 			continue
@@ -762,7 +767,7 @@ TargetLoop:
 
 // Dump dumps the state of OPA to aid in debugging.
 func (c *Client) Dump(ctx context.Context) (string, error) {
-	return c.backend.driver.Dump(ctx)
+	return c.driver.Dump(ctx)
 }
 
 // knownTargets returns a sorted list of currently-known target names.

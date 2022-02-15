@@ -1,4 +1,4 @@
-package local
+package errors
 
 import "errors"
 
@@ -14,5 +14,7 @@ var (
 	ErrTransaction  = errors.New("error committing data")
 
 	ErrInvalidConstraintTemplate = errors.New("invalid ConstraintTemplate")
+	ErrInvalidConstraint         = errors.New("invalid Constraint")
+	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
 	ErrInvalidModule             = errors.New("invalid module")
 )

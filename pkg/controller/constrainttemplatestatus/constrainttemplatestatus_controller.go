@@ -23,7 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	constrainttemplatev1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -44,7 +44,7 @@ import (
 var log = logf.Log.WithName("controller").WithValues(logging.Process, "constraint_template_status_controller")
 
 type Adder struct {
-	Opa              *opa.Client
+	Opa              *constraintclient.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 }

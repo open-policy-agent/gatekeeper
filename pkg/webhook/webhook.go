@@ -16,14 +16,14 @@ limitations under the License.
 package webhook
 
 import (
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager.
-var AddToManagerFuncs []func(manager.Manager, *client.Client, *process.Excluder, *mutation.System) error
+var AddToManagerFuncs []func(manager.Manager, *constraintclient.Client, *process.Excluder, *mutation.System) error
 
 // The below autogen directive is currently disabled because controller-gen has
 // no way of specifying the resource name restriction
@@ -33,7 +33,7 @@ var AddToManagerFuncs []func(manager.Manager, *client.Client, *process.Excluder,
 // +kubebuilder:rbac:groups="",namespace=gatekeeper-system,resources=events,verbs=create;patch
 
 // AddToManager adds all Controllers to the Manager.
-func AddToManager(m manager.Manager, opa *client.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddToManager(m manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	for _, f := range AddToManagerFuncs {
 		if err := f(m, opa, processExcluder, mutationSystem); err != nil {
 			return err

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -64,7 +64,7 @@ var (
 // Manager allows us to audit resources periodically.
 type Manager struct {
 	client          client.Client
-	opa             *opa.Client
+	opa             *constraintclient.Client
 	stopper         chan struct{}
 	stopped         chan struct{}
 	mgr             manager.Manager
@@ -121,7 +121,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder) (*Manager, error) {
+func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")

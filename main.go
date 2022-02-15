@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/apis"
@@ -264,13 +264,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	// initialize OPA
 	driver := local.New(args...)
 
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		setupLog.Error(err, "unable to set up OPA backend")
-		os.Exit(1)
-	}
-
-	client, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
 	}

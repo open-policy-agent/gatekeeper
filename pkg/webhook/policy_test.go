@@ -6,7 +6,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	badRegoTemplate = `
+	invalidRegoTemplate = `
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -45,7 +45,7 @@ spec:
         msg := "I'm sure this will work"
 `
 
-	goodRegoTemplate = `
+	validRegoTemplate = `
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
@@ -158,14 +158,10 @@ spec:
 `
 )
 
-func makeOpaClient() (*client.Client, error) {
-	target := &target.K8sValidationTarget{}
+func makeOpaClient() (*constraintclient.Client, error) {
+	t := &target.K8sValidationTarget{}
 	driver := local.New(local.Tracing(false))
-	backend, err := client.NewBackend(client.Driver(driver))
-	if err != nil {
-		return nil, err
-	}
-	c, err := backend.NewClient(client.Targets(target))
+	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver))
 	if err != nil {
 		return nil, err
 	}
@@ -180,12 +176,12 @@ func TestTemplateValidation(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Template",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Template",
-			Template:      badRegoTemplate,
+			Template:      invalidRegoTemplate,
 			ErrorExpected: true,
 		},
 	}
@@ -200,6 +196,7 @@ func TestTemplateValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
+
 			review := &atypes.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -212,10 +209,12 @@ func TestTemplateValidation(t *testing.T) {
 					},
 				},
 			}
+
 			_, err = handler.validateGatekeeperResources(review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
+
 			if err == nil && tt.ErrorExpected {
 				t.Error("err = nil; want non-nil")
 			}
@@ -332,37 +331,37 @@ func TestConstraintValidation(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Constraint labelselector",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    goodLabelSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint labelselector",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    badLabelSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint namespaceselector",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    goodNamespaceSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint namespaceselector",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    badNamespaceSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint enforcementaction",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    goodEnforcementAction,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint enforcementaction",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			Constraint:    badEnforcementAction,
 			ErrorExpected: true,
 		},
@@ -422,7 +421,7 @@ func TestTracing(t *testing.T) {
 	}{
 		{
 			Name:          "Valid Trace",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			TraceExpected: true,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -444,7 +443,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong Kind",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			TraceExpected: false,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -466,7 +465,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong User",
-			Template:      goodRegoTemplate,
+			Template:      validRegoTemplate,
 			TraceExpected: false,
 			User:          "other@test.com",
 			Cfg: &v1alpha1.Config{

@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -58,7 +58,7 @@ const (
 )
 
 type Adder struct {
-	Opa              *opa.Client
+	Opa              *constraintclient.Client
 	ConstraintsCache *ConstraintsCache
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
@@ -69,7 +69,7 @@ type Adder struct {
 	AssumeDeleted    func(schema.GroupVersionKind) bool
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
+func (a *Adder) InjectOpa(o *constraintclient.Client) {
 	a.Opa = o
 }
 
@@ -122,7 +122,7 @@ type tags struct {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	opa *opa.Client,
+	opa *constraintclient.Client,
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
@@ -188,7 +188,7 @@ type ReconcileConstraint struct {
 
 	cs               *watch.ControllerSwitch
 	scheme           *runtime.Scheme
-	opa              *opa.Client
+	opa              *constraintclient.Client
 	log              logr.Logger
 	reporter         StatsReporter
 	constraintsCache *ConstraintsCache
@@ -308,7 +308,7 @@ func (r *ReconcileConstraint) Reconcile(ctx context.Context, request reconcile.R
 	} else {
 		r.log.Info("handling constraint delete", "instance", instance)
 		if _, err := r.opa.RemoveConstraint(ctx, instance); err != nil {
-			if errors.Is(err, opa.ErrMissingConstraint) {
+			if errors.Is(err, constraintclient.ErrMissingConstraint) {
 				return reconcile.Result{}, err
 			}
 		}

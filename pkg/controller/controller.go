@@ -21,7 +21,7 @@ import (
 	"os"
 	"sync"
 
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -41,7 +41,7 @@ import (
 var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
 
 type Injector interface {
-	InjectOpa(*opa.Client)
+	InjectOpa(*constraintclient.Client)
 	InjectWatchManager(*watch.Manager)
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
@@ -67,7 +67,7 @@ var AddToManagerFuncs []func(manager.Manager) error
 
 // Dependencies are dependencies that can be injected into controllers.
 type Dependencies struct {
-	Opa              *opa.Client
+	Opa              *constraintclient.Client
 	WatchManger      *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
