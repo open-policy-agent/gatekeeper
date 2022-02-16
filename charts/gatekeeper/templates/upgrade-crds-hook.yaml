@@ -98,7 +98,11 @@ spec:
           runAsGroup: 65532
           runAsNonRoot: true
           runAsUser: 65532
+      affinity:
+        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
       nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml .Values.upgradeCRDs.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 
 {{- end }}

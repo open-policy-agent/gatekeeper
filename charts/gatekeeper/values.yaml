@@ -94,6 +94,7 @@ disabledBuiltins:
 psp:
   enabled: true
 upgradeCRDs:
+  nodeSelector: { kubernetes.io/os: linux }
   enabled: true
 rbac:
   create: true
