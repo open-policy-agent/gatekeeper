@@ -21,6 +21,7 @@ resourceQuota: true
 postInstall:
   labelNamespace:
     enabled: true
+    nodeSelector: { kubernetes.io/os: linux }
     image:
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.7.0
@@ -97,3 +98,4 @@ upgradeCRDs:
   enabled: true
 rbac:
   create: true
+

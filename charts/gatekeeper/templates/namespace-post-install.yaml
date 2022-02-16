@@ -26,8 +26,12 @@ spec:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-update-namespace-label
+      affinity:
+        {{- toYaml .Values.postInstall.labelNamespace.affinity | nindent 8 }}
       nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml .Values.postInstall.labelNamespace.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.postInstall.labelNamespace.tolerations | nindent 8 }}
       containers:
         - name: kubectl-label
           image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
