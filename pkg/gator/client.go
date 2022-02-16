@@ -21,12 +21,12 @@ type Client interface {
 	// Constraint does not match the structure defined by the referenced Template.
 	AddConstraint(ctx context.Context, constraint *unstructured.Unstructured) (*types.Responses, error)
 
-	// AddData adds the state of the cluster. For use in referential Constraints.
-	AddData(ctx context.Context, data interface{}) (*types.Responses, error)
+	// AddCachedData adds the state of the cluster. For use in referential Constraints.
+	AddCachedData(ctx context.Context, data interface{}) (*types.Responses, error)
 
-	// RemoveData removes objects from the state of the cluster. For use in
+	// RemoveCachedData removes objects from the state of the cluster. For use in
 	// referential constraints.
-	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
+	RemoveCachedData(ctx context.Context, data interface{}) (*types.Responses, error)
 
 	// Review runs all Constraints against obj.
 	Review(ctx context.Context, obj interface{}, opts ...constraintclient.QueryOpt) (*types.Responses, error)

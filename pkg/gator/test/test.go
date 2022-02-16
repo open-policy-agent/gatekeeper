@@ -61,7 +61,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 
 	// finally, add all the data.
 	for _, obj := range objs {
-		_, err := client.AddData(context.Background(), obj)
+		_, err := client.AddCachedData(context.Background(), obj)
 		if err != nil {
 			return nil, fmt.Errorf("adding data of GVK %q: %w", obj.GroupVersionKind().String(), err)
 		}

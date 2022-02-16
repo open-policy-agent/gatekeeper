@@ -253,7 +253,7 @@ func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventory
 	}
 
 	for _, obj := range inventory {
-		_, err = c.AddData(ctx, obj)
+		_, err = c.AddCachedData(ctx, obj)
 		if err != nil {
 			return fmt.Errorf("%w: %v %v/%v: %v",
 				ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
