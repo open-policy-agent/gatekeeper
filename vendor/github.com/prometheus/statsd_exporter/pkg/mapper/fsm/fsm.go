@@ -170,7 +170,8 @@ func (f *FSM) GetMapping(statsdMetric string, statsdMetricType string) (*mapping
 						if !present || fieldsLeft > altState.maxRemainingLength || fieldsLeft < altState.minRemainingLength {
 						} else {
 							// push to backtracking stack
-							newCursor := fsmBacktrackStackCursor{prev: backtrackCursor, state: altState,
+							newCursor := fsmBacktrackStackCursor{
+								prev: backtrackCursor, state: altState,
 								fieldIndex:   i,
 								captureIndex: captureIdx, currentCapture: field,
 							}

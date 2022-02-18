@@ -10,7 +10,6 @@ import (
 )
 
 func newHMAC(alg jwa.SignatureAlgorithm) (*HMACVerifier, error) {
-
 	s, err := sign.New(alg)
 	if err != nil {
 		return nil, errors.Wrap(err, `failed to generate HMAC signer`)
@@ -20,7 +19,6 @@ func newHMAC(alg jwa.SignatureAlgorithm) (*HMACVerifier, error) {
 
 // Verify checks whether the signature for a given input and key is correct
 func (v HMACVerifier) Verify(signingInput, signature []byte, key interface{}) (err error) {
-
 	expected, err := v.signer.Sign(signingInput, key)
 	if err != nil {
 		return errors.Wrap(err, `failed to generated signature`)

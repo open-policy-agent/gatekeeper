@@ -11,7 +11,6 @@ import (
 )
 
 func newECDSAPublicKey(key *ecdsa.PublicKey) (*ECDSAPublicKey, error) {
-
 	var hdr StandardHeaders
 	err := hdr.Set(KeyTypeKey, jwa.EC)
 	if err != nil {
@@ -25,7 +24,6 @@ func newECDSAPublicKey(key *ecdsa.PublicKey) (*ECDSAPublicKey, error) {
 }
 
 func newECDSAPrivateKey(key *ecdsa.PrivateKey) (*ECDSAPrivateKey, error) {
-
 	var hdr StandardHeaders
 	err := hdr.Set(KeyTypeKey, jwa.EC)
 	if err != nil {
@@ -50,7 +48,6 @@ func (k ECDSAPrivateKey) Materialize() (interface{}, error) {
 
 // GenerateKey creates a ECDSAPublicKey from JWK format
 func (k *ECDSAPublicKey) GenerateKey(keyJSON *RawKeyJSON) error {
-
 	var x, y big.Int
 
 	if keyJSON.X == nil || keyJSON.Y == nil || keyJSON.Crv == "" {
@@ -85,7 +82,6 @@ func (k *ECDSAPublicKey) GenerateKey(keyJSON *RawKeyJSON) error {
 
 // GenerateKey creates a ECDSAPrivateKey from JWK format
 func (k *ECDSAPrivateKey) GenerateKey(keyJSON *RawKeyJSON) error {
-
 	if keyJSON.D == nil {
 		return errors.Errorf("Missing mandatory key parameter D")
 	}

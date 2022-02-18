@@ -11,8 +11,7 @@ import (
 )
 
 // NoImmediateArgs indicates the instruction has no immediate arguments.
-type NoImmediateArgs struct {
-}
+type NoImmediateArgs struct{}
 
 // ImmediateArgs returns the immedate arguments of an instruction.
 func (NoImmediateArgs) ImmediateArgs() []interface{} {

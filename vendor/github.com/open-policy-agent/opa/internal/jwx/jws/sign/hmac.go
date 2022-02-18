@@ -22,7 +22,6 @@ func init() {
 
 	for alg, h := range algs {
 		hmacSignFuncs[alg] = makeHMACSignFunc(h)
-
 	}
 }
 

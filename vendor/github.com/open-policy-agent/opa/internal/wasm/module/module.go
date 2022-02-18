@@ -337,7 +337,6 @@ func (tpe FunctionType) String() string {
 
 // Equal returns true if tpe equals other.
 func (tpe FunctionType) Equal(other FunctionType) bool {
-
 	if len(tpe.Params) != len(other.Params) || len(tpe.Results) != len(other.Results) {
 		return false
 	}

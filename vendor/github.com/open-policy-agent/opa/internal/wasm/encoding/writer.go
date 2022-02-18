@@ -21,7 +21,6 @@ import (
 
 // WriteModule writes a binary-encoded representation of module to w.
 func WriteModule(w io.Writer, module *module.Module) error {
-
 	if err := writeMagic(w); err != nil {
 		return err
 	}
@@ -93,7 +92,6 @@ func WriteModule(w io.Writer, module *module.Module) error {
 
 // WriteCodeEntry writes a binary encoded representation of entry to w.
 func WriteCodeEntry(w io.Writer, entry *module.CodeEntry) error {
-
 	if err := leb128.WriteVarUint32(w, uint32(len(entry.Func.Locals))); err != nil {
 		return err
 	}
@@ -121,7 +119,6 @@ func writeVersion(w io.Writer) error {
 }
 
 func writeStartSection(w io.Writer, s module.StartSection) error {
-
 	if s.FuncIndex == nil {
 		return nil
 	}
@@ -138,7 +135,6 @@ func writeStartSection(w io.Writer, s module.StartSection) error {
 }
 
 func writeTypeSection(w io.Writer, s module.TypeSection) error {
-
 	if len(s.Functions) == 0 {
 		return nil
 	}
@@ -163,7 +159,6 @@ func writeTypeSection(w io.Writer, s module.TypeSection) error {
 }
 
 func writeImportSection(w io.Writer, s module.ImportSection) error {
-
 	if len(s.Imports) == 0 {
 		return nil
 	}
@@ -188,7 +183,6 @@ func writeImportSection(w io.Writer, s module.ImportSection) error {
 }
 
 func writeGlobalSection(w io.Writer, s module.GlobalSection) error {
-
 	if len(s.Globals) == 0 {
 		return nil
 	}
@@ -213,7 +207,6 @@ func writeGlobalSection(w io.Writer, s module.GlobalSection) error {
 }
 
 func writeFunctionSection(w io.Writer, s module.FunctionSection) error {
-
 	if len(s.TypeIndices) == 0 {
 		return nil
 	}
@@ -238,7 +231,6 @@ func writeFunctionSection(w io.Writer, s module.FunctionSection) error {
 }
 
 func writeTableSection(w io.Writer, s module.TableSection) error {
-
 	if len(s.Tables) == 0 {
 		return nil
 	}
@@ -271,7 +263,6 @@ func writeTableSection(w io.Writer, s module.TableSection) error {
 }
 
 func writeMemorySection(w io.Writer, s module.MemorySection) error {
-
 	if len(s.Memories) == 0 {
 		return nil
 	}
@@ -296,7 +287,6 @@ func writeMemorySection(w io.Writer, s module.MemorySection) error {
 }
 
 func writeExportSection(w io.Writer, s module.ExportSection) error {
-
 	if len(s.Exports) == 0 {
 		return nil
 	}
@@ -340,7 +330,6 @@ func writeExportSection(w io.Writer, s module.ExportSection) error {
 }
 
 func writeElementSection(w io.Writer, s module.ElementSection) error {
-
 	if len(s.Segments) == 0 {
 		return nil
 	}
@@ -371,7 +360,6 @@ func writeElementSection(w io.Writer, s module.ElementSection) error {
 }
 
 func writeRawCodeSection(w io.Writer, s module.RawCodeSection) error {
-
 	if len(s.Segments) == 0 {
 		return nil
 	}
@@ -399,7 +387,6 @@ func writeRawCodeSection(w io.Writer, s module.RawCodeSection) error {
 }
 
 func writeDataSection(w io.Writer, s module.DataSection) error {
-
 	if len(s.Segments) == 0 {
 		return nil
 	}
@@ -517,7 +504,6 @@ func writeNameMap(buf io.Writer, nm []module.NameMap) error {
 }
 
 func writeCustomSection(w io.Writer, s module.CustomSection) error {
-
 	if err := writeByte(w, constant.CustomSectionID); err != nil {
 		return err
 	}
@@ -535,7 +521,6 @@ func writeCustomSection(w io.Writer, s module.CustomSection) error {
 }
 
 func writeFunctionType(w io.Writer, fsig module.FunctionType) error {
-
 	if err := writeByte(w, constant.FunctionTypeID); err != nil {
 		return err
 	}
@@ -548,7 +533,6 @@ func writeFunctionType(w io.Writer, fsig module.FunctionType) error {
 }
 
 func writeImport(w io.Writer, imp module.Import) error {
-
 	if err := writeByteVector(w, []byte(imp.Module)); err != nil {
 		return err
 	}
@@ -593,7 +577,6 @@ func writeImport(w io.Writer, imp module.Import) error {
 }
 
 func writeGlobal(w io.Writer, global module.Global) error {
-
 	if err := writeValueType(w, global.Type); err != nil {
 		return err
 	}
@@ -614,7 +597,6 @@ func writeGlobal(w io.Writer, global module.Global) error {
 }
 
 func writeInstructions(w io.Writer, instrs []instruction.Instruction) error {
-
 	for i, instr := range instrs {
 
 		_, err := w.Write([]byte{byte(instr.Op())})
@@ -684,7 +666,6 @@ func writeLimits(w io.Writer, lim module.Limit) error {
 }
 
 func writeVarUint32Vector(w io.Writer, v []uint32) error {
-
 	if err := leb128.WriteVarUint32(w, uint32(len(v))); err != nil {
 		return err
 	}
@@ -699,7 +680,6 @@ func writeVarUint32Vector(w io.Writer, v []uint32) error {
 }
 
 func writeValueTypeVector(w io.Writer, v []types.ValueType) error {
-
 	if err := leb128.WriteVarUint32(w, uint32(len(v))); err != nil {
 		return err
 	}
@@ -748,7 +728,6 @@ func writeValueType(w io.Writer, v types.ValueType) error {
 }
 
 func writeRawSection(w io.Writer, buf *bytes.Buffer) error {
-
 	size := buf.Len()
 
 	if err := leb128.WriteVarUint32(w, uint32(size)); err != nil {
@@ -760,7 +739,6 @@ func writeRawSection(w io.Writer, buf *bytes.Buffer) error {
 }
 
 func writeByteVector(w io.Writer, bs []byte) error {
-
 	if err := leb128.WriteVarUint32(w, uint32(len(bs))); err != nil {
 		return err
 	}

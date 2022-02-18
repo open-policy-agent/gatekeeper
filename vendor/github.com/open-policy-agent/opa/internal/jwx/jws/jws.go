@@ -101,7 +101,6 @@ func SignWithOption(payload []byte, alg jwa.SignatureAlgorithm, key interface{})
 // control of the verification process, manually call `Parse`, generate a
 // verifier, and call `Verify` on the parsed JWS message object.
 func Verify(buf []byte, alg jwa.SignatureAlgorithm, key interface{}) (ret []byte, err error) {
-
 	verifier, err := verify.New(alg)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create verifier")
@@ -140,7 +139,6 @@ func Verify(buf []byte, alg jwa.SignatureAlgorithm, key interface{}) (ret []byte
 
 // VerifyWithJWK verifies the JWS message using the specified JWK
 func VerifyWithJWK(buf []byte, key jwk.Key) (payload []byte, err error) {
-
 	keyVal, err := key.Materialize()
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to materialize key")
@@ -153,7 +151,6 @@ func VerifyWithJWK(buf []byte, key jwk.Key) (payload []byte, err error) {
 // set to either "sig" or "enc", but you can override it by
 // providing a keyaccept function.
 func VerifyWithJWKSet(buf []byte, keyset *jwk.Set) (payload []byte, err error) {
-
 	for _, key := range keyset.Keys {
 		payload, err := VerifyWithJWK(buf, key)
 		if err == nil {
@@ -176,7 +173,6 @@ func ParseString(s string) (*Message, error) {
 // SplitCompact splits a JWT and returns its three parts
 // separately: Protected Headers, Payload and Signature.
 func SplitCompact(jwsCompact string) ([]string, error) {
-
 	parts := strings.Split(jwsCompact, ".")
 	if len(parts) < 3 {
 		return nil, errors.New("Failed to split compact serialization")
@@ -186,7 +182,6 @@ func SplitCompact(jwsCompact string) ([]string, error) {
 
 // parseCompact parses a JWS value serialized via compact serialization.
 func parseCompact(str string) (m *Message, err error) {
-
 	var decodedHeader, decodedPayload, decodedSignature []byte
 	parts, err := SplitCompact(str)
 	if err != nil {
