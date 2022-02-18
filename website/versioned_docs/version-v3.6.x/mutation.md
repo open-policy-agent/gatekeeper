@@ -53,7 +53,7 @@ applyTo:
 match:
   scope: Namespaced | Cluster
   kinds:
-  - APIGroups: []
+  - apiGroups: []
     kinds: []
   labelSelector: []
   namespaces: []
@@ -137,7 +137,7 @@ parameters:
 ### AssignMetadata
 
 AssignMetadata is a CRD for modifying the metadata section of a resource. Note that the metadata of a resource is a very sensitive piece of data, and certain mutations could result in unintended consequences. An example of this could be changing the name or namespace of a resource. The AssignMetadata changes have therefore been limited to only the labels and annotations. Furthermore, it is currently only allowed to add a label or annotation.
- 
+
  An example of an AssignMetadata adding a label `owner` set to `admin`:
 ```yaml
 apiVersion: mutations.gatekeeper.sh/v1alpha1

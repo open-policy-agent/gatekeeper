@@ -8,7 +8,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -24,11 +24,7 @@ import (
 func TestFrameworkInjection(t *testing.T) {
 	target := &K8sValidationTarget{}
 	driver := local.New(local.Tracing(true))
-	backend, err := client.NewBackend(client.Driver(driver))
-	if err != nil {
-		t.Fatalf("Could not initialize backend: %s", err)
-	}
-	_, err = backend.NewClient(client.Targets(target))
+	_, err := constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}

@@ -37,3 +37,14 @@ There are three types of events that are emitted by Gatekeeper when the above fl
 > 39s         Warning   FailedAdmission   namespace/test      (combined from similar events):  Admission webhook "validation.gatekeeper.sh" denied request, Resource Namespace: , Constraint: ns-must-have-gk, Message: you must provide labels: {"gatekeeper"}
 > ```
 > Gatekeeper might burst 25 events about an object, but limit the refill rate to 1 new event every 5 minutes. This will help control the long-tail of events for resources that are always violating the constraint.
+
+## [Beta] Enable mutation logging and annotations
+
+The `--log-mutations` flag enables logging of mutation events and errors.
+
+The `--mutations-annotations` flag adds the following two annotations to mutated objects:
+
+| Annotation                  | Value                                                                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gatekeeper.sh/mutation-id` | The UUID of the mutation.                                                                                                                                     |
+| `gatekeeper.sh/mutations`   | A list of comma-separated mutations in the format of `<MutationType>/<MutationNamespace>/<MutationName>:<MutationGeneration>` that are applied to the object. |

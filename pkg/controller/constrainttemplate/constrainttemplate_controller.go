@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -68,7 +68,7 @@ var gvkConstraintTemplate = schema.GroupVersionKind{
 }
 
 type Adder struct {
-	Opa              *opa.Client
+	Opa              *constraintclient.Client
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
@@ -90,7 +90,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *opa.Client) {
+func (a *Adder) InjectOpa(o *constraintclient.Client) {
 	a.Opa = o
 }
 
@@ -118,7 +118,7 @@ func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
 // cstrEvents is the channel from which constraint controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // cstrEvents and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, opa *opa.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
+func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
@@ -234,7 +234,7 @@ type ReconcileConstraintTemplate struct {
 	scheme        *runtime.Scheme
 	watcher       *watch.Registrar
 	statusWatcher *watch.Registrar
-	opa           *opa.Client
+	opa           *constraintclient.Client
 	cs            *watch.ControllerSwitch
 	metrics       *reporter
 	tracker       *readiness.Tracker

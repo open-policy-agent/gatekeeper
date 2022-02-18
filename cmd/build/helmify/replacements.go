@@ -127,6 +127,20 @@ var replacements = map[string]string{
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}
   {{- end }}`,
+
+	`HELMSUBST_SERVICE_HEALTHZ: ""`: `
+  ports:
+  - name: https-webhook-server
+    port: 443
+    targetPort: webhook-server
+{{- if .Values.service }}
+{{- if .Values.service.healthzPort }}
+  - name: http-webhook-healthz
+    port: {{ .Values.service.healthzPort }}
+    targetPort: healthz
+      {{- end }}
+  {{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN": `
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}

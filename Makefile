@@ -61,6 +61,8 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --operation=webhook\
 \n        - --operation=mutation-webhook\
 \n        - --disable-opa-builtin=http.send\
+\n        - --log-mutations\
+\n        - --mutation-annotations\
 \n---\
 \napiVersion: apps/v1\
 \nkind: Deployment\
@@ -119,7 +121,7 @@ test-gator-verify: gator
 test-gator-test: gator
 	bats test/gator/test
 
-e2e-dependencies: 
+e2e-dependencies:
 	# Download and install kind
 	curl -L https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64 --output ${GITHUB_WORKSPACE}/bin/kind && chmod +x ${GITHUB_WORKSPACE}/bin/kind
 	# Download and install kubectl
@@ -167,7 +169,9 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set disabledBuiltins={http.send};\
+		--set disabledBuiltins={http.send} \
+		--set logMutations=true \
+		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade-init: e2e-helm-install
 	./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
@@ -192,7 +196,9 @@ e2e-helm-upgrade:
 		--set postInstall.labelNamespace.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
-		--set disabledBuiltins={http.send};\
+		--set disabledBuiltins={http.send} \
+		--set logMutations=true \
+		--set mutationAnnotations=true;\
 
 # Build manager binary
 manager: generate

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -147,7 +147,7 @@ func TestTest(t *testing.T) {
 			inputs: []string{
 				fixtures.ConstraintReferential,
 			},
-			err: client.ErrMissingConstraintTemplate,
+			err: constraintclient.ErrMissingConstraintTemplate,
 		},
 	}
 

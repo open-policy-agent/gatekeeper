@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
@@ -83,11 +83,7 @@ func TestReconcile(t *testing.T) {
 	// initialize OPA
 	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
 	driver := local.New(args...)
-	backend, err := opa.NewBackend(opa.Driver(driver))
-	if err != nil {
-		t.Fatalf("unable to set up OPA backend: %s", err)
-	}
-	opa, err := backend.NewClient(opa.Targets(&target.K8sValidationTarget{}))
+	opa, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}

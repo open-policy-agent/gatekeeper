@@ -95,3 +95,9 @@ patchesJson6902:
         path: /spec/template/spec/affinity/podAntiAffinity
       - op: remove
         path: /spec/template/spec/containers/0/image
+  - target:
+      kind: Service
+      name: webhook-service
+    patch: |-
+      - op: remove
+        path: /spec/ports

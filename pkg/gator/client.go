@@ -3,7 +3,7 @@ package gator
 import (
 	"context"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,10 +29,10 @@ type Client interface {
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 
 	// Review runs all Constraints against obj.
-	Review(ctx context.Context, obj interface{}, opts ...client.QueryOpt) (*types.Responses, error)
+	Review(ctx context.Context, obj interface{}, opts ...constraintclient.QueryOpt) (*types.Responses, error)
 
 	// Audit makes sure the cached state of the system satisfies all stored constraints.
 	// On error, the responses return value will still be populated so that
 	// partial results can be analyzed.
-	Audit(ctx context.Context, opts ...client.QueryOpt) (*types.Responses, error)
+	Audit(ctx context.Context, opts ...constraintclient.QueryOpt) (*types.Responses, error)
 }

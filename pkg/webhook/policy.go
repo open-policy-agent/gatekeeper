@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	opa "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -72,7 +72,7 @@ func init() {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
-func AddPolicyWebhook(mgr manager.Manager, opa *opa.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
 	if !operations.IsAssigned(operations.Webhook) {
 		return nil
 	}
@@ -116,7 +116,7 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa       *opa.Client
+	opa       *constraintclient.Client
 	semaphore chan struct{}
 }
 
@@ -338,18 +338,25 @@ func (h *validationHandler) validateGatekeeperResources(req *admission.Request) 
 	return false, nil
 }
 
+// validateTemplate validates the ConstraintTemplate in the Request.
+// Returns an error if the ConstraintTemplate fails validation.
+// The returned boolean is only true if error is non-nil and is a result of user
+// error.
 func (h *validationHandler) validateTemplate(req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
 	}
+
 	unversioned := &templates.ConstraintTemplate{}
 	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
 		return false, err
 	}
+
 	if err := h.opa.ValidateConstraintTemplate(unversioned); err != nil {
 		return true, err
 	}
+
 	return false, nil
 }
 
@@ -475,7 +482,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		review.Namespace = ns
 	}
 
-	resp, err := h.opa.Review(ctx, review, opa.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, constraintclient.Tracing(trace))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}
