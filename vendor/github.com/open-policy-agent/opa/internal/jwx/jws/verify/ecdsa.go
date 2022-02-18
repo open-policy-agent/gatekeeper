@@ -26,6 +26,7 @@ func init() {
 
 func makeECDSAVerifyFunc(hash crypto.Hash) ecdsaVerifyFunc {
 	return ecdsaVerifyFunc(func(payload []byte, signature []byte, key *ecdsa.PublicKey) error {
+
 		r, s := &big.Int{}, &big.Int{}
 		n := len(signature) / 2
 		r.SetBytes(signature[:n])

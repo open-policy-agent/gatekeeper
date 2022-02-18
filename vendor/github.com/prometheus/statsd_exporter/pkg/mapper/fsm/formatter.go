@@ -20,7 +20,9 @@ import (
 	"strings"
 )
 
-var templateReplaceCaptureRE = regexp.MustCompile(`\$\{?([a-zA-Z0-9_\$]+)\}?`)
+var (
+	templateReplaceCaptureRE = regexp.MustCompile(`\$\{?([a-zA-Z0-9_\$]+)\}?`)
+)
 
 type TemplateFormatter struct {
 	captureIndexes []int

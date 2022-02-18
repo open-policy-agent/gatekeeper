@@ -11,11 +11,9 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 )
 
-const (
-	ArrayIndexTypeMsg = "array index must be integer"
-	DoesNotExistMsg   = "document does not exist"
-	OutOfRangeMsg     = "array index out of range"
-)
+const ArrayIndexTypeMsg = "array index must be integer"
+const DoesNotExistMsg = "document does not exist"
+const OutOfRangeMsg = "array index out of range"
 
 func NewNotFoundError(path storage.Path) *storage.Error {
 	return NewNotFoundErrorWithHint(path, DoesNotExistMsg)

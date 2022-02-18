@@ -16,6 +16,7 @@ var goos = runtime.GOOS
 
 // Clean returns a cleaned file path that may or may not be a URL.
 func Clean(path string) (string, error) {
+
 	if strings.Contains(path, "://") {
 
 		url, err := url.Parse(path)

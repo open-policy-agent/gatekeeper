@@ -25,6 +25,7 @@ func MustWriteTarGz(files [][2]string) *bytes.Buffer {
 
 // WriteFile adds a file header with content to the given tar writer
 func WriteFile(tw *tar.Writer, path string, bs []byte) error {
+
 	hdr := &tar.Header{
 		Name:     "/" + strings.TrimLeft(path, "/"),
 		Mode:     0600,

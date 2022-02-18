@@ -297,6 +297,7 @@ func partitionCIDR(targetCIDR net.IPNet, excludeCIDR net.IPNet) ([]*net.IPNet, [
 				iUpperBytes = append(zeroBytes, iUpper.Bytes()...)
 			} else {
 				iUpperBytes = iUpper.Bytes()
+
 			}
 
 			iLowerBytesLen := len(iLower.Bytes())
@@ -306,6 +307,7 @@ func partitionCIDR(targetCIDR net.IPNet, excludeCIDR net.IPNet) ([]*net.IPNet, [
 				iLowerBytes = append(zeroBytes, iLower.Bytes()...)
 			} else {
 				iLowerBytes = iLower.Bytes()
+
 			}
 		}
 		// If the IP we are excluding over is of a higher value than the current

@@ -8,7 +8,6 @@ import (
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsvalidation "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/validation"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -38,7 +37,7 @@ func ValidateTargets(templ *templates.ConstraintTemplate) error {
 
 // ValidateCRD calls the CRD package's validation on an internal representation of the CRD.
 func ValidateCRD(crd *apiextensions.CustomResourceDefinition) error {
-	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(crd, apiextensionsv1.SchemeGroupVersion)
+	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(crd)
 	if len(errs) > 0 {
 		return errs.ToAggregate()
 	}

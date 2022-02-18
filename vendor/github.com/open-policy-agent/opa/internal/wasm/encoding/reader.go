@@ -23,6 +23,7 @@ import (
 
 // ReadModule reads a binary-encoded WASM module from r.
 func ReadModule(r io.Reader) (*module.Module, error) {
+
 	wr := &reader{r: r, n: 0}
 	module, err := readModule(wr)
 	if err != nil {
@@ -34,6 +35,7 @@ func ReadModule(r io.Reader) (*module.Module, error) {
 
 // ReadCodeEntry reads a binary-encoded WASM code entry from r.
 func ReadCodeEntry(r io.Reader) (*module.CodeEntry, error) {
+
 	wr := &reader{r: r, n: 0}
 	entry, err := readCodeEntry(wr)
 	if err != nil {
@@ -45,6 +47,7 @@ func ReadCodeEntry(r io.Reader) (*module.CodeEntry, error) {
 
 // CodeEntries returns the WASM code entries contained in r.
 func CodeEntries(m *module.Module) ([]*module.CodeEntry, error) {
+
 	entries := make([]*module.CodeEntry, len(m.Code.Segments))
 
 	for i, s := range m.Code.Segments {
@@ -71,6 +74,7 @@ func (r *reader) Read(bs []byte) (int, error) {
 }
 
 func readModule(r io.Reader) (*module.Module, error) {
+
 	if err := readMagic(r); err != nil {
 		return nil, err
 	}
@@ -89,6 +93,7 @@ func readModule(r io.Reader) (*module.Module, error) {
 }
 
 func readCodeEntry(r io.Reader) (*module.CodeEntry, error) {
+
 	var entry module.CodeEntry
 
 	if err := readLocals(r, &entry.Func.Locals); err != nil {
@@ -302,8 +307,7 @@ func readNameSectionLocals(r io.Reader, s *module.NameSection) error {
 				NameMap: module.NameMap{
 					Index: m.Index,
 					Name:  m.Name,
-				},
-			})
+				}})
 		}
 	}
 	return nil
@@ -319,6 +323,7 @@ func readStartSection(r io.Reader, s *module.StartSection) error {
 }
 
 func readTypeSection(r io.Reader, s *module.TypeSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -338,6 +343,7 @@ func readTypeSection(r io.Reader, s *module.TypeSection) error {
 }
 
 func readImportSection(r io.Reader, s *module.ImportSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -358,6 +364,7 @@ func readImportSection(r io.Reader, s *module.ImportSection) error {
 }
 
 func readTableSection(r io.Reader, s *module.TableSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -386,6 +393,7 @@ func readTableSection(r io.Reader, s *module.TableSection) error {
 }
 
 func readMemorySection(r io.Reader, s *module.MemorySection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -406,6 +414,7 @@ func readMemorySection(r io.Reader, s *module.MemorySection) error {
 }
 
 func readGlobalSection(r io.Reader, s *module.GlobalSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -430,6 +439,7 @@ func readFunctionSection(r io.Reader, s *module.FunctionSection) error {
 }
 
 func readExportSection(r io.Reader, s *module.ExportSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -450,6 +460,7 @@ func readExportSection(r io.Reader, s *module.ExportSection) error {
 }
 
 func readElementSection(r io.Reader, s *module.ElementSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -470,6 +481,7 @@ func readElementSection(r io.Reader, s *module.ElementSection) error {
 }
 
 func readDataSection(r io.Reader, s *module.DataSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -490,6 +502,7 @@ func readDataSection(r io.Reader, s *module.DataSection) error {
 }
 
 func readRawCodeSection(r io.Reader, s *module.RawCodeSection) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -509,6 +522,7 @@ func readRawCodeSection(r io.Reader, s *module.RawCodeSection) error {
 }
 
 func readFunctionType(r io.Reader, ftype *module.FunctionType) error {
+
 	if b, err := readByte(r); err != nil {
 		return err
 	} else if b != constant.FunctionTypeID {
@@ -523,6 +537,7 @@ func readFunctionType(r io.Reader, ftype *module.FunctionType) error {
 }
 
 func readGlobal(r io.Reader, global *module.Global) error {
+
 	if err := readValueType(r, &global.Type); err != nil {
 		return err
 	}
@@ -542,6 +557,7 @@ func readGlobal(r io.Reader, global *module.Global) error {
 }
 
 func readImport(r io.Reader, imp *module.Import) error {
+
 	if err := readByteVectorString(r, &imp.Module); err != nil {
 		return err
 	}
@@ -553,6 +569,7 @@ func readImport(r io.Reader, imp *module.Import) error {
 	b, err := readByte(r)
 	if err != nil {
 		return err
+
 	}
 
 	if b == constant.ImportDescType {
@@ -612,6 +629,7 @@ func readImport(r io.Reader, imp *module.Import) error {
 }
 
 func readExport(r io.Reader, exp *module.Export) error {
+
 	if err := readByteVectorString(r, &exp.Name); err != nil {
 		return err
 	}
@@ -643,6 +661,7 @@ func readExport(r io.Reader, exp *module.Export) error {
 }
 
 func readElementSegment(r io.Reader, seg *module.ElementSegment) error {
+
 	if err := readVarUint32(r, &seg.Index); err != nil {
 		return err
 	}
@@ -655,6 +674,7 @@ func readElementSegment(r io.Reader, seg *module.ElementSegment) error {
 }
 
 func readDataSegment(r io.Reader, seg *module.DataSegment) error {
+
 	if err := readVarUint32(r, &seg.Index); err != nil {
 		return err
 	}
@@ -671,6 +691,7 @@ func readRawCodeSegment(r io.Reader, seg *module.RawCodeSegment) error {
 }
 
 func readConstantExpr(r io.Reader, expr *module.Expr) error {
+
 	instrs := make([]instruction.Instruction, 0)
 
 	for {
@@ -702,6 +723,7 @@ func readConstantExpr(r io.Reader, expr *module.Expr) error {
 }
 
 func readExpr(r io.Reader, expr *module.Expr) (err error) {
+
 	defer func() {
 		if r := recover(); r != nil {
 			switch r := r.(type) {
@@ -717,6 +739,7 @@ func readExpr(r io.Reader, expr *module.Expr) (err error) {
 }
 
 func readInstructions(r io.Reader, instrs *[]instruction.Instruction) error {
+
 	ret := make([]instruction.Instruction, 0)
 
 	for {
@@ -783,6 +806,7 @@ func mustReadByte(r io.Reader) byte {
 }
 
 func readLimits(r io.Reader, l *module.Limit) error {
+
 	b, err := readByte(r)
 	if err != nil {
 		return err
@@ -809,6 +833,7 @@ func readLimits(r io.Reader, l *module.Limit) error {
 }
 
 func readLocals(r io.Reader, locals *[]module.LocalDeclaration) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -830,6 +855,7 @@ func readLocals(r io.Reader, locals *[]module.LocalDeclaration) error {
 }
 
 func readByteVector(r io.Reader, v *[]byte) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -845,6 +871,7 @@ func readByteVector(r io.Reader, v *[]byte) error {
 }
 
 func readByteVectorString(r io.Reader, v *string) error {
+
 	var buf []byte
 
 	if err := readByteVector(r, &buf); err != nil {
@@ -856,6 +883,7 @@ func readByteVectorString(r io.Reader, v *string) error {
 }
 
 func readVarUint32Vector(r io.Reader, v *[]uint32) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err
@@ -874,6 +902,7 @@ func readVarUint32Vector(r io.Reader, v *[]uint32) error {
 }
 
 func readValueTypeVector(r io.Reader, v *[]types.ValueType) error {
+
 	n, err := leb128.ReadVarUint32(r)
 	if err != nil {
 		return err

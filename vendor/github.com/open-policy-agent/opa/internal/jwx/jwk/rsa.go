@@ -11,6 +11,7 @@ import (
 )
 
 func newRSAPublicKey(key *rsa.PublicKey) (*RSAPublicKey, error) {
+
 	var hdr StandardHeaders
 	err := hdr.Set(KeyTypeKey, jwa.RSA)
 	if err != nil {
@@ -23,6 +24,7 @@ func newRSAPublicKey(key *rsa.PublicKey) (*RSAPublicKey, error) {
 }
 
 func newRSAPrivateKey(key *rsa.PrivateKey) (*RSAPrivateKey, error) {
+
 	var hdr StandardHeaders
 	err := hdr.Set(KeyTypeKey, jwa.RSA)
 	if err != nil {
@@ -80,6 +82,7 @@ func (k *RSAPrivateKey) Materialize() (interface{}, error) {
 
 // GenerateKey creates a RSAPublicKey from a RawKeyJSON
 func (k *RSAPublicKey) GenerateKey(keyJSON *RawKeyJSON) error {
+
 	if keyJSON.N == nil || keyJSON.E == nil {
 		return errors.Errorf("Missing mandatory key parameters N or E")
 	}
@@ -94,6 +97,7 @@ func (k *RSAPublicKey) GenerateKey(keyJSON *RawKeyJSON) error {
 
 // GenerateKey creates a RSAPublicKey from a RawKeyJSON
 func (k *RSAPrivateKey) GenerateKey(keyJSON *RawKeyJSON) error {
+
 	rsaPublicKey := &RSAPublicKey{}
 	err := rsaPublicKey.GenerateKey(keyJSON)
 	if err != nil {

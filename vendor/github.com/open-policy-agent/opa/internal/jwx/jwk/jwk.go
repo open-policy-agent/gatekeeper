@@ -38,6 +38,7 @@ func GetPublicKey(key interface{}) (interface{}, error) {
 
 // GetKeyTypeFromKey creates a jwk.Key from the given key.
 func GetKeyTypeFromKey(key interface{}) jwa.KeyType {
+
 	switch key.(type) {
 	case *rsa.PrivateKey, *rsa.PublicKey:
 		return jwa.RSA
@@ -73,6 +74,7 @@ func New(key interface{}) (Key, error) {
 }
 
 func parse(jwkSrc string) (*Set, error) {
+
 	var jwkKeySet Set
 	var jwkKey Key
 	rawKeySetJSON := &RawKeySetJSON{}
@@ -119,6 +121,7 @@ func ParseString(s string) (*Set, error) {
 
 // GenerateKey creates an internal representation of a key from a raw JWK JSON
 func (r *RawKeyJSON) GenerateKey() (Key, error) {
+
 	var key Key
 
 	switch r.KeyType {
