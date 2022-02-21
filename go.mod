@@ -24,10 +24,10 @@ require (
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-	k8s.io/api v0.21.9
+	k8s.io/api v0.21.10
 	k8s.io/apiextensions-apiserver v0.21.9
-	k8s.io/apimachinery v0.21.9
-	k8s.io/client-go v0.21.9
+	k8s.io/apimachinery v0.21.10
+	k8s.io/client-go v0.21.10
 	k8s.io/klog/v2 v2.10.0
 	k8s.io/utils v0.0.0-20211203121628-587287796c64
 	sigs.k8s.io/controller-runtime v0.9.7
