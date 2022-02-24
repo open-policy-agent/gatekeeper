@@ -19,7 +19,7 @@ By default, Gatekeeper uses [`open-policy-agent/cert-controller`](https://github
 
 ## Disable OPA built-in functions
 
-The `--disable-opa-builtin` flag disables specific [OPA built-ins functions](https://www.openpolicyagent.org/docs/v0.37.2/policy-reference/#built-in-functions). Starting with v3.8.0, Gatekeeper disables `http.send` built-in function. For more information, please see [external data](./externaldata.md#motivation).
+The `--disable-opa-builtin` flag disables specific [OPA built-ins functions](https://www.openpolicyagent.org/docs/v0.37.2/policy-reference/#built-in-functions). Starting with v3.8.0, Gatekeeper disables the `http.send` built-in function by default. For more information, please see [external data](./externaldata.md#motivation).
 
 ## [Alpha] Emit admission and audit events
 
