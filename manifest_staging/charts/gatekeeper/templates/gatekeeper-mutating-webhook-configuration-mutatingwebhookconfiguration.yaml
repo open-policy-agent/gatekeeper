@@ -31,6 +31,7 @@ webhooks:
       operator: NotIn
       value: {{ $value }}
     {{- end }}
+  reinvocationPolicy: {{ .Values.mutatingWebhookReinvocationPolicy }}
   rules:
   {{- if .Values.mutatingWebhookCustomRules }}
   {{- toYaml .Values.mutatingWebhookCustomRules | nindent 2 }}
