@@ -106,7 +106,7 @@ pdb:
   controllerManager:
     minAvailable: 1
 service: {}
-disabledBuiltins:
+disabledBuiltins: ["{http.send}"]
 psp:
   enabled: true
 upgradeCRDs:

@@ -17,6 +17,10 @@ The `--enable-pprof` flag enables an HTTP server for profiling using the [pprof]
 
 By default, Gatekeeper uses [`open-policy-agent/cert-controller`](https://github.com/open-policy-agent/cert-controller) to handle the webhook's certificate rotation and generation. If you want to use a third-party solution, you may disable the cert-controller feature using `--disable-cert-rotation`.
 
+## Disable OPA built-in functions
+
+The `--disable-opa-builtin` flag disables specific [OPA built-ins functions](https://www.openpolicyagent.org/docs/v0.37.2/policy-reference/#built-in-functions).
+
 ## [Alpha] Emit admission and audit events
 
 The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events in the Gatekeeper namespace. This flag is in alpha stage and it is set to `false` by default.
