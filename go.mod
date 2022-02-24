@@ -15,7 +15,7 @@ require (
 	github.com/open-policy-agent/cert-controller v0.2.0
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20220210184400-2c8fe2d2e8e1
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/spf13/cobra v1.2.1
 	go.opencensus.io v0.23.0
 	go.uber.org/zap v1.19.1
