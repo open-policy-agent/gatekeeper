@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -137,7 +138,7 @@ func TestRegistrar_AddUnknown(t *testing.T) {
 // other events within the same work queue.
 func Test_ReconcileErrorDoesNotBlockController(t *testing.T) {
 	mgr, _ := setupManager(t)
-	ctrl.SetLogger(logf.NullLogger{})
+	ctrl.SetLogger(logr.New(logf.NullLogSink{}))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)

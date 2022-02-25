@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -245,14 +246,6 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 		m.path.String() != other.path.String()
 }
 
-type noOpLogger struct {
-	logr.Logger
-}
-
-func (l noOpLogger) Info(string, ...interface{}) {}
-
-func (l noOpLogger) Error(error, string, ...interface{}) {}
-
 type errSome struct{ id int }
 
 func newErrSome(id int) error { return &errSome{id: id} }
@@ -280,7 +273,7 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 
 	return &Reconciler{
 		Client:         c,
-		log:            noOpLogger{},
+		log:            logr.New(logf.NullLogSink{}),
 		newMutationObj: func() client.Object { return &fakeMutatorObject{} },
 		cache:          mutators.NewMutationCache(),
 		mutatorFor: func(object client.Object) (mutationtypes.Mutator, error) {

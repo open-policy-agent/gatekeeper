@@ -14,6 +14,11 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 )
 
+// defaultLocationFile is the file name used in `Ast()` for terms
+// without a location, as could happen when pretty-printing the
+// results of partial eval.
+const defaultLocationFile = "__format_default__"
+
 // Source formats a Rego source file. The bytes provided must describe a complete
 // Rego module. If they don't, Source will return an error resulting from the attempt
 // to parse the bytes.
@@ -51,6 +56,12 @@ func Ast(x interface{}) ([]byte, error) {
 
 	wildcards := map[ast.Var]*ast.Term{}
 
+	// NOTE(sr): When the formatter encounters a call to internal.member_2
+	// or internal.member_3, it will sugarize them into usage of the `in`
+	// operator. It has to ensure that the proper future keyword import is
+	// present.
+	extraFutureKeywordImports := map[string]bool{}
+
 	// Preprocess the AST. Set any required defaults and calculate
 	// values required for printing the formatted output.
 	ast.WalkNodes(x, func(x ast.Node) bool {
@@ -61,6 +72,13 @@ func Ast(x interface{}) ([]byte, error) {
 			}
 		case *ast.Term:
 			unmangleWildcardVar(wildcards, n)
+
+		case *ast.Expr:
+			if n.IsCall() &&
+				ast.Member.Ref().Equal(n.Operator()) ||
+				ast.MemberWithKey.Ref().Equal(n.Operator()) {
+				extraFutureKeywordImports["in"] = true
+			}
 		}
 		if x.Loc() == nil {
 			x.SetLoc(defaultLocation(x))
@@ -74,6 +92,9 @@ func Ast(x interface{}) ([]byte, error) {
 
 	switch x := x.(type) {
 	case *ast.Module:
+		for kw := range extraFutureKeywordImports {
+			x.Imports = ensureFutureKeywordImport(x.Imports, kw)
+		}
 		w.writeModule(x)
 	case *ast.Package:
 		w.writePackage(x, nil)
@@ -138,7 +159,7 @@ func squashTrailingNewlines(bs []byte) []byte {
 }
 
 func defaultLocation(x ast.Node) *ast.Location {
-	return ast.NewLocation([]byte(x.String()), "", 1, 1)
+	return ast.NewLocation([]byte(x.String()), defaultLocationFile, 1, 1)
 }
 
 type writer struct {
@@ -410,6 +431,8 @@ func (w *writer) writeExpr(expr *ast.Expr, comments []*ast.Comment) []*ast.Comme
 	switch t := expr.Terms.(type) {
 	case *ast.SomeDecl:
 		comments = w.writeSomeDecl(t, comments)
+	case *ast.Every:
+		comments = w.writeEvery(t, comments)
 	case []*ast.Term:
 		comments = w.writeFunctionCall(expr, comments)
 	case *ast.Term:
@@ -462,6 +485,27 @@ func (w *writer) writeSomeDecl(decl *ast.SomeDecl, comments []*ast.Comment) []*a
 		}
 	}
 
+	return comments
+}
+
+func (w *writer) writeEvery(every *ast.Every, comments []*ast.Comment) []*ast.Comment {
+	comments = w.insertComments(comments, every.Location)
+	w.write("every ")
+	if every.Key != nil {
+		comments = w.writeTerm(every.Key, comments)
+		w.write(", ")
+	}
+	comments = w.writeTerm(every.Value, comments)
+	w.write(" in ")
+	comments = w.writeTerm(every.Domain, comments)
+	w.write(" {")
+	comments = w.writeComprehensionBody('{', '}', every.Body, every.Loc(), every.Loc(), comments)
+
+	if len(every.Body) == 1 &&
+		every.Body[0].Location.Row == every.Location.Row {
+		w.write(" ")
+	}
+	w.write("}")
 	return comments
 }
 
@@ -570,14 +614,16 @@ func (w *writer) writeRef(x ast.Ref) {
 	if len(x) > 0 {
 		w.writeTerm(x[0], nil)
 		path := x[1:]
-		for _, p := range path {
-			switch p := p.Value.(type) {
+		for _, t := range path {
+			switch p := t.Value.(type) {
 			case ast.String:
 				w.writeRefStringPath(p)
 			case ast.Var:
 				w.writeBracketed(w.formatVar(p))
 			default:
-				w.writeBracketed(p.String())
+				w.write("[")
+				w.writeTerm(t, nil)
+				w.write("]")
 			}
 		}
 	}
@@ -854,22 +900,38 @@ func (w *writer) listWriter() entryWriter {
 // location: anything on the same line will be put into a slice.
 func groupIterable(elements []interface{}, last *ast.Location) [][]interface{} {
 	// Generated vars occur in the AST when we're rendering the result of
-	// partial evaluation in a bundle build with optimization. For those vars,
-	// there is no location, and the grouping based on source location will
-	// yield a bad result. So if there's a generated variable among elements,
-	// we'll render the elements all in one line.
-	vis := ast.NewVarVisitor()
+	// partial evaluation in a bundle build with optimization.
+	// Those variables, and wildcard variables have the "default location",
+	// set in `Ast()`). That is no proper file location, and the grouping
+	// based on source location will yield a bad result.
+	// Another case is generated variables: they do have proper file locations,
+	// but their row/col information may no longer match their AST location.
+	// So, for generated variables, we also don't trust the location, but
+	// keep them ungrouped.
+	def := false // default location found?
 	for _, elem := range elements {
-		vis.Walk(elem)
-	}
-	for v := range vis.Vars() {
-		if v.IsGenerated() {
+		ast.WalkTerms(elem, func(t *ast.Term) bool {
+			if t.Location.File == defaultLocationFile {
+				def = true
+				return true
+			}
+			return false
+		})
+		ast.WalkVars(elem, func(v ast.Var) bool {
+			if v.IsGenerated() {
+				def = true
+				return true
+			}
+			return false
+		})
+		if def { // return as-is
 			return [][]interface{}{elements}
 		}
 	}
 	sort.Slice(elements, func(i, j int) bool {
 		return locLess(elements[i], elements[j])
 	})
+
 	var lines [][]interface{}
 	var cur []interface{}
 	for i, t := range elements {
@@ -908,20 +970,30 @@ func mapImportsToComments(imports []*ast.Import, comments []*ast.Comment) (map[*
 	return m, leftovers
 }
 
-func groupImports(imports []*ast.Import) (groups [][]*ast.Import) {
-	if len(imports) == 0 {
+func groupImports(imports []*ast.Import) [][]*ast.Import {
+	switch len(imports) { // shortcuts
+	case 0:
 		return nil
+	case 1:
+		return [][]*ast.Import{imports}
 	}
+	// there are >=2 imports to group
 
-	last := imports[0]
-	var group []*ast.Import
-	for _, i := range imports {
-		if i.Loc().Row-last.Loc().Row > 1 {
+	var groups [][]*ast.Import
+	group := []*ast.Import{imports[0]}
+
+	for _, i := range imports[1:] {
+		last := group[len(group)-1]
+
+		// nil-location imports have been sorted up to come first
+		if i.Loc() != nil && last.Loc() != nil && // first import with a location, or
+			i.Loc().Row-last.Loc().Row > 1 { // more than one row apart from previous import
+
+			// start a new group
 			groups = append(groups, group)
 			group = []*ast.Import{}
 		}
 		group = append(group, i)
-		last = i
 	}
 	if len(group) > 0 {
 		groups = append(groups, group)
@@ -980,21 +1052,29 @@ func locLess(a, b interface{}) bool {
 func locCmp(a, b interface{}) int {
 	al := getLoc(a)
 	bl := getLoc(b)
+	switch {
+	case al == nil && bl == nil:
+		return 0
+	case al == nil:
+		return -1
+	case bl == nil:
+		return 1
+	}
+
 	if cmp := al.Row - bl.Row; cmp != 0 {
 		return cmp
+
 	}
 	return al.Col - bl.Col
 }
 
 func getLoc(x interface{}) *ast.Location {
 	switch x := x.(type) {
-	case ast.Statement:
-		// Implicitly matches *ast.Head, *ast.Expr, *ast.With, *ast.Term.
+	case ast.Node: // *ast.Head, *ast.Expr, *ast.With, *ast.Term
 		return x.Loc()
 	case *ast.Location:
 		return x
-	case [2]*ast.Term:
-		// Special case to allow for easy printing of objects.
+	case [2]*ast.Term: // Special case to allow for easy printing of objects.
 		return x[0].Location
 	default:
 		panic("Not reached")
@@ -1151,4 +1231,15 @@ func (w *writer) down() {
 		panic("negative indentation level")
 	}
 	w.level--
+}
+
+func ensureFutureKeywordImport(imps []*ast.Import, kw string) []*ast.Import {
+	allKeywords := ast.MustParseTerm("future.keywords")
+	kwPath := ast.MustParseTerm("future.keywords." + kw)
+	for _, imp := range imps {
+		if allKeywords.Equal(imp.Path) || imp.Path.Equal(kwPath) {
+			return imps
+		}
+	}
+	return append(imps, &ast.Import{Path: kwPath})
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown/cache"
 	"github.com/open-policy-agent/opa/topdown/copypropagation"
 	"github.com/open-policy-agent/opa/topdown/print"
+	"github.com/open-policy-agent/opa/tracing"
 )
 
 type evalIterator func(*eval) error
@@ -90,6 +91,7 @@ type eval struct {
 	runtime                *ast.Term
 	builtinErrors          *builtinErrors
 	printHook              print.Hook
+	tracingOpts            tracing.Options
 	findOne                bool
 }
 
@@ -240,6 +242,8 @@ func (e *eval) traceEvent(op Op, x ast.Node, msg string, target *ast.Ref) {
 		Location: x.Loc(),
 		Message:  msg,
 		Ref:      target,
+		input:    e.input,
+		bindings: e.bindings,
 	}
 
 	// Skip plugging the local variables, unless any of the tracers
@@ -699,6 +703,11 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 		parentID = e.parent.queryID
 	}
 
+	var capabilities *ast.Capabilities
+	if e.compiler != nil {
+		capabilities = e.compiler.Capabilities()
+	}
+
 	bctx := BuiltinContext{
 		Context:                e.ctx,
 		Metrics:                e.metrics,
@@ -714,6 +723,8 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 		QueryID:                e.queryID,
 		ParentID:               parentID,
 		PrintHook:              e.printHook,
+		DistributedTracingOpts: e.tracingOpts,
+		Capabilities:           capabilities,
 	}
 
 	eval := evalBuiltin{
