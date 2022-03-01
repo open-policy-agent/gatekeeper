@@ -25,7 +25,7 @@ See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gat
 
 Join us to help define the direction and implementation of this project!
 
-- Join the [`#kubernetes-policy`](https://openpolicyagent.slack.com/messages/CDTN970AX)
+- Join the [`#opa-gatekeeper`](https://openpolicyagent.slack.com/messages/CDTN970AX)
   channel on [OPA Slack](https://slack.openpolicyagent.org/).
 
 - Join [weekly meetings](https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)
