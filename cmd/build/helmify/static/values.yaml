@@ -49,7 +49,7 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
-  { container.seccomp.security.alpha.kubernetes.io/manager: runtime/default }
+  {container.seccomp.security.alpha.kubernetes.io/manager: runtime/default}
 podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
@@ -75,7 +75,7 @@ controllerManager:
             topologyKey: kubernetes.io/hostname
           weight: 100
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
       cpu: 1000m
@@ -91,7 +91,7 @@ audit:
   priorityClassName: system-cluster-critical
   affinity: {}
   tolerations: []
-  nodeSelector: { kubernetes.io/os: linux }
+  nodeSelector: {kubernetes.io/os: linux}
   writeToRAMDisk: false
   resources:
     limits:
