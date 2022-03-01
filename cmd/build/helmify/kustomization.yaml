@@ -1,9 +1,10 @@
 namespace: "{{ .Release.Namespace }}"
 commonLabels:
-  app: '{{ template "gatekeeper.name" . }}'
-  chart: '{{ template "gatekeeper.name" . }}'
-  release: "{{ .Release.Name }}"
-  heritage: "{{ .Release.Service }}"
+  app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+  helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+  app.kubernetes.io/instance: "{{ .Release.Name }}"
+  app.kubernetes.io/managed-by: "{{ .Release.Service }}"
+  app.kubernetes.io/version: "{{ .Chart.AppVersion }}"
 bases:
   - "../../../config/default"
 patchesStrategicMerge:

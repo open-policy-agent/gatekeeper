@@ -2,39 +2,42 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/instance: '{{ .Release.Name }}'
+    app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+    app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
     control-plane: controller-manager
     gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/instance: '{{ .Release.Name }}'
+      app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+      app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'
+      helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
   template:
     metadata:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+        app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+        app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+        app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
         control-plane: controller-manager
         gatekeeper.sh/operation: webhook
         gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
+        helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
     spec:
       affinity:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}

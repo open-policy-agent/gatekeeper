@@ -2,39 +2,42 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/instance: '{{ .Release.Name }}'
+    app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+    app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
     control-plane: audit-controller
     gatekeeper.sh/operation: audit
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
   name: gatekeeper-audit
   namespace: '{{ .Release.Namespace }}'
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/instance: '{{ .Release.Name }}'
+      app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+      app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
       control-plane: audit-controller
       gatekeeper.sh/operation: audit
       gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'
+      helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
   template:
     metadata:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
-        app: '{{ template "gatekeeper.name" . }}'
-        chart: '{{ template "gatekeeper.name" . }}'
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+        app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+        app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+        app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
         control-plane: audit-controller
         gatekeeper.sh/operation: audit
         gatekeeper.sh/system: "yes"
-        heritage: '{{ .Release.Service }}'
-        release: '{{ .Release.Name }}'
+        helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
     spec:
       affinity:
         {{- toYaml .Values.audit.affinity | nindent 8 }}

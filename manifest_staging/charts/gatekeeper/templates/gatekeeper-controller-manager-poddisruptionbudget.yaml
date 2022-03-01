@@ -6,21 +6,23 @@ apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/instance: '{{ .Release.Name }}'
+    app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+    app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+    app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
+    helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
   name: gatekeeper-controller-manager
   namespace: '{{ .Release.Namespace }}'
 spec:
   minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
   selector:
     matchLabels:
-      app: '{{ template "gatekeeper.name" . }}'
-      chart: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/instance: '{{ .Release.Name }}'
+      app.kubernetes.io/managed-by: '{{ .Release.Service }}'
+      app.kubernetes.io/name: '{{ template "gatekeeper.name" . }}'
+      app.kubernetes.io/version: '{{ .Chart.AppVersion }}'
       control-plane: controller-manager
       gatekeeper.sh/operation: webhook
       gatekeeper.sh/system: "yes"
-      heritage: '{{ .Release.Service }}'
-      release: '{{ .Release.Name }}'
+      helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
