@@ -125,7 +125,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
-      {{- if .Values.controllerManager.priorityClassName }} 
+      {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
       serviceAccountName: gatekeeper-admin

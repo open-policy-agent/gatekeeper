@@ -122,7 +122,7 @@ var replacements = map[string]string{
         {{- end }}`,
 
 	`HELMSUBST_SERVICE_TYPE: ""`: `{{- if .Values.service }}
-  type: {{  .Values.service.type | default "ClusterIP" }}
+  type: {{ .Values.service.type | default "ClusterIP" }}
     {{- if .Values.service.loadBalancerIP }}
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}

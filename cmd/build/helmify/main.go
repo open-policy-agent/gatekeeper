@@ -118,15 +118,15 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == DeploymentKind {
-				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.controllerManager.priorityClassName }} \n      priorityClassName:  {{ .Values.controllerManager.priorityClassName }}\n      {{- end }}", 1)
+				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.controllerManager.priorityClassName }}\n      priorityClassName:  {{ .Values.controllerManager.priorityClassName }}\n      {{- end }}", 1)
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
-				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }} \n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
+				obj = strings.Replace(obj, "      priorityClassName: system-cluster-critical", "      {{- if .Values.audit.priorityClassName }}\n      priorityClassName:  {{ .Values.audit.priorityClassName }}\n      {{- end }}", 1)
 			}
 
 			if name == "gatekeeper-audit" && kind == DeploymentKind {
-				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if .Values.audit.writeToRAMDisk }} \n      - emptyDir:\n          medium: Memory\n      {{ else }} \n      - emptyDir: {}\n      {{- end }}", 1)
+				obj = strings.Replace(obj, "      - emptyDir: {}", "      {{- if .Values.audit.writeToRAMDisk }}\n      - emptyDir:\n          medium: Memory\n      {{ else }}\n      - emptyDir: {}\n      {{- end }}", 1)
 			}
 
 			if kind == DeploymentKind {
