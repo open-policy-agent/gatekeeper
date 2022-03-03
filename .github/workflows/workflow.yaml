@@ -36,7 +36,7 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       # source: https://github.com/golangci/golangci-lint-action
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v2
@@ -57,7 +57,7 @@ jobs:
           go-version: 1.17
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Unit test
         run: |
@@ -88,7 +88,7 @@ jobs:
           go-version: 1.17
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Download e2e dependencies
         run: |
@@ -110,7 +110,7 @@ jobs:
         KUBERNETES_VERSION: ["1.21.1", "1.22.0", "1.23.0"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go 1.17
         uses: actions/setup-go@v2
@@ -158,7 +158,7 @@ jobs:
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Bootstrap e2e
         run: |
@@ -197,7 +197,7 @@ jobs:
         KUBERNETES_VERSION: ["1.23.0"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go 1.17
         uses: actions/setup-go@v2
@@ -242,7 +242,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Download trivy
         run: |
@@ -274,7 +274,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: make docker-push-dev
         run: |
@@ -312,7 +312,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go 1.17
         uses: actions/setup-go@v2
