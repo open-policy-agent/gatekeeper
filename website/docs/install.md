@@ -89,7 +89,7 @@ You can alter the variables in `charts/gatekeeper/values.yaml` to customize your
 If you used a prebuilt image to deploy Gatekeeper, then you can delete all the Gatekeeper components with the following command:
 
   ```sh
-  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.5/deploy/gatekeeper.yaml
+  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
   ```
 
 ### Using make
