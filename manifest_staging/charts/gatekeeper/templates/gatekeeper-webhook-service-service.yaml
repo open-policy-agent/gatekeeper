@@ -23,7 +23,7 @@ spec:
       {{- end }}
   {{- end }}
   {{- if .Values.service }}
-  type: {{  .Values.service.type | default "ClusterIP" }}
+  type: {{ .Values.service.type | default "ClusterIP" }}
     {{- if .Values.service.loadBalancerIP }}
   loadBalancerIP: {{ .Values.service.loadBalancerIP }}
     {{- end }}

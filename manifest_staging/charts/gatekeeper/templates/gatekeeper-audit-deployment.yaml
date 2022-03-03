@@ -109,7 +109,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
-      {{- if .Values.audit.priorityClassName }} 
+      {{- if .Values.audit.priorityClassName }}
       priorityClassName:  {{ .Values.audit.priorityClassName }}
       {{- end }}
       serviceAccountName: gatekeeper-admin
@@ -117,10 +117,10 @@ spec:
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
-      {{- if .Values.audit.writeToRAMDisk }} 
+      {{- if .Values.audit.writeToRAMDisk }}
       - emptyDir:
           medium: Memory
-      {{ else }} 
+      {{ else }}
       - emptyDir: {}
       {{- end }}
         name: tmp-volume
