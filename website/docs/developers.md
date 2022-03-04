@@ -3,7 +3,7 @@ id: developers
 title: Developers
 ---
 
-This section describes how gatekeeper developers can leverage [kind](https://kind.sigs.k8s.io/) and [Tilt](https://tilt.dev/) for rapid iterative development. Kind allows developers to quickly provision a conformant Kubernetes cluster using Docker and Tilt enables smart rebuilds and live updates of your Kubernetes workload during development time.
+This section describes how Gatekeeper developers can leverage [kind](https://kind.sigs.k8s.io/) and [Tilt](https://tilt.dev/) for rapid iterative development. Kind allows developers to quickly provision a conformant Kubernetes cluster using Docker and Tilt enables smart rebuilds and live updates of your Kubernetes workload during development time.
 
 ## Prerequisites
 
