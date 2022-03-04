@@ -107,6 +107,10 @@
       "items": [
         {
           "type": "doc",
+          "id": "version-v3.7.x/developers"
+        },
+        {
+          "type": "doc",
           "id": "version-v3.7.x/help"
         },
         {

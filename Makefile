@@ -423,3 +423,17 @@ gator: bin/gator-$(GOOS)-$(GOARCH)
 
 bin/gator-$(GOOS)-$(GOARCH):
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BIN_DIR)/gator-$(GOOS)-$(GOARCH) -ldflags $(LDFLAGS) ./cmd/gator
+
+tilt-prepare:
+	mkdir -p .tiltbuild/charts
+	rm -rf .tiltbuild/charts/gatekeeper
+	cp -R manifest_staging/charts/gatekeeper .tiltbuild/charts
+	# disable some configs from the security context so we can perform live update
+	sed -i "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+
+tilt: generate manifests tilt-prepare
+	tilt up
+
+tilt-clean:
+	rm -rf .tiltbuild
