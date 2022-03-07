@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"path"
 	"sync"
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/opa/storage"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,16 +55,16 @@ func (h *K8sValidationTarget) GetName() string {
 	return "admission.k8s.gatekeeper.sh"
 }
 
-func (h *K8sValidationTarget) Add(key string, object interface{}) error {
+func (h *K8sValidationTarget) Add(key storage.Path, object interface{}) error {
 	ns, ok := object.(*corev1.Namespace)
 	if !ok {
 		return fmt.Errorf("%w: cannot cache type %T", ErrCachingType, object)
 	}
-	return h.cache.Add(key, ns)
+	return h.cache.Add(key.String(), ns)
 }
 
-func (h *K8sValidationTarget) Remove(key string) {
-	h.cache.Remove(key)
+func (h *K8sValidationTarget) Remove(key storage.Path) {
+	h.cache.Remove(key.String())
 }
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
@@ -76,8 +75,8 @@ func (h *K8sValidationTarget) Library() *template.Template {
 
 type WipeData struct{}
 
-func processWipeData() (bool, string, interface{}, error) {
-	return true, "", nil, nil
+func processWipeData() (bool, storage.Path, interface{}, error) {
+	return true, nil, nil, nil
 }
 
 type AugmentedReview struct {
@@ -99,23 +98,23 @@ type unstable struct {
 	Namespace *corev1.Namespace `json:"namespace,omitempty"`
 }
 
-func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
+func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) (bool, storage.Path, interface{}, error) {
 	// Namespace will be "" for cluster objects
 	gvk := o.GetObjectKind().GroupVersionKind()
 	if gvk.Version == "" {
-		return true, "", nil, fmt.Errorf("resource %s has no version", o.GetName())
+		return true, nil, nil, fmt.Errorf("resource %s has no version", o.GetName())
 	}
 	if gvk.Kind == "" {
-		return true, "", nil, fmt.Errorf("resource %s has no kind", o.GetName())
+		return true, nil, nil, fmt.Errorf("resource %s has no kind", o.GetName())
 	}
 
 	if o.GetNamespace() == "" {
-		return true, path.Join("cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+		return true, []string{"cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()}, o.Object, nil
 	}
-	return true, path.Join("namespace", o.GetNamespace(), url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+	return true, []string{"namespace", o.GetNamespace(), url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()}, o.Object, nil
 }
 
-func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interface{}, error) {
+func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, interface{}, error) {
 	switch data := obj.(type) {
 	case unstructured.Unstructured:
 		return h.processUnstructured(&data)
@@ -124,7 +123,7 @@ func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interf
 	case WipeData, *WipeData:
 		return processWipeData()
 	default:
-		return false, "", nil, nil
+		return false, nil, nil, nil
 	}
 }
 
@@ -201,87 +200,6 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.
 	}
 
 	return req, nil
-}
-
-func getString(m map[string]interface{}, k string) (string, error) {
-	val, exists, err := unstructured.NestedFieldNoCopy(m, "kind", k)
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		return "", fmt.Errorf("review[kind][%s] does not exist", k)
-	}
-	s, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("review[kind][%s] is not a string: %+v", k, val)
-	}
-	return s, nil
-}
-
-// nestedMap augments unstructured.NestedMap to interpret a nil-valued field
-// as missing.
-func nestedMap(rmap map[string]interface{}, field string) (map[string]interface{}, bool, error) {
-	objMap, found, err := unstructured.NestedMap(rmap, field)
-	if err != nil || !found {
-		if val, found, err2 := unstructured.NestedFieldNoCopy(rmap, field); val == nil && found && err2 == nil {
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-	return objMap, true, nil
-}
-
-func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
-	rmap, ok := result.Review.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("could not cast review as map[string]: %+v", result.Review)
-	}
-	group, err := getString(rmap, "group")
-	if err != nil {
-		return err
-	}
-	version, err := getString(rmap, "version")
-	if err != nil {
-		return err
-	}
-	kind, err := getString(rmap, "kind")
-	if err != nil {
-		return err
-	}
-	var apiVersion string
-	if group == "" {
-		apiVersion = version
-	} else {
-		apiVersion = fmt.Sprintf("%s/%s", group, version)
-	}
-
-	objMap, found, err := nestedMap(rmap, "object")
-	if err != nil {
-		return errors.Wrap(err, "HandleViolation:NestedMap")
-	}
-	if !found {
-		objMap, found, err = nestedMap(rmap, "oldObject")
-		if err != nil {
-			return errors.Wrap(err, "HandleViolation:NestedMapOldObj")
-		}
-		if !found {
-			return errors.New("no object or oldObject returned in review")
-		}
-	}
-
-	objMap["apiVersion"] = apiVersion
-	objMap["kind"] = kind
-
-	js, err := json.Marshal(objMap)
-	if err != nil {
-		return errors.Wrap(err, "HandleViolation:Marshal(Object)")
-	}
-	obj := &unstructured.Unstructured{}
-	if err := json.Unmarshal(js, obj); err != nil {
-		return errors.Wrap(err, "HandleViolation:Unmarshal(unstructured)")
-	}
-	result.Resource = obj
-	return nil
 }
 
 func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
@@ -462,11 +380,11 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 	}
 	if found && obj != nil {
-		match, err := convertToMatch(obj)
+		m, err := convertToMatch(obj)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 		}
-		return &Matcher{match, &h.cache}, nil
+		return &Matcher{match: m, cache: &h.cache}, nil
 	}
 	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMatcher, u.GetKind(), u.GetName())
 }

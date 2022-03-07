@@ -26,6 +26,7 @@ import (
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -349,11 +350,13 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 	}
 
 	unversioned := &templates.ConstraintTemplate{}
-	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
+	err = runtimeScheme.Convert(templ, unversioned, nil)
+	if err != nil {
 		return false, err
 	}
 
-	if err := h.opa.ValidateConstraintTemplate(unversioned); err != nil {
+	_, err = h.opa.CreateCRD(unversioned)
+	if err != nil {
 		return true, err
 	}
 
@@ -482,7 +485,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		review.Namespace = ns
 	}
 
-	resp, err := h.opa.Review(ctx, review, constraintclient.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}
