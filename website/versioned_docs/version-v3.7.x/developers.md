@@ -17,8 +17,10 @@ This section describes how Gatekeeper developers can leverage [kind](https://kin
 Kind cluster with a local registry will enable faster image pushing and pulling:
 
 ```bash
-KIND_CLUSTER_NAME=gatekeeper ./third_party/github.com/tilt-dev/kind-local/kind-with-registry.sh
+./third_party/github.com/tilt-dev/kind-local/kind-with-registry.sh
 ```
+
+> If you would like to customize the local registry port on your machine (the default port is `5000`), you can run `export KIND_REGISTRY_PORT=<port>` to customize it.
 
 ### Create `tilt-settings.json`
 
@@ -154,5 +156,5 @@ If you have trigger mode set to `manual`, you can trigger a manager build manual
 To tear down the kind cluster and its local registry:
 
 ```bash
-KIND_CLUSTER_NAME=gatekeeper ./third_party/github.com/tilt-dev/kind-local/teardown-kind-with-registry.sh
+./third_party/github.com/tilt-dev/kind-local/teardown-kind-with-registry.sh
 ```

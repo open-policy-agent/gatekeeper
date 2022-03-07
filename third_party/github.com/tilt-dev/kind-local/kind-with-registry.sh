@@ -19,8 +19,8 @@
 
 set -o errexit
 
-# desired cluster name; default is "kind"
-KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+# desired cluster name; default is "gatekeeper"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-gatekeeper}"
 KIND_CLUSTER_OPTS="--name ${KIND_CLUSTER_NAME}"
 
 if [ -n "${KIND_CLUSTER_IMAGE}" ]; then
@@ -30,7 +30,7 @@ fi
 kind_version=$(kind version)
 kind_network='kind'
 reg_name='kind-registry'
-reg_port='5000'
+reg_port="${KIND_REGISTRY_PORT:-5000}"
 case "${kind_version}" in
   "kind v0.7."* | "kind v0.6."* | "kind v0.5."*)
     kind_network='bridge'

@@ -429,7 +429,7 @@ tilt-prepare:
 	rm -rf .tiltbuild/charts/gatekeeper
 	cp -R manifest_staging/charts/gatekeeper .tiltbuild/charts
 	# disable some configs from the security context so we can perform live update
-	sed -i "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
 	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
 
 tilt: generate manifests tilt-prepare
