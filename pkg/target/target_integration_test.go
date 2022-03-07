@@ -7,6 +7,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -397,7 +398,11 @@ func TestConstraintEnforcement(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			target := &K8sValidationTarget{}
-			driver := local.New(local.Tracing(true))
+			driver, err := local.New(local.Tracing(true))
+			if err != nil {
+				t.Fatalf("unable to set up Driver: %v", err)
+			}
+
 			c, err := constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
 			if err != nil {
 				t.Fatalf("unable to set up OPA client: %s", err)
@@ -434,7 +439,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req}
-			res, err := c.Review(context.Background(), fullReq, constraintclient.Tracing(true))
+			res, err := c.Review(context.Background(), fullReq, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing request: %s", err)
 			}
@@ -463,7 +468,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq2 := &AugmentedReview{Namespace: tc.ns, AdmissionRequest: req2}
-			res2, err := c.Review(context.Background(), fullReq2, constraintclient.Tracing(true))
+			res2, err := c.Review(context.Background(), fullReq2, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing OldObject request: %s", err)
 			}
@@ -476,7 +481,7 @@ func TestConstraintEnforcement(t *testing.T) {
 			}
 
 			fullReq3 := &AugmentedUnstructured{Namespace: tc.ns, Object: *tc.obj}
-			res3, err := c.Review(context.Background(), fullReq3, constraintclient.Tracing(true))
+			res3, err := c.Review(context.Background(), fullReq3, drivers.Tracing(true))
 			if err != nil {
 				t.Errorf("Error reviewing AugmentedUnstructured request: %s", err)
 			}

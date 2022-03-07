@@ -154,7 +154,7 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
-	webhooks := []rotator.WebhookInfo{}
+	var webhooks []rotator.WebhookInfo
 	webhooks = webhook.AppendValidationWebhookIfEnabled(webhooks)
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
@@ -262,7 +262,10 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
 	}
 	// initialize OPA
-	driver := local.New(args...)
+	driver, err := local.New(args...)
+	if err != nil {
+		setupLog.Error(err, "unable to set up Driver")
+	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {

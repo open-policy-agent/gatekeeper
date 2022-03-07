@@ -379,6 +379,7 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 	}
+
 	if found && obj != nil {
 		m, err := convertToMatch(obj)
 		if err != nil {
@@ -386,7 +387,8 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		}
 		return &Matcher{match: m, cache: &h.cache}, nil
 	}
-	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMatcher, u.GetKind(), u.GetName())
+
+	return &Matcher{}, nil
 }
 
 // Matcher implements constraint.Matcher.
@@ -430,6 +432,11 @@ func (nc *nsCache) Remove(key string) {
 }
 
 func (m *Matcher) Match(review interface{}) (bool, error) {
+	if m.match == nil {
+		// No-op if Match unspecified.
+		return true, nil
+	}
+
 	var gkReq *gkReview
 	switch req := review.(type) {
 	case *gkReview:

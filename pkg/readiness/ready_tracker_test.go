@@ -89,7 +89,11 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 func setupOpa(t *testing.T) *constraintclient.Client {
 	// initialize OPA
-	driver := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		t.Fatalf("setting up Driver: %v", err)
+	}
+
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("setting up OPA client: %v", err)

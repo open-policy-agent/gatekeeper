@@ -156,7 +156,11 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -567,7 +571,11 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)

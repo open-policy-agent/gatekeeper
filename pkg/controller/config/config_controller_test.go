@@ -121,13 +121,17 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// Set up the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -377,7 +381,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events <-chan event.GenericEvent) error {
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		return fmt.Errorf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		return fmt.Errorf("unable to set up OPA backend client: %w", err)

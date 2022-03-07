@@ -81,17 +81,14 @@ func TestTest(t *testing.T) {
 				{
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   constraintNeverValidate,
 				},
 				{
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   object,
 				},
 				{
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   templateNeverValidate,
 				},
 			},
 		},
@@ -107,12 +104,10 @@ func TestTest(t *testing.T) {
 				{
 					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
 					Constraint: constraintReferential,
-					Resource:   objectReferentialInventory,
 				},
 				{
 					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
 					Constraint: constraintReferential,
-					Resource:   objectReferentialDeny,
 				},
 			},
 		},
@@ -178,7 +173,7 @@ func TestTest(t *testing.T) {
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction", "Review"))
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction"))
 			if diff != "" {
 				t.Errorf("diff in Result objects (-want +got):\n%s", diff)
 			}

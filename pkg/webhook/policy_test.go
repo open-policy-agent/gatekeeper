@@ -160,7 +160,11 @@ spec:
 
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
-	driver := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		return nil, err
+	}
+
 	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver))
 	if err != nil {
 		return nil, err
