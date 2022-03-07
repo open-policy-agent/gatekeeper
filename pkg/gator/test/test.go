@@ -6,8 +6,11 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis"
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -24,7 +27,13 @@ func init() {
 
 func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	// create the client
-	client, err := gator.NewOPAClient()
+
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
@@ -60,15 +69,21 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	}
 
 	// finally, add all the data.
+	ctx := context.Background()
 	for _, obj := range objs {
-		_, err := client.AddData(context.Background(), obj)
+		_, err := client.AddData(ctx, obj)
 		if err != nil {
 			return nil, fmt.Errorf("adding data of GVK %q: %w", obj.GroupVersionKind().String(), err)
 		}
 	}
 
+	out, err := driver.Dump(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(out)
+
 	// now audit all objects
-	ctx := context.Background()
 	responses := &types.Responses{
 		ByTarget: make(map[string]*types.Response),
 	}
@@ -79,11 +94,11 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 
-		for target, r := range review.ByTarget {
-			targetResponse := responses.ByTarget[target]
+		for targetName, r := range review.ByTarget {
+			targetResponse := responses.ByTarget[targetName]
 			if targetResponse == nil {
 				targetResponse = &types.Response{}
-				targetResponse.Target = target
+				targetResponse.Target = targetName
 			}
 
 			targetResponse.Results = append(targetResponse.Results, r.Results...)
@@ -98,7 +113,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 				targetResponse.Trace = &trace
 			}
 
-			responses.ByTarget[target] = targetResponse
+			responses.ByTarget[targetName] = targetResponse
 		}
 	}
 

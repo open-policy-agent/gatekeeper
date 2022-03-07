@@ -265,11 +265,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	driver, err := local.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
+		os.Exit(1)
 	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
+		os.Exit(1)
 	}
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{Reporter: mutation.NewStatsReporter()})

@@ -27,6 +27,7 @@ import (
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -355,7 +356,20 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 		return false, err
 	}
 
+	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
 	_, err = h.opa.CreateCRD(unversioned)
+	if err != nil {
+		return true, err
+	}
+
+	// Create a temporary Driver and attempt to add the Template to it. This
+	// ensures the Rego code both parses and compiles.
+	d, err := local.New()
+	if err != nil {
+		return false, fmt.Errorf("unable to create Driver: %v", err)
+	}
+
+	err = d.AddTemplate(unversioned)
 	if err != nil {
 		return true, err
 	}
@@ -462,6 +476,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 			return nil, errors.New("serving context canceled, aborting request")
 		}
 	}
+
 	trace, dump := h.tracingLevel(ctx, req)
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See

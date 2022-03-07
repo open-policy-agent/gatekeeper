@@ -77,7 +77,7 @@ func TestReconcile(t *testing.T) {
 			},
 			Targets: []v1beta1.Target{
 				{
-					Target: "admission.k8s.gatekeeper.sh",
+					Target: target.Name,
 					Rego: `
 package foo
 

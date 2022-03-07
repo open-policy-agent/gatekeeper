@@ -9,6 +9,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -79,14 +80,17 @@ func TestTest(t *testing.T) {
 			},
 			want: []*types.Result{
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
 				},
@@ -102,10 +106,12 @@ func TestTest(t *testing.T) {
 			},
 			want: []*types.Result{
 				{
+					Target:     target.Name,
 					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
 					Constraint: constraintReferential,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
 					Constraint: constraintReferential,
 				},

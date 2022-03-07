@@ -3,7 +3,6 @@ package target
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"sync"
 	"text/template"
 
@@ -45,6 +44,9 @@ import (
 // See the following regexr to test this regex: https://regexr.com/6dgdj
 const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
+// Name is the name of Gatekeeper's Kubernetes validation target.
+const Name = "admission.k8s.gatekeeper.sh"
+
 var _ handler.TargetHandler = &K8sValidationTarget{}
 
 type K8sValidationTarget struct {
@@ -52,7 +54,7 @@ type K8sValidationTarget struct {
 }
 
 func (h *K8sValidationTarget) GetName() string {
-	return "admission.k8s.gatekeeper.sh"
+	return Name
 }
 
 func (h *K8sValidationTarget) Add(key storage.Path, object interface{}) error {
@@ -85,8 +87,8 @@ type AugmentedReview struct {
 }
 
 type gkReview struct {
-	*admissionv1.AdmissionRequest
-	Unstable *unstable `json:"_unstable,omitempty"`
+	admissionv1.AdmissionRequest
+	Unstable unstable `json:"_unstable,omitempty"`
 }
 
 type AugmentedUnstructured struct {
@@ -108,10 +110,14 @@ func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) 
 		return true, nil, nil, fmt.Errorf("resource %s has no kind", o.GetName())
 	}
 
+	var path []string
 	if o.GetNamespace() == "" {
-		return true, []string{"cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()}, o.Object, nil
+		path = []string{"cluster", gvk.GroupVersion().String(), gvk.Kind, o.GetName()}
+	} else {
+		path = []string{"namespace", o.GetNamespace(), gvk.GroupVersion().String(), gvk.Kind, o.GetName()}
 	}
-	return true, []string{"namespace", o.GetNamespace(), url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()}, o.Object, nil
+
+	return true, path, o.Object, nil
 }
 
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, interface{}, error) {
@@ -128,62 +134,60 @@ func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, 
 }
 
 func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, error) {
+	var err error
+	var review *gkReview
+
 	switch data := obj.(type) {
 	case admissionv1.AdmissionRequest:
-		return true, data, nil
+		review = &gkReview{AdmissionRequest: data}
 	case *admissionv1.AdmissionRequest:
-		return true, data, nil
+		review = &gkReview{AdmissionRequest: *data}
 	case AugmentedReview:
-		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
 	case *AugmentedReview:
-		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
 	case AugmentedUnstructured:
-		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(data)
+		review, err = augmentedUnstructuredToAdmissionRequest(data)
 		if err != nil {
 			return false, nil, err
 		}
-		return true, admissionRequest, nil
 	case *AugmentedUnstructured:
-		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(*data)
+		review, err = augmentedUnstructuredToAdmissionRequest(*data)
 		if err != nil {
 			return false, nil, err
 		}
-		return true, admissionRequest, nil
 	case unstructured.Unstructured:
-		admissionRequest, err := unstructuredToAdmissionRequest(data)
+		review, err = unstructuredToAdmissionRequest(data)
 		if err != nil {
 			return false, nil, err
 		}
-		return true, admissionRequest, nil
 	case *unstructured.Unstructured:
-		admissionRequest, err := unstructuredToAdmissionRequest(*data)
+		review, err = unstructuredToAdmissionRequest(*data)
 		if err != nil {
 			return false, nil, err
 		}
-		return true, admissionRequest, nil
+	default:
+		return false, nil, nil
 	}
-	return false, nil, nil
+
+	return true, review, nil
 }
 
-func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkReview, error) {
-	req, err := unstructuredToAdmissionRequest(obj.Object)
+func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkReview, error) {
+	review, err := unstructuredToAdmissionRequest(obj.Object)
 	if err != nil {
-		return gkReview{}, err
+		return &gkReview{}, err
 	}
 
-	review := gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}
-
-	if obj.Namespace != nil {
-		review.Namespace = obj.Namespace.Name
-	}
+	review.Unstable = unstable{Namespace: obj.Namespace}
 
 	return review, nil
 }
 
-func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.AdmissionRequest, error) {
+func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (*gkReview, error) {
 	resourceJSON, err := json.Marshal(obj.Object)
 	if err != nil {
-		return admissionv1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
+		return &gkReview{}, errors.New("Unable to marshal JSON encoding of object")
 	}
 
 	req := admissionv1.AdmissionRequest{
@@ -199,7 +203,7 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.
 		Namespace: obj.GetNamespace(),
 	}
 
-	return req, nil
+	return &gkReview{AdmissionRequest: req}, nil
 }
 
 func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
@@ -470,10 +474,12 @@ func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructur
 			nilObj++
 			continue
 		}
+
 		matched, err := match.Matches(m.match, obj, ns)
 		if err != nil {
 			return false, fmt.Errorf("%w: %v", ErrMatching, err)
 		}
+
 		if matched {
 			return true, nil
 		}
@@ -497,6 +503,7 @@ func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns 
 			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.Object.Raw))
 		}
 	}
+
 	return obj, oldObj, req.Unstable.Namespace, nil
 }
 

@@ -393,7 +393,11 @@ func TestProcessData(t *testing.T) {
 		{
 			Name:         "Grouped Object",
 			JSON:         `{"apiVersion": "mygroup/v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
+<<<<<<< HEAD
 			ExpectedPath: "cluster/mygroup%2Fv1beta1/Rock/myrock",
+=======
+			ExpectedPath: []string{"cluster", "mygroup/v1beta1", "Rock", "myrock"},
+>>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
 			Name:          "No Version",
@@ -554,14 +558,30 @@ func TestMatcher_Match(t *testing.T) {
 		want    bool
 	}{
 		{
+<<<<<<< HEAD
 			name:    "AdmissionRequest not supported",
 			req:     admissionv1.AdmissionRequest{},
 			wantErr: ErrReviewFormat,
+=======
+			name: "AdmissionRequest supported",
+			req: admissionv1.AdmissionRequest{
+				Object: runtime.RawExtension{Raw: matchedRawData()},
+			},
+			match:   fooMatch(),
+			want:    false,
+			wantErr: nil,
+>>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
-			name:    "unstructured.Unstructured not supported",
+			name:    "unstructured.Unstructured supported",
 			req:     makeResource("some", "Thing"),
+<<<<<<< HEAD
 			wantErr: ErrReviewFormat,
+=======
+			match:   fooMatch(),
+			want:    false,
+			wantErr: nil,
+>>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
 			name: "Raw object doesn't unmarshal",
