@@ -8,7 +8,7 @@ RUN apk add --no-cache curl && \
     curl -LO https://storage.googleapis.com/kubernetes-release/release/v${KUBE_VERSION}/bin/${TARGETOS}/${TARGETARCH}/kubectl && \
     chmod +x kubectl
 
-FROM scratch
+FROM scratch as build
 USER 65532:65532
 COPY --chown=65532:65532 * /crds/
 COPY --from=builder /kubectl /kubectl
