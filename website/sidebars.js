@@ -40,6 +40,7 @@ module.exports = {
       label: 'Contributing',
       collapsed: false,
       items: [
+        'developers',
         'help',
         'security'
       ],
