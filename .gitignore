@@ -350,3 +350,7 @@ __pycache__/
 
 # always include vendor directory
 !/vendor/**
+
+# tilt
+tilt-settings.json
+.tiltbuild
