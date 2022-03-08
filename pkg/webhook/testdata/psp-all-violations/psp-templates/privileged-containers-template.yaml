@@ -7,6 +7,10 @@ spec:
     spec:
       names:
         kind: K8sPSPPrivilegedContainer
+        validation:
+          # Schema for the `parameters` field
+          openAPIV3Schema:
+            type: object
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
