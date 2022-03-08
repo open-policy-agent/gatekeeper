@@ -232,7 +232,8 @@ func TestTemplateValidation(t *testing.T) {
 				},
 			}
 
-			_, err = handler.validateGatekeeperResources(review)
+			ctx := context.Background()
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -395,7 +396,8 @@ func TestConstraintValidation(t *testing.T) {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 
-			if _, err := opa.AddTemplate(tt.Template); err != nil {
+			ctx := context.Background()
+			if _, err := opa.AddTemplate(ctx, tt.Template); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
@@ -415,7 +417,7 @@ func TestConstraintValidation(t *testing.T) {
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(review)
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -510,12 +512,12 @@ func TestTracing(t *testing.T) {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 
-			_, err = opa.AddTemplate(tt.Template)
+			ctx := context.Background()
+			_, err = opa.AddTemplate(ctx, tt.Template)
 			if err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 
-			ctx := context.Background()
 			_, err = opa.AddConstraint(ctx, validRegoTemplateConstraint())
 			if err != nil {
 				t.Fatal(err)
@@ -545,7 +547,7 @@ func TestTracing(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error: %s", err)
 			}
-			_, err = handler.validateGatekeeperResources(review)
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil {
 				t.Errorf("unable to validate gatekeeper resources: %s", err)
 			}

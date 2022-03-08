@@ -150,7 +150,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
-	if userErr, err := h.validateGatekeeperResources(&req); err != nil {
+	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
 		var code int32
 		if userErr {
 			code = http.StatusUnprocessableEntity
@@ -317,12 +317,12 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
-func (h *validationHandler) validateGatekeeperResources(req *admission.Request) (bool, error) {
+func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
-		return h.validateTemplate(req)
+		return h.validateTemplate(ctx, req)
 	case gvk.Group == "constraints.gatekeeper.sh":
 		return h.validateConstraint(req)
 	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
@@ -344,7 +344,7 @@ func (h *validationHandler) validateGatekeeperResources(req *admission.Request) 
 // Returns an error if the ConstraintTemplate fails validation.
 // The returned boolean is only true if error is non-nil and is a result of user
 // error.
-func (h *validationHandler) validateTemplate(req *admission.Request) (bool, error) {
+func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
@@ -369,7 +369,7 @@ func (h *validationHandler) validateTemplate(req *admission.Request) (bool, erro
 		return false, fmt.Errorf("unable to create Driver: %v", err)
 	}
 
-	err = d.AddTemplate(unversioned)
+	err = d.AddTemplate(ctx, unversioned)
 	if err != nil {
 		return true, err
 	}

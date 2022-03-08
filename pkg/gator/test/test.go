@@ -39,6 +39,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	}
 
 	// search for templates, add them if they exist
+	ctx := context.Background()
 	for _, obj := range objs {
 		if !isTemplate(obj) {
 			continue
@@ -49,7 +50,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 			return nil, fmt.Errorf("converting unstructured %q to template: %w", obj.GetName(), err)
 		}
 
-		_, err = client.AddTemplate(templ)
+		_, err = client.AddTemplate(ctx, templ)
 		if err != nil {
 			return nil, fmt.Errorf("adding template %q: %w", templ.GetName(), err)
 		}
@@ -69,7 +70,6 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	}
 
 	// finally, add all the data.
-	ctx := context.Background()
 	for _, obj := range objs {
 		_, err := client.AddData(ctx, obj)
 		if err != nil {
