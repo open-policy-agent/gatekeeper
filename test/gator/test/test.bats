@@ -183,3 +183,16 @@ match_yaml_msg () {
   want_msg="Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>" 
   match_yaml_msg "${output[*]}" "${want_msg}"
 }
+
+@test "referential data causes violation" {
+  run bin/gator test \
+    -f="$BATS_TEST_DIRNAME/fixtures/policies/default" \
+    -f="$BATS_TEST_DIRNAME/fixtures/manifests/referential-data" \
+    -o=yaml
+
+  [ "$status" -eq 1 ]
+
+  # Confirm we still get our violation output
+  want_msg="ingress host conflicts with an existing ingress <example-host.example.com>" 
+  match_yaml_msg "${output[*]}" "${want_msg}"
+}

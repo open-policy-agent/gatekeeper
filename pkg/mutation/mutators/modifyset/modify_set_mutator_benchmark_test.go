@@ -1,7 +1,6 @@
 package modifyset
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,19 +9,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 )
-
-func makeValue(v interface{}) runtime.RawExtension {
-	v2 := map[string]interface{}{
-		"value": v,
-	}
-	j, err := json.Marshal(v2)
-	if err != nil {
-		panic(err)
-	}
-	return runtime.RawExtension{Raw: j}
-}
 
 func modifyset(value interface{}, location string) *unversioned.ModifySet {
 	result := &unversioned.ModifySet{
@@ -34,8 +21,9 @@ func modifyset(value interface{}, location string) *unversioned.ModifySet {
 			}},
 			Location: location,
 			Parameters: unversioned.ModifySetParameters{
+				Operation: unversioned.MergeOp,
 				Values: unversioned.Values{
-					FromList: []interface{}{makeValue(value)},
+					FromList: []interface{}{value},
 				},
 			},
 		},
