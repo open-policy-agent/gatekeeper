@@ -10,6 +10,7 @@ spec:
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
+          type: object
           properties:
             hostNetwork:
               type: boolean
