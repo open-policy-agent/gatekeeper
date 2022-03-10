@@ -567,7 +567,11 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 			return false, err
 		}
 		if cachedNs != nil {
-			ns = cachedNs.(*corev1.Namespace)
+			n, ok := cachedNs.(*corev1.Namespace)
+			if !ok {
+				return false, fmt.Errorf("could not convert cached namespace of type %T to corev1.Namespace", cachedNs)
+			}
+			ns = n
 		}
 	} else {
 		err := m.cache.Add(obj.GetNamespace(), ns)
