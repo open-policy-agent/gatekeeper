@@ -169,11 +169,13 @@ type ReconcileConfig struct {
 	syncMetricsCache *syncc.MetricsCache
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
-	watched          *watch.Set
-	needsReplay      *watch.Set
-	needsWipe        bool
-	tracker          *readiness.Tracker
-	processExcluder  *process.Excluder
+
+	watched *watch.Set
+
+	needsReplay     *watch.Set
+	needsWipe       bool
+	tracker         *readiness.Tracker
+	processExcluder *process.Excluder
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
@@ -273,6 +275,13 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if r.needsReplay == nil {
 		r.needsReplay = r.watched.Intersection(newSyncOnly)
 	}
+
+	// Wipe all data to avoid stale state if needed. Happens once per watch-set-change.
+	if err := r.wipeCacheIfNeeded(ctx); err != nil {
+		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
+	}
+
+	// TODO: lock watched
 	r.watched.Replace(newSyncOnly)
 
 	// swapping with the new excluder
@@ -280,18 +289,14 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 	// *Note the following steps are not transactional with respect to admission control*
 
-	// Wipe all data to avoid stale state if needed. Happens once per watch-set-change.
-	if err := r.wipeCacheIfNeeded(ctx); err != nil {
-		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
-	}
-
 	// Important: dynamic watches update must happen *after* updating our watchSet.
-	// Otherwise the sync controller will drop events for the newly watched kinds.
+	// Otherwise, the sync controller will drop events for the newly watched kinds.
 	// Defer error handling so object re-sync happens even if the watch is hard
 	// errored due to a missing GVK in the watch set.
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
+	// TODO: release lock on watched
 
 	// Replay cached data for any resources that were previously watched and still in the watch set.
 	// This is necessary because we wipe their data from Opa above.

@@ -634,6 +634,7 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 }
 
 func (am *Manager) listObjects() []*unstructured.Unstructured {
+	am.client
 	return nil
 }
 

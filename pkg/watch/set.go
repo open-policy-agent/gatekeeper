@@ -30,6 +30,14 @@ type Set struct {
 	set map[schema.GroupVersionKind]bool
 }
 
+func (w *Set) DoForEach(f func(gvk schema.GroupVersionKind)) {
+	w.mux.RLock()
+	for gvk := range w.set {
+		f(gvk)
+	}
+	w.mux.RUnlock()
+}
+
 // NewSet constructs a new watchSet.
 func NewSet() *Set {
 	return &Set{
