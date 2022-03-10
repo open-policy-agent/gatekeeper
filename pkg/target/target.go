@@ -524,7 +524,7 @@ func (nc *nsCache) Get(key string) (interface{}, error) {
 
 	ns, ok := nc.cache[key]
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("error reading key %s from namespace cache", key)
 	}
 	return ns, nil
 }
