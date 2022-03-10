@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
@@ -16,6 +18,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -494,6 +497,7 @@ func TestToMatcher(t *testing.T) {
 			constraint: fooConstraint(),
 			want: &Matcher{
 				fooMatch(),
+				newNsCache(nil),
 			},
 		},
 		{
@@ -503,6 +507,7 @@ func TestToMatcher(t *testing.T) {
 			},
 			want: &Matcher{
 				fooMatch(),
+				newNsCache(nil),
 			},
 		},
 	}
@@ -514,7 +519,11 @@ func TestToMatcher(t *testing.T) {
 				t.Errorf("ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(Matcher{})); diff != "" {
+			opts := []cmp.Option{
+				cmpopts.IgnoreTypes(sync.RWMutex{}),
+				cmp.AllowUnexported(Matcher{}, nsCache{}),
+			}
+			if diff := cmp.Diff(got, tt.want, opts...); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -666,6 +675,7 @@ func TestMatcher_Match(t *testing.T) {
 			target := &K8sValidationTarget{}
 			m := &Matcher{
 				match: tt.match,
+				cache: newNsCache(nil),
 			}
 			handled, review, err := target.HandleReview(tt.req)
 			if !handled || err != nil {
@@ -680,5 +690,16 @@ func TestMatcher_Match(t *testing.T) {
 				t.Errorf("want %v matched, got %v", tt.want, got)
 			}
 		})
+	}
+}
+
+func newNsCache(data map[string]*corev1.Namespace) *nsCache {
+	if data == nil {
+		data = make(map[string]*corev1.Namespace)
+	}
+
+	return &nsCache{
+		lock:  &sync.RWMutex{},
+		cache: data,
 	}
 }
