@@ -48,7 +48,7 @@ const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-
 
 var _ handler.TargetHandler = &K8sValidationTarget{}
 
-type K8sValidationTarget struct{
+type K8sValidationTarget struct {
 	cache *nsCache
 }
 
@@ -507,7 +507,7 @@ type Matcher struct {
 }
 
 type nsCache struct {
-	lock *sync.RWMutex
+	lock  *sync.RWMutex
 	cache map[string]*corev1.Namespace
 }
 
