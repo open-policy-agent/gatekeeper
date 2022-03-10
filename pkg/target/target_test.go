@@ -696,8 +696,6 @@ func TestMatcher_Match(t *testing.T) {
 }
 
 func TestNamespaceCache(t *testing.T) {
-	//ns1 := makeNamespace("my-ns1", map[string]string{"ns1": "label"})
-	//ns2 := makeNamespace("my-ns2", map[string]string{"ns2": "label"})
 	type wantNs struct {
 		key         string
 		ns          *corev1.Namespace
@@ -729,6 +727,11 @@ func TestNamespaceCache(t *testing.T) {
 				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
 			},
 			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: true,
+				},
 				{
 					key:         "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
@@ -767,7 +770,7 @@ func TestNamespaceCache(t *testing.T) {
 				{
 					key:         "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
-					shouldExist: false,
+					shouldExist: true,
 				},
 			},
 			wantErr: ErrCachingType,
@@ -809,7 +812,12 @@ func TestNamespaceCache(t *testing.T) {
 				target.Remove(key)
 			}
 
+			wantCount := 0
+			gotCount := len(target.cache.cache)
 			for _, want := range tt.checkNs {
+				if want.shouldExist {
+					wantCount += 1
+				}
 				got, err := target.cache.Get(want.key)
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
@@ -820,6 +828,10 @@ func TestNamespaceCache(t *testing.T) {
 				if diff := cmp.Diff(got, want.ns); diff != "" {
 					t.Errorf("+got -want:\n%s", diff)
 				}
+			}
+
+			if gotCount != wantCount {
+				t.Fatalf("got %d members in cache, want %d", gotCount, wantCount)
 			}
 		})
 	}
