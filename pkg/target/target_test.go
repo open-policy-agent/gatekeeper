@@ -17,7 +17,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -542,154 +541,62 @@ func unmatchedRawData() []byte {
 	return objData
 }
 
-func TestMatcher_Match(t *testing.T) {
-	nsData, _ := json.Marshal(makeResource("", "Namespace").Object)
-
-	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
+func TestNamespaceCache(t *testing.T) {
+	ns1 := makeNamespace("my-ns1", map[string]string{"ns1": "label"})
+	ns2 := makeNamespace("my-ns2", map[string]string{"ns2": "label"})
 	tests := []struct {
 		name    string
-		match   *match.Match
-		req     interface{}
-		wantErr error
-		want    bool
+		addNs   map[string]interface{}
+		wantNs  map[string]*corev1.Namespace
+		wantErr bool
 	}{
 		{
-			name:    "AdmissionRequest not supported",
-			req:     admissionv1.AdmissionRequest{},
-			wantErr: ErrReviewFormat,
+			name:    "retrieving a namespace from empty cache returns nil",
+			addNs:   map[string]interface{}{},
+			wantNs:  map[string]*corev1.Namespace{"my-ns2": nil},
+			wantErr: false,
 		},
 		{
-			name:    "unstructured.Unstructured not supported",
-			req:     makeResource("some", "Thing"),
-			wantErr: ErrReviewFormat,
+			name:    "retrieving a namespace that doesnt exist returns nil",
+			addNs:   map[string]interface{}{"my-ns1": ns1},
+			wantNs:  map[string]*corev1.Namespace{"my-ns2": nil},
+			wantErr: false,
 		},
 		{
-			name: "Raw object doesn't unmarshal",
-			req: &AugmentedUnstructured{
-				Namespace: makeNamespace("my-ns"),
-				Object: unstructured.Unstructured{Object: map[string]interface{}{
-					"key": "Some invalid json",
-				}},
-			},
-			wantErr: ErrRequestObject,
+			name:    "retrieving an added namespace returns the namespace",
+			addNs:   map[string]interface{}{"my-ns1": ns1, "my-ns2": ns2},
+			wantNs:  map[string]*corev1.Namespace{"my-ns1": ns1, "my-ns2": ns2},
+			wantErr: false,
 		},
 		{
-			name: "Match error",
-			req: &AugmentedReview{
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{Raw: nsData},
-				},
-			},
-			match:   fooMatch(),
-			wantErr: ErrMatching,
-		},
-		{
-			name: "AugmentedReview is supported",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{Raw: matchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  true,
-		},
-		{
-			name: "AugmentedUnstructured is supported",
-			req: &AugmentedUnstructured{
-				Namespace: ns,
-				Object:    *makeResource("some", "Thing", map[string]string{"obj": "label"}),
-			},
-			match: fooMatch(),
-			want:  true,
-		},
-		{
-			name: "Both object and old object are matched",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object:    runtime.RawExtension{Raw: matchedRawData()},
-					OldObject: runtime.RawExtension{Raw: matchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  true,
-		},
-		{
-			name: "object is matched, old object is not matched",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object:    runtime.RawExtension{Raw: matchedRawData()},
-					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  true,
-		},
-		{
-			name: "object is not matched, old object is matched",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
-					OldObject: runtime.RawExtension{Raw: matchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  true,
-		},
-		{
-			name: "object is matched, old object is not matched",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
-					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  false,
-		},
-		{
-			name: "new object is not matched, old object is not specified",
-			req: &AugmentedReview{
-				Namespace: ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{Raw: unmatchedRawData()},
-				},
-			},
-			match: fooMatch(),
-			want:  false,
-		},
-		{
-			name: "neither new or old object is specified",
-			req: &AugmentedReview{
-				Namespace:        ns,
-				AdmissionRequest: &admissionv1.AdmissionRequest{},
-			},
-			match:   fooMatch(),
-			wantErr: ErrRequestObject,
+			name:    "adding a non-namespace type returns error",
+			addNs:   map[string]interface{}{"my-ns1": fooConstraint(), "my-ns2": ns2},
+			wantNs:  map[string]*corev1.Namespace{"my-ns2": ns2},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			target := &K8sValidationTarget{}
-			m := &Matcher{
-				match: tt.match,
-				cache: newNsCache(nil),
+			cache := newNsCache(nil)
+
+			for key, ns := range tt.addNs {
+				err := cache.Add(key, ns)
+				if !tt.wantErr && err != nil {
+					t.Errorf("unwanted error adding namespace")
+				}
 			}
-			handled, review, err := target.HandleReview(tt.req)
-			if !handled || err != nil {
-				t.Fatalf("failed to handle review %v", err)
-			}
-			got, err := m.Match(review)
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("want %v matched, got %v", tt.want, got)
+
+			for key, want := range tt.wantNs {
+				got, err := cache.Get(key)
+				if !tt.wantErr && err != nil {
+					t.Errorf("unwanted error getting namespace")
+				}
+				if want == nil && got == nil {
+					continue
+				}
+				if diff := cmp.Diff(got, want); diff != "" {
+					t.Errorf("Get() got = %v, want %v", got, want)
+				}
 			}
 		})
 	}
