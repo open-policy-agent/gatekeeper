@@ -565,7 +565,6 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	}
 
 	return matchAny(m, ns, &obj, &oldObj)
-
 }
 
 func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
@@ -605,5 +604,7 @@ func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns 
 	return obj, oldObj, req.Unstable.Namespace, nil
 }
 
-var _ constraints.Matcher = &Matcher{}
-var _ handler.Cache = &K8sValidationTarget{}
+var (
+	_ constraints.Matcher = &Matcher{}
+	_ handler.Cache       = &K8sValidationTarget{}
+)
