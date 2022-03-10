@@ -816,8 +816,9 @@ func TestNamespaceCache(t *testing.T) {
 			gotCount := len(target.cache.cache)
 			for _, want := range tt.checkNs {
 				if want.shouldExist {
-					wantCount += 1
+					wantCount++
 				}
+
 				got, err := target.cache.Get(want.key)
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
