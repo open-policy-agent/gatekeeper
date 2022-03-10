@@ -532,6 +532,16 @@ func TestToMatcher(t *testing.T) {
 	}
 }
 
+func matchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
+	return objData
+}
+
+func unmatchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("another", "thing").Object)
+	return objData
+}
+
 func TestMatcher_Match(t *testing.T) {
 	nsData, _ := json.Marshal(makeResource("", "Namespace").Object)
 
@@ -683,16 +693,6 @@ func TestMatcher_Match(t *testing.T) {
 			}
 		})
 	}
-}
-
-func matchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
-	return objData
-}
-
-func unmatchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("another", "thing").Object)
-	return objData
 }
 
 func TestNamespaceCache(t *testing.T) {
