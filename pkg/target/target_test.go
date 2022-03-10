@@ -531,16 +531,6 @@ func TestToMatcher(t *testing.T) {
 	}
 }
 
-func matchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
-	return objData
-}
-
-func unmatchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("another", "thing").Object)
-	return objData
-}
-
 func TestNamespaceCache(t *testing.T) {
 	ns1 := makeNamespace("my-ns1", map[string]string{"ns1": "label"})
 	ns2 := makeNamespace("my-ns2", map[string]string{"ns2": "label"})
