@@ -480,12 +480,6 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
 		}
-		//if h.cache.cache == nil {
-		//	h.cache = nsCache{
-		//		lock:  sync.RWMutex{},
-		//		cache: make(map[string]*corev1.Namespace),
-		//	}
-		//}
 		return &Matcher{match, &h.cache}, nil
 	}
 	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMather, u.GetKind(), u.GetName())
