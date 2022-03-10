@@ -490,7 +490,7 @@ func TestToMatcher(t *testing.T) {
 		{
 			name:       "constraint with no match fields",
 			constraint: makeConstraint(),
-			wantErr:    ErrCreatingMather,
+			wantErr:    ErrCreatingMatcher,
 		},
 		{
 			name:       "constraint with match fields",
@@ -696,60 +696,129 @@ func TestMatcher_Match(t *testing.T) {
 }
 
 func TestNamespaceCache(t *testing.T) {
-	ns1 := makeNamespace("my-ns1", map[string]string{"ns1": "label"})
-	ns2 := makeNamespace("my-ns2", map[string]string{"ns2": "label"})
+	//ns1 := makeNamespace("my-ns1", map[string]string{"ns1": "label"})
+	//ns2 := makeNamespace("my-ns2", map[string]string{"ns2": "label"})
+	type wantNs struct {
+		key         string
+		ns          *corev1.Namespace
+		shouldExist bool
+	}
+
 	tests := []struct {
-		name    string
-		addNs   map[string]interface{}
-		wantNs  map[string]*corev1.Namespace
-		wantErr bool
+		name     string
+		addNs    map[string]interface{}
+		removeNs []string
+		checkNs  []wantNs
+		wantErr  error
 	}{
 		{
-			name:    "retrieving a namespace from empty cache returns nil",
-			addNs:   map[string]interface{}{},
-			wantNs:  map[string]*corev1.Namespace{"my-ns2": nil},
-			wantErr: false,
+			name:  "retrieving a namespace from empty cache returns nil",
+			addNs: map[string]interface{}{},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: false,
+				},
+			},
+			wantErr: nil,
 		},
 		{
-			name:    "retrieving a namespace that doesnt exist returns nil",
-			addNs:   map[string]interface{}{"my-ns1": ns1},
-			wantNs:  map[string]*corev1.Namespace{"my-ns2": nil},
-			wantErr: false,
+			name: "retrieving a namespace that does not exist returns nil",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: false,
+				},
+			},
+			wantErr: nil,
 		},
 		{
-			name:    "retrieving an added namespace returns the namespace",
-			addNs:   map[string]interface{}{"my-ns1": ns1, "my-ns2": ns2},
-			wantNs:  map[string]*corev1.Namespace{"my-ns1": ns1, "my-ns2": ns2},
-			wantErr: false,
+			name: "retrieving an added namespace returns the namespace",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: true,
+				},
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: true,
+				},
+			},
+			wantErr: nil,
 		},
 		{
-			name:    "adding a non-namespace type returns error",
-			addNs:   map[string]interface{}{"my-ns1": fooConstraint(), "my-ns2": ns2},
-			wantNs:  map[string]*corev1.Namespace{"my-ns2": ns2},
-			wantErr: true,
+			name: "adding a non-namespace type returns error",
+			addNs: map[string]interface{}{
+				"my-ns1": fooConstraint(),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: false,
+				},
+			},
+			wantErr: ErrCachingType,
+		},
+		{
+			name: "removing a namespace returns nil when retrieving",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			removeNs: []string{"my-ns1"},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: false,
+				},
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: true,
+				},
+			},
+			wantErr: nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := newNsCache(nil)
+			target := &K8sValidationTarget{}
 
 			for key, ns := range tt.addNs {
-				err := cache.Add(key, ns)
-				if !tt.wantErr && err != nil {
-					t.Errorf("unwanted error adding namespace")
+				err := target.Add(key, ns)
+				if err != nil && !errors.Is(err, tt.wantErr) {
+					t.Errorf("Add() error = %v, wantErr = %v", err, tt.wantErr)
 				}
 			}
 
-			for key, want := range tt.wantNs {
-				got, err := cache.Get(key)
-				if !tt.wantErr && err != nil {
-					t.Errorf("unwanted error getting namespace")
+			for _, key := range tt.removeNs {
+				target.Remove(key)
+			}
+
+			for _, want := range tt.checkNs {
+				got, err := target.cache.Get(want.key)
+				if err != nil && !errors.Is(err, tt.wantErr) {
+					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
 				}
-				if want == nil && got == nil {
+				if !want.shouldExist && got == nil {
 					continue
 				}
-				if diff := cmp.Diff(got, want); diff != "" {
-					t.Errorf("Get() got = %v, want %v", got, want)
+				if diff := cmp.Diff(got, want.ns); diff != "" {
+					t.Errorf("+got -want:\n%s", diff)
 				}
 			}
 		})
@@ -762,7 +831,6 @@ func newNsCache(data map[string]*corev1.Namespace) *nsCache {
 	}
 
 	return &nsCache{
-		lock:  sync.RWMutex{},
 		cache: data,
 	}
 }

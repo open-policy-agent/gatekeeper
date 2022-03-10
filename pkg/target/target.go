@@ -57,7 +57,11 @@ func (h *K8sValidationTarget) GetName() string {
 }
 
 func (h *K8sValidationTarget) Add(key string, object interface{}) error {
-	return h.cache.Add(key, object)
+	ns, ok := object.(*corev1.Namespace)
+	if !ok {
+		return fmt.Errorf("%w: cannot cache type %T", ErrCachingType, object)
+	}
+	return h.cache.Add(key, ns)
 }
 
 func (h *K8sValidationTarget) Remove(key string) {
@@ -473,16 +477,16 @@ func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
 	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 	}
 	if found && obj != nil {
 		match, err := convertToMatch(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 		}
 		return &Matcher{match, &h.cache}, nil
 	}
-	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMather, u.GetKind(), u.GetName())
+	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMatcher, u.GetKind(), u.GetName())
 }
 
 // Matcher implements constraint.Matcher.
@@ -496,7 +500,7 @@ type nsCache struct {
 	cache map[string]*corev1.Namespace
 }
 
-func (nc *nsCache) Add(key string, object interface{}) error {
+func (nc *nsCache) Add(key string, ns *corev1.Namespace) error {
 	nc.lock.Lock()
 	defer nc.lock.Unlock()
 
@@ -504,15 +508,11 @@ func (nc *nsCache) Add(key string, object interface{}) error {
 		nc.cache = make(map[string]*corev1.Namespace)
 	}
 
-	data, ok := object.(*corev1.Namespace)
-	if !ok {
-		return fmt.Errorf("cannot cache non-namespace type %T", object)
-	}
-	nc.cache[key] = data
+	nc.cache[key] = ns
 	return nil
 }
 
-func (nc *nsCache) Get(key string) (interface{}, error) {
+func (nc *nsCache) Get(key string) (*corev1.Namespace, error) {
 	nc.lock.RLock()
 	defer nc.lock.RUnlock()
 
@@ -550,13 +550,7 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		if cachedNs != nil {
-			n, ok := cachedNs.(*corev1.Namespace)
-			if !ok {
-				return false, fmt.Errorf("could not convert cached namespace of type %T to corev1.Namespace", cachedNs)
-			}
-			ns = n
-		}
+		ns = cachedNs
 	} else {
 		err := m.cache.Add(obj.GetNamespace(), ns)
 		if err != nil {
