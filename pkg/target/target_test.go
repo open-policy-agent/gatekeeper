@@ -17,6 +17,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -529,6 +530,169 @@ func TestToMatcher(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMatcher_Match(t *testing.T) {
+	nsData, _ := json.Marshal(makeResource("", "Namespace").Object)
+
+	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
+	tests := []struct {
+		name    string
+		match   *match.Match
+		req     interface{}
+		wantErr error
+		want    bool
+	}{
+		{
+			name:    "AdmissionRequest not supported",
+			req:     admissionv1.AdmissionRequest{},
+			wantErr: ErrReviewFormat,
+		},
+		{
+			name:    "unstructured.Unstructured not supported",
+			req:     makeResource("some", "Thing"),
+			wantErr: ErrReviewFormat,
+		},
+		{
+			name: "Raw object doesn't unmarshal",
+			req: &AugmentedUnstructured{
+				Namespace: makeNamespace("my-ns"),
+				Object: unstructured.Unstructured{Object: map[string]interface{}{
+					"key": "Some invalid json",
+				}},
+			},
+			wantErr: ErrRequestObject,
+		},
+		{
+			name: "Match error",
+			req: &AugmentedReview{
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: nsData},
+				},
+			},
+			match:   fooMatch(),
+			wantErr: ErrMatching,
+		},
+		{
+			name: "AugmentedReview is supported",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: matchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "AugmentedUnstructured is supported",
+			req: &AugmentedUnstructured{
+				Namespace: ns,
+				Object:    *makeResource("some", "Thing", map[string]string{"obj": "label"}),
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "Both object and old object are matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: matchedRawData()},
+					OldObject: runtime.RawExtension{Raw: matchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is matched, old object is not matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: matchedRawData()},
+					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is not matched, old object is matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
+					OldObject: runtime.RawExtension{Raw: matchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  true,
+		},
+		{
+			name: "object is matched, old object is not matched",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object:    runtime.RawExtension{Raw: unmatchedRawData()},
+					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  false,
+		},
+		{
+			name: "new object is not matched, old object is not specified",
+			req: &AugmentedReview{
+				Namespace: ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: unmatchedRawData()},
+				},
+			},
+			match: fooMatch(),
+			want:  false,
+		},
+		{
+			name: "neither new or old object is specified",
+			req: &AugmentedReview{
+				Namespace:        ns,
+				AdmissionRequest: &admissionv1.AdmissionRequest{},
+			},
+			match:   fooMatch(),
+			wantErr: ErrRequestObject,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := &K8sValidationTarget{}
+			m := &Matcher{
+				match: tt.match,
+				cache: newNsCache(nil),
+			}
+			handled, review, err := target.HandleReview(tt.req)
+			if !handled || err != nil {
+				t.Fatalf("failed to handle review %v", err)
+			}
+			got, err := m.Match(review)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("want %v matched, got %v", tt.want, got)
+			}
+		})
+	}
+}
+
+func matchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
+	return objData
+}
+
+func unmatchedRawData() []byte {
+	objData, _ := json.Marshal(makeResource("another", "thing").Object)
+	return objData
 }
 
 func TestNamespaceCache(t *testing.T) {
