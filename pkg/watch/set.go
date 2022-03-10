@@ -30,12 +30,21 @@ type Set struct {
 	set map[schema.GroupVersionKind]bool
 }
 
-func (w *Set) DoForEach(f func(gvk schema.GroupVersionKind)) {
+// DoForEach locks Set to prevent mutations and executes f on every element
+// currently in the set.
+// Exits early if f returns an error.
+func (w *Set) DoForEach(f func(gvk schema.GroupVersionKind) error) error {
 	w.mux.RLock()
+	defer w.mux.RUnlock()
+
 	for gvk := range w.set {
-		f(gvk)
+		err := f(gvk)
+		if err != nil {
+			return err
+		}
 	}
-	w.mux.RUnlock()
+
+	return nil
 }
 
 // NewSet constructs a new watchSet.

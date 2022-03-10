@@ -145,7 +145,8 @@ func TestReconcile(t *testing.T) {
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)
@@ -397,7 +398,8 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 
 	processExcluder := process.Get()
 
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, nil)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		return fmt.Errorf("adding reconciler to manager: %w", err)
@@ -437,7 +439,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -597,7 +600,8 @@ func TestConfig_Retries(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)

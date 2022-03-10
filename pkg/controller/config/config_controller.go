@@ -57,6 +57,7 @@ type Adder struct {
 	ControllerSwitch *watch.ControllerSwitch
 	Tracker          *readiness.Tracker
 	ProcessExcluder  *process.Excluder
+	WatchSet         *watch.Set
 }
 
 // Add creates a new ConfigController and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -65,7 +66,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// Events will be used to receive events from dynamic watches registered
 	// via the registrar below.
 	events := make(chan event.GenericEvent, 1024)
-	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder, events, events)
+	r, err := newReconciler(mgr, a.Opa, a.WatchManager, a.ControllerSwitch, a.Tracker, a.ProcessExcluder, events, a.WatchSet, events)
 	if err != nil {
 		return err
 	}
@@ -97,12 +98,15 @@ func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
+func (a *Adder) InjectWatchSet(watchSet *watch.Set) {
+	a.WatchSet = watchSet
+}
+
 // newReconciler returns a new reconcile.Reconciler
 // events is the channel from which sync controller will receive the events
 // regEvents is the channel registered by Registrar to put the events in
 // events and regEvents point to same event channel except for testing.
-func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
-	watchSet := watch.NewSet()
+func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, processExcluder *process.Excluder, events <-chan event.GenericEvent, watchSet *watch.Set, regEvents chan<- event.GenericEvent) (*ReconcileConfig, error) {
 	filteredOpa := syncc.NewFilteredOpaDataClient(opa, watchSet)
 	syncMetricsCache := syncc.NewMetricsCache()
 
@@ -116,6 +120,10 @@ func newReconciler(mgr manager.Manager, opa syncc.OpaDataClient, wm *watch.Manag
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := syncAdder.Add(mgr); err != nil {
 		return nil, fmt.Errorf("registering sync controller: %w", err)
+	}
+
+	if watchSet == nil {
+		return nil, fmt.Errorf("watchSet must be non-nil")
 	}
 
 	w, err := wm.NewRegistrar(

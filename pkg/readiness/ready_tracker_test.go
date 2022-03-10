@@ -133,9 +133,9 @@ func setupController(
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ProviderCache:    providerCache,
+		WatchSet:         watch.NewSet(),
 	}
-	ctx := context.Background()
-	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
 	return nil

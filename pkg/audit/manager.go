@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -73,6 +73,9 @@ type Manager struct {
 	processExcluder *process.Excluder
 	eventRecorder   record.EventRecorder
 	gkNamespace     string
+
+	// auditCache lists objects from the audit's cache if auditFromCache is enabled.
+	auditCache *CacheLister
 }
 
 type auditResult struct {
@@ -120,7 +123,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder) (*Manager, error) {
+func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -142,6 +145,7 @@ func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *pro
 		processExcluder: processExcluder,
 		eventRecorder:   recorder,
 		gkNamespace:     util.GetNamespace(),
+		auditCache:      cacheLister,
 	}
 	return am, nil
 }
@@ -165,7 +169,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Error(err, "failed to report run start time")
 	}
 
-	// new client to get updated restmapper
+	// Create a new client to get an updated RESTMapper.
 	c, err := client.New(am.mgr.GetConfig(), client.Options{Scheme: am.mgr.GetScheme(), Mapper: nil})
 	if err != nil {
 		return err
@@ -266,7 +270,7 @@ func (am *Manager) auditResources(
 	for _, rl := range serverResourceLists {
 		gvParsed, err := schema.ParseGroupVersion(rl.GroupVersion)
 		if err != nil {
-			am.log.Error(err, "Error parsing groupversion", "groupversion", rl.GroupVersion)
+			am.log.Error(err, "Error parsing GroupVersion", "GroupVersion", rl.GroupVersion)
 			continue
 		}
 
@@ -288,7 +292,7 @@ func (am *Manager) auditResources(
 	}
 
 	var errs []error
-	nsCache := newNSCache()
+	namespaceCache := newNSCache()
 
 	matchedKinds := make(map[string]bool)
 	if *auditMatchKindOnly {
@@ -403,7 +407,7 @@ func (am *Manager) auditResources(
 						log.Error(err, "error while marshaling unstructured object to JSON")
 						continue
 					}
-					if err := os.WriteFile(destFile, []byte(data), 0o600); err != nil {
+					if err := os.WriteFile(destFile, data, 0o600); err != nil {
 						log.Error(err, "error writing data to file")
 						continue
 					}
@@ -415,8 +419,8 @@ func (am *Manager) auditResources(
 					break
 				}
 			}
-			// loop thru all subDirs to review all files for this kind
-			err = am.reviewObjects(ctx, kind, folderCount, nsCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			// Loop through all subDirs to review all files for this kind.
+			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -431,11 +435,16 @@ func (am *Manager) auditResources(
 }
 
 func (am *Manager) auditFromCache(ctx context.Context) ([]Result, error) {
-	objs := am.listObjects()
+	objs, err := am.auditCache.ListObjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("unable to list objects from audit cache: %w", err)
+	}
 
 	var results []Result
 
-	for _, obj := range objs {
+	for i := range objs {
+		// Prevent referencing loop variables directly.
+		obj := objs[i]
 		resp, err := am.opa.Review(ctx, obj)
 		if err != nil {
 			return nil, err
@@ -444,7 +453,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, error) {
 		for _, r := range resp.Results() {
 			results = append(results, Result{
 				Result: r,
-				obj:    obj,
+				obj:    &obj,
 			})
 		}
 	}
@@ -631,11 +640,6 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 		ret = append(ret, gvk)
 	}
 	return ret, nil
-}
-
-func (am *Manager) listObjects() []*unstructured.Unstructured {
-	am.client
-	return nil
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
@@ -876,7 +880,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 				// get the latest constraint
 				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
 				if err != nil {
-					if k8serrors.IsNotFound(err) {
+					if apierrors.IsNotFound(err) {
 						ucloop.log.Info("could not find constraint", "name", name, "namespace", namespace)
 						delete(ucloop.uc, key)
 					} else {
