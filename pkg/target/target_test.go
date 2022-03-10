@@ -496,8 +496,8 @@ func TestToMatcher(t *testing.T) {
 			name:       "constraint with match fields",
 			constraint: fooConstraint(),
 			want: &Matcher{
-				fooMatch(),
-				newNsCache(nil),
+				match: fooMatch(),
+				cache: newNsCache(nil),
 			},
 		},
 		{
@@ -506,8 +506,8 @@ func TestToMatcher(t *testing.T) {
 				Object: unstructAssign,
 			},
 			want: &Matcher{
-				fooMatch(),
-				newNsCache(nil),
+				match: fooMatch(),
+				cache: newNsCache(nil),
 			},
 		},
 	}
@@ -520,8 +520,10 @@ func TestToMatcher(t *testing.T) {
 				return
 			}
 			opts := []cmp.Option{
-				cmpopts.IgnoreTypes(sync.RWMutex{}),
-				cmp.AllowUnexported(Matcher{}, nsCache{}),
+				// Since nsCache is lazy-instantiated and this test isn't concerned
+				// about caching functionality, we do not compare the cache
+				cmpopts.IgnoreTypes(sync.RWMutex{}, nsCache{}),
+				cmp.AllowUnexported(Matcher{}),
 			}
 			if diff := cmp.Diff(got, tt.want, opts...); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
@@ -699,7 +701,7 @@ func newNsCache(data map[string]*corev1.Namespace) *nsCache {
 	}
 
 	return &nsCache{
-		lock:  &sync.RWMutex{},
+		lock:  sync.RWMutex{},
 		cache: data,
 	}
 }

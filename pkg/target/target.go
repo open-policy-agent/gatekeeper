@@ -49,7 +49,7 @@ const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-
 var _ handler.TargetHandler = &K8sValidationTarget{}
 
 type K8sValidationTarget struct {
-	cache *nsCache
+	cache nsCache
 }
 
 func (h *K8sValidationTarget) GetName() string {
@@ -57,19 +57,10 @@ func (h *K8sValidationTarget) GetName() string {
 }
 
 func (h *K8sValidationTarget) Add(key string, object interface{}) error {
-	if h.cache == nil {
-		h.cache = &nsCache{
-			lock:  &sync.RWMutex{},
-			cache: make(map[string]*corev1.Namespace),
-		}
-	}
 	return h.cache.Add(key, object)
 }
 
 func (h *K8sValidationTarget) Remove(key string) {
-	if h.cache == nil {
-		return
-	}
 	h.cache.Remove(key)
 }
 
@@ -489,13 +480,13 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
 		}
-		if h.cache == nil {
-			h.cache = &nsCache{
-				lock:  &sync.RWMutex{},
-				cache: make(map[string]*corev1.Namespace),
-			}
-		}
-		return &Matcher{match, h.cache}, nil
+		//if h.cache.cache == nil {
+		//	h.cache = nsCache{
+		//		lock:  sync.RWMutex{},
+		//		cache: make(map[string]*corev1.Namespace),
+		//	}
+		//}
+		return &Matcher{match, &h.cache}, nil
 	}
 	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMather, u.GetKind(), u.GetName())
 }
@@ -507,13 +498,17 @@ type Matcher struct {
 }
 
 type nsCache struct {
-	lock  *sync.RWMutex
+	lock  sync.RWMutex
 	cache map[string]*corev1.Namespace
 }
 
 func (nc *nsCache) Add(key string, object interface{}) error {
 	nc.lock.Lock()
 	defer nc.lock.Unlock()
+
+	if nc.cache == nil {
+		nc.cache = make(map[string]*corev1.Namespace)
+	}
 
 	data, ok := object.(*corev1.Namespace)
 	if !ok {
@@ -524,8 +519,8 @@ func (nc *nsCache) Add(key string, object interface{}) error {
 }
 
 func (nc *nsCache) Get(key string) (interface{}, error) {
-	nc.lock.Lock()
-	defer nc.lock.Unlock()
+	nc.lock.RLock()
+	defer nc.lock.RUnlock()
 
 	ns, ok := nc.cache[key]
 	if !ok {
@@ -537,11 +532,6 @@ func (nc *nsCache) Get(key string) (interface{}, error) {
 func (nc *nsCache) Remove(key string) {
 	nc.lock.Lock()
 	defer nc.lock.Unlock()
-
-	if nc.cache == nil {
-		return
-	}
-
 	delete(nc.cache, key)
 }
 
@@ -553,7 +543,7 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	case gkReview:
 		gkReq = &req
 	default:
-		return false, fmt.Errorf("%w: expect gkReview, got %T", ErrReviewFormat, review)
+		return false, fmt.Errorf("%w: expect %T, got %T", ErrReviewFormat, gkReview{}, review)
 	}
 
 	obj, oldObj, ns, err := gkReviewToObject(gkReq)
