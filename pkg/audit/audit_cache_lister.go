@@ -55,7 +55,7 @@ func listObjects(ctx context.Context, reader client.Reader, gvk schema.GroupVers
 		Items:  []unstructured.Unstructured{},
 	}
 
-	gvk.Kind = gvk.Kind + "List"
+	gvk.Kind += "List"
 	list.SetGroupVersionKind(gvk)
 
 	err := reader.List(ctx, list)
