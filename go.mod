@@ -2,6 +2,8 @@ module github.com/open-policy-agent/gatekeeper
 
 go 1.16
 
+replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20211202192323-5770296d904e // CVE-2021-43565
+
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
@@ -22,7 +24,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	go.opencensus.io v0.22.3
 	go.uber.org/zap v1.15.0
-	golang.org/x/net v0.0.0-20210224082022-3d97a244fca7
+	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	gopkg.in/yaml.v2 v2.4.0
