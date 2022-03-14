@@ -109,16 +109,6 @@ func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) 
 		return true, "", nil, fmt.Errorf("resource %s has no kind", o.GetName())
 	}
 
-	if gvk.Kind == "Namespace" {
-		ns, err := unstructuredToNamespace(o)
-		if err != nil {
-			return true, "", nil, err
-		}
-		if err := h.Add(ns.Name, ns); err != nil {
-			return true, "", nil, err
-		}
-	}
-
 	if o.GetNamespace() == "" {
 		return true, path.Join("cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
 	}
@@ -211,14 +201,6 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.
 	}
 
 	return req, nil
-}
-
-func unstructuredToNamespace(obj *unstructured.Unstructured) (*corev1.Namespace, error) {
-	var ns corev1.Namespace
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &ns); err != nil {
-		return nil, fmt.Errorf("could not convert unstructured to namespace: %s", err)
-	}
-	return &ns, nil
 }
 
 func getString(m map[string]interface{}, k string) (string, error) {
@@ -551,11 +533,6 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 			return false, err
 		}
 		ns = cachedNs
-	} else {
-		err := m.cache.Add(obj.GetNamespace(), ns)
-		if err != nil {
-			return false, err
-		}
 	}
 
 	return matchAny(m, ns, &obj, &oldObj)
