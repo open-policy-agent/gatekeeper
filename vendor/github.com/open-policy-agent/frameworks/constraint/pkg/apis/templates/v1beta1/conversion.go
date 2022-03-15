@@ -17,6 +17,7 @@ package v1beta1
 
 import (
 	apisTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -24,18 +25,38 @@ import (
 )
 
 func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *coreTemplates.Validation, s conversion.Scope) error { //nolint:golint
-	if in.OpenAPIV3Schema != nil {
-		inSchemaCopy := in.OpenAPIV3Schema.DeepCopy()
-		if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
-			return err
-		}
+	inSchema := in.OpenAPIV3Schema
+	// to preserve legacy behavior, allow users to provide arbitrary parameters, regardless of whether the user specified them
+	if inSchema == nil {
+		inSchema = &apiextensionsv1beta1.JSONSchemaProps{}
+	}
 
-		out.OpenAPIV3Schema = new(apiextensions.JSONSchemaProps)
-		if err := apiextensionsv1beta1.Convert_v1beta1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(inSchemaCopy, out.OpenAPIV3Schema, s); err != nil {
+	inSchemaCopy := inSchema.DeepCopy()
+	if err := apisTemplates.AddPreserveUnknownFields(inSchemaCopy); err != nil {
+		return err
+	}
+
+	out.OpenAPIV3Schema = new(apiextensions.JSONSchemaProps)
+	if err := apiextensionsv1beta1.Convert_v1beta1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(inSchemaCopy, out.OpenAPIV3Schema, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+func Convert_v1beta1_CRDSpec_To_templates_CRDSpec(in *CRDSpec, out *templates.CRDSpec, s conversion.Scope) error { //nolint:golint
+	if err := Convert_v1beta1_Names_To_templates_Names(&in.Names, &out.Names, s); err != nil {
+		return err
+	}
+	validation := in.Validation
+	if validation == nil {
+		validation = &Validation{}
+	}
+	{
+		in, out := &validation, &out.Validation
+		*out = new(templates.Validation)
+		if err := Convert_v1beta1_Validation_To_templates_Validation(*in, *out, s); err != nil {
 			return err
 		}
-	} else {
-		out.OpenAPIV3Schema = nil
 	}
 	return nil
 }
