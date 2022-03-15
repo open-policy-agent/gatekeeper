@@ -528,7 +528,7 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	}
 
 	if ns == nil {
-		cachedNs, err := m.cache.Get(obj.GetNamespace())
+		cachedNs, err := m.cache.Get(gkReq.Namespace)
 		if err != nil {
 			return false, err
 		}
