@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"sync"
 	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
@@ -47,10 +48,24 @@ const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-
 
 var _ handler.TargetHandler = &K8sValidationTarget{}
 
-type K8sValidationTarget struct{}
+type K8sValidationTarget struct {
+	cache nsCache
+}
 
 func (h *K8sValidationTarget) GetName() string {
 	return "admission.k8s.gatekeeper.sh"
+}
+
+func (h *K8sValidationTarget) Add(key string, object interface{}) error {
+	ns, ok := object.(*corev1.Namespace)
+	if !ok {
+		return fmt.Errorf("%w: cannot cache type %T", ErrCachingType, object)
+	}
+	return h.cache.Add(key, ns)
+}
+
+func (h *K8sValidationTarget) Remove(key string) {
+	h.cache.Remove(key)
 }
 
 var libTempl = template.Must(template.New("library").Parse(templSrc))
@@ -84,7 +99,7 @@ type unstable struct {
 	Namespace *corev1.Namespace `json:"namespace,omitempty"`
 }
 
-func processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
+func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
 	// Namespace will be "" for cluster objects
 	gvk := o.GetObjectKind().GroupVersionKind()
 	if gvk.Version == "" {
@@ -103,9 +118,9 @@ func processUnstructured(o *unstructured.Unstructured) (bool, string, interface{
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interface{}, error) {
 	switch data := obj.(type) {
 	case unstructured.Unstructured:
-		return processUnstructured(&data)
+		return h.processUnstructured(&data)
 	case *unstructured.Unstructured:
-		return processUnstructured(data)
+		return h.processUnstructured(data)
 	case WipeData, *WipeData:
 		return processWipeData()
 	default:
@@ -444,41 +459,83 @@ func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
 	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 	}
 	if found && obj != nil {
 		match, err := convertToMatch(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCreatingMather, err)
+			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 		}
-		return &Matcher{match}, nil
+		return &Matcher{match, &h.cache}, nil
 	}
-	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMather, u.GetKind(), u.GetName())
+	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMatcher, u.GetKind(), u.GetName())
 }
 
 // Matcher implements constraint.Matcher.
-// TODO: add cache when handler.Cache interface is available.
 type Matcher struct {
 	match *match.Match
+	cache *nsCache
+}
+
+type nsCache struct {
+	lock  sync.RWMutex
+	cache map[string]*corev1.Namespace
+}
+
+func (nc *nsCache) Add(key string, ns *corev1.Namespace) error {
+	nc.lock.Lock()
+	defer nc.lock.Unlock()
+
+	if nc.cache == nil {
+		nc.cache = make(map[string]*corev1.Namespace)
+	}
+
+	nc.cache[key] = ns
+	return nil
+}
+
+func (nc *nsCache) Get(key string) (*corev1.Namespace, error) {
+	nc.lock.RLock()
+	defer nc.lock.RUnlock()
+
+	ns, ok := nc.cache[key]
+	if !ok {
+		return nil, nil
+	}
+	return ns, nil
+}
+
+func (nc *nsCache) Remove(key string) {
+	nc.lock.Lock()
+	defer nc.lock.Unlock()
+	delete(nc.cache, key)
 }
 
 func (m *Matcher) Match(review interface{}) (bool, error) {
+	var gkReq *gkReview
 	switch req := review.(type) {
 	case *gkReview:
-		obj, oldObj, ns, err := gkReviewToObject(req)
-		if err != nil {
-			return false, err
-		}
-		return matchAny(m, ns, &obj, &oldObj)
+		gkReq = req
 	case gkReview:
-		obj, oldObj, ns, err := gkReviewToObject(&req)
+		gkReq = &req
+	default:
+		return false, fmt.Errorf("%w: expect %T, got %T", ErrReviewFormat, gkReview{}, review)
+	}
+
+	obj, oldObj, ns, err := gkReviewToObject(gkReq)
+	if err != nil {
+		return false, err
+	}
+
+	if ns == nil {
+		cachedNs, err := m.cache.Get(gkReq.Namespace)
 		if err != nil {
 			return false, err
 		}
-		return matchAny(m, ns, &obj, &oldObj)
-	default:
-		return false, fmt.Errorf("%w: expect gkReview, got %T", ErrReviewFormat, review)
+		ns = cachedNs
 	}
+
+	return matchAny(m, ns, &obj, &oldObj)
 }
 
 func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
@@ -518,4 +575,7 @@ func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns 
 	return obj, oldObj, req.Unstable.Namespace, nil
 }
 
-var _ constraints.Matcher = &Matcher{}
+var (
+	_ constraints.Matcher = &Matcher{}
+	_ handler.Cache       = &K8sValidationTarget{}
+)
