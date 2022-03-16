@@ -135,7 +135,7 @@ func readSources(filenames []string) ([]*unstructured.Unstructured, error) {
 	var unstrucs []*unstructured.Unstructured
 
 	// read from flags if available
-	us, err := readFiles(filenames)
+	us, err := ReadFiles(filenames)
 	if err != nil {
 		return nil, fmt.Errorf("reading from filenames: %w", err)
 	}
@@ -151,7 +151,7 @@ func readSources(filenames []string) ([]*unstructured.Unstructured, error) {
 	return unstrucs, nil
 }
 
-func readFiles(filenames []string) ([]*unstructured.Unstructured, error) {
+func ReadFiles(filenames []string) ([]*unstructured.Unstructured, error) {
 	var unstrucs []*unstructured.Unstructured
 
 	// verify that the filenames aren't themselves disallowed extensions.  This
