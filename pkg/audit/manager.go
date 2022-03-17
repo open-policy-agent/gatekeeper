@@ -324,13 +324,19 @@ func (am *Manager) auditResources(
 							continue
 						}
 						for _, kk := range kindsKind {
-							if kk.(string) == "" || kk.(string) == "*" {
+							kks, ok := kk.(string)
+							if !ok {
+								am.log.Error(errors.New("could not cast kind as string"), "kind", kk)
+								continue
+							}
+
+							if kks == "" || kks == "*" {
 								// no need to continue, all kinds are included
 								matchedKinds["*"] = true
 								break constraintsLoop
 							}
 							// adding constraint match kind to matchedKinds list
-							matchedKinds[kk.(string)] = true
+							matchedKinds[kks] = true
 						}
 					}
 				} else {
