@@ -486,11 +486,18 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	}
 
 	if ns == nil {
-		cachedNs, err := m.cache.GetNamespace(gkReq.Namespace)
-		if err != nil {
-			return false, err
+		isNamespace := (obj != nil && match.IsNamespace(obj)) || (oldObj != nil && match.IsNamespace(oldObj))
+		if isNamespace {
+			ns, err = m.cache.GetNamespace(obj.GetName())
+			if err != nil {
+				return false, err
+			}
+		} else if gkReq.Namespace != "" {
+			ns, err = m.cache.GetNamespace(gkReq.Namespace)
+			if err != nil {
+				return false, err
+			}
 		}
-		ns = cachedNs
 	}
 
 	return matchAny(m, ns, obj, oldObj)

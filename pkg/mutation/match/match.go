@@ -9,7 +9,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -94,7 +93,7 @@ type Kinds struct {
 // Matches verifies if the given object belonging to the given namespace
 // matches the current mutator.
 func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
-	if isNamespace(obj) && ns == nil {
+	if IsNamespace(obj) && ns == nil {
 		return false, errors.New("invalid call to Matches(), ns must not be nil for Namespace objects")
 	}
 
@@ -136,7 +135,7 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 		return false, fmt.Errorf("namespace selector but missing Namespace")
 	}
 
-	clusterScoped := ns == nil || isNamespace(obj)
+	clusterScoped := ns == nil || IsNamespace(obj)
 
 	selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
 	if err != nil {
@@ -144,7 +143,7 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 	}
 
 	switch {
-	case isNamespace(obj): // if the object is a namespace, namespace selector matches against the object
+	case IsNamespace(obj): // if the object is a namespace, namespace selector matches against the object
 		return selector.Matches(labels.Set(obj.GetLabels())), nil
 	case clusterScoped:
 		return true, nil
@@ -267,7 +266,7 @@ func namesMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, err
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	switch match.Scope {
 	case apiextensionsv1.ClusterScoped:
-		return (ns == nil || isNamespace(obj)) && obj.GetNamespace() == "", nil
+		return (ns == nil || IsNamespace(obj)) && obj.GetNamespace() == "", nil
 	case apiextensionsv1.NamespaceScoped:
 		return (ns != nil) || obj.GetNamespace() != "", nil
 	default:
@@ -276,7 +275,7 @@ func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.
-func AppliesTo(applyTo []ApplyTo, obj runtime.Object) bool {
+func AppliesTo(applyTo []ApplyTo, obj client.Object) bool {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	for _, apply := range applyTo {
 		matchesGroup := false
@@ -310,7 +309,11 @@ func AppliesTo(applyTo []ApplyTo, obj runtime.Object) bool {
 	return false
 }
 
-func isNamespace(obj runtime.Object) bool {
+func IsNamespace(obj client.Object) bool {
+	if obj == nil {
+		return false
+	}
+
 	return obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" &&
 		obj.GetObjectKind().GroupVersionKind().Group == ""
 }

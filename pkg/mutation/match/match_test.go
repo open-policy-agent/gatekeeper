@@ -8,7 +8,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -277,8 +276,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname: "label selector",
 			toMatch: makeObject("kind", "group", "", "name", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
@@ -301,8 +299,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname: "label selector not matching",
 			toMatch: makeObject("kind", "group", "", "name", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
@@ -399,8 +396,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname: "namespace selector is applied to the object, if the object is a namespace",
 			toMatch: makeNamespace("namespace", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
@@ -417,8 +413,7 @@ func TestMatch(t *testing.T) {
 		{
 			tname: "namespace selector is applied to the namespace, and does not match",
 			toMatch: makeNamespace("namespace", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),

@@ -6,9 +6,7 @@ import (
 
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Process indicates the Gatekeeper component from which the resource will be excluded.
@@ -87,20 +85,15 @@ func (s *Excluder) Equals(new *Excluder) bool {
 	return reflect.DeepEqual(s.excludedNamespaces, new.excludedNamespaces)
 }
 
-func (s *Excluder) IsNamespaceExcluded(process Process, obj runtime.Object) (bool, error) {
+func (s *Excluder) IsNamespaceExcluded(process Process, obj client.Object) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 
-	meta, err := meta.Accessor(obj)
-	if err != nil {
-		return false, errors.Wrapf(err, "Failed to get accessor for %s - %s", obj.GetObjectKind().GroupVersionKind().Group, obj.GetObjectKind().GroupVersionKind().Kind)
-	}
-
 	if obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" && obj.GetObjectKind().GroupVersionKind().Group == "" {
-		return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetName()), nil
+		return exactOrWildcardMatch(s.excludedNamespaces[process], obj.GetName()), nil
 	}
 
-	return exactOrWildcardMatch(s.excludedNamespaces[process], meta.GetNamespace()), nil
+	return exactOrWildcardMatch(s.excludedNamespaces[process], obj.GetNamespace()), nil
 }
 
 func exactOrWildcardMatch(boolMap map[util.Wildcard]bool, ns string) bool {
