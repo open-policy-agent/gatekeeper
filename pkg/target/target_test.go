@@ -622,7 +622,7 @@ func TestNamespaceCache(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		addNs    []interface{}
+		addNs    []*unstructured.Unstructured
 		removeNs []string
 		checkNs  []wantNs
 		wantErr  error
@@ -641,7 +641,7 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "retrieving a namespace that does not exist returns nil",
-			addNs: []interface{}{
+			addNs: []*unstructured.Unstructured{
 				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
 			},
 			checkNs: []wantNs{
@@ -660,7 +660,7 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "retrieving an added namespace returns the namespace",
-			addNs: []interface{}{
+			addNs: []*unstructured.Unstructured{
 				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
 				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
@@ -680,7 +680,7 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "adding a non-namespace type returns error",
-			addNs: []interface{}{
+			addNs: []*unstructured.Unstructured{
 				fooConstraint(),
 				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
@@ -695,7 +695,7 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "removing a namespace returns nil when retrieving",
-			addNs: []interface{}{
+			addNs: []*unstructured.Unstructured{
 				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
 				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
@@ -725,7 +725,7 @@ func TestNamespaceCache(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				err = target.Add(key, ns)
+				err = target.GetCache().Add(key, ns.Object)
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("Add() error = %v, wantErr = %v", err, tt.wantErr)
 				}
@@ -738,7 +738,7 @@ func TestNamespaceCache(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				target.Remove(key)
+				target.GetCache().Remove(key)
 			}
 
 			wantCount := 0
@@ -748,13 +748,7 @@ func TestNamespaceCache(t *testing.T) {
 					wantCount++
 				}
 
-				ns := makeResource("", "Namespace", want.namespace)
-				_, key, _, err := target.ProcessData(ns)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				got, err := target.cache.Get(key.String())
+				got, err := target.cache.GetNamespace(want.namespace)
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
 				}

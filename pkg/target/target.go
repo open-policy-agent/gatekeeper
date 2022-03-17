@@ -58,30 +58,6 @@ func (h *K8sValidationTarget) GetName() string {
 	return Name
 }
 
-func (h *K8sValidationTarget) Add(key storage.Path, object interface{}) error {
-	obj, ok := object.(*unstructured.Unstructured)
-	if !ok {
-		return fmt.Errorf("%w: cannot cache type %T, want %T", ErrCachingType, object, &unstructured.Unstructured{})
-	}
-
-	nsType := schema.GroupKind{Kind: "Namespace"}
-	if obj.GroupVersionKind().GroupKind() != nsType {
-		return nil
-	}
-
-	ns := &corev1.Namespace{}
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, ns)
-	if err != nil {
-		return fmt.Errorf("%w: cannot cache Namespace: %v", ErrCachingType, ns)
-	}
-
-	return h.cache.Add(key.String(), ns)
-}
-
-func (h *K8sValidationTarget) Remove(key storage.Path) {
-	h.cache.Remove(key.String())
-}
-
 var libTempl = template.Must(template.New("library").Parse(templSrc))
 
 func (h *K8sValidationTarget) Library() *template.Template {
@@ -125,12 +101,20 @@ func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) 
 
 	var path []string
 	if o.GetNamespace() == "" {
-		path = []string{"cluster", gvk.GroupVersion().String(), gvk.Kind, o.GetName()}
+		path = clusterScopedKey(gvk, o.GetName())
 	} else {
-		path = []string{"namespace", o.GetNamespace(), gvk.GroupVersion().String(), gvk.Kind, o.GetName()}
+		path = namespaceScopedKey(o.GetNamespace(), gvk, o.GetName())
 	}
 
 	return true, path, o.Object, nil
+}
+
+func clusterScopedKey(gvk schema.GroupVersionKind, name string) storage.Path {
+	return []string{"cluster", gvk.GroupVersion().String(), gvk.Kind, name}
+}
+
+func namespaceScopedKey(namespace string, gvk schema.GroupVersionKind, name string) storage.Path {
+	return []string{"namespace", namespace, gvk.GroupVersion().String(), gvk.Kind, name}
 }
 
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, interface{}, error) {
@@ -413,6 +397,10 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 	return &Matcher{}, nil
 }
 
+func (h *K8sValidationTarget) GetCache() handler.Cache {
+	return &h.cache
+}
+
 // Matcher implements constraint.Matcher.
 type Matcher struct {
 	match *match.Match
@@ -424,33 +412,61 @@ type nsCache struct {
 	cache map[string]*corev1.Namespace
 }
 
-func (nc *nsCache) Add(key string, ns *corev1.Namespace) error {
-	nc.lock.Lock()
-	defer nc.lock.Unlock()
-
-	if nc.cache == nil {
-		nc.cache = make(map[string]*corev1.Namespace)
+func (c *nsCache) Add(key storage.Path, object interface{}) error {
+	obj, ok := object.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("%w: cannot cache type %T, want %T", ErrCachingType, object, map[string]interface{}{})
 	}
 
-	nc.cache[key] = ns
+	u := &unstructured.Unstructured{Object: obj}
+
+	nsType := schema.GroupKind{Kind: "Namespace"}
+	if u.GroupVersionKind().GroupKind() != nsType {
+		return nil
+	}
+
+	ns := &corev1.Namespace{}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, ns)
+	if err != nil {
+		return fmt.Errorf("%w: cannot cache Namespace: %v", ErrCachingType, ns)
+	}
+
+	return c.AddNamespace(key.String(), ns)
+}
+
+func (c *nsCache) AddNamespace(key string, ns *corev1.Namespace) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.cache == nil {
+		c.cache = make(map[string]*corev1.Namespace)
+	}
+
+	c.cache[key] = ns
 	return nil
 }
 
-func (nc *nsCache) Get(key string) (*corev1.Namespace, error) {
-	nc.lock.RLock()
-	defer nc.lock.RUnlock()
+func (c *nsCache) GetNamespace(name string) (*corev1.Namespace, error) {
+	key := clusterScopedKey(corev1.SchemeGroupVersion.WithKind("Namespace"), name)
 
-	ns, ok := nc.cache[key]
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	ns, ok := c.cache[key.String()]
 	if !ok {
 		return nil, nil
 	}
 	return ns, nil
 }
 
-func (nc *nsCache) Remove(key string) {
-	nc.lock.Lock()
-	defer nc.lock.Unlock()
-	delete(nc.cache, key)
+func (c *nsCache) Remove(key storage.Path) {
+	c.RemoveNamespace(key.String())
+}
+
+func (c *nsCache) RemoveNamespace(key string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.cache, key)
 }
 
 func (m *Matcher) Match(review interface{}) (bool, error) {
@@ -470,7 +486,7 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 	}
 
 	if ns == nil {
-		cachedNs, err := m.cache.Get(gkReq.Namespace)
+		cachedNs, err := m.cache.GetNamespace(gkReq.Namespace)
 		if err != nil {
 			return false, err
 		}
@@ -528,5 +544,6 @@ func gkReviewToObject(req *gkReview) (*unstructured.Unstructured, *unstructured.
 
 var (
 	_ constraints.Matcher = &Matcher{}
-	_ handler.Cache       = &K8sValidationTarget{}
+	_ handler.Cache       = &nsCache{}
+	_ handler.Cacher      = &K8sValidationTarget{}
 )

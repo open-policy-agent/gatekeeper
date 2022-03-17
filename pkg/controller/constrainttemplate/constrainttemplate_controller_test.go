@@ -269,8 +269,8 @@ func TestReconcile(t *testing.T) {
 
 		gotResults := resp.Results()
 		if len(gotResults) != 1 {
-			fmt.Println(resp.TraceDump())
-			fmt.Println(opaClient.Dump(ctx))
+			t.Log(resp.TraceDump())
+			t.Log(opaClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
 		}
 	})
@@ -459,8 +459,8 @@ func TestReconcile(t *testing.T) {
 
 		gotResults := resp.Results()
 		if len(resp.Results()) != 0 {
-			fmt.Println(resp.TraceDump())
-			fmt.Println(opaClient.Dump(ctx))
+			t.Log(resp.TraceDump())
+			t.Log(opaClient.Dump(ctx))
 			t.Fatalf("did not get 0 results: %v", gotResults)
 		}
 

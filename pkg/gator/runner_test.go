@@ -784,6 +784,60 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "namespace selector",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "namespace selected Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "selected",
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "not-selected",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Inventory:  []string{"inventory-2.yaml"},
+					}, {
+						Name:       "missing-namespace",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("missing Namespace")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNamespaceSelector),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectNamespaceScope),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NamespaceSelected),
+				},
+				"inventory-2.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NamespaceNotSelected),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "namespace selected Constraint",
+					CaseResults: []CaseResult{{
+						Name: "selected",
+					}, {
+						Name: "not-selected",
+					}, {
+						Name: "missing-namespace",
+					}},
+				}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -132,6 +132,10 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 		return true, nil
 	}
 
+	if obj.GetNamespace() != "" && ns == nil {
+		return false, fmt.Errorf("namespace selector but missing Namespace")
+	}
+
 	clusterScoped := ns == nil || isNamespace(obj)
 
 	selector, err := metav1.LabelSelectorAsSelector(match.NamespaceSelector)
@@ -205,7 +209,6 @@ func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (boo
 
 	for _, n := range match.Namespaces {
 		if n.Matches(namespace) {
-			fmt.Println(namespace)
 			return true, nil
 		}
 	}
