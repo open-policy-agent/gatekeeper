@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -58,10 +59,22 @@ func (h *K8sValidationTarget) GetName() string {
 }
 
 func (h *K8sValidationTarget) Add(key storage.Path, object interface{}) error {
-	ns, ok := object.(*corev1.Namespace)
+	obj, ok := object.(*unstructured.Unstructured)
 	if !ok {
-		return fmt.Errorf("%w: cannot cache type %T", ErrCachingType, object)
+		return fmt.Errorf("%w: cannot cache type %T, want %T", ErrCachingType, object, &unstructured.Unstructured{})
 	}
+
+	nsType := schema.GroupKind{Kind: "Namespace"}
+	if obj.GroupVersionKind().GroupKind() != nsType {
+		return nil
+	}
+
+	ns := &corev1.Namespace{}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, ns)
+	if err != nil {
+		return fmt.Errorf("%w: cannot cache Namespace: %v", ErrCachingType, ns)
+	}
+
 	return h.cache.Add(key.String(), ns)
 }
 

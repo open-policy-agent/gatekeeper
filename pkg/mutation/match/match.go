@@ -2,6 +2,7 @@ package match
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -148,7 +149,7 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 	return selector.Matches(labels.Set(ns.Labels)), nil
 }
 
-func labelSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func labelSelectorMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
 	if match.LabelSelector == nil {
 		return true, nil
 	}
@@ -163,12 +164,21 @@ func labelSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (
 
 func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	// If we don't have a namespace, we can't disqualify the match
-	if ns == nil {
+	var namespace string
+
+	switch {
+	case ns != nil:
+		namespace = ns.Name
+	case obj.GetNamespace() != "":
+		// Fall back to the Namespace the Object declares in case it isn't specified,
+		// such as for the gator CLI.
+		namespace = obj.GetNamespace()
+	default:
 		return true, nil
 	}
 
 	for _, n := range match.ExcludedNamespaces {
-		if n.Matches(ns.Name) {
+		if n.Matches(namespace) {
 			return false, nil
 		}
 	}
@@ -178,24 +188,32 @@ func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespa
 
 func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
 	// If we don't have a namespace, we can't disqualify the match
-	if ns == nil {
+	var namespace string
+
+	switch {
+	case len(match.Namespaces) == 0:
+		return true, nil
+	case ns != nil:
+		namespace = ns.Name
+	case obj.GetNamespace() != "":
+		// Fall back to the Namespace the Object declares in case it isn't specified,
+		// such as for the gator CLI.
+		namespace = obj.GetNamespace()
+	default:
 		return true, nil
 	}
 
 	for _, n := range match.Namespaces {
-		if n.Matches(ns.Name) {
+		if n.Matches(namespace) {
+			fmt.Println(namespace)
 			return true, nil
 		}
 	}
 
-	if len(match.Namespaces) > 0 {
-		return false, nil
-	}
-
-	return true, nil
+	return false, nil
 }
 
-func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func kindsMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
 	if len(match.Kinds) == 0 {
 		return true, nil
 	}
@@ -232,7 +250,7 @@ func kindsMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	return false, nil
 }
 
-func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func namesMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
 	// A blank string could be undefined or an intentional blank string by the user.  Either way,
 	// we will assume this means "any name".  This goes with the undefined == match everything
 	// pattern that we've already got going in the Match.
@@ -244,19 +262,14 @@ func namesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 }
 
 func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
-	clusterScoped := ns == nil || isNamespace(obj)
-
-	if match.Scope == apiextensionsv1.ClusterScoped &&
-		!clusterScoped {
-		return false, nil
+	switch match.Scope {
+	case apiextensionsv1.ClusterScoped:
+		return (ns == nil || isNamespace(obj)) && obj.GetNamespace() == "", nil
+	case apiextensionsv1.NamespaceScoped:
+		return (ns != nil) || obj.GetNamespace() != "", nil
+	default:
+		return true, nil
 	}
-
-	if match.Scope == apiextensionsv1.NamespaceScoped &&
-		clusterScoped {
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // AppliesTo checks if any item the given slice of ApplyTo applies to the given object.

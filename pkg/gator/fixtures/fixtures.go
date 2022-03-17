@@ -152,6 +152,26 @@ spec:
     excludedNamespaces: ["excluded"]
 `
 
+	ConstraintIncludedNamespace = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    namespaces: ["included"]
+`
+
+	ConstraintClusterScope = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    scope: "Cluster"
+`
+
 	ConstraintNeverValidate = `
 kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -212,6 +232,21 @@ apiVersion: group.sh/v1
 metadata:
   name: object
   namespace: excluded
+`
+
+	ObjectNamespaceScope = `
+kind: Object
+apiVersion: group.sh/v1
+metadata:
+  name: object
+  namespace: foo
+`
+
+	ObjectClusterScope = `
+kind: Object
+apiVersion: group.sh/v1
+metadata:
+  name: object
 `
 
 	ObjectInvalid = `

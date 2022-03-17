@@ -13,10 +13,10 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,8 +26,12 @@ import (
 
 func TestFrameworkInjection(t *testing.T) {
 	target := &K8sValidationTarget{}
-	driver := local.New(local.Tracing(true))
-	_, err := constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = constraintclient.NewClient(constraintclient.Targets(target), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
 	}
@@ -277,127 +281,27 @@ func TestValidateConstraint(t *testing.T) {
 	}
 }
 
-func TestHandleViolation(t *testing.T) {
-	tc := []struct {
-		Name          string
-		Review        string
-		ErrorExpected bool
-		ExpectedObj   string
-	}{
-		{
-			Name: "Valid Review",
-			Review: `
-{
-	"kind": {
-		"group": "myGroup",
-		"version": "v1",
-		"kind": "MyKind"
-	},
-	"name": "somename",
-	"operation": "CREATE",
-	"object": {
-		"metadata": {"name": "somename"},
-		"spec": {"value": "yep"}
-	}
-}
-`,
-			ExpectedObj: `
-{
-	"apiVersion": "myGroup/v1",
-	"kind": "MyKind",
-	"metadata": {"name": "somename"},
-	"spec": {"value": "yep"}
-}
-`,
-		},
-		{
-			Name: "Valid Review (No Group)",
-			Review: `
-{
-	"kind": {
-		"group": "",
-		"version": "v1",
-		"kind": "MyKind"
-	},
-	"name": "somename",
-	"operation": "CREATE",
-	"object": {
-		"metadata": {"name": "somename"},
-		"spec": {"value": "yep"}
-	}
-}
-`,
-			ExpectedObj: `
-{
-	"apiVersion": "v1",
-	"kind": "MyKind",
-	"metadata": {"name": "somename"},
-	"spec": {"value": "yep"}
-}
-`,
-		},
-		{
-			Name:          "No Review",
-			Review:        `["list is wrong"]`,
-			ErrorExpected: true,
-		},
-	}
-	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
-			r := &types.Result{}
-			var i interface{}
-			err := json.Unmarshal([]byte(tt.Review), &i)
-			if err != nil {
-				t.Fatalf("Error parsing result: %s", err)
-			}
-			r.Review = i
-			h := &K8sValidationTarget{}
-			err = h.HandleViolation(r)
-			if err != nil && !tt.ErrorExpected {
-				t.Errorf("err = %s; want nil", err)
-			}
-			if err == nil && tt.ErrorExpected {
-				t.Error("err = nil; want non-nil")
-			}
-			if tt.ExpectedObj != "" {
-				expected := &unstructured.Unstructured{}
-				err = json.Unmarshal([]byte(tt.ExpectedObj), expected)
-				if err != nil {
-					t.Fatalf("Error parsing expected obj: %s", err)
-				}
-				if !reflect.DeepEqual(r.Resource, expected) {
-					t.Errorf("result.Resource = %s; wanted %s", spew.Sdump(r.Resource), spew.Sdump(expected))
-				}
-			}
-		})
-	}
-}
-
 func TestProcessData(t *testing.T) {
 	tc := []struct {
 		Name          string
 		JSON          string
 		ErrorExpected bool
-		ExpectedPath  string
+		ExpectedPath  storage.Path
 	}{
 		{
 			Name:         "Cluster Object",
 			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-			ExpectedPath: "cluster/v1beta1/Rock/myrock",
+			ExpectedPath: []string{"cluster", "v1beta1", "Rock", "myrock"},
 		},
 		{
 			Name:         "Namespace Object",
 			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
-			ExpectedPath: "namespace/foo/v1beta1/Rock/myrock",
+			ExpectedPath: []string{"namespace", "foo", "v1beta1", "Rock", "myrock"},
 		},
 		{
 			Name:         "Grouped Object",
 			JSON:         `{"apiVersion": "mygroup/v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-<<<<<<< HEAD
-			ExpectedPath: "cluster/mygroup%2Fv1beta1/Rock/myrock",
-=======
 			ExpectedPath: []string{"cluster", "mygroup/v1beta1", "Rock", "myrock"},
->>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
 			Name:          "No Version",
@@ -418,8 +322,8 @@ func TestProcessData(t *testing.T) {
 				t.Errorf("handled = false; want true")
 			}
 			if !tt.ErrorExpected {
-				if path != tt.ExpectedPath {
-					t.Errorf("path = %s; want %s", path, tt.ExpectedPath)
+				if diff := cmp.Diff(path, tt.ExpectedPath); diff != "" {
+					t.Error(diff)
 				}
 				if !reflect.DeepEqual(data, o.Object) {
 					t.Errorf(cmp.Diff(data, o.Object))
@@ -428,8 +332,8 @@ func TestProcessData(t *testing.T) {
 					t.Errorf("err = %s; want nil", err)
 				}
 			} else {
-				if path != "" {
-					t.Errorf("path = %s; want empty string", path)
+				if len(path) != 0 {
+					t.Errorf("path = %s; want empty", path)
 				}
 				if data != nil {
 					t.Errorf("data = %v; want nil", spew.Sdump(data))
@@ -494,7 +398,8 @@ func TestToMatcher(t *testing.T) {
 		{
 			name:       "constraint with no match fields",
 			constraint: makeConstraint(),
-			wantErr:    ErrCreatingMatcher,
+			want:       &Matcher{},
+			wantErr:    nil,
 		},
 		{
 			name:       "constraint with match fields",
@@ -520,16 +425,17 @@ func TestToMatcher(t *testing.T) {
 			h := &K8sValidationTarget{}
 			got, err := h.ToMatcher(tt.constraint)
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("got ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+
 			opts := []cmp.Option{
 				// Since nsCache is lazy-instantiated and this test isn't concerned
 				// about caching functionality, we do not compare the cache
 				cmpopts.IgnoreTypes(sync.RWMutex{}, nsCache{}),
 				cmp.AllowUnexported(Matcher{}),
 			}
-			if diff := cmp.Diff(got, tt.want, opts...); diff != "" {
+			if diff := cmp.Diff(tt.want, got, opts...); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -537,17 +443,17 @@ func TestToMatcher(t *testing.T) {
 }
 
 func matchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("some", "Thing", map[string]string{"obj": "label"}).Object)
+	objData, _ := json.Marshal(makeResource("some", "Thing", "foo", map[string]string{"obj": "label"}).Object)
 	return objData
 }
 
 func unmatchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("another", "thing").Object)
+	objData, _ := json.Marshal(makeResource("another", "thing", "foo").Object)
 	return objData
 }
 
 func TestMatcher_Match(t *testing.T) {
-	nsData, _ := json.Marshal(makeResource("", "Namespace").Object)
+	nsData, _ := json.Marshal(makeResource("", "Namespace", "foo").Object)
 
 	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
 	tests := []struct {
@@ -558,11 +464,6 @@ func TestMatcher_Match(t *testing.T) {
 		want    bool
 	}{
 		{
-<<<<<<< HEAD
-			name:    "AdmissionRequest not supported",
-			req:     admissionv1.AdmissionRequest{},
-			wantErr: ErrReviewFormat,
-=======
 			name: "AdmissionRequest supported",
 			req: admissionv1.AdmissionRequest{
 				Object: runtime.RawExtension{Raw: matchedRawData()},
@@ -570,18 +471,13 @@ func TestMatcher_Match(t *testing.T) {
 			match:   fooMatch(),
 			want:    false,
 			wantErr: nil,
->>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
 			name:    "unstructured.Unstructured supported",
-			req:     makeResource("some", "Thing"),
-<<<<<<< HEAD
-			wantErr: ErrReviewFormat,
-=======
+			req:     makeResource("some", "Thing", "foo"),
 			match:   fooMatch(),
 			want:    false,
 			wantErr: nil,
->>>>>>> 03a984ae (Fix all but one test)
 		},
 		{
 			name: "Raw object doesn't unmarshal",
@@ -591,6 +487,7 @@ func TestMatcher_Match(t *testing.T) {
 					"key": "Some invalid json",
 				}},
 			},
+			match:   fooMatch(),
 			wantErr: ErrRequestObject,
 		},
 		{
@@ -618,7 +515,7 @@ func TestMatcher_Match(t *testing.T) {
 			name: "AugmentedUnstructured is supported",
 			req: &AugmentedUnstructured{
 				Namespace: ns,
-				Object:    *makeResource("some", "Thing", map[string]string{"obj": "label"}),
+				Object:    *makeResource("some", "Thing", "foo", map[string]string{"obj": "label"}),
 			},
 			match: fooMatch(),
 			want:  true,
@@ -703,6 +600,7 @@ func TestMatcher_Match(t *testing.T) {
 			if !handled || err != nil {
 				t.Fatalf("failed to handle review %v", err)
 			}
+
 			got, err := m.Match(review)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
@@ -717,24 +615,24 @@ func TestMatcher_Match(t *testing.T) {
 
 func TestNamespaceCache(t *testing.T) {
 	type wantNs struct {
-		key         string
+		namespace   string
 		ns          *corev1.Namespace
 		shouldExist bool
 	}
 
 	tests := []struct {
 		name     string
-		addNs    map[string]interface{}
+		addNs    []interface{}
 		removeNs []string
 		checkNs  []wantNs
 		wantErr  error
 	}{
 		{
 			name:  "retrieving a namespace from empty cache returns nil",
-			addNs: map[string]interface{}{},
+			addNs: nil,
 			checkNs: []wantNs{
 				{
-					key:         "my-ns1",
+					namespace:   "my-ns1",
 					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
 					shouldExist: false,
 				},
@@ -743,17 +641,17 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "retrieving a namespace that does not exist returns nil",
-			addNs: map[string]interface{}{
-				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+			addNs: []interface{}{
+				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
 			},
 			checkNs: []wantNs{
 				{
-					key:         "my-ns1",
+					namespace:   "my-ns1",
 					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
 					shouldExist: true,
 				},
 				{
-					key:         "my-ns2",
+					namespace:   "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
 					shouldExist: false,
 				},
@@ -762,18 +660,18 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "retrieving an added namespace returns the namespace",
-			addNs: map[string]interface{}{
-				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
-				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			addNs: []interface{}{
+				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
+				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			checkNs: []wantNs{
 				{
-					key:         "my-ns1",
+					namespace:   "my-ns1",
 					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
 					shouldExist: true,
 				},
 				{
-					key:         "my-ns2",
+					namespace:   "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
 					shouldExist: true,
 				},
@@ -782,13 +680,13 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "adding a non-namespace type returns error",
-			addNs: map[string]interface{}{
-				"my-ns1": fooConstraint(),
-				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			addNs: []interface{}{
+				fooConstraint(),
+				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			checkNs: []wantNs{
 				{
-					key:         "my-ns2",
+					namespace:   "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
 					shouldExist: true,
 				},
@@ -797,19 +695,19 @@ func TestNamespaceCache(t *testing.T) {
 		},
 		{
 			name: "removing a namespace returns nil when retrieving",
-			addNs: map[string]interface{}{
-				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
-				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			addNs: []interface{}{
+				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
+				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			removeNs: []string{"my-ns1"},
 			checkNs: []wantNs{
 				{
-					key:         "my-ns1",
+					namespace:   "my-ns1",
 					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
 					shouldExist: false,
 				},
 				{
-					key:         "my-ns2",
+					namespace:   "my-ns2",
 					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
 					shouldExist: true,
 				},
@@ -821,14 +719,25 @@ func TestNamespaceCache(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			target := &K8sValidationTarget{}
 
-			for key, ns := range tt.addNs {
-				err := target.Add(key, ns)
+			for _, ns := range tt.addNs {
+				_, key, _, err := target.ProcessData(ns)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				err = target.Add(key, ns)
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("Add() error = %v, wantErr = %v", err, tt.wantErr)
 				}
 			}
 
-			for _, key := range tt.removeNs {
+			for _, name := range tt.removeNs {
+				ns := makeResource("", "Namespace", name)
+				_, key, _, err := target.ProcessData(ns)
+				if err != nil {
+					t.Fatal(err)
+				}
+
 				target.Remove(key)
 			}
 
@@ -839,13 +748,21 @@ func TestNamespaceCache(t *testing.T) {
 					wantCount++
 				}
 
-				got, err := target.cache.Get(want.key)
+				ns := makeResource("", "Namespace", want.namespace)
+				_, key, _, err := target.ProcessData(ns)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				got, err := target.cache.Get(key.String())
 				if err != nil && !errors.Is(err, tt.wantErr) {
 					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
 				}
+
 				if !want.shouldExist && got == nil {
 					continue
 				}
+
 				if diff := cmp.Diff(got, want.ns); diff != "" {
 					t.Errorf("+got -want:\n%s", diff)
 				}
