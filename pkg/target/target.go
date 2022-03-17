@@ -147,6 +147,11 @@ func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, 
 }
 
 func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, error) {
+	return h.handleReview(obj)
+}
+
+// handleReview returns a complete *gkReview to pass to the Client.
+func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, error) {
 	var err error
 	var review *gkReview
 
@@ -454,14 +459,9 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		return true, nil
 	}
 
-	var gkReq *gkReview
-	switch req := review.(type) {
-	case *gkReview:
-		gkReq = req
-	case gkReview:
-		gkReq = &req
-	default:
-		return false, fmt.Errorf("%w: expect %T, got %T", ErrReviewFormat, gkReview{}, review)
+	gkReq, ok := review.(*gkReview)
+	if !ok {
+		return false, fmt.Errorf("%w: expect %T, got %T", ErrReviewFormat, &gkReview{}, review)
 	}
 
 	obj, oldObj, ns, err := gkReviewToObject(gkReq)
@@ -477,13 +477,13 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		ns = cachedNs
 	}
 
-	return matchAny(m, ns, &obj, &oldObj)
+	return matchAny(m, ns, obj, oldObj)
 }
 
 func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
 	nilObj := 0
 	for _, obj := range objs {
-		if obj.Object == nil {
+		if obj == nil || obj.Object == nil {
 			nilObj++
 			continue
 		}
@@ -497,23 +497,29 @@ func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructur
 			return true, nil
 		}
 	}
+
 	if nilObj == len(objs) {
 		return false, fmt.Errorf("%w: neither object nor old object are defined", ErrRequestObject)
 	}
 	return false, nil
 }
 
-func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns *corev1.Namespace, err error) {
+func gkReviewToObject(req *gkReview) (*unstructured.Unstructured, *unstructured.Unstructured, *corev1.Namespace, error) {
+	var obj *unstructured.Unstructured
 	if req.Object.Raw != nil {
-		err = obj.UnmarshalJSON(req.Object.Raw)
+		obj = &unstructured.Unstructured{}
+		err := obj.UnmarshalJSON(req.Object.Raw)
 		if err != nil {
-			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview object %s", ErrRequestObject, string(req.Object.Raw))
+			return nil, nil, nil, fmt.Errorf("%w: failed to unmarshal gkReview object %s", ErrRequestObject, string(req.Object.Raw))
 		}
 	}
+
+	var oldObj *unstructured.Unstructured
 	if req.OldObject.Raw != nil {
-		err = oldObj.UnmarshalJSON(req.OldObject.Raw)
+		oldObj = &unstructured.Unstructured{}
+		err := oldObj.UnmarshalJSON(req.OldObject.Raw)
 		if err != nil {
-			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.Object.Raw))
+			return nil, nil, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.OldObject.Raw))
 		}
 	}
 
