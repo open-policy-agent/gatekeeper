@@ -77,12 +77,6 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		}
 	}
 
-	out, err := driver.Dump(ctx)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println(out)
-
 	// now audit all objects
 	responses := &types.Responses{
 		ByTarget: make(map[string]*types.Response),
