@@ -243,7 +243,8 @@ func (am *Manager) auditResources(
 	updateLists map[util.KindVersionResource][]auditResult,
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
-	timestamp string) error {
+	timestamp string,
+) error {
 	// delete all from cache dir before starting audit
 	err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 	if err != nil {
@@ -443,7 +444,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 	updateLists map[util.KindVersionResource][]auditResult,
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
-	timestamp string) error {
+	timestamp string,
+) error {
 	var errs []error
 	for i := 0; i < folderCount; i++ {
 		// cache directory structure:
@@ -622,7 +624,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	res []*constraintTypes.Result,
 	totalViolationsPerConstraint map[util.KindVersionResource]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
-	timestamp string) error {
+	timestamp string,
+) error {
 	for _, r := range res {
 		key := util.GetUniqueKey(*r.Constraint)
 		totalViolationsPerConstraint[key]++
@@ -921,7 +924,8 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}) {
+	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{},
+) {
 	l.Info(
 		message,
 		logging.Details, details,
@@ -942,7 +946,8 @@ func logViolation(l logr.Logger,
 
 func emitEvent(constraint *unstructured.Unstructured,
 	timestamp, enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
-	eventRecorder record.EventRecorder) {
+	eventRecorder record.EventRecorder,
+) {
 	annotations := map[string]string{
 		"process":                    "audit",
 		"auditTimestamp":             timestamp,

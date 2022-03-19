@@ -105,9 +105,17 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 
 	switch o := obj.(type) {
 	case *fakeMutatorObject:
-		*o = *got.object.(*fakeMutatorObject)
+		mo, ok := got.object.(*fakeMutatorObject)
+		if !ok {
+			return fmt.Errorf("got got.object type %T, want %T", got.object, fakeMutatorObject{})
+		}
+		*o = *mo
 	case *statusv1beta1.MutatorPodStatus:
-		*o = *got.object.(*statusv1beta1.MutatorPodStatus)
+		mo, ok := got.object.(*statusv1beta1.MutatorPodStatus)
+		if !ok {
+			return fmt.Errorf("got got.object type %T, want %T", got.object, statusv1beta1.MutatorPodStatus{})
+		}
+		*o = *mo
 	default:
 		return fmt.Errorf("unrecognized type %T", obj)
 	}

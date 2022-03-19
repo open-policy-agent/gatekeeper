@@ -102,7 +102,8 @@ func setupController(
 	wm *watch.Manager,
 	opa *constraintclient.Client,
 	mutationSystem *mutation.System,
-	providerCache *frameworksexternaldata.ProviderCache) error {
+	providerCache *frameworksexternaldata.ProviderCache,
+) error {
 	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil, providerCache != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)

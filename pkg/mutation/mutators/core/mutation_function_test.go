@@ -95,7 +95,11 @@ func TestObjectsAndLists(t *testing.T) {
 			}
 
 			if containerAsMap["name"] == "testname2" {
-				for _, port := range containerAsMap["ports"].([]interface{}) {
+				cm, ok := containerAsMap["ports"].([]interface{})
+				if !ok {
+					t.Fatalf("got container ports type %T, want %T", containerAsMap["ports"], []interface{}{})
+				}
+				for _, port := range cm {
 					portAsMap, ok := port.(map[string]interface{})
 					if !ok {
 						t.Fatalf("got port type %T, want %T", container, map[string]interface{}{})
@@ -112,7 +116,11 @@ func TestObjectsAndLists(t *testing.T) {
 					}
 				}
 			} else {
-				for _, port := range container.(map[string]interface{})["ports"].([]interface{}) {
+				cp, ok := container.(map[string]interface{})["ports"].([]interface{})
+				if !ok {
+					t.Errorf("got container ports type %T, want %T", container, []interface{}{})
+				}
+				for _, port := range cp {
 					if _, ok := port.(map[string]interface{})["hostIP"]; ok {
 						t.Errorf("Unexpected pod was updated")
 					}
@@ -153,9 +161,18 @@ func TestListsAsLastElement(t *testing.T) {
 		if err != nil {
 			t.Error("Unexpected error", err)
 		}
-		for _, container := range containers.([]interface{}) {
-			if container.(map[string]interface{})["name"] == "notExists" {
-				if container.(map[string]interface{})["foo"] == "foovalue" {
+
+		c, ok := containers.([]interface{})
+		if !ok {
+			t.Errorf("got containers type %T, want %T", containers, []interface{}{})
+		}
+		for _, container := range c {
+			cm, ok := container.(map[string]interface{})
+			if !ok {
+				t.Errorf("got container type %T, want %T", container, map[string]interface{}{})
+			}
+			if cm["name"] == "notExists" {
+				if cm["foo"] == "foovalue" {
 					return
 				}
 			}
@@ -185,8 +202,12 @@ func TestListsAsLastElementAlreadyExists(t *testing.T) {
 			t.Error("Unexpected error", err)
 		}
 		for _, container := range containers {
-			if container.(map[string]interface{})["name"] == "testname1" {
-				if container.(map[string]interface{})["foo"] == "bar" {
+			cm, ok := container.(map[string]interface{})
+			if !ok {
+				t.Errorf("got container type %T, want %T", container, map[string]interface{}{})
+			}
+			if cm["name"] == "testname1" {
+				if cm["foo"] == "bar" {
 					return
 				}
 			}
@@ -222,7 +243,11 @@ func TestGlobbedList(t *testing.T) {
 			}
 
 			ports := containerAsMap["ports"]
-			for _, port := range ports.([]interface{}) {
+			p, ok := ports.([]interface{})
+			if !ok {
+				t.Errorf("got ports type %T, want %T", ports, []interface{}{})
+			}
+			for _, port := range p {
 				if value, ok := port.(map[string]interface{})["protocol"]; !ok || value != TestValue {
 					t.Errorf("Expected value was not updated: %v, wanted %v", value, TestValue)
 				}
@@ -351,7 +376,8 @@ func testDummyMutation(
 	value interface{},
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
-	t *testing.T) error {
+	t *testing.T,
+) error {
 	mutator := testhelpers.NewDummyMutator("dummy", location, value)
 	return testMutation(mutator, unstructured, testFunc, t)
 }
@@ -362,7 +388,8 @@ func testAssignMutation(
 	value interface{},
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
-	t *testing.T) error {
+	t *testing.T,
+) error {
 	assign := mutationsunversioned.Assign{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsunversioned.AssignSpec{
@@ -385,7 +412,8 @@ func testAssignMetadataMutation(
 	value string,
 	unstructured *unstructured.Unstructured,
 	testFunc func(*unstructured.Unstructured),
-	t *testing.T) error {
+	t *testing.T,
+) error {
 	assignMetadata := mutationsunversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: mutationsunversioned.AssignMetadataSpec{

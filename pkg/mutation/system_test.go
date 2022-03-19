@@ -412,13 +412,25 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	if gotErr != nil {
 		t.Fatalf("got Mutate() error = %v, want <nil>", gotErr)
 	}
-	if s.Get(id("foo")).(*fakeMutator).MutationCount != 0 {
+	i, ok := s.Get(id("foo")).(*fakeMutator)
+	if !ok {
+		t.Errorf("got type = %T, want %T", s.Get(id("foo")), fakeMutator{})
+	}
+	if i.MutationCount != 0 {
 		t.Errorf("got foo.MutationCount == %d, want %d", foo.MutationCount, 0)
 	}
-	if s.Get(id("foo-conflict")).(*fakeMutator).MutationCount != 0 {
+	i, ok = s.Get(id("foo-conflict")).(*fakeMutator)
+	if !ok {
+		t.Errorf("got type = %T, want %T", s.Get(id("foo-conflict")), fakeMutator{})
+	}
+	if i.MutationCount != 0 {
 		t.Errorf("got fooConflict.MutationCount == %d, want %d", fooConflict.MutationCount, 0)
 	}
-	if s.Get(id("bar")).(*fakeMutator).MutationCount != 2 {
+	i, ok = s.Get(id("bar")).(*fakeMutator)
+	if !ok {
+		t.Errorf("got type = %T, want %T", s.Get(id("bar")), fakeMutator{})
+	}
+	if i.MutationCount != 2 {
 		t.Errorf("got bar.MutationCount == %d, want %d", bar.MutationCount, 2)
 	}
 }

@@ -59,12 +59,17 @@ func (m *Mutator) TerminalType() parser.NodeType {
 }
 
 func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+	v, ok := runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{})
+	if !ok {
+		return false, fmt.Errorf("got unexpected type for values: %T, want %T", m.modifySet.Spec.Parameters.Values.FromList, []interface{}{})
+	}
+
 	return core.Mutate(
 		m.Path(),
 		m.tester,
 		setter{
 			op:     m.modifySet.Spec.Parameters.Operation,
-			values: runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{}),
+			values: v,
 		},
 		obj,
 	)
