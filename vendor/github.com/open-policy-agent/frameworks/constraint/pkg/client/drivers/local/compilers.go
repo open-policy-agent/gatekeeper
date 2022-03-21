@@ -124,17 +124,14 @@ type TargetModule struct {
 // parseConstraintTemplate validates the rego in template target by parsing
 // rego modules.
 func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []string) (map[string]TargetModule, error) {
-	kind := templ.Spec.CRD.Spec.Names.Kind
-	pkgPrefix := templateLibPrefix(kind)
-
-	rr, err := regorewriter.New(regorewriter.NewPackagePrefixer(pkgPrefix), []string{libRoot}, externs)
+	rr, err := regorewriter.New(regorewriter.NewPackagePrefixer(templateLibPrefix), []string{libRoot}, externs)
 	if err != nil {
 		return nil, fmt.Errorf("creating rego rewriter: %w", err)
 	}
 
 	mods := make(map[string]TargetModule)
 	for _, target := range templ.Spec.Targets {
-		targetMods, err := parseConstraintTemplateTarget(rr, pkgPrefix, target)
+		targetMods, err := parseConstraintTemplateTarget(rr, target)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +145,7 @@ func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []stri
 	return mods, nil
 }
 
-func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, pkgPrefix string, targetSpec templates.Target) ([]string, error) {
+func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec templates.Target) ([]string, error) {
 	entryPoint, err := parseModule(targetSpec.Rego)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
@@ -172,7 +169,7 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, pkgPrefix stri
 
 	rr.AddEntryPointModule(templatePath, entryPoint)
 	for idx, libSrc := range targetSpec.Libs {
-		libPath := fmt.Sprintf(`%s["lib_%d"]`, pkgPrefix, idx)
+		libPath := fmt.Sprintf(`%s["lib_%d"]`, templateLibPrefix, idx)
 		if err = rr.AddLib(libPath, libSrc); err != nil {
 			return nil, fmt.Errorf("%w: %v",
 				clienterrors.ErrInvalidConstraintTemplate, err)
@@ -215,12 +212,6 @@ func compileTemplateTarget(module TargetModule, capabilities *ast.Capabilities, 
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrParse, err)
 	}
 	modules[hookModulePath] = builtinModule
-
-	regoModule, err := ast.ParseModule(templatePath, module.Rego)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", clienterrors.ErrParse, err)
-	}
-	modules[templatePath] = regoModule
 
 	for i, lib := range module.Libs {
 		libPath := fmt.Sprintf("%s%d", templatePath, i)

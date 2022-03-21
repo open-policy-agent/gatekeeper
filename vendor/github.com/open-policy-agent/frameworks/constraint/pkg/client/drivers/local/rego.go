@@ -5,6 +5,10 @@ const (
 	// Must match the "data.xxx.violation[r]" path in hookModule.
 	templatePath = "template"
 
+	// templateLibPrefix is the path under which library Rego code is stored.
+	// Must match "data.xxx.[library package]" path.
+	templateLibPrefix = "libs"
+
 	// hookModulePath.
 	hookModulePath = "hooks.hooks_builtin"
 

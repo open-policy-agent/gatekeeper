@@ -307,11 +307,6 @@ func (d *Driver) Dump(ctx context.Context) (string, error) {
 	return string(b), nil
 }
 
-// templateLibPrefix returns the new lib prefix for the libs that are specified in the CT.
-func templateLibPrefix(name string) string {
-	return fmt.Sprintf("libs.%s", name)
-}
-
 // parseModule parses the module and also fails empty modules.
 func parseModule(rego string) (*ast.Module, error) {
 	module, err := ast.ParseModule(templatePath, rego)

@@ -541,6 +541,8 @@ github.com/open-policy-agent/cert-controller v0.2.0 h1:Z+IPOYDor28l6cjEo2WvTZY6B
 github.com/open-policy-agent/cert-controller v0.2.0/go.mod h1:SWS7Ame8oKHF11cDsQCFlULrrOMV5Z59FIGEAF/M6YI=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20220315182327-00eadf686a28 h1:6Yf718/tqNdg1bYjUG5LdvzBo5CiPeP90e4MEPNVG2w=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20220315182327-00eadf686a28/go.mod h1:y8aZ+J4EnNqQ+DdyMOaNhuTAnMoJErDg9ySgqd5qo38=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220319020711-acd776435a23 h1:BZhSbD73XcCyPxtFop1EbNKcCa7VCoox3YKY9xYcDxs=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220319020711-acd776435a23/go.mod h1:y8aZ+J4EnNqQ+DdyMOaNhuTAnMoJErDg9ySgqd5qo38=
 github.com/open-policy-agent/opa v0.37.2 h1:pR9i4xlsnlq7b5Zgw6oj7PcFaJ9HX+sY4yfuzLI2WrA=
 github.com/open-policy-agent/opa v0.37.2/go.mod h1:9YlKCh5WIk1Pu0bpIPozaJKQWpUDTVCMVpe55FVUfik=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
