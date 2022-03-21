@@ -13,7 +13,7 @@ denies all requests and outputs the request object as its rejection message.
 Example template:
 
 ```yaml
-apiVersion: templates.gatekeeper.sh/v1beta1
+apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8sdenyall

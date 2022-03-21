@@ -12,7 +12,7 @@ Before you can define a constraint, you must first define a [`ConstraintTemplate
 Here is an example constraint template that requires all labels described by the constraint to be present:
 
 ```yaml
-apiVersion: templates.gatekeeper.sh/v1beta1
+apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredlabels
@@ -24,6 +24,7 @@ spec:
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
+          type: object
           properties:
             labels:
               type: array
