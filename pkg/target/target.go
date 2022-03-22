@@ -425,16 +425,27 @@ func (c *nsCache) Add(key storage.Path, object interface{}) error {
 		return nil
 	}
 
-	ns := &corev1.Namespace{}
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, ns)
+	ns, err := toNamespace(u)
 	if err != nil {
 		return fmt.Errorf("%w: cannot cache Namespace: %v", ErrCachingType, ns)
 	}
 
-	return c.AddNamespace(key.String(), ns)
+	c.AddNamespace(key.String(), ns)
+
+	return nil
 }
 
-func (c *nsCache) AddNamespace(key string, ns *corev1.Namespace) error {
+func toNamespace(u *unstructured.Unstructured) (*corev1.Namespace, error) {
+	ns := &corev1.Namespace{}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, ns)
+	if err != nil {
+		return nil, err
+	}
+
+	return ns, nil
+}
+
+func (c *nsCache) AddNamespace(key string, ns *corev1.Namespace) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -443,20 +454,15 @@ func (c *nsCache) AddNamespace(key string, ns *corev1.Namespace) error {
 	}
 
 	c.cache[key] = ns
-	return nil
 }
 
-func (c *nsCache) GetNamespace(name string) (*corev1.Namespace, error) {
+func (c *nsCache) GetNamespace(name string) *corev1.Namespace {
 	key := clusterScopedKey(corev1.SchemeGroupVersion.WithKind("Namespace"), name)
 
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	ns, ok := c.cache[key.String()]
-	if !ok {
-		return nil, nil
-	}
-	return ns, nil
+	return c.cache[key.String()]
 }
 
 func (c *nsCache) Remove(key storage.Path) {
@@ -485,19 +491,21 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		return false, err
 	}
 
-	if ns == nil {
-		isNamespace := (obj != nil && match.IsNamespace(obj)) || (oldObj != nil && match.IsNamespace(oldObj))
-		if isNamespace {
-			ns, err = m.cache.GetNamespace(obj.GetName())
+	isNamespace := (obj != nil && match.IsNamespace(obj)) || (oldObj != nil && match.IsNamespace(oldObj))
+	switch {
+	case ns != nil:
+		// We already have the object's Namespace.
+	case isNamespace:
+		ns = m.cache.GetNamespace(obj.GetName())
+		if ns == nil {
+			// This Namespace hasn't been cached yet.
+			ns, err = toNamespace(obj)
 			if err != nil {
-				return false, err
-			}
-		} else if gkReq.Namespace != "" {
-			ns, err = m.cache.GetNamespace(gkReq.Namespace)
-			if err != nil {
-				return false, err
+				return false, fmt.Errorf("could not convert Namespace: %v", err)
 			}
 		}
+	case gkReq.Namespace != "":
+		ns = m.cache.GetNamespace(gkReq.Namespace)
 	}
 
 	return matchAny(m, ns, obj, oldObj)

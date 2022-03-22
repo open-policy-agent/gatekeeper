@@ -346,6 +346,16 @@ func TestProcessData(t *testing.T) {
 	}
 }
 
+func namespaceSelectorMatch() *match.Match {
+	return &match.Match{
+		NamespaceSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"ns": "label",
+			},
+		},
+	}
+}
+
 func fooMatch() *match.Match {
 	return &match.Match{
 		Kinds: []match.Kinds{
@@ -447,6 +457,14 @@ func matchedRawData() []byte {
 	return objData
 }
 
+func namespacedRawData() []byte {
+	u := makeResource("some", "Thing", "foo", map[string]string{"obj": "label"})
+	u.SetNamespace("bar")
+
+	objData, _ := json.Marshal(u.Object)
+	return objData
+}
+
 func unmatchedRawData() []byte {
 	objData, _ := json.Marshal(makeResource("another", "thing", "foo").Object)
 	return objData
@@ -494,11 +512,21 @@ func TestMatcher_Match(t *testing.T) {
 			name: "Match error",
 			req: &AugmentedReview{
 				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{Raw: namespacedRawData()},
+				},
+			},
+			match:   namespaceSelectorMatch(),
+			wantErr: ErrMatching,
+		},
+		{
+			name: "Success if Namespace not cached",
+			req: &AugmentedReview{
+				AdmissionRequest: &admissionv1.AdmissionRequest{
 					Object: runtime.RawExtension{Raw: nsData},
 				},
 			},
 			match:   fooMatch(),
-			wantErr: ErrMatching,
+			wantErr: nil,
 		},
 		{
 			name: "AugmentedReview is supported",
@@ -748,10 +776,7 @@ func TestNamespaceCache(t *testing.T) {
 					wantCount++
 				}
 
-				got, err := target.cache.GetNamespace(want.namespace)
-				if err != nil && !errors.Is(err, tt.wantErr) {
-					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
-				}
+				got := target.cache.GetNamespace(want.namespace)
 
 				if !want.shouldExist && got == nil {
 					continue

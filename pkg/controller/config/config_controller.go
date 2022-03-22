@@ -289,7 +289,6 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
 	}
 
-	// TODO: lock watched
 	r.watched.Replace(newSyncOnly)
 
 	// swapping with the new excluder
