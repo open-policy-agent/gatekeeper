@@ -1,4 +1,4 @@
-apiVersion: templates.gatekeeper.sh/v1beta1
+apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
   name: k8srequiredprobes
@@ -9,6 +9,7 @@ spec:
         kind: K8sRequiredProbes
       validation:
         openAPIV3Schema:
+          type: object
           properties:
             probes:
               type: array
