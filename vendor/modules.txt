@@ -1,7 +1,7 @@
 # cloud.google.com/go v0.99.0
 ## explicit; go 1.11
 cloud.google.com/go/compute/metadata
-# contrib.go.opencensus.io/exporter/prometheus v0.4.0
+# contrib.go.opencensus.io/exporter/prometheus v0.4.1
 ## explicit; go 1.13
 contrib.go.opencensus.io/exporter/prometheus
 # github.com/OneOfOne/xxhash v1.2.8
