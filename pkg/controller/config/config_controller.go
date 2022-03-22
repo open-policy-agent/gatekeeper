@@ -18,6 +18,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -178,7 +179,8 @@ type ReconcileConfig struct {
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
 
-	watched *watch.Set
+	watched    *watch.Set
+	watchedMtx sync.Mutex
 
 	needsReplay     *watch.Set
 	needsWipe       bool
@@ -289,6 +291,8 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
 	}
 
+	r.watchedMtx.Lock()
+	defer r.watchedMtx.Unlock()
 	r.watched.Replace(newSyncOnly)
 
 	// swapping with the new excluder
@@ -303,7 +307,6 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
 		return reconcile.Result{}, err
 	}
-	// TODO: release lock on watched
 
 	// Replay cached data for any resources that were previously watched and still in the watch set.
 	// This is necessary because we wipe their data from Opa above.
