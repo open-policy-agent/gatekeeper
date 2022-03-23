@@ -119,7 +119,7 @@ func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, 
 	switch data := obj.(type) {
 	case *unstructured.Unstructured:
 		return h.processUnstructured(data)
-	case wipeData:
+	case wipeData, *wipeData:
 		return true, nil, nil, nil
 	default:
 		return false, nil, nil, nil
@@ -140,10 +140,22 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 		review = &gkReview{AdmissionRequest: data}
 	case *admissionv1.AdmissionRequest:
 		review = &gkReview{AdmissionRequest: *data}
+	case AugmentedReview:
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
 	case *AugmentedReview:
 		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
+	case AugmentedUnstructured:
+		review, err = augmentedUnstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
 	case *AugmentedUnstructured:
 		review, err = augmentedUnstructuredToAdmissionRequest(*data)
+		if err != nil {
+			return false, nil, err
+		}
+	case unstructured.Unstructured:
+		review, err = unstructuredToAdmissionRequest(&data)
 		if err != nil {
 			return false, nil, err
 		}
