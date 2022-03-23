@@ -3,7 +3,6 @@ package target
 import (
 	"encoding/json"
 	"errors"
-	"reflect"
 	"sync"
 	"testing"
 
@@ -22,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestFrameworkInjection(t *testing.T) {
@@ -101,6 +101,62 @@ func TestValidateConstraint(t *testing.T) {
 }
 `,
 			ErrorExpected: false,
+		},
+		{
+			Name: "Invalid LabelSelector type",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+	"kind": "K8sRequiredLabel",
+	"metadata": {
+		"name": "ns-must-have-gk"
+	},
+	"spec": {
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Namespace"]
+				}
+			],
+			"labelSelector": 3
+		},
+		"parameters": {
+			"labels": ["gatekeeper"]
+		}
+	}
+}
+`,
+			ErrorExpected: true,
+		},
+		{
+			Name: "Invalid LabelSelector MatchLels",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+	"kind": "K8sRequiredLabel",
+	"metadata": {
+		"name": "ns-must-have-gk"
+	},
+	"spec": {
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Namespace"]
+				}
+			],
+			"labelSelector": {
+        "matchLabels": 3
+      }
+		},
+		"parameters": {
+			"labels": ["gatekeeper"]
+		}
+	}
+}
+`,
+			ErrorExpected: true,
 		},
 		{
 			Name: "Invalid LabelSelector",
@@ -202,6 +258,62 @@ func TestValidateConstraint(t *testing.T) {
 			ErrorExpected: false,
 		},
 		{
+			Name: "Invalid NamespaceSelector type",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+	"kind": "K8sAllowedRepos",
+	"metadata": {
+		"name": "prod-nslabels-is-openpolicyagent"
+	},
+	"spec": {
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			],
+			"namespaceSelector": 3
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
+		}
+	}
+}
+`,
+			ErrorExpected: true,
+		},
+		{
+			Name: "Invalid NamespaceSelector MatchLabel",
+			Constraint: `
+{
+	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
+	"kind": "K8sAllowedRepos",
+	"metadata": {
+		"name": "prod-nslabels-is-openpolicyagent"
+	},
+	"spec": {
+		"match": {
+			"kinds": [
+				{
+					"apiGroups": [""],
+					"kinds": ["Pod"]
+				}
+			],
+			"namespaceSelector": {
+        "matchLabels": 3
+      }
+		},
+		"parameters": {
+			"repos": ["openpolicyagent"]
+		}
+	}
+}
+`,
+			ErrorExpected: true,
+		},
+		{
 			Name: "Invalid NamespaceSelector",
 			Constraint: `
 {
@@ -283,64 +395,95 @@ func TestValidateConstraint(t *testing.T) {
 
 func TestProcessData(t *testing.T) {
 	tc := []struct {
-		Name          string
-		JSON          string
-		ErrorExpected bool
-		ExpectedPath  storage.Path
+		name        string
+		obj         interface{}
+		wantHandled bool
+		wantPath    storage.Path
+		wantErr     error
 	}{
 		{
-			Name:         "Cluster Object",
-			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-			ExpectedPath: []string{"cluster", "v1beta1", "Rock", "myrock"},
+			name:        "Cluster Object",
+			obj:         makeResource(schema.GroupVersionKind{Version: "v1beta1", Kind: "Rock"}, "myrock"),
+			wantHandled: true,
+			wantPath:    []string{"cluster", "v1beta1", "Rock", "myrock"},
+			wantErr:     nil,
 		},
 		{
-			Name:         "Namespace Object",
-			JSON:         `{"apiVersion": "v1beta1", "kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
-			ExpectedPath: []string{"namespace", "foo", "v1beta1", "Rock", "myrock"},
+			name:        "Namespaced Object",
+			obj:         makeNamespacedResource(schema.GroupVersionKind{Version: "v1beta1", Kind: "Rock"}, "foo", "myrock"),
+			wantHandled: true,
+			wantPath:    []string{"namespace", "foo", "v1beta1", "Rock", "myrock"},
+			wantErr:     nil,
 		},
 		{
-			Name:         "Grouped Object",
-			JSON:         `{"apiVersion": "mygroup/v1beta1", "kind": "Rock", "metadata": {"name": "myrock"}}`,
-			ExpectedPath: []string{"cluster", "mygroup/v1beta1", "Rock", "myrock"},
+			name:        "Grouped Object",
+			obj:         makeResource(schema.GroupVersionKind{Group: "mygroup", Version: "v1beta1", Kind: "Rock"}, "myrock"),
+			wantHandled: true,
+			wantPath:    []string{"cluster", "mygroup/v1beta1", "Rock", "myrock"},
+			wantErr:     nil,
 		},
 		{
-			Name:          "No Version",
-			JSON:          `{"kind": "Rock", "metadata": {"name": "myrock", "namespace": "foo"}}`,
-			ErrorExpected: true,
+			name:        "No Version",
+			obj:         makeResource(schema.GroupVersionKind{Version: "", Kind: "Rock"}, "myrock"),
+			wantHandled: true,
+			wantPath:    nil,
+			wantErr:     ErrRequestObject,
+		},
+		{
+			name:        "No Kind",
+			obj:         makeResource(schema.GroupVersionKind{Version: "v1beta1", Kind: ""}, "myrock"),
+			wantHandled: true,
+			wantPath:    nil,
+			wantErr:     ErrRequestObject,
+		},
+		{
+			name:        "Wipe Data",
+			obj:         WipeData(),
+			wantHandled: true,
+			wantPath:    nil,
+			wantErr:     nil,
+		},
+		{
+			name:        "non-handled type",
+			obj:         3,
+			wantHandled: false,
+			wantPath:    nil,
+			wantErr:     nil,
 		},
 	}
 	for _, tt := range tc {
-		t.Run(tt.Name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			h := &K8sValidationTarget{}
-			o := &unstructured.Unstructured{}
-			err := json.Unmarshal([]byte(tt.JSON), o)
-			if err != nil {
-				t.Fatalf("Error parsing JSON: %s", err)
+
+			handled, path, data, err := h.ProcessData(tt.obj)
+			if handled != tt.wantHandled {
+				t.Errorf("got handled = %t, want %t", handled, tt.wantHandled)
 			}
-			handled, path, data, err := h.ProcessData(o)
-			if !handled {
-				t.Errorf("handled = false; want true")
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got err %v, want %v", err, tt.wantErr)
 			}
-			if !tt.ErrorExpected {
-				if diff := cmp.Diff(path, tt.ExpectedPath); diff != "" {
-					t.Error(diff)
-				}
-				if !reflect.DeepEqual(data, o.Object) {
-					t.Errorf(cmp.Diff(data, o.Object))
+
+			if diff := cmp.Diff(path, tt.wantPath); diff != "" {
+				t.Error(diff)
+			}
+
+			if tt.wantErr == nil {
+				switch obj := tt.obj.(type) {
+				case *unstructured.Unstructured:
+					if diff := cmp.Diff(obj.Object, data); diff != "" {
+						t.Error(diff)
+					}
+				case wipeData:
+					if data != nil {
+						t.Errorf("data = %v; want nil", spew.Sdump(data))
+					}
 				}
 				if err != nil {
 					t.Errorf("err = %s; want nil", err)
 				}
-			} else {
-				if len(path) != 0 {
-					t.Errorf("path = %s; want empty", path)
-				}
-				if data != nil {
-					t.Errorf("data = %v; want nil", spew.Sdump(data))
-				}
-				if err == nil {
-					t.Errorf("err = nil; want non-nil")
-				}
+			} else if data != nil {
+				t.Errorf("data = %v; want nil", spew.Sdump(data))
 			}
 		})
 	}
@@ -391,6 +534,24 @@ func fooConstraint() *unstructured.Unstructured {
 	)
 }
 
+func invalidMatchConstraintType() *unstructured.Unstructured {
+	cstr := makeConstraint()
+	err := unstructured.SetNestedField(cstr.Object, 3.0, "spec", "match")
+	if err != nil {
+		panic(err)
+	}
+	return cstr
+}
+
+func invalidMatchConstraint() *unstructured.Unstructured {
+	cstr := makeConstraint()
+	err := unstructured.SetNestedField(cstr.Object, 3.0, "spec", "match", "kinds")
+	if err != nil {
+		panic(err)
+	}
+	return cstr
+}
+
 func TestToMatcher(t *testing.T) {
 	unstructAssign, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(&unversioned.Assign{
 		TypeMeta:   metav1.TypeMeta{},
@@ -416,8 +577,20 @@ func TestToMatcher(t *testing.T) {
 			constraint: fooConstraint(),
 			want: &Matcher{
 				match: fooMatch(),
-				cache: newNsCache(nil),
+				cache: newNsCache(),
 			},
+		},
+		{
+			name:       "constraint with invalid Match type",
+			constraint: invalidMatchConstraintType(),
+			want:       nil,
+			wantErr:    ErrCreatingMatcher,
+		},
+		{
+			name:       "constraint with invalid Match field type",
+			constraint: invalidMatchConstraint(),
+			want:       nil,
+			wantErr:    ErrCreatingMatcher,
 		},
 		{
 			name: "mutator with match fields",
@@ -426,7 +599,7 @@ func TestToMatcher(t *testing.T) {
 			},
 			want: &Matcher{
 				match: fooMatch(),
-				cache: newNsCache(nil),
+				cache: newNsCache(),
 			},
 		},
 	}
@@ -453,49 +626,64 @@ func TestToMatcher(t *testing.T) {
 }
 
 func matchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("some", "Thing", "foo", map[string]string{"obj": "label"}).Object)
+	objData, _ := json.Marshal(makeNamespacedResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo", "bar", map[string]string{"obj": "label"}).Object)
 	return objData
 }
 
-func namespacedRawData() []byte {
-	u := makeResource("some", "Thing", "foo", map[string]string{"obj": "label"})
-	u.SetNamespace("bar")
+func namespacedRawData(ns string) []byte {
+	u := makeResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo", map[string]string{"obj": "label"})
+	u.SetNamespace(ns)
 
 	objData, _ := json.Marshal(u.Object)
 	return objData
 }
 
 func unmatchedRawData() []byte {
-	objData, _ := json.Marshal(makeResource("another", "thing", "foo").Object)
+	objData, err := json.Marshal(makeNamespacedResource(schema.GroupVersionKind{Group: "another", Kind: "thing"}, "foo", "bar").Object)
+	if err != nil {
+		panic(err)
+	}
+
 	return objData
 }
 
 func TestMatcher_Match(t *testing.T) {
-	nsData, _ := json.Marshal(makeResource("", "Namespace", "foo").Object)
+	nsData, _ := json.Marshal(makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "foo").Object)
 
 	ns := makeNamespace("my-ns", map[string]string{"ns": "label"})
 	tests := []struct {
-		name    string
-		match   *match.Match
-		req     interface{}
-		wantErr error
-		want    bool
+		name        string
+		match       *match.Match
+		cachedNs    *corev1.Namespace
+		req         interface{}
+		wantHandled bool
+		wantErr     error
+		want        bool
 	}{
+		{
+			name:        "nil",
+			req:         nil,
+			match:       nil,
+			wantHandled: false,
+			wantErr:     nil,
+		},
 		{
 			name: "AdmissionRequest supported",
 			req: admissionv1.AdmissionRequest{
 				Object: runtime.RawExtension{Raw: matchedRawData()},
 			},
-			match:   fooMatch(),
-			want:    false,
-			wantErr: nil,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
 		},
 		{
-			name:    "unstructured.Unstructured supported",
-			req:     makeResource("some", "Thing", "foo"),
-			match:   fooMatch(),
-			want:    false,
-			wantErr: nil,
+			name:        "unstructured.Unstructured supported",
+			req:         makeResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo"),
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
 		},
 		{
 			name: "Raw object doesn't unmarshal",
@@ -505,18 +693,22 @@ func TestMatcher_Match(t *testing.T) {
 					"key": "Some invalid json",
 				}},
 			},
-			match:   fooMatch(),
-			wantErr: ErrRequestObject,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     ErrRequestObject,
+			want:        false,
 		},
 		{
 			name: "Match error",
 			req: &AugmentedReview{
 				AdmissionRequest: &admissionv1.AdmissionRequest{
-					Object: runtime.RawExtension{Raw: namespacedRawData()},
+					Object: runtime.RawExtension{Raw: namespacedRawData("foo")},
 				},
 			},
-			match:   namespaceSelectorMatch(),
-			wantErr: ErrMatching,
+			match:       namespaceSelectorMatch(),
+			wantHandled: true,
+			wantErr:     ErrMatching,
+			want:        false,
 		},
 		{
 			name: "Success if Namespace not cached",
@@ -525,8 +717,10 @@ func TestMatcher_Match(t *testing.T) {
 					Object: runtime.RawExtension{Raw: nsData},
 				},
 			},
-			match:   fooMatch(),
-			wantErr: nil,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
 		},
 		{
 			name: "AugmentedReview is supported",
@@ -536,17 +730,21 @@ func TestMatcher_Match(t *testing.T) {
 					Object: runtime.RawExtension{Raw: matchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  true,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "AugmentedUnstructured is supported",
 			req: &AugmentedUnstructured{
 				Namespace: ns,
-				Object:    *makeResource("some", "Thing", "foo", map[string]string{"obj": "label"}),
+				Object:    *makeResource(schema.GroupVersionKind{Group: "some", Kind: "Thing"}, "foo", map[string]string{"obj": "label"}),
 			},
-			match: fooMatch(),
-			want:  true,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "Both object and old object are matched",
@@ -557,8 +755,10 @@ func TestMatcher_Match(t *testing.T) {
 					OldObject: runtime.RawExtension{Raw: matchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  true,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "object is matched, old object is not matched",
@@ -569,8 +769,10 @@ func TestMatcher_Match(t *testing.T) {
 					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  true,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "object is not matched, old object is matched",
@@ -581,8 +783,10 @@ func TestMatcher_Match(t *testing.T) {
 					OldObject: runtime.RawExtension{Raw: matchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  true,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "object is matched, old object is not matched",
@@ -593,8 +797,10 @@ func TestMatcher_Match(t *testing.T) {
 					OldObject: runtime.RawExtension{Raw: unmatchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  false,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
 		},
 		{
 			name: "new object is not matched, old object is not specified",
@@ -604,8 +810,78 @@ func TestMatcher_Match(t *testing.T) {
 					Object: runtime.RawExtension{Raw: unmatchedRawData()},
 				},
 			},
-			match: fooMatch(),
-			want:  false,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
+		},
+		{
+			name:     "missing cached Namespace",
+			cachedNs: nil,
+			req: &AugmentedReview{
+				Namespace: nil,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Namespace: "foo",
+					Object:    runtime.RawExtension{Raw: namespacedRawData("foo")},
+				},
+			},
+			match: &match.Match{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"ns": "label"},
+				},
+			},
+			wantHandled: true,
+			wantErr:     ErrMatching,
+			want:        false,
+		},
+		{
+			name: "use cached Namespace no match",
+			cachedNs: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "foo",
+				},
+			},
+			req: &AugmentedReview{
+				Namespace: nil,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Namespace: "foo",
+					Object:    runtime.RawExtension{Raw: namespacedRawData("foo")},
+				},
+			},
+			match: &match.Match{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"ns": "label"},
+				},
+			},
+			wantHandled: true,
+			wantErr:     nil,
+			want:        false,
+		},
+		{
+			name: "use cached Namespace match",
+			cachedNs: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "foo",
+					Labels: map[string]string{
+						"ns": "label",
+					},
+				},
+			},
+			req: &AugmentedReview{
+				Namespace: nil,
+				AdmissionRequest: &admissionv1.AdmissionRequest{
+					Namespace: "foo",
+					Object:    runtime.RawExtension{Raw: namespacedRawData("foo")},
+				},
+			},
+			match: &match.Match{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"ns": "label"},
+				},
+			},
+			wantHandled: true,
+			wantErr:     nil,
+			want:        true,
 		},
 		{
 			name: "neither new or old object is specified",
@@ -613,8 +889,10 @@ func TestMatcher_Match(t *testing.T) {
 				Namespace:        ns,
 				AdmissionRequest: &admissionv1.AdmissionRequest{},
 			},
-			match:   fooMatch(),
-			wantErr: ErrRequestObject,
+			match:       fooMatch(),
+			wantHandled: true,
+			wantErr:     ErrRequestObject,
+			want:        false,
 		},
 	}
 	for _, tt := range tests {
@@ -622,17 +900,30 @@ func TestMatcher_Match(t *testing.T) {
 			target := &K8sValidationTarget{}
 			m := &Matcher{
 				match: tt.match,
-				cache: newNsCache(nil),
+				cache: newNsCache(),
 			}
+
+			if tt.cachedNs != nil {
+				key := clusterScopedKey(corev1.SchemeGroupVersion.WithKind("Namespace"), tt.cachedNs.Name)
+				m.cache.AddNamespace(key.String(), tt.cachedNs)
+			}
+
 			handled, review, err := target.HandleReview(tt.req)
-			if !handled || err != nil {
-				t.Fatalf("failed to handle review %v", err)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.wantHandled != handled {
+				t.Fatalf("got handled = %t, want %t", handled, tt.want)
+			}
+
+			if !tt.wantHandled {
+				return
 			}
 
 			got, err := m.Match(review)
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("Match() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.want {
 				t.Errorf("want %v matched, got %v", tt.want, got)
@@ -670,7 +961,7 @@ func TestNamespaceCache(t *testing.T) {
 		{
 			name: "retrieving a namespace that does not exist returns nil",
 			addNs: []*unstructured.Unstructured{
-				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns1", map[string]string{"ns1": "label"}),
 			},
 			checkNs: []wantNs{
 				{
@@ -689,8 +980,8 @@ func TestNamespaceCache(t *testing.T) {
 		{
 			name: "retrieving an added namespace returns the namespace",
 			addNs: []*unstructured.Unstructured{
-				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
-				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns1", map[string]string{"ns1": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			checkNs: []wantNs{
 				{
@@ -707,10 +998,22 @@ func TestNamespaceCache(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "adding an invalid Namespace does not work",
+			addNs: []*unstructured.Unstructured{{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Namespace",
+					"spec":       3.0,
+				},
+			}},
+			checkNs: []wantNs{},
+			wantErr: ErrCachingType,
+		},
+		{
 			name: "adding a non-namespace type returns error",
 			addNs: []*unstructured.Unstructured{
 				fooConstraint(),
-				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			checkNs: []wantNs{
 				{
@@ -724,8 +1027,8 @@ func TestNamespaceCache(t *testing.T) {
 		{
 			name: "removing a namespace returns nil when retrieving",
 			addNs: []*unstructured.Unstructured{
-				makeResource("", "Namespace", "my-ns1", map[string]string{"ns1": "label"}),
-				makeResource("", "Namespace", "my-ns2", map[string]string{"ns2": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns1", map[string]string{"ns1": "label"}),
+				makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "my-ns2", map[string]string{"ns2": "label"}),
 			},
 			removeNs: []string{"my-ns1"},
 			checkNs: []wantNs{
@@ -760,7 +1063,7 @@ func TestNamespaceCache(t *testing.T) {
 			}
 
 			for _, name := range tt.removeNs {
-				ns := makeResource("", "Namespace", name)
+				ns := makeResource(schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, name)
 				_, key, _, err := target.ProcessData(ns)
 				if err != nil {
 					t.Fatal(err)
@@ -794,12 +1097,8 @@ func TestNamespaceCache(t *testing.T) {
 	}
 }
 
-func newNsCache(data map[string]*corev1.Namespace) *nsCache {
-	if data == nil {
-		data = make(map[string]*corev1.Namespace)
-	}
-
+func newNsCache() *nsCache {
 	return &nsCache{
-		cache: data,
+		cache: make(map[string]*corev1.Namespace),
 	}
 }

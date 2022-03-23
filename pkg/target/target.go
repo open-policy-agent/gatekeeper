@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
@@ -58,16 +57,15 @@ func (h *K8sValidationTarget) GetName() string {
 	return Name
 }
 
-var libTempl = template.Must(template.New("library").Parse(templSrc))
+type wipeData struct{}
 
-func (h *K8sValidationTarget) Library() *template.Template {
-	return libTempl
+func WipeData() interface{} {
+	return wipeData{}
 }
 
-type WipeData struct{}
-
-func processWipeData() (bool, storage.Path, interface{}, error) {
-	return true, nil, nil, nil
+func IsWipeData(o interface{}) bool {
+	_, ok := o.(wipeData)
+	return ok
 }
 
 type AugmentedReview struct {
@@ -93,10 +91,10 @@ func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) 
 	// Namespace will be "" for cluster objects
 	gvk := o.GetObjectKind().GroupVersionKind()
 	if gvk.Version == "" {
-		return true, nil, nil, fmt.Errorf("resource %s has no version", o.GetName())
+		return true, nil, nil, fmt.Errorf("%w: resource %s has no version", ErrRequestObject, o.GetName())
 	}
 	if gvk.Kind == "" {
-		return true, nil, nil, fmt.Errorf("resource %s has no kind", o.GetName())
+		return true, nil, nil, fmt.Errorf("%w: resource %s has no kind", ErrRequestObject, o.GetName())
 	}
 
 	var path []string
@@ -119,12 +117,10 @@ func namespaceScopedKey(namespace string, gvk schema.GroupVersionKind, name stri
 
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, interface{}, error) {
 	switch data := obj.(type) {
-	case unstructured.Unstructured:
-		return h.processUnstructured(&data)
 	case *unstructured.Unstructured:
 		return h.processUnstructured(data)
-	case WipeData, *WipeData:
-		return processWipeData()
+	case wipeData:
+		return true, nil, nil, nil
 	default:
 		return false, nil, nil, nil
 	}
@@ -144,27 +140,15 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 		review = &gkReview{AdmissionRequest: data}
 	case *admissionv1.AdmissionRequest:
 		review = &gkReview{AdmissionRequest: *data}
-	case AugmentedReview:
-		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
 	case *AugmentedReview:
 		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
-	case AugmentedUnstructured:
-		review, err = augmentedUnstructuredToAdmissionRequest(data)
-		if err != nil {
-			return false, nil, err
-		}
 	case *AugmentedUnstructured:
 		review, err = augmentedUnstructuredToAdmissionRequest(*data)
 		if err != nil {
 			return false, nil, err
 		}
-	case unstructured.Unstructured:
-		review, err = unstructuredToAdmissionRequest(data)
-		if err != nil {
-			return false, nil, err
-		}
 	case *unstructured.Unstructured:
-		review, err = unstructuredToAdmissionRequest(*data)
+		review, err = unstructuredToAdmissionRequest(data)
 		if err != nil {
 			return false, nil, err
 		}
@@ -176,9 +160,9 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 }
 
 func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkReview, error) {
-	review, err := unstructuredToAdmissionRequest(obj.Object)
+	review, err := unstructuredToAdmissionRequest(&obj.Object)
 	if err != nil {
-		return &gkReview{}, err
+		return nil, err
 	}
 
 	review.Unstable = unstable{Namespace: obj.Namespace}
@@ -186,10 +170,10 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkRevi
 	return review, nil
 }
 
-func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (*gkReview, error) {
-	resourceJSON, err := json.Marshal(obj.Object)
+func unstructuredToAdmissionRequest(obj *unstructured.Unstructured) (*gkReview, error) {
+	resourceJSON, err := obj.MarshalJSON()
 	if err != nil {
-		return &gkReview{}, errors.New("Unable to marshal JSON encoding of object")
+		return nil, fmt.Errorf("%w: unable to marshal JSON encoding of object", ErrRequestObject)
 	}
 
 	req := admissionv1.AdmissionRequest{

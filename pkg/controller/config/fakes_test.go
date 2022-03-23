@@ -74,7 +74,7 @@ func (f *fakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraint
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := data.(target.WipeData); ok {
+	if target.IsWipeData(data) {
 		f.data = make(map[opaKey]interface{})
 		return &constraintTypes.Responses{}, nil
 	}

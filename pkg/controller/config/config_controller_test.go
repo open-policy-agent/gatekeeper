@@ -673,7 +673,7 @@ func TestConfig_Retries(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
-	_, err = opaClient.RemoveData(ctx, target.WipeData{})
+	_, err = opaClient.RemoveData(ctx, target.WipeData())
 	if err != nil {
 		t.Fatalf("wiping opa cache: %v", err)
 	}

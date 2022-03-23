@@ -320,7 +320,7 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 
 func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {
 	if r.needsWipe {
-		if _, err := r.opa.RemoveData(ctx, target.WipeData{}); err != nil {
+		if _, err := r.opa.RemoveData(ctx, target.WipeData()); err != nil {
 			return err
 		}
 
