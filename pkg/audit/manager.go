@@ -549,10 +549,6 @@ func (am *Manager) readUnstructured(jsonBytes []byte) (*unstructured.Unstructure
 }
 
 func (am *Manager) auditManagerLoop(ctx context.Context) {
-	// do an initial run so we get fast feedback on fresh deploys
-	am.auditAndLog(ctx)
-
-	// start a ticker to do a run every auditInterval
 	ticker := time.NewTicker(time.Duration(*auditInterval) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -562,14 +558,10 @@ func (am *Manager) auditManagerLoop(ctx context.Context) {
 			close(am.stopper)
 			return
 		case <-ticker.C:
-			am.auditAndLog(ctx)
+			if err := am.audit(ctx); err != nil {
+				log.Error(err, "audit manager audit() failed")
+			}
 		}
-	}
-}
-
-func (am *Manager) auditAndLog(ctx context.Context) {
-	if err := am.audit(ctx); err != nil {
-		log.Error(err, "audit manager audit() failed")
 	}
 }
 
