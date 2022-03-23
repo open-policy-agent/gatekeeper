@@ -491,20 +491,7 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		return false, err
 	}
 
-	isNamespace := (obj != nil && match.IsNamespace(obj)) || (oldObj != nil && match.IsNamespace(oldObj))
-	switch {
-	case ns != nil:
-		// We already have the object's Namespace.
-	case isNamespace:
-		ns = m.cache.GetNamespace(obj.GetName())
-		if ns == nil {
-			// This Namespace hasn't been cached yet.
-			ns, err = toNamespace(obj)
-			if err != nil {
-				return false, fmt.Errorf("could not convert Namespace: %v", err)
-			}
-		}
-	case gkReq.Namespace != "":
+	if (ns == nil) && (gkReq.Namespace != "") {
 		ns = m.cache.GetNamespace(gkReq.Namespace)
 	}
 
