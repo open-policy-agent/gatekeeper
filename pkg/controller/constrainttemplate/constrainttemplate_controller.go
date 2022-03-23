@@ -477,7 +477,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 
 func (r *ReconcileConstraintTemplate) handleDelete(
 	ctx context.Context,
-	ct *templates.ConstraintTemplate) (reconcile.Result, error) {
+	ct *templates.ConstraintTemplate,
+) (reconcile.Result, error) {
 	logger := logger.WithValues("name", ct.GetName())
 	logger.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)

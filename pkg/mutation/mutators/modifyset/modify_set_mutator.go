@@ -60,12 +60,14 @@ func (m *Mutator) TerminalType() parser.NodeType {
 }
 
 func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+	values := m.modifySet.Spec.Parameters.Values.DeepCopy().FromList
+
 	return core.Mutate(
 		m.Path(),
 		m.tester,
 		setter{
 			op:     m.modifySet.Spec.Parameters.Operation,
-			values: runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{}),
+			values: values,
 		},
 		obj,
 	)

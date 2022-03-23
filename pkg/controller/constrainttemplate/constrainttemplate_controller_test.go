@@ -845,7 +845,13 @@ type testExpectations interface {
 // passed to client.Create, so it is not mutated by this call.
 func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj client.Object) {
 	t.Helper()
-	err := c.Create(ctx, obj.DeepCopyObject().(client.Object))
+	cpy := obj.DeepCopyObject()
+	cpyObj, ok := cpy.(client.Object)
+	if !ok {
+		t.Fatalf("got obj.DeepCopyObject() type = %T, want %T", cpy, client.Object(nil))
+	}
+
+	err := c.Create(ctx, cpyObj)
 	if err != nil {
 		t.Fatal(err)
 	}
