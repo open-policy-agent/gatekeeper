@@ -9,6 +9,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -24,6 +25,10 @@ type assignTestCfg struct {
 	path      string
 	pathTests []mutationsunversioned.PathTest
 	applyTo   []match.ApplyTo
+}
+
+func makeExternalData(e *mutationsunversioned.ExternalData) mutationsunversioned.AssignField {
+	return mutationsunversioned.AssignField{ExternalData: e}
 }
 
 func makeValue(v interface{}) mutationsunversioned.AssignField {
@@ -710,7 +715,7 @@ func TestPathTests(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mutator := newAssignMutator(test.cfg)
 			obj := newFoo(test.spec)
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(&types.Mutable{Object: obj})
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
@@ -769,7 +774,7 @@ func TestApplyTo(t *testing.T) {
 				Version: test.version,
 				Kind:    test.kind,
 			})
-			matches := mutator.Matches(obj, nil)
+			matches := mutator.Matches(&types.Mutable{Object: obj})
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
 			}
@@ -978,13 +983,64 @@ func TestAssign(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "external data placeholders",
+			obj:  newPod(testPod),
+			cfg: &assignTestCfg{
+				applyTo: []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				value: makeExternalData(&mutationsunversioned.ExternalData{
+					Provider:   "some-provider",
+					DataSource: types.DataSourceValueAtLocation,
+				}),
+				path: "spec.containers[name:*].image",
+				pathTests: []mutationsunversioned.PathTest{
+					{SubPath: "spec.containers[name:*].image", Condition: path.MustExist},
+				},
+			},
+			fn: func(u *unstructured.Unstructured) error {
+				obj := []interface{}{
+					map[string]interface{}{
+						"name": "opa",
+						"image": &mutationsunversioned.ExternalDataPlaceholder{
+							Ref: &mutationsunversioned.ExternalData{
+								Provider:   "some-provider",
+								DataSource: types.DataSourceValueAtLocation,
+							},
+							ValueAtLocation: "openpolicyagent/opa:0.9.2",
+						},
+						"args": []interface{}{
+							"run",
+							"--server",
+							"--addr=localhost:8080",
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"containerPort": int64(8080),
+								"name":          "out-of-scope",
+							},
+							map[string]interface{}{
+								"containerPort": int64(8888),
+								"name":          "unchanged",
+							},
+						},
+						"resources": map[string]interface{}{},
+					},
+				}
+				return ensureObj(u, obj, "spec", "containers")
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			*externaldata.ExternalDataEnabled = true
+			defer func() {
+				*externaldata.ExternalDataEnabled = false
+			}()
+
 			mutator := newAssignMutator(test.cfg)
 			obj := test.obj.DeepCopy()
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(&types.Mutable{Object: obj})
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}

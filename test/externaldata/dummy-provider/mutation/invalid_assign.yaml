@@ -1,0 +1,43 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  name: assign-image-invalid
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name: *].image"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: ValueAtLocation
+        # this should fail because default is not defined
+        failurePolicy: UseDefault
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  name: assign-to-list
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name: *]"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: ValueAtLocation
