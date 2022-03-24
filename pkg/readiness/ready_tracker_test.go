@@ -187,7 +187,7 @@ func Test_ModifySet(t *testing.T) {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	// Apply fixtures *before* the controllers are setup.
+	// Apply fixtures *before* the controllers are set up.
 	err := applyFixtures("testdata")
 	if err != nil {
 		t.Fatalf("applying fixtures: %v", err)

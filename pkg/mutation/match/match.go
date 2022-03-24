@@ -131,7 +131,7 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 	}
 
 	if ns == nil {
-		return false, fmt.Errorf("namespace selector for cluster-scoped object but missing Namespace")
+		return false, fmt.Errorf("namespace selector for namespace-scoped object but missing Namespace")
 	}
 
 	return selector.Matches(labels.Set(ns.Labels)), nil

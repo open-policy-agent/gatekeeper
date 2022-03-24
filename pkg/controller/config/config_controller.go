@@ -18,7 +18,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -179,8 +178,7 @@ type ReconcileConfig struct {
 	cs               *watch.ControllerSwitch
 	watcher          *watch.Registrar
 
-	watched    *watch.Set
-	watchedMtx sync.Mutex
+	watched *watch.Set
 
 	needsReplay     *watch.Set
 	needsWipe       bool
@@ -291,20 +289,19 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, fmt.Errorf("wiping opa data cache: %w", err)
 	}
 
-	r.watchedMtx.Lock()
-	defer r.watchedMtx.Unlock()
-	r.watched.Replace(newSyncOnly)
+	r.watched.Replace(newSyncOnly, func() {
+		// swapping with the new excluder
+		r.processExcluder.Replace(newExcluder)
 
-	// swapping with the new excluder
-	r.processExcluder.Replace(newExcluder)
+		// *Note the following steps are not transactional with respect to admission control*
 
-	// *Note the following steps are not transactional with respect to admission control*
-
-	// Important: dynamic watches update must happen *after* updating our watchSet.
-	// Otherwise, the sync controller will drop events for the newly watched kinds.
-	// Defer error handling so object re-sync happens even if the watch is hard
-	// errored due to a missing GVK in the watch set.
-	if err := r.watcher.ReplaceWatch(newSyncOnly.Items()); err != nil {
+		// Important: dynamic watches update must happen *after* updating our watchSet.
+		// Otherwise, the sync controller will drop events for the newly watched kinds.
+		// Defer error handling so object re-sync happens even if the watch is hard
+		// errored due to a missing GVK in the watch set.
+		err = r.watcher.ReplaceWatch(newSyncOnly.Items())
+	})
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 

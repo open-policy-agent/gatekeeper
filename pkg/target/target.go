@@ -117,6 +117,8 @@ func namespaceScopedKey(namespace string, gvk schema.GroupVersionKind, name stri
 
 func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, storage.Path, interface{}, error) {
 	switch data := obj.(type) {
+	case unstructured.Unstructured:
+		return h.processUnstructured(&data)
 	case *unstructured.Unstructured:
 		return h.processUnstructured(data)
 	case wipeData, *wipeData:
