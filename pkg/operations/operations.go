@@ -108,11 +108,18 @@ func IsAssigned(op Operation) bool {
 // AssignedStringList returns a list of all operations assigned to the pod
 // as a sorted list of strings.
 func AssignedStringList() []string {
-	// Acquire a write lock since we always overwrite the existing set every time
-	// this is called.
+	// Use a read lock so we can exit early without potentially having multiple
+	// threads try to write this simultaneously.
+	operationsMtx.RLock()
+	gotList := operations.assignedStringList
+	operationsMtx.RUnlock()
+	if gotList != nil {
+		return gotList
+	}
+
 	operationsMtx.Lock()
 	defer operationsMtx.Unlock()
-
+	// Verify the list hasn't been set since we last checked.
 	if operations.assignedStringList != nil {
 		return operations.assignedStringList
 	}
