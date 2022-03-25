@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
@@ -16,6 +18,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -487,13 +490,14 @@ func TestToMatcher(t *testing.T) {
 		{
 			name:       "constraint with no match fields",
 			constraint: makeConstraint(),
-			wantErr:    ErrCreatingMather,
+			wantErr:    ErrCreatingMatcher,
 		},
 		{
 			name:       "constraint with match fields",
 			constraint: fooConstraint(),
 			want: &Matcher{
-				fooMatch(),
+				match: fooMatch(),
+				cache: newNsCache(nil),
 			},
 		},
 		{
@@ -502,7 +506,8 @@ func TestToMatcher(t *testing.T) {
 				Object: unstructAssign,
 			},
 			want: &Matcher{
-				fooMatch(),
+				match: fooMatch(),
+				cache: newNsCache(nil),
 			},
 		},
 	}
@@ -514,7 +519,13 @@ func TestToMatcher(t *testing.T) {
 				t.Errorf("ToMatcher() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(Matcher{})); diff != "" {
+			opts := []cmp.Option{
+				// Since nsCache is lazy-instantiated and this test isn't concerned
+				// about caching functionality, we do not compare the cache
+				cmpopts.IgnoreTypes(sync.RWMutex{}, nsCache{}),
+				cmp.AllowUnexported(Matcher{}),
+			}
+			if diff := cmp.Diff(got, tt.want, opts...); diff != "" {
 				t.Errorf("ToMatcher() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -666,6 +677,7 @@ func TestMatcher_Match(t *testing.T) {
 			target := &K8sValidationTarget{}
 			m := &Matcher{
 				match: tt.match,
+				cache: newNsCache(nil),
 			}
 			handled, review, err := target.HandleReview(tt.req)
 			if !handled || err != nil {
@@ -680,5 +692,158 @@ func TestMatcher_Match(t *testing.T) {
 				t.Errorf("want %v matched, got %v", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestNamespaceCache(t *testing.T) {
+	type wantNs struct {
+		key         string
+		ns          *corev1.Namespace
+		shouldExist bool
+	}
+
+	tests := []struct {
+		name     string
+		addNs    map[string]interface{}
+		removeNs []string
+		checkNs  []wantNs
+		wantErr  error
+	}{
+		{
+			name:  "retrieving a namespace from empty cache returns nil",
+			addNs: map[string]interface{}{},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: false,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "retrieving a namespace that does not exist returns nil",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: true,
+				},
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: false,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "retrieving an added namespace returns the namespace",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: true,
+				},
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: true,
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "adding a non-namespace type returns error",
+			addNs: map[string]interface{}{
+				"my-ns1": fooConstraint(),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: true,
+				},
+			},
+			wantErr: ErrCachingType,
+		},
+		{
+			name: "removing a namespace returns nil when retrieving",
+			addNs: map[string]interface{}{
+				"my-ns1": makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+				"my-ns2": makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+			},
+			removeNs: []string{"my-ns1"},
+			checkNs: []wantNs{
+				{
+					key:         "my-ns1",
+					ns:          makeNamespace("my-ns1", map[string]string{"ns1": "label"}),
+					shouldExist: false,
+				},
+				{
+					key:         "my-ns2",
+					ns:          makeNamespace("my-ns2", map[string]string{"ns2": "label"}),
+					shouldExist: true,
+				},
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := &K8sValidationTarget{}
+
+			for key, ns := range tt.addNs {
+				err := target.Add(key, ns)
+				if err != nil && !errors.Is(err, tt.wantErr) {
+					t.Errorf("Add() error = %v, wantErr = %v", err, tt.wantErr)
+				}
+			}
+
+			for _, key := range tt.removeNs {
+				target.Remove(key)
+			}
+
+			wantCount := 0
+			gotCount := len(target.cache.cache)
+			for _, want := range tt.checkNs {
+				if want.shouldExist {
+					wantCount++
+				}
+
+				got, err := target.cache.Get(want.key)
+				if err != nil && !errors.Is(err, tt.wantErr) {
+					t.Errorf("cache.Get() error = %v, wantErr = %v", err, tt.wantErr)
+				}
+				if !want.shouldExist && got == nil {
+					continue
+				}
+				if diff := cmp.Diff(got, want.ns); diff != "" {
+					t.Errorf("+got -want:\n%s", diff)
+				}
+			}
+
+			if gotCount != wantCount {
+				t.Fatalf("got %d members in cache, want %d", gotCount, wantCount)
+			}
+		})
+	}
+}
+
+func newNsCache(data map[string]*corev1.Namespace) *nsCache {
+	if data == nil {
+		data = make(map[string]*corev1.Namespace)
+	}
+
+	return &nsCache{
+		cache: data,
 	}
 }

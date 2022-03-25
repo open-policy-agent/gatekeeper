@@ -14,10 +14,10 @@ replace (
 )
 
 require (
-	contrib.go.opencensus.io/exporter/prometheus v0.4.0
+	contrib.go.opencensus.io/exporter/prometheus v0.4.1
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
-	github.com/go-logr/logr v1.2.2
+	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
 	github.com/google/go-cmp v0.5.7
 	github.com/google/uuid v1.3.0
@@ -35,10 +35,10 @@ require (
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-	k8s.io/api v0.23.4
+	k8s.io/api v0.23.5
 	k8s.io/apiextensions-apiserver v0.23.4
-	k8s.io/apimachinery v0.23.4
-	k8s.io/client-go v0.23.4
+	k8s.io/apimachinery v0.23.5
+	k8s.io/client-go v0.23.5
 	k8s.io/klog/v2 v2.40.1
 	k8s.io/utils v0.0.0-20211203121628-587287796c64
 	sigs.k8s.io/controller-runtime v0.11.1
