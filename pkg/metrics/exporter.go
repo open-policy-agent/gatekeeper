@@ -76,8 +76,9 @@ func (r *runner) shutdownMetricsExporter(ctx context.Context) error {
 	switch mb {
 	case prometheusExporter:
 		log.Info("shutting down prometheus server")
-		if curPromSrv != nil {
-			if err := curPromSrv.Shutdown(ctx); err != nil {
+		srv := curPromSrv.Srv()
+		if srv != nil {
+			if err := srv.Shutdown(ctx); err != nil {
 				return err
 			}
 		}

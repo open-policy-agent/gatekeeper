@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"net/http"
+	"sync"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats/view"
@@ -10,7 +11,12 @@ import (
 	ctlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-var curPromSrv *http.Server
+type prometheusServer struct {
+	srv *http.Server
+	mux sync.RWMutex
+}
+
+var curPromSrv = &prometheusServer{}
 
 var log = logf.Log.WithName("metrics")
 
@@ -41,9 +47,22 @@ func newPrometheusExporter() (view.Exporter, error) {
 func startNewPromSrv(e *prometheus.Exporter, port int) *http.Server {
 	sm := http.NewServeMux()
 	sm.Handle("/metrics", e)
-	curPromSrv = &http.Server{
+	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
 		Handler: sm,
 	}
-	return curPromSrv
+	curPromSrv.SetSrv(srv)
+	return srv
+}
+
+func (p *prometheusServer) Srv() *http.Server {
+	p.mux.RLock()
+	defer p.mux.RUnlock()
+	return p.srv
+}
+
+func (p *prometheusServer) SetSrv(srv *http.Server) {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+	p.srv = srv
 }
