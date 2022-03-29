@@ -200,15 +200,15 @@ func (am *Manager) audit(ctx context.Context) error {
 	if *auditFromCache {
 		var res []Result
 		am.log.Info("Auditing from cache")
-		res, err = am.auditFromCache(ctx)
-		if err != nil {
-			return err
-		}
+		res, errs := am.auditFromCache(ctx)
 
 		am.log.Info("Audit opa.Audit() results", "violations", len(res))
+		for _, err := range errs {
+			am.log.Error(err, "Auditing")
+		}
 
 		err := am.addAuditResponsesToUpdateLists(updateLists, res, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-		if err != nil {
+		if errs != nil {
 			return err
 		}
 	} else {
@@ -410,12 +410,12 @@ func (am *Manager) auditResources(
 					fileName := fmt.Sprintf("%d", index)
 					destFile := path.Join(*apiCacheDir, subPath, fileName)
 					item := objList.Items[index]
-					data, err := item.MarshalJSON()
+					jsonBytes, err := item.MarshalJSON()
 					if err != nil {
 						log.Error(err, "error while marshaling unstructured object to JSON")
 						continue
 					}
-					if err := os.WriteFile(destFile, data, 0o600); err != nil {
+					if err := os.WriteFile(destFile, jsonBytes, 0o600); err != nil {
 						log.Error(err, "error writing data to file")
 						continue
 					}
@@ -442,20 +442,22 @@ func (am *Manager) auditResources(
 	return nil
 }
 
-func (am *Manager) auditFromCache(ctx context.Context) ([]Result, error) {
+func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	objs, err := am.auditCache.ListObjects(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("unable to list objects from audit cache: %w", err)
+		return nil, []error{fmt.Errorf("unable to list objects from audit cache: %w", err)}
 	}
 
 	var results []Result
 
+	var errs []error
 	for i := range objs {
 		// Prevent referencing loop variables directly.
 		obj := objs[i]
 		resp, err := am.opa.Review(ctx, obj)
 		if err != nil {
-			return nil, err
+			errs = append(errs, fmt.Errorf("validating %v %s/%s: %v", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err))
+			continue
 		}
 
 		for _, r := range resp.Results() {
@@ -466,7 +468,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, error) {
 		}
 	}
 
-	return results, nil
+	return results, errs
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
