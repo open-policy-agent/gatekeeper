@@ -7,7 +7,7 @@ Gatekeeper is flexible in how it can be deployed. If desired, core pieces of fun
 out to be run in different pods. This allows Gatekeeper to accommodate needs like running in a monolithic pod
 in order to avoid overhead, or running each operation in a separate pod to make scaling individual operations
 easier and to limit the impact of operational issues with any one operation (e.g. if audit is running in its
-own pod, audit OOMing will not affect the validation webhook).
+own pod, audit running out of memory will not affect the validation webhook).
 
 Gatekeeper achieves this through the concept of `Operations`, which can be enabled via the `--operation`
 command line flag. To enable multiple operations this flag can be defined multiple times. If no `--operation`
@@ -23,12 +23,12 @@ __--operation key:__ `webhook`
 
 This operation serves the validating webhook that Kubernetes' API server calls as part of the admission process.
 
-### High Level Functionality
+### Required Behaviors
 
 At a high level, this requires:
 
 * Ingesting constraint templates
-* The ability to create CRDs for a corresponding constraint template
+* Creating CRDs for a corresponding constraint template
 * Ingesting constraints
 * Reporting the status of ingested constraints/templates
 * Watching and syncing resources specified by the `Config` resource to support referential constraints
@@ -57,7 +57,7 @@ __--operation key:__ `mutation-webhook`
 
 This operation serves the mutating webhook that Kubernetes' API server calls as part of the admission process.
 
-### High Level Functionality
+### Required Behaviors
 
 At a high level, this requires:
 
@@ -81,13 +81,13 @@ This operation runs the audit process, which periodically evaluates existing res
 any violations it discovers. To limit traffic to the API server and to avoid contention writing audit results
 to constraints, audit should run as a singleton pod.
 
-### High Level Functionality
+### Required Behaviors
 
 At a high level, this requires:
 
 * Listing all objects on the cluster to scan them for violations
 * Ingesting constraint templates
-* The ability to create CRDs for a corresponding constraint template
+* Creating CRDs for a corresponding constraint template
 * Ingesting constraints
 * Reporting the status of ingested constraints/templates
 * Watching and syncing resources specified by the `Config` resource to support referential constraints
@@ -119,7 +119,7 @@ would be blank.
 In order to do its job (eliminating write contention) effectively, the Status operation should be run as a
 singleton.
 
-### High Level Functionality
+### Required Behaviors
 
 At a high level, this requires:
 
@@ -141,7 +141,7 @@ Because users may not want to install mutation CRDs if they do not want to use t
 trying to watch a Kind that doesn't exist would cause errors, Gatekeeper splits mutation status into a
 separate operation. It behaves like the Status operation, except it only applies for mutation resources.
 
-### High Level Functionality
+### Required Behaviors
 
 At a high level, this requires:
 
