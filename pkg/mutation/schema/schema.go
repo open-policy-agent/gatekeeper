@@ -194,7 +194,6 @@ func (db *DB) GetConflicts(id types.ID) IDSet {
 	defer db.mutex.RUnlock()
 
 	mutator, ok := db.cachedMutators[id]
-
 	if !ok {
 		return nil
 	}
