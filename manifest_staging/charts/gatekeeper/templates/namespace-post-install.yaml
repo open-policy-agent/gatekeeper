@@ -39,14 +39,7 @@ spec:
             - admission.gatekeeper.sh/ignore=no-self-managing
             - --overwrite
           securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - all
-            readOnlyRootFilesystem: true
-            runAsGroup: 999
-            runAsNonRoot: true
-            runAsUser: 1000
+            {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
 ---
 apiVersion: v1
 kind: ServiceAccount

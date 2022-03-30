@@ -92,14 +92,7 @@ spec:
         resources:
           {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - all
-          readOnlyRootFilesystem: true
-          runAsGroup: 999
-          runAsNonRoot: true
-          runAsUser: 1000
+          {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
         - mountPath: /tmp/audit
           name: tmp-volume
