@@ -107,14 +107,7 @@ spec:
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - all
-          readOnlyRootFilesystem: true
-          runAsGroup: 999
-          runAsNonRoot: true
-          runAsUser: 1000
+          {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
         - mountPath: /certs
           name: cert

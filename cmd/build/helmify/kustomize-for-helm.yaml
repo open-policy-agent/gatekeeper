@@ -107,6 +107,8 @@ spec:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+          securityContext:
+            HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
       nodeSelector:
@@ -165,6 +167,8 @@ spec:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+          securityContext:
+            HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:
