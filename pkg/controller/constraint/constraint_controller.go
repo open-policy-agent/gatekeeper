@@ -66,7 +66,11 @@ type Adder struct {
 	Tracker          *readiness.Tracker
 	GetPod           func(context.Context) (*corev1.Pod, error)
 	ProcessExcluder  *process.Excluder
-	IfWatching       func(schema.GroupVersionKind, func() error) (bool, error)
+	// IfWatching allows the reconciler to only execute functions if a constraint
+	// template is currently being watched. It is designed to be atomic to avoid
+	// race conditions between the constraint controller and the constraint template
+	// controller
+	IfWatching func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
 func (a *Adder) InjectOpa(o *constraintclient.Client) {
@@ -195,7 +199,9 @@ type ReconcileConstraint struct {
 	tracker          *readiness.Tracker
 	getPod           func(context.Context) (*corev1.Pod, error)
 	// ifWatching allows us to short-circuit get requests
-	// that would otherwise trigger a watch
+	// that would otherwise trigger a watch. The bool returns whether
+	// the function was executed, which can be used to determine
+	// whether the reconciler should infer the object has been deleted
 	ifWatching func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
