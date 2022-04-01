@@ -43,7 +43,8 @@ type Mutator struct {
 var _ schema.MutatorWithSchema = &Mutator{}
 
 func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, obj) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, gvk) {
 		return false
 	}
 	matches, err := match.Matches(&m.modifySet.Spec.Match, obj, ns)
@@ -59,12 +60,14 @@ func (m *Mutator) TerminalType() parser.NodeType {
 }
 
 func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+	values := m.modifySet.Spec.Parameters.Values.DeepCopy().FromList
+
 	return core.Mutate(
 		m.Path(),
 		m.tester,
 		setter{
 			op:     m.modifySet.Spec.Parameters.Operation,
-			values: runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{}),
+			values: values,
 		},
 		obj,
 	)
