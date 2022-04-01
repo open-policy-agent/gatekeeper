@@ -64,7 +64,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch) *ReconcileConstraintStatus {
+	cs *watch.ControllerSwitch,
+) *ReconcileConstraintStatus {
 	return &ReconcileConstraintStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),

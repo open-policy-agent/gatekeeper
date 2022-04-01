@@ -75,6 +75,7 @@ func (db *DB) Upsert(mutator MutatorWithSchema) error {
 	}
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
+
 	return db.upsert(mutator)
 }
 
@@ -123,6 +124,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 func (db *DB) Remove(id types.ID) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
+
 	db.remove(id)
 }
 
@@ -183,13 +185,15 @@ func (db *DB) remove(id types.ID) {
 func (db *DB) HasConflicts(id types.ID) bool {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
+
 	return db.conflicts[id]
 }
 
 func (db *DB) GetConflicts(id types.ID) IDSet {
 	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
 	mutator, ok := db.cachedMutators[id]
-	db.mutex.RUnlock()
 	if !ok {
 		return nil
 	}

@@ -9,6 +9,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -79,19 +80,19 @@ func TestTest(t *testing.T) {
 			},
 			want: []*types.Result{
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   constraintNeverValidate,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   object,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "never validate",
 					Constraint: constraintNeverValidate,
-					Resource:   templateNeverValidate,
 				},
 			},
 		},
@@ -105,14 +106,14 @@ func TestTest(t *testing.T) {
 			},
 			want: []*types.Result{
 				{
+					Target:     target.Name,
 					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
 					Constraint: constraintReferential,
-					Resource:   objectReferentialInventory,
 				},
 				{
+					Target:     target.Name,
 					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
 					Constraint: constraintReferential,
-					Resource:   objectReferentialDeny,
 				},
 			},
 		},
@@ -178,7 +179,7 @@ func TestTest(t *testing.T) {
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction", "Review"))
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction"))
 			if diff != "" {
 				t.Errorf("diff in Result objects (-want +got):\n%s", diff)
 			}

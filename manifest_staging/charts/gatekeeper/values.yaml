@@ -34,6 +34,15 @@ postInstall:
       tag: v3.7.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
     enabled: false
@@ -42,6 +51,15 @@ preUninstall:
       tag: v3.7.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
@@ -83,6 +101,15 @@ controllerManager:
     requests:
       cpu: 100m
       memory: 256Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
@@ -100,8 +127,26 @@ audit:
     requests:
       cpu: 100m
       memory: 256Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 crds:
   resources: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
 pdb:
   controllerManager:
     minAvailable: 1

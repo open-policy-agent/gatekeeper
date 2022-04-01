@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -22,7 +23,7 @@ func TestAdmission(t *testing.T) {
 	tests := []struct {
 		name          string
 		kind          metav1.GroupVersionKind
-		obj           runtime.Object
+		obj           client.Object
 		op            admissionv1.Operation
 		expectAllowed bool
 	}{
@@ -166,7 +167,7 @@ func TestAdmissionPrefix(t *testing.T) {
 		name          string
 		prefixes      []string
 		kind          metav1.GroupVersionKind
-		obj           runtime.Object
+		obj           client.Object
 		op            admissionv1.Operation
 		expectAllowed bool
 	}{

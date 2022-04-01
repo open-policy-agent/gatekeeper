@@ -27,7 +27,7 @@ import (
 // Goroutines can be individually canceled provided they respect the context passed to them.
 type SingleRunner struct {
 	m   map[string]context.CancelFunc
-	mu  sync.Mutex
+	mu  sync.RWMutex
 	grp *errgroup.Group
 }
 
@@ -44,10 +44,14 @@ func RunnerWithContext(ctx context.Context) *SingleRunner {
 // Wait waits for all goroutines managed by the SingleRunner to complete.
 // Returns the first error returned from a managed goroutine, or nil.
 func (s *SingleRunner) Wait() error {
-	if s.grp == nil {
+	s.mu.RLock()
+	grp := s.grp
+	s.mu.RUnlock()
+	if grp == nil {
 		return nil
 	}
-	err := s.grp.Wait()
+
+	err := grp.Wait()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

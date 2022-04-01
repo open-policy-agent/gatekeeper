@@ -20,7 +20,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // OpaDataClient is an interface for caching data.
@@ -45,7 +45,7 @@ func NewFilteredOpaDataClient(opa OpaDataClient, watchSet *watch.Set) *FilteredD
 // AddData adds data to the opa cache if that data is currently being watched.
 // Unwatched data is silently dropped with no error.
 func (f *FilteredDataClient) AddData(ctx context.Context, data interface{}) (*types.Responses, error) {
-	if obj, ok := data.(runtime.Object); ok {
+	if obj, ok := data.(client.Object); ok {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		if !f.watched.Contains(gvk) {
 			return &types.Responses{}, nil
@@ -58,7 +58,7 @@ func (f *FilteredDataClient) AddData(ctx context.Context, data interface{}) (*ty
 // RemoveData removes data from the opa cache if that data is currently being watched.
 // Unwatched data is silently dropped with no error.
 func (f *FilteredDataClient) RemoveData(ctx context.Context, data interface{}) (*types.Responses, error) {
-	if obj, ok := data.(runtime.Object); ok {
+	if obj, ok := data.(client.Object); ok {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		if !f.watched.Contains(gvk) {
 			return &types.Responses{}, nil
