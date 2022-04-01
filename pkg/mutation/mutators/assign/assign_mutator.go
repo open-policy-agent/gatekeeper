@@ -42,7 +42,8 @@ type Mutator struct {
 var _ schema.MutatorWithSchema = &Mutator{}
 
 func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if !match.AppliesTo(m.assign.Spec.ApplyTo, gvk) {
 		return false
 	}
 	matches, err := match.Matches(&m.assign.Spec.Match, obj, ns)

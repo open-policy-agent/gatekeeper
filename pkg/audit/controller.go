@@ -19,12 +19,12 @@ import (
 )
 
 // AddToManager adds audit manager to the Manager.
-func AddToManager(m manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder) error {
+func AddToManager(m manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) error {
 	if *auditInterval == 0 {
 		log.Info("auditing is disabled")
 		return nil
 	}
-	am, err := New(m, opa, processExcluder)
+	am, err := New(m, opa, processExcluder, cacheLister)
 	if err != nil {
 		return err
 	}

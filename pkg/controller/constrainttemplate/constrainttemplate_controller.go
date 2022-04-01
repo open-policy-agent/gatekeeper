@@ -422,7 +422,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// It's important that opa.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(unversionedCT); err != nil {
+	if _, err := r.opa.AddTemplate(ctx, unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
@@ -480,7 +480,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 
 func (r *ReconcileConstraintTemplate) handleDelete(
 	ctx context.Context,
-	ct *templates.ConstraintTemplate) (reconcile.Result, error) {
+	ct *templates.ConstraintTemplate,
+) (reconcile.Result, error) {
 	logger := logger.WithValues("name", ct.GetName())
 	logger.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)

@@ -10,6 +10,7 @@ var (
 	ErrMissingConstraint         = errors.New("missing Constraint")
 	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
 	ErrInvalidModule             = errors.New("invalid module")
+	ErrReview                    = errors.New("target.HandleReview failed")
 )
 
 // IsUnrecognizedConstraintError returns true if err is an ErrMissingConstraint.

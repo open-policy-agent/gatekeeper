@@ -22,9 +22,7 @@ import (
 
 	constraintTypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -42,19 +40,17 @@ type fakeOpa struct {
 // keyFor returns an opaKey for the provided resource.
 // Returns error if the resource is not a runtime.Object w/ metadata.
 func (f *fakeOpa) keyFor(obj interface{}) (opaKey, error) {
-	o, ok := obj.(runtime.Object)
+	o, ok := obj.(client.Object)
 	if !ok {
 		return opaKey{}, fmt.Errorf("expected runtime.Object, got: %T", obj)
 	}
 	gvk := o.GetObjectKind().GroupVersionKind()
-	k, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		return opaKey{}, fmt.Errorf("extracting key: %v", err)
+	ns := o.GetNamespace()
+	if ns == "" {
+		return opaKey{gvk: gvk, key: o.GetName()}, nil
 	}
-	return opaKey{
-		gvk: gvk,
-		key: k,
-	}, nil
+
+	return opaKey{gvk: gvk, key: fmt.Sprintf("%s/%s", ns, o.GetName())}, nil
 }
 
 func (f *fakeOpa) AddData(ctx context.Context, data interface{}) (*constraintTypes.Responses, error) {
@@ -78,7 +74,7 @@ func (f *fakeOpa) RemoveData(ctx context.Context, data interface{}) (*constraint
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := data.(target.WipeData); ok {
+	if target.IsWipeData(data) {
 		f.data = make(map[opaKey]interface{})
 		return &constraintTypes.Responses{}, nil
 	}

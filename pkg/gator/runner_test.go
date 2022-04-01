@@ -698,6 +698,146 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "included namespace",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "included namespace Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "included",
+						Object:     "included.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "not-included",
+						Object:     "not-included.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintIncludedNamespace),
+				},
+				"included.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectIncluded),
+				},
+				"not-included.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectExcluded),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "included namespace Constraint",
+					CaseResults: []CaseResult{{
+						Name: "included",
+					}, {
+						Name: "not-included",
+					}},
+				}},
+			},
+		},
+		{
+			name: "cluster scope",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "cluster scope Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "cluster-scope",
+						Object:     "included.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "namespace-scope",
+						Object:     "not-included.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintClusterScope),
+				},
+				"included.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectClusterScope),
+				},
+				"not-included.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectNamespaceScope),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "cluster scope Constraint",
+					CaseResults: []CaseResult{{
+						Name: "cluster-scope",
+					}, {
+						Name: "namespace-scope",
+					}},
+				}},
+			},
+		},
+		{
+			name: "namespace selector",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "namespace selected Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "selected",
+						Object:     "object.yaml",
+						Inventory:  []string{"inventory.yaml"},
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "not-selected",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Inventory:  []string{"inventory-2.yaml"},
+					}, {
+						Name:       "missing-namespace",
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("missing Namespace")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNamespaceSelector),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectNamespaceScope),
+				},
+				"inventory.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NamespaceSelected),
+				},
+				"inventory-2.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NamespaceNotSelected),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "namespace selected Constraint",
+					CaseResults: []CaseResult{{
+						Name: "selected",
+					}, {
+						Name: "not-selected",
+					}, {
+						Name: "missing-namespace",
+					}},
+				}},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
