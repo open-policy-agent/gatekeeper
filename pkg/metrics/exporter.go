@@ -53,22 +53,24 @@ func (r *runner) Start(ctx context.Context) error {
 }
 
 func (r *runner) newMetricsExporter() error {
-	var e view.Exporter
-	var err error
 	mb := strings.ToLower(*metricsBackend)
 	log.Info("metrics", "backend", mb)
 	switch mb {
 	// Prometheus is the only exporter for now
 	case prometheusExporter:
-		e, err = newPrometheusExporter()
+		e, err := newPrometheusExporter()
+		if err != nil {
+			return err
+		}
+
+		srv := startPrometheusExporter(e)
+		view.RegisterExporter(e)
+
+		// listenAndServe only exits on failure.
+		return listenAndServe(srv)
 	default:
-		err = fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
+		return fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
 	}
-	if err != nil {
-		return err
-	}
-	view.RegisterExporter(e)
-	return nil
 }
 
 func (r *runner) shutdownMetricsExporter(ctx context.Context) error {

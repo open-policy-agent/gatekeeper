@@ -8,23 +8,23 @@ import (
 func TestPrometheusExporter(t *testing.T) {
 	const expectedAddr = ":8888"
 
+	e, err := newPrometheusExporter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e == nil {
+		t.Error("newPrometheusExporter() should not return nil")
+	}
+
+	srv := startPrometheusExporter(e)
 	go func() {
-		e, err := newPrometheusExporter()
+		err = listenAndServe(srv)
 		if err != nil {
 			t.Error(err)
 		}
-		if e == nil {
-			t.Error("newPrometheusExporter() should not return nil")
-		}
-
-		// TODO(willbeason): newPrometheusExporter() never exits, so the rest of the code in this goroutine never
-		//  executes. As this goroutine is asynchronous with the actual test, the test runner doesn't wait for this
-		//  goroutine to finish before exiting the test (implicitly canceling the goroutine). Unfortunately the fix
-		//  to this bug is nontrivial, so I'll be doing it as its own pull request.
-		// If you get this panic, it means you've fixed the bug.
-		panic("THIS TEST DOES NOT WORK AS INTENDED")
 	}()
 
+	// TODO: This test should actually check that the exporter is able to serve requests.
 	time.Sleep(100 * time.Millisecond)
 	srv := curPromSrv.Srv()
 	if srv.Addr != expectedAddr {
