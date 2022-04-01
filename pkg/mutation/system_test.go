@@ -412,15 +412,24 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	if gotErr != nil {
 		t.Fatalf("got Mutate() error = %v, want <nil>", gotErr)
 	}
-	if s.Get(id("foo")).(*fakeMutator).MutationCount != 0 {
+
+	if getMutationCount(t, s.Get(id("foo"))) != 0 {
 		t.Errorf("got foo.MutationCount == %d, want %d", foo.MutationCount, 0)
 	}
-	if s.Get(id("foo-conflict")).(*fakeMutator).MutationCount != 0 {
+	if getMutationCount(t, s.Get(id("foo-conflict"))) != 0 {
 		t.Errorf("got fooConflict.MutationCount == %d, want %d", fooConflict.MutationCount, 0)
 	}
-	if s.Get(id("bar")).(*fakeMutator).MutationCount != 2 {
+	if getMutationCount(t, s.Get(id("bar"))) != 2 {
 		t.Errorf("got bar.MutationCount == %d, want %d", bar.MutationCount, 2)
 	}
+}
+
+func getMutationCount(t *testing.T, m types.Mutator) int {
+	f, ok := m.(*fakeMutator)
+	if !ok {
+		t.Fatalf("got mutator type %T, want %T", m, &fakeMutator{})
+	}
+	return f.MutationCount
 }
 
 type fakeReporter struct {

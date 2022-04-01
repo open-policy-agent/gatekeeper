@@ -10,6 +10,9 @@ import (
 )
 
 type Result struct {
+	// Target is the target this violation is for.
+	Target string `json:"target"`
+
 	Msg string `json:"msg,omitempty"`
 
 	// Metadata includes the contents of `details` from the Rego rule signature
@@ -18,31 +21,46 @@ type Result struct {
 	// The constraint that was violated
 	Constraint *unstructured.Unstructured `json:"constraint,omitempty"`
 
-	// The violating review
-	Review interface{} `json:"review,omitempty"`
-
-	// The violating Resource, filled out by the Target
-	Resource interface{}
-
 	// The enforcement action of the constraint
 	EnforcementAction string `json:"enforcementAction,omitempty"`
 }
 
+// Response is a collection of Constraint violations for a particular Target.
+// Each Result is for a distinct Constraint.
 type Response struct {
 	Trace   *string
-	Input   *string
 	Target  string
 	Results []*Result
+}
+
+func (r *Response) AddResult(results *Result) {
+	r.Results = append(r.Results, results)
+}
+
+// Sort sorts the Results in Response lexicographically first by the Constraint
+// Kind, and then by Constraint Name.
+func (r *Response) Sort() {
+	// Since Constraints are uniquely identified by Kind and Name, this guarantees
+	// a stable sort when each Result is for a different Constraint.
+	sort.Slice(r.Results, func(i, j int) bool {
+		resultI := r.Results[i]
+		resultJ := r.Results[j]
+
+		kindI := resultI.Constraint.GetKind()
+		kindJ := resultJ.Constraint.GetKind()
+		if kindI != kindJ {
+			return kindI < kindJ
+		}
+
+		nameI := resultI.Constraint.GetName()
+		nameJ := resultJ.Constraint.GetName()
+		return nameI < nameJ
+	})
 }
 
 func (r *Response) TraceDump() string {
 	b := &strings.Builder{}
 	_, _ = fmt.Fprintf(b, "Target: %s\n", r.Target)
-	if r.Input == nil {
-		_, _ = fmt.Fprintf(b, "Input: TRACING DISABLED\n\n")
-	} else {
-		_, _ = fmt.Fprintf(b, "Input:\n%s\n\n", *r.Input)
-	}
 	if r.Trace == nil {
 		_, _ = fmt.Fprintf(b, "Trace: TRACING DISABLED\n\n")
 	} else {
@@ -70,9 +88,13 @@ func (r *Responses) Results() []*Result {
 	if r == nil {
 		return nil
 	}
+
 	var res []*Result
-	for _, resp := range r.ByTarget {
-		res = append(res, resp.Results...)
+	for target, resp := range r.ByTarget {
+		for _, rr := range resp.Results {
+			rr.Target = target
+			res = append(res, rr)
+		}
 	}
 
 	// Make results more (but not completely) deterministic.

@@ -126,7 +126,8 @@ func newReconciler(
 	cs *watch.ControllerSwitch,
 	reporter StatsReporter,
 	constraintsCache *ConstraintsCache,
-	tracker *readiness.Tracker) *ReconcileConstraint {
+	tracker *readiness.Tracker,
+) *ReconcileConstraint {
 	r := &ReconcileConstraint{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
