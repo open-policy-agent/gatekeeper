@@ -117,7 +117,7 @@ func makeReconcileConstrainTemplate() *v1beta1.ConstraintTemplate {
 			},
 			Targets: []v1beta1.Target{
 				{
-					Target: "admission.k8s.gatekeeper.sh",
+					Target: target.Name,
 					Rego: `
 package foo
 
@@ -156,7 +156,11 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -265,8 +269,8 @@ func TestReconcile(t *testing.T) {
 
 		gotResults := resp.Results()
 		if len(gotResults) != 1 {
-			fmt.Println(resp.TraceDump())
-			fmt.Println(opaClient.Dump(ctx))
+			t.Log(resp.TraceDump())
+			t.Log(opaClient.Dump(ctx))
 			t.Fatalf("want 1 result, got %v", gotResults)
 		}
 	})
@@ -370,7 +374,7 @@ func TestReconcile(t *testing.T) {
 				},
 				Targets: []v1beta1.Target{
 					{
-						Target: "admission.k8s.gatekeeper.sh",
+						Target: target.Name,
 						Rego: `
 	package foo
 
@@ -455,8 +459,8 @@ func TestReconcile(t *testing.T) {
 
 		gotResults := resp.Results()
 		if len(resp.Results()) != 0 {
-			fmt.Println(resp.TraceDump())
-			fmt.Println(opaClient.Dump(ctx))
+			t.Log(resp.TraceDump())
+			t.Log(opaClient.Dump(ctx))
 			t.Fatalf("did not get 0 results: %v", gotResults)
 		}
 
@@ -511,7 +515,7 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 			},
 			Targets: []v1beta1.Target{
 				{
-					Target: "admission.k8s.gatekeeper.sh",
+					Target: target.Name,
 					Rego: `
 package foo
 
@@ -567,7 +571,11 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -837,7 +845,13 @@ type testExpectations interface {
 // passed to client.Create, so it is not mutated by this call.
 func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj client.Object) {
 	t.Helper()
-	err := c.Create(ctx, obj.DeepCopyObject().(client.Object))
+	cpy := obj.DeepCopyObject()
+	cpyObj, ok := cpy.(client.Object)
+	if !ok {
+		t.Fatalf("got obj.DeepCopyObject() type = %T, want %T", cpy, client.Object(nil))
+	}
+
+	err := c.Create(ctx, cpyObj)
 	if err != nil {
 		t.Fatal(err)
 	}

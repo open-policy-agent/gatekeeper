@@ -82,7 +82,11 @@ func TestReconcile(t *testing.T) {
 
 	// initialize OPA
 	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
-	driver := local.New(args...)
+	driver, err := local.New(args...)
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opa, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)

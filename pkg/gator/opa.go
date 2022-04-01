@@ -7,10 +7,15 @@ import (
 )
 
 func NewOPAClient() (Client, error) {
-	driver := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		return nil, err
+	}
+
 	c, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		return nil, err
 	}
-	return c, err
+
+	return c, nil
 }
