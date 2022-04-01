@@ -115,7 +115,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Encasing this call in a function prevents the arguments from being evaluated early.
 	id := types.MakeID(mutationObj)
 	defer func() {
-		r.reportMutator(id, ingestionStatus, startTime, conflict)
+		if !deleted {
+			r.cache.Upsert(id, ingestionStatus, conflict)
+		}
+		r.reportMutator(id, ingestionStatus, startTime, deleted)
 	}()
 
 	// previousConflicts records the conflicts this Mutator has with other mutators
@@ -220,14 +223,15 @@ func (r *Reconciler) defaultGetPod(_ context.Context) (*corev1.Pod, error) {
 	panic("GetPod must be injected to Reconciler")
 }
 
-func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time, conflict bool) {
-	r.cache.Upsert(id, ingestionStatus, conflict)
+func (r *Reconciler) reportMutator(id types.ID, ingestionStatus ctrlmutators.MutatorIngestionStatus, startTime time.Time, deleted bool) {
 	if r.reporter == nil {
 		return
 	}
 
-	if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
-		r.log.Error(err, "failed to report mutator ingestion request")
+	if !deleted {
+		if err := r.reporter.ReportMutatorIngestionRequest(ingestionStatus, time.Since(startTime)); err != nil {
+			r.log.Error(err, "failed to report mutator ingestion request")
+		}
 	}
 
 	for status, count := range r.cache.TallyStatus() {
