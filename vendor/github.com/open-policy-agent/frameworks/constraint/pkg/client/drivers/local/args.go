@@ -43,6 +43,10 @@ func Defaults() Arg {
 			d.compilers.capabilities.Builtins = append(d.compilers.capabilities.Builtins, newBuiltin)
 		}
 
+		if d.sendRequestToProvider == nil {
+			d.sendRequestToProvider = externaldata.DefaultSendRequestToProvider
+		}
+
 		return nil
 	}
 }

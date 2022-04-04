@@ -1,5 +1,7 @@
 package local
 
+import "github.com/open-policy-agent/opa/ast"
+
 const (
 	// templatePath is the path the Template's Rego code is stored.
 	// Must match the "data.xxx.violation[r]" path in hookModule.
@@ -16,7 +18,7 @@ const (
 	// This removes boilerplate that would otherwise need to be present in every
 	// Template's Rego code. The violation's response is written to a standard
 	// location we can read from to see if any violations occurred.
-	hookModule = `
+	hookModuleRego = `
 package hooks
 
 # Determine if the object under review violates any passed Constraints.
@@ -45,3 +47,13 @@ violation[response] {
 
 `
 )
+
+var hookModule *ast.Module
+
+func init() {
+	var err error
+	hookModule, err = parseModule(hookModulePath, hookModuleRego)
+	if err != nil {
+		panic(err)
+	}
+}

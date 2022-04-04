@@ -116,37 +116,29 @@ func (d *Compilers) list() map[string]map[string]*ast.Compiler {
 	return result
 }
 
-type TargetModule struct {
-	Rego string
-	Libs []string
-}
-
 // parseConstraintTemplate validates the rego in template target by parsing
 // rego modules.
-func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []string) (map[string]TargetModule, error) {
+func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []string) (map[string][]*ast.Module, error) {
 	rr, err := regorewriter.New(regorewriter.NewPackagePrefixer(templateLibPrefix), []string{libRoot}, externs)
 	if err != nil {
 		return nil, fmt.Errorf("creating rego rewriter: %w", err)
 	}
 
-	mods := make(map[string]TargetModule)
+	mods := make(map[string][]*ast.Module)
 	for _, target := range templ.Spec.Targets {
 		targetMods, err := parseConstraintTemplateTarget(rr, target)
 		if err != nil {
 			return nil, err
 		}
 
-		mods[target.Target] = TargetModule{
-			Rego: target.Rego,
-			Libs: targetMods,
-		}
+		mods[target.Target] = targetMods
 	}
 
 	return mods, nil
 }
 
-func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec templates.Target) ([]string, error) {
-	entryPoint, err := parseModule(targetSpec.Rego)
+func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec templates.Target) ([]*ast.Module, error) {
+	entryPoint, err := parseModule(templatePath, targetSpec.Rego)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
 	}
@@ -170,7 +162,14 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec tem
 	rr.AddEntryPointModule(templatePath, entryPoint)
 	for idx, libSrc := range targetSpec.Libs {
 		libPath := fmt.Sprintf(`%s["lib_%d"]`, templateLibPrefix, idx)
-		if err = rr.AddLib(libPath, libSrc); err != nil {
+
+		m, err := parseModule(libPath, libSrc)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v",
+				clienterrors.ErrInvalidConstraintTemplate, err)
+		}
+
+		if err = rr.AddLib(libPath, m); err != nil {
 			return nil, fmt.Errorf("%w: %v",
 				clienterrors.ErrInvalidConstraintTemplate, err)
 		}
@@ -182,44 +181,28 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec tem
 			clienterrors.ErrInvalidConstraintTemplate, err)
 	}
 
-	var mods []string
-	err = sources.ForEachModule(func(m *regorewriter.Module) error {
-		content, err2 := m.Content()
-		if err2 != nil {
-			return err2
-		}
-		mods = append(mods, string(content))
-		return nil
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v",
-			clienterrors.ErrInvalidConstraintTemplate, err)
+	var mods []*ast.Module
+	for _, m := range sources.EntryPoints {
+		mods = append(mods, m.Module)
+	}
+	for _, m := range sources.Libs {
+		mods = append(mods, m.Module)
 	}
 
 	return mods, nil
 }
 
-func compileTemplateTarget(module TargetModule, capabilities *ast.Capabilities, printEnabled bool) (*ast.Compiler, error) {
+func compileTemplateTarget(module []*ast.Module, capabilities *ast.Capabilities, printEnabled bool) (*ast.Compiler, error) {
 	compiler := ast.NewCompiler().
 		WithCapabilities(capabilities).
 		WithEnablePrintStatements(printEnabled)
 
-	modules := make(map[string]*ast.Module)
+	modules := make(map[string]*ast.Module, len(module)+1)
+	modules[hookModulePath] = hookModule
 
-	builtinModule, err := ast.ParseModule(hookModulePath, hookModule)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", clienterrors.ErrParse, err)
-	}
-	modules[hookModulePath] = builtinModule
-
-	for i, lib := range module.Libs {
+	for i, lib := range module {
 		libPath := fmt.Sprintf("%s%d", templatePath, i)
-		libModule, err := ast.ParseModule(libPath, lib)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", clienterrors.ErrParse, err)
-		}
-		modules[libPath] = libModule
+		modules[libPath] = lib
 	}
 
 	compiler.Compile(modules)
@@ -228,4 +211,19 @@ func compileTemplateTarget(module TargetModule, capabilities *ast.Capabilities, 
 	}
 
 	return compiler, nil
+}
+
+// parseModule parses the module and also fails empty modules.
+func parseModule(path, rego string) (*ast.Module, error) {
+	module, err := ast.ParseModule(path, rego)
+	if err != nil {
+		return nil, err
+	}
+
+	if module == nil {
+		return nil, fmt.Errorf("%w: module %q is empty",
+			clienterrors.ErrInvalidModule, templatePath)
+	}
+
+	return module, nil
 }
