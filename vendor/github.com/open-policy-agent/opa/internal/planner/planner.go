@@ -514,16 +514,18 @@ func (p *Planner) planQuery(q ast.Body, index int, iter planiter) error {
 // TODO(tsandall): improve errors to include location information.
 func (p *Planner) planExpr(e *ast.Expr, iter planiter) error {
 
-	if e.Negated {
+	switch {
+	case e.Negated:
 		return p.planNot(e, iter)
-	}
 
-	if len(e.With) > 0 {
+	case len(e.With) > 0:
 		return p.planWith(e, iter)
-	}
 
-	if e.IsCall() {
+	case e.IsCall():
 		return p.planExprCall(e, iter)
+
+	case e.IsEvery():
+		return p.planExprEvery(e, iter)
 	}
 
 	return p.planExprTerm(e, iter)
@@ -712,6 +714,74 @@ func (p *Planner) planExprTerm(e *ast.Expr, iter planiter) error {
 		})
 		return iter()
 	})
+}
+
+func (p *Planner) planExprEvery(e *ast.Expr, iter planiter) error {
+	every := e.Terms.(*ast.Every)
+
+	cond0 := p.newLocal() // outer not
+	cond1 := p.newLocal() // inner not
+
+	// We're using condition variables together with IsDefinedStmt to encode
+	// this:
+	// every x, y in xs { p(x,y) }
+	// ~> p(x1, y1) AND p(x2, y2) AND ... AND p(xn, yn)
+	// ~> NOT (NOT p(x1, y1) OR NOT p(x2, y2) OR ... OR NOT p(xn, yn))
+	//
+	// cond1 is initialized to 0, and set to TRUE if p(xi, yi) succeeds for
+	// a binding of (xi, yi). We then use IsUndefined to check that this has NOT
+	// happened (NOT p(xi, yi)).
+	// cond0 is initialized to 0, and set to TRUE if cond1 happens to not
+	// be set: it's encoding the NOT ( ... OR ... OR ... ) part of this.
+
+	p.appendStmt(&ir.ResetLocalStmt{
+		Target: cond0,
+	})
+
+	err := p.planTerm(every.Domain, func() error {
+		return p.planScan(every.Key, func(ir.Local) error {
+			p.appendStmt(&ir.ResetLocalStmt{
+				Target: cond1,
+			})
+			nested := &ir.BlockStmt{Blocks: []*ir.Block{{}}}
+
+			prev := p.curr
+			p.curr = nested.Blocks[0]
+
+			lval := p.ltarget
+			err := p.planUnifyLocal(lval, every.Value, func() error {
+				return p.planQuery(every.Body, 0, func() error {
+					p.appendStmt(&ir.AssignVarStmt{
+						Source: op(ir.Bool(true)),
+						Target: cond1,
+					})
+					return nil
+				})
+			})
+			if err != nil {
+				return err
+			}
+
+			p.curr = prev
+			p.appendStmt(nested)
+			p.appendStmt(&ir.IsUndefinedStmt{
+				Source: cond1,
+			})
+			p.appendStmt(&ir.AssignVarStmt{
+				Source: op(ir.Bool(true)),
+				Target: cond0,
+			})
+			return nil
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	p.appendStmt(&ir.IsUndefinedStmt{
+		Source: cond0,
+	})
+	return iter()
 }
 
 func (p *Planner) planExprCall(e *ast.Expr, iter planiter) error {
@@ -1473,23 +1543,26 @@ func (p *Planner) planRefData(virtual *ruletrie, base *baseptr, ref ast.Ref, ind
 
 			// We're planning a structure like this:
 			//
-			// block a
-			//   block b
-			//     block c1
-			//       opa_mapping_lookup || br c1
-			//       call_indirect      || br a
-			//       br b
+			// block res
+			//   block a
+			//     block b
+			//       block c1
+			//         opa_mapping_lookup || br c1
+			//         call_indirect      || br res
+			//         br b
+			//       end
+			//       block c2
+			//         dot i   || br c2
+			//         dot i+1 || br c2
+			//         br b
+			//       end
+			//       br a
 			//     end
-			//     block c2
-			//       dot i   || br c2
-			//       dot i+1 || br c2
-			//       br b
-			//     end
-			//     br a
-			//   end
-			//   dot i+2 || br a
-			//   dot i+3 || br a
-			// end
+			//     dot i+2 || br res
+			//     dot i+3 || br res
+			//   end; a
+			//   [add_to_result_set]
+			// end; res
 			//
 			// We have to do it like this because the dot IR stmts
 			// are compiled to `br 0`, the innermost block, if they
@@ -1531,7 +1604,7 @@ func (p *Planner) planRefData(virtual *ruletrie, base *baseptr, ref ast.Ref, ind
 						{ // block "b" in the sketch above
 							Stmts: []ir.Stmt{
 								&ir.BlockStmt{Blocks: []*ir.Block{callDynBlock, dotBlock}},
-								&ir.BreakStmt{Index: 1}},
+								&ir.BreakStmt{Index: 2}},
 						},
 					}},
 				}}
