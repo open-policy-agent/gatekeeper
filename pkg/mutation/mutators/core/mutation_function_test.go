@@ -67,13 +67,24 @@ func prepareTestPodWithPlaceholder(t *testing.T) *unstructured.Unstructured {
 	if err != nil {
 		t.Error("Unexpected error", err)
 	}
-	containers[0].(map[string]interface{})["image"] = &mutationsunversioned.ExternalDataPlaceholder{
+
+	container, ok := containers[0].(map[string]interface{})
+	if !ok {
+		t.Error("Unable to cast container to map[string]interface{}")
+	}
+
+	container["image"] = &mutationsunversioned.ExternalDataPlaceholder{
 		Ref: &mutationsunversioned.ExternalData{
 			Provider: "old-provider",
 		},
 		ValueAtLocation: "old-image",
 	}
-	pod.Object["spec"].(map[string]interface{})["containers"] = containers
+
+	spec, ok := pod.Object["spec"].(map[string]interface{})
+	if !ok {
+		t.Error("Unable to cast spec to map[string]interface{}")
+	}
+	spec["containers"] = containers
 	return pod
 }
 
@@ -392,8 +403,26 @@ func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
 
 func TestIncomingPlaceholder(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {
-		containers := u.Object["spec"].(map[string]interface{})["containers"].([]interface{})                          // nolint:forcetypeassert
-		placeholder := containers[0].(map[string]interface{})["image"].(*mutationsunversioned.ExternalDataPlaceholder) // nolint:forcetypeassert
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		placeholder, ok := container["image"].(*mutationsunversioned.ExternalDataPlaceholder)
+		if !ok {
+			t.Errorf("Unable to cast image to *mutationsunversioned.ExternalDataPlaceholder")
+		}
+
 		if placeholder.ValueAtLocation != "image" {
 			t.Errorf("Expected placeholder's value at location to be 'image', got %s", placeholder.ValueAtLocation)
 		}
@@ -416,8 +445,26 @@ func TestIncomingPlaceholder(t *testing.T) {
 
 func TestPlaceholderWithIncomingPlaceholder(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {
-		containers := u.Object["spec"].(map[string]interface{})["containers"].([]interface{})                          // nolint:forcetypeassert
-		placeholder := containers[0].(map[string]interface{})["image"].(*mutationsunversioned.ExternalDataPlaceholder) // nolint:forcetypeassert
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		placeholder, ok := container["image"].(*mutationsunversioned.ExternalDataPlaceholder)
+		if !ok {
+			t.Errorf("Unable to cast image to *mutationsunversioned.ExternalDataPlaceholder")
+		}
+
 		if placeholder.Ref.Provider != "new-provider" {
 			t.Errorf("Expected placeholder's provider to be 'new-provider', got %s", placeholder.Ref.Provider)
 		}
@@ -443,10 +490,23 @@ func TestPlaceholderWithIncomingPlaceholder(t *testing.T) {
 
 func TestPlaceholderWithIncomingValue(t *testing.T) {
 	testFunc := func(u *unstructured.Unstructured) {
-		containers := u.Object["spec"].(map[string]interface{})["containers"].([]interface{}) // nolint:forcetypeassert
-		image := containers[0].(map[string]interface{})["image"]
-		if containers[0].(map[string]interface{})["image"] != "new-image" {
-			t.Errorf("Expected container's image to be 'new-image', got %s", image)
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		if container["image"] != "new-image" {
+			t.Errorf("Expected container's image to be 'new-image', got %s", container["image"])
 		}
 	}
 	if err := testDummyMutation(
