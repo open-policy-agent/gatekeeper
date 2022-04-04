@@ -1,15 +1,5 @@
 package types
 
-import (
-	"context"
-
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
-	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-)
-
-// SendRequestToExternalDataProvider is a function that sends a request to the external data provider.
-type SendRequestToExternalDataProvider func(ctx context.Context, provider *v1alpha1.Provider, keys []string) (*frameworksexternaldata.ProviderResponse, error)
-
 // ExternalDataSource is the type of the data source to use for the external data.
 // +kubebuilder:validation:Enum=ValueAtLocation;Username
 type ExternalDataSource string

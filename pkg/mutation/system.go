@@ -30,7 +30,7 @@ type System struct {
 	reporter                          StatsReporter
 	newUUID                           func() uuid.UUID
 	providerCache                     *externaldata.ProviderCache
-	sendRequestToExternalDataProvider types.SendRequestToExternalDataProvider
+	sendRequestToExternalDataProvider externaldata.SendRequestToProvider
 }
 
 // SystemOpts allows for optional dependencies to be passed into the mutation System.
@@ -38,7 +38,7 @@ type SystemOpts struct {
 	Reporter                          StatsReporter
 	NewUUID                           func() uuid.UUID
 	ProviderCache                     *externaldata.ProviderCache
-	SendRequestToExternalDataProvider types.SendRequestToExternalDataProvider
+	SendRequestToExternalDataProvider externaldata.SendRequestToProvider
 }
 
 // NewSystem initializes an empty mutation system.

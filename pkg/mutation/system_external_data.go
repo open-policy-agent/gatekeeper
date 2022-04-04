@@ -1,15 +1,10 @@
 package mutation
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -74,7 +69,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]m
 	)
 
 	if fn == nil {
-		fn = defaultSendRequestToExternalDataProvider
+		fn = externaldata.DefaultSendRequestToProvider
 	}
 
 	for name, keys := range providerKeys {
@@ -88,7 +83,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]m
 		go func(provider *v1alpha1.Provider, keys []string) {
 			defer wg.Done()
 
-			resp, err := fn(context.Background(), provider, keys)
+			resp, _, err := fn(context.Background(), provider, keys)
 
 			mutex.Lock()
 			defer mutex.Unlock()
@@ -187,43 +182,6 @@ func (s *System) mutateWithExternalData(object *unstructured.Unstructured, exter
 	}
 
 	return errorsutil.NewAggregate(mutate(object.Object))
-}
-
-// defaultSendRequestToExternalDataProvider is the default implementation of SendRequestToExternalDataProvider.
-// TODO: to be moved to frameworks.
-func defaultSendRequestToExternalDataProvider(ctx context.Context, provider *v1alpha1.Provider, keys []string) (*externaldata.ProviderResponse, error) {
-	externaldataRequest := externaldata.NewProviderRequest(keys)
-	body, err := json.Marshal(externaldataRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal external data request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, provider.Spec.URL, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create external data request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	ctxWithDeadline, cancel := context.WithDeadline(ctx, time.Now().Add(time.Duration(provider.Spec.Timeout)*time.Second))
-	defer cancel()
-
-	resp, err := http.DefaultClient.Do(req.WithContext(ctxWithDeadline))
-	if err != nil {
-		return nil, fmt.Errorf("failed to send external data request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read external data response: %w", err)
-	}
-
-	var externaldataResponse externaldata.ProviderResponse
-	if err := json.Unmarshal(respBody, &externaldataResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal external data response: %w", err)
-	}
-
-	return &externaldataResponse, nil
 }
 
 // validateExternalDataResponse validates the given external data response.
