@@ -23,6 +23,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -192,7 +193,12 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 	oldNS := obj.GetNamespace()
 	obj.SetNamespace(req.Namespace)
 
-	mutated, err := h.mutationSystem.Mutate(&obj, ns)
+	mutable := &mutationtypes.Mutable{
+		Object:    &obj,
+		Namespace: ns,
+		Username:  req.AdmissionRequest.UserInfo.Username,
+	}
+	mutated, err := h.mutationSystem.Mutate(mutable)
 	if err != nil {
 		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err)
@@ -201,9 +207,9 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		return admission.Allowed("Resource was not mutated")
 	}
 
-	obj.SetNamespace(oldNS)
+	mutable.Object.SetNamespace(oldNS)
 
-	newJSON, err := obj.MarshalJSON()
+	newJSON, err := mutable.Object.MarshalJSON()
 	if err != nil {
 		log.Error(err, "failed to marshal mutated object", "object", obj)
 		return admission.Errored(int32(http.StatusInternalServerError), err)

@@ -8,6 +8,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -45,14 +46,14 @@ func benchmarkModifySetMutator(b *testing.B, n int) {
 	for i := 0; i < n; i++ {
 		p[i] = "spec"
 	}
-	_, err = mutator.Mutate(obj)
+	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = mutator.Mutate(obj)
+		_, _ = mutator.Mutate(&types.Mutable{Object: obj})
 	}
 }
 
@@ -75,14 +76,14 @@ func benchmarkNoModifySetMutator(b *testing.B, n int) {
 	for i := 0; i < n; i++ {
 		p[i] = "spec"
 	}
-	_, err = mutator.Mutate(obj)
+	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = mutator.Mutate(obj)
+		_, _ = mutator.Mutate(&types.Mutable{Object: obj})
 	}
 }
 

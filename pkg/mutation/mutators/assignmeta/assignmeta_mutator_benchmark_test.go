@@ -42,7 +42,7 @@ func BenchmarkAssignMetadataMutator_Always(b *testing.B) {
 		obj := &unstructured.Unstructured{
 			Object: make(map[string]interface{}),
 		}
-		_, _ = mutator.Mutate(obj)
+		_, _ = mutator.Mutate(&types.Mutable{Object: obj})
 	}
 }
 
@@ -55,7 +55,7 @@ func BenchmarkAssignMetadataMutator_Never(b *testing.B) {
 	obj := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
-	_, err = mutator.Mutate(obj)
+	_, err = mutator.Mutate(&types.Mutable{Object: obj})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -65,6 +65,6 @@ func BenchmarkAssignMetadataMutator_Never(b *testing.B) {
 		// Use the same object each time as AssignMetadata.Mutate does nothing if
 		// a label/annotation already exists. Thus, this test is for the case where
 		// no mutation is necessary.
-		_, _ = mutator.Mutate(obj)
+		_, _ = mutator.Mutate(&types.Mutable{Object: obj})
 	}
 }
