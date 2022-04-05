@@ -57,7 +57,7 @@ var (
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	emptyAuditResults         []auditResult
+	emptyAuditResults         []*updateListEntry
 )
 
 // Manager allows us to audit resources periodically.
@@ -78,19 +78,6 @@ type Manager struct {
 	auditCache *CacheLister
 }
 
-type auditResult struct {
-	cname             string
-	cnamespace        string
-	cgvk              schema.GroupVersionKind
-	capiversion       string
-	rkind             string
-	rname             string
-	rnamespace        string
-	message           string
-	enforcementAction string
-	constraint        *unstructured.Unstructured
-}
-
 // StatusViolation represents each violation under status.
 type StatusViolation struct {
 	Kind              string `json:"kind"`
@@ -98,6 +85,19 @@ type StatusViolation struct {
 	Namespace         string `json:"namespace,omitempty"`
 	Message           string `json:"message"`
 	EnforcementAction string `json:"enforcementAction"`
+}
+
+// updateListEntry holds the information necessary to update the
+// audit results in the `status` field of the constraint template.
+// Adding data to this struct has a large impact on memory usage.
+type updateListEntry struct {
+	group             string
+	version           string
+	kind              string
+	namespace         string
+	name              string
+	msg               string
+	enforcementAction util.EnforcementAction
 }
 
 // nsCache is used for caching namespaces and their labels.
@@ -189,8 +189,8 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 
-	updateLists := make(map[util.KindVersionResource][]auditResult)
-	totalViolationsPerConstraint := make(map[util.KindVersionResource]int64)
+	updateLists := make(map[util.KindVersionName][]*updateListEntry)
+	totalViolationsPerConstraint := make(map[util.KindVersionName]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 	// resetting total violations per enforcement action
 	for _, action := range util.KnownEnforcementActions {
@@ -220,9 +220,9 @@ func (am *Manager) audit(ctx context.Context) error {
 	}
 
 	// log constraints with violations
-	for link := range updateLists {
-		ar := updateLists[link][0]
-		logConstraint(am.log, ar.constraint, ar.enforcementAction, totalViolationsPerConstraint[link])
+	for gvknn := range updateLists {
+		ar := updateLists[gvknn][0]
+		logConstraint(am.log, gvknn, string(ar.enforcementAction), totalViolationsPerConstraint[gvknn])
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
@@ -237,12 +237,12 @@ func (am *Manager) audit(ctx context.Context) error {
 	return nil
 }
 
-// Audits server resources via the discovery client, as an alternative to opa.Client.Audit().
+// Audits server resources via the discovery client.
 func (am *Manager) auditResources(
 	ctx context.Context,
 	constraintsGVK []schema.GroupVersionKind,
-	updateLists map[util.KindVersionResource][]auditResult,
-	totalViolationsPerConstraint map[util.KindVersionResource]int64,
+	updateLists map[util.KindVersionName][]*updateListEntry,
+	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
 ) error {
@@ -472,8 +472,8 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
-	updateLists map[util.KindVersionResource][]auditResult,
-	totalViolationsPerConstraint map[util.KindVersionResource]int64,
+	updateLists map[util.KindVersionName][]*updateListEntry,
+	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
 ) error {
@@ -646,65 +646,50 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
-	updateLists map[util.KindVersionResource][]auditResult,
+	updateLists map[util.KindVersionName][]*updateListEntry,
 	res []Result,
-	totalViolationsPerConstraint map[util.KindVersionResource]int64,
+	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
 ) error {
 	for _, r := range res {
-		am.addAuditResultToUpdateLists(updateLists, r, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+		key := util.GetUniqueKey(*r.Constraint)
+		totalViolationsPerConstraint[key]++
+		details := r.Metadata["details"]
+
+		gvk := r.obj.GroupVersionKind()
+		namespace := r.obj.GetNamespace()
+		name := r.obj.GetName()
+		ea := util.EnforcementAction(r.EnforcementAction)
+
+		// append audit results only if it is below violations limit
+		if uint(len(updateLists[key])) < *constraintViolationsLimit {
+			msg := r.Msg
+			if len(msg) > msgSize {
+				msg = truncateString(msg, msgSize)
+			}
+			entry := &updateListEntry{
+				group:             gvk.Group,
+				version:           gvk.Version,
+				kind:              gvk.Kind,
+				namespace:         namespace,
+				name:              name,
+				msg:               msg,
+				enforcementAction: ea,
+			}
+			updateLists[key] = append(updateLists[key], entry)
+		}
+
+		totalViolationsPerEnforcementAction[ea]++
+		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details)
+		if *emitAuditEvents {
+			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, r.Msg, am.gkNamespace, am.eventRecorder)
+		}
 	}
 	return nil
 }
 
-func (am *Manager) addAuditResultToUpdateLists(
-	updateLists map[util.KindVersionResource][]auditResult,
-	r Result,
-	totalViolationsPerConstraint map[util.KindVersionResource]int64,
-	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
-	timestamp string,
-) {
-	key := util.GetUniqueKey(*r.Constraint)
-	totalViolationsPerConstraint[key]++
-	name := r.Constraint.GetName()
-	namespace := r.Constraint.GetNamespace()
-	apiVersion := r.Constraint.GetAPIVersion()
-	gvk := r.Constraint.GroupVersionKind()
-	enforcementAction := r.EnforcementAction
-	message := r.Msg
-	details := r.Metadata["details"]
-
-	resource := r.obj
-	rname := resource.GetName()
-	rkind := resource.GetKind()
-	rnamespace := resource.GetNamespace()
-	// append audit results only if it is below violations limit
-	if uint(len(updateLists[key])) < *constraintViolationsLimit {
-		result := auditResult{
-			cgvk:              gvk,
-			capiversion:       apiVersion,
-			cname:             name,
-			cnamespace:        namespace,
-			rkind:             rkind,
-			rname:             rname,
-			rnamespace:        rnamespace,
-			message:           message,
-			enforcementAction: enforcementAction,
-			constraint:        r.Constraint,
-		}
-		updateLists[key] = append(updateLists[key], result)
-	}
-
-	ea := util.EnforcementAction(enforcementAction)
-	totalViolationsPerEnforcementAction[ea]++
-	logViolation(am.log, r.Constraint, r.EnforcementAction, resource.GroupVersionKind(), rnamespace, rname, message, details)
-	if *emitAuditEvents {
-		emitEvent(r.Constraint, timestamp, enforcementAction, resource.GroupVersionKind(), rnamespace, rname, message, am.gkNamespace, am.eventRecorder)
-	}
-}
-
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionResource][]auditResult, timestamp string, totalViolations map[util.KindVersionResource]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName][]*updateListEntry, timestamp string, totalViolations map[util.KindVersionName]int64) {
 	// if there is a previous reporting thread, close it before starting a new one
 	if am.ucloop != nil {
 		// this is closing the previous audit reporting thread
@@ -741,25 +726,21 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 	return isNamespaceExcluded, err
 }
 
-func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []auditResult, timestamp string, totalViolations int64) error {
+func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []*updateListEntry, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 	// create constraint status violations
 	var statusViolations []interface{}
 	for i := range auditResults {
-		ar := &auditResults[i] // avoid large shallow copy in range loop
+		ar := auditResults[i] // avoid large shallow copy in range loop
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
 		if uint(len(statusViolations)) < *constraintViolationsLimit {
-			msg := ar.message
-			if len(msg) > msgSize {
-				msg = truncateString(msg, msgSize)
-			}
 			statusViolations = append(statusViolations, StatusViolation{
-				Kind:              ar.rkind,
-				Name:              ar.rname,
-				Namespace:         ar.rnamespace,
-				Message:           msg,
-				EnforcementAction: ar.enforcementAction,
+				Kind:              ar.kind,
+				Name:              ar.name,
+				Namespace:         ar.namespace,
+				Message:           ar.msg,
+				EnforcementAction: string(ar.enforcementAction),
 			})
 		}
 	}
@@ -821,20 +802,20 @@ func truncateString(str string, size int) string {
 }
 
 type updateConstraintLoop struct {
-	uc      map[util.KindVersionResource]unstructured.Unstructured
+	uc      map[util.KindVersionName]struct{}
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
-	ul      map[util.KindVersionResource][]auditResult
+	ul      map[util.KindVersionName][]*updateListEntry
 	ts      string
-	tv      map[util.KindVersionResource]int64
+	tv      map[util.KindVersionName]int64
 	log     logr.Logger
 }
 
 func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs []schema.GroupVersionKind) {
 	defer close(ucloop.stopped)
 
-	ucloop.uc = make(map[util.KindVersionResource]unstructured.Unstructured)
+	ucloop.uc = make(map[util.KindVersionName]struct{})
 
 	// get constraints for each Kind
 	for _, constraintGvk := range constraintsGVKs {
@@ -857,7 +838,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 		// get each constraint
 		for _, item := range instanceList.Items {
 			key := util.GetUniqueKey(item)
-			ucloop.uc[key] = item
+			ucloop.uc[key] = struct{}{}
 		}
 	}
 
@@ -868,44 +849,41 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 	ucloop.log.Info("starting update constraints loop", "constraints to update", fmt.Sprintf("%v", ucloop.uc))
 
 	updateLoop := func() (bool, error) {
-		for _, item := range ucloop.uc {
+		for key, _ := range ucloop.uc {
 			select {
 			case <-ucloop.stop:
 				return true, nil
 			default:
-				var latestItem unstructured.Unstructured
-				item.DeepCopyInto(&latestItem)
-				name := latestItem.GetName()
-				namespace := latestItem.GetNamespace()
+				constraint := &unstructured.Unstructured{}
+				constraint.SetKind(key.Kind)
+				constraint.SetGroupVersionKind(schema.GroupVersionKind{Group: key.Group, Version: key.Version, Kind: key.Kind})
 				namespacedName := types.NamespacedName{
-					Name:      name,
-					Namespace: namespace,
+					Name:      key.Name,
+					Namespace: key.Namespace,
 				}
-				key := util.GetUniqueKey(item)
 				// get the latest constraint
-				err := ucloop.client.Get(ctx, namespacedName, &latestItem)
+				err := ucloop.client.Get(ctx, namespacedName, constraint)
 				if err != nil {
 					if apierrors.IsNotFound(err) {
-						ucloop.log.Info("could not find constraint", "name", name, "namespace", namespace)
+						ucloop.log.Info("could not find constraint", "name", key.Name, "namespace", key.Namespace)
 						delete(ucloop.uc, key)
 					} else {
-						ucloop.log.Error(err, "could not get latest constraint during update", "name", name, "namespace", namespace)
+						ucloop.log.Error(err, "could not get latest constraint during update", "name", key.Name, "namespace", key.Namespace)
 						continue
 					}
 				}
-				latestItemKey := util.GetUniqueKey(latestItem)
-				totalViolations := ucloop.tv[latestItemKey]
-				if constraintAuditResults, ok := ucloop.ul[latestItemKey]; !ok {
-					err := ucloop.updateConstraintStatus(ctx, &latestItem, emptyAuditResults, ucloop.ts, totalViolations)
+				totalViolations := ucloop.tv[key]
+				if constraintAuditResults, ok := ucloop.ul[key]; !ok {
+					err := ucloop.updateConstraintStatus(ctx, constraint, emptyAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
-						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
+						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
 						continue
 					}
 				} else {
 					// update the constraint
-					err := ucloop.updateConstraintStatus(ctx, &latestItem, constraintAuditResults, ucloop.ts, totalViolations)
+					err := ucloop.updateConstraintStatus(ctx, constraint, constraintAuditResults, ucloop.ts, totalViolations)
 					if err != nil {
-						ucloop.log.Error(err, "could not update constraint status", "name", name, "namespace", namespace)
+						ucloop.log.Error(err, "could not update constraint status", "name", key.Name, "namespace", key.Namespace)
 						continue
 					}
 				}
@@ -942,15 +920,15 @@ func logFinish(l logr.Logger) {
 	)
 }
 
-func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforcementAction string, totalViolations int64) {
+func logConstraint(l logr.Logger, gvknn util.KindVersionName, enforcementAction string, totalViolations int64) {
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",
-		logging.ConstraintGroup, constraint.GroupVersionKind().Group,
-		logging.ConstraintAPIVersion, constraint.GroupVersionKind().Version,
-		logging.ConstraintKind, constraint.GetKind(),
-		logging.ConstraintName, constraint.GetName(),
-		logging.ConstraintNamespace, constraint.GetNamespace(),
+		logging.ConstraintGroup, gvknn.Group,
+		logging.ConstraintAPIVersion, gvknn.Version,
+		logging.ConstraintKind, gvknn.Kind,
+		logging.ConstraintName, gvknn.Name,
+		logging.ConstraintNamespace, gvknn.Namespace,
 		logging.ConstraintAction, enforcementAction,
 		logging.ConstraintStatus, "enforced",
 		logging.ConstraintViolations, strconv.FormatInt(totalViolations, 10),
@@ -959,7 +937,7 @@ func logConstraint(l logr.Logger, constraint *unstructured.Unstructured, enforce
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{},
+	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{},
 ) {
 	l.Info(
 		message,
@@ -980,7 +958,7 @@ func logViolation(l logr.Logger,
 }
 
 func emitEvent(constraint *unstructured.Unstructured,
-	timestamp, enforcementAction string, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
+	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
 	eventRecorder record.EventRecorder,
 ) {
 	annotations := map[string]string{
@@ -992,7 +970,7 @@ func emitEvent(constraint *unstructured.Unstructured,
 		logging.ConstraintKind:       constraint.GetKind(),
 		logging.ConstraintName:       constraint.GetName(),
 		logging.ConstraintNamespace:  constraint.GetNamespace(),
-		logging.ConstraintAction:     enforcementAction,
+		logging.ConstraintAction:     string(enforcementAction),
 		logging.ResourceGroup:        resourceGroupVersionKind.Group,
 		logging.ResourceAPIVersion:   resourceGroupVersionKind.Version,
 		logging.ResourceKind:         resourceGroupVersionKind.Kind,

@@ -19,10 +19,12 @@ func TestGetUniqueKey(t *testing.T) {
 	obj.SetName(name)
 
 	key := GetUniqueKey(*obj)
-	expected := KindVersionResource{
-		version:  "constraints.gatekeeper.sh/v1beta1",
-		kind:     "myTemplate",
-		resource: "myConstraint",
+	expected := KindVersionName{
+		Group:     "constraints.gatekeeper.sh",
+		Version:   "v1beta1",
+		Kind:      "myTemplate",
+		Name:      "myConstraint",
+		Namespace: "",
 	}
 
 	if key != expected {
