@@ -128,6 +128,7 @@ spec:
         - args:
             - --operation=audit
             - --operation=status
+            - --operation=mutation-status
             - --logtostderr
             - --disable-opa-builtin={http.send}
           command:
