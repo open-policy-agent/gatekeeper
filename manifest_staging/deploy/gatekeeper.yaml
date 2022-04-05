@@ -2313,6 +2313,7 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
+        - --operation=mutation-status
         - --logtostderr
         command:
         - /manager
