@@ -216,6 +216,7 @@ type Registrar struct {
 	mgr          *Manager
 	managedKinds *recordKeeper
 	events       chan<- event.GenericEvent
+	mux          sync.RWMutex
 }
 
 // AddWatch registers a watch for the given kind.
@@ -226,6 +227,8 @@ type Registrar struct {
 //   * The consumer of the channel does not receive any unbuffered events.
 // XXXX also may block if the watch manager has not been started.
 func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
+	r.mux.Lock()
+	defer r.mux.Unlock()
 	wv := vitals{
 		gvk:        gvk,
 		registrars: map[*Registrar]bool{r: true},
@@ -236,6 +239,8 @@ func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
 
 // ReplaceWatch replaces the set of watched resources.
 func (r *Registrar) ReplaceWatch(gvks []schema.GroupVersionKind) error {
+	r.mux.Lock()
+	defer r.mux.Unlock()
 	roster := make(vitalsByGVK)
 	for _, gvk := range gvks {
 		wv := vitals{
@@ -251,12 +256,20 @@ func (r *Registrar) ReplaceWatch(gvks []schema.GroupVersionKind) error {
 // RemoveWatch removes a watch for the given kind.
 // Ignores the request if the kind was not previously watched.
 func (r *Registrar) RemoveWatch(gvk schema.GroupVersionKind) error {
+	r.mux.Lock()
+	defer r.mux.Unlock()
 	r.managedKinds.Remove(r.parentName, gvk)
 	return r.mgr.removeWatch(r, gvk)
 }
 
-// Watching returns whether a given GVK is being watched by the
-// registrar.
-func (r *Registrar) Watching(gvk schema.GroupVersionKind) bool {
-	return r.managedKinds.Watching(r.parentName, gvk)
+// IfWatching executes the passed function if the provided GVK is being watched
+// by the registrar, ignoring it if not. It returns whether the function was
+// executed and any errors returned by the executed function.
+func (r *Registrar) IfWatching(gvk schema.GroupVersionKind, fn func() error) (bool, error) {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+	if r.managedKinds.Watching(r.parentName, gvk) {
+		return true, fn()
+	}
+	return false, nil
 }

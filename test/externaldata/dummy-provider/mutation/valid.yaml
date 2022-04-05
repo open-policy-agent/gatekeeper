@@ -1,0 +1,62 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: annotate-owner
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "metadata.annotations.external-data-username"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: Username
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  # since mutation is applied alphabetically, we can force to run this mutation first
+  # by prepending the name with a lowercase letter
+  name: a-sidecar-injection
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name:networking]"
+  parameters:
+    assign:
+      value:
+        name: networking
+        image: busybox
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  # since mutation is applied alphabetically, we can force to run this mutation last
+  # by prepending the name with b lowercase letter
+  name: b-assign-image
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name: *].image"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: ValueAtLocation

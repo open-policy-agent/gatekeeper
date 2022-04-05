@@ -61,6 +61,33 @@ func prepareTestPod(t *testing.T) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: podObject}
 }
 
+func prepareTestPodWithPlaceholder(t *testing.T) *unstructured.Unstructured {
+	pod := prepareTestPod(t)
+	containers, _, err := unstructured.NestedSlice(pod.Object, "spec", "containers")
+	if err != nil {
+		t.Error("Unexpected error", err)
+	}
+
+	container, ok := containers[0].(map[string]interface{})
+	if !ok {
+		t.Error("Unable to cast container to map[string]interface{}")
+	}
+
+	container["image"] = &mutationsunversioned.ExternalDataPlaceholder{
+		Ref: &mutationsunversioned.ExternalData{
+			Provider: "old-provider",
+		},
+		ValueAtLocation: "old-image",
+	}
+
+	spec, ok := pod.Object["spec"].(map[string]interface{})
+	if !ok {
+		t.Error("Unable to cast spec to map[string]interface{}")
+	}
+	spec["containers"] = containers
+	return pod
+}
+
 func TestObjects(t *testing.T) {
 	testFunc := func(unstr *unstructured.Unstructured) {
 		element, found, err := unstructured.NestedString(unstr.Object, "metadata", "labels", "labelA")
@@ -374,6 +401,125 @@ func TestListsAsLastElementAlreadyExistsWithKeyConflict(t *testing.T) {
 	}
 }
 
+func TestIncomingPlaceholder(t *testing.T) {
+	testFunc := func(u *unstructured.Unstructured) {
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		placeholder, ok := container["image"].(*mutationsunversioned.ExternalDataPlaceholder)
+		if !ok {
+			t.Errorf("Unable to cast image to *mutationsunversioned.ExternalDataPlaceholder")
+		}
+
+		if placeholder.ValueAtLocation != "image" {
+			t.Errorf("Expected placeholder's value at location to be 'image', got %s", placeholder.ValueAtLocation)
+		}
+	}
+	placeholder := &mutationsunversioned.ExternalDataPlaceholder{
+		Ref: &mutationsunversioned.ExternalData{
+			Provider: "some-provider",
+		},
+	}
+	if err := testDummyMutation(
+		`spec.containers[name:testname1].image`,
+		placeholder,
+		prepareTestPod(t),
+		testFunc,
+		t,
+	); err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+}
+
+func TestPlaceholderWithIncomingPlaceholder(t *testing.T) {
+	testFunc := func(u *unstructured.Unstructured) {
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		placeholder, ok := container["image"].(*mutationsunversioned.ExternalDataPlaceholder)
+		if !ok {
+			t.Errorf("Unable to cast image to *mutationsunversioned.ExternalDataPlaceholder")
+		}
+
+		if placeholder.Ref.Provider != "new-provider" {
+			t.Errorf("Expected placeholder's provider to be 'new-provider', got %s", placeholder.Ref.Provider)
+		}
+		if placeholder.ValueAtLocation != "old-image" {
+			t.Errorf("Expected placeholder's value at location to be 'old-image', got %s", placeholder.ValueAtLocation)
+		}
+	}
+	placeholder := &mutationsunversioned.ExternalDataPlaceholder{
+		Ref: &mutationsunversioned.ExternalData{
+			Provider: "new-provider",
+		},
+	}
+	if err := testDummyMutation(
+		`spec.containers[name:testname1].image`,
+		placeholder,
+		prepareTestPodWithPlaceholder(t),
+		testFunc,
+		t,
+	); err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+}
+
+func TestPlaceholderWithIncomingValue(t *testing.T) {
+	testFunc := func(u *unstructured.Unstructured) {
+		spec, ok := u.Object["spec"].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast spec to map[string]interface{}")
+		}
+
+		containers, ok := spec["containers"].([]interface{})
+		if !ok {
+			t.Errorf("Unable to cast containers to []interface{}")
+		}
+
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("Unable to cast container to map[string]interface{}")
+		}
+
+		if container["image"] != "new-image" {
+			t.Errorf("Expected container's image to be 'new-image', got %s", container["image"])
+		}
+	}
+	if err := testDummyMutation(
+		`spec.containers[name:testname1].image`,
+		"new-image",
+		prepareTestPodWithPlaceholder(t),
+		testFunc,
+		t,
+	); err != nil {
+		t.Errorf("Unexpected error: %+v", err)
+	}
+}
+
 func testDummyMutation(
 	location string,
 	value interface{},
@@ -434,7 +580,7 @@ func testAssignMetadataMutation(
 }
 
 func testMutation(mutator types.Mutator, unstructured *unstructured.Unstructured, testFunc func(*unstructured.Unstructured), t *testing.T) error {
-	_, err := mutator.Mutate(unstructured)
+	_, err := mutator.Mutate(&types.Mutable{Object: unstructured})
 	if err != nil {
 		return err
 	}

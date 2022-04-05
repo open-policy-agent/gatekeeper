@@ -13,6 +13,9 @@ type AssignField struct {
 
 	// FromMetadata assigns a value from the specified metadata field.
 	FromMetadata *FromMetadata `json:"fromMetadata,omitempty"`
+
+	// ExternalData describes the external data provider to be used for mutation.
+	ExternalData *ExternalData `json:"externalData,omitempty"`
 }
 
 type FromMetadata struct {

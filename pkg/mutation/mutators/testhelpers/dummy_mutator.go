@@ -8,9 +8,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ types.Mutator = &DummyMutator{}
@@ -39,17 +36,21 @@ func (d *DummyMutator) Path() parser.Path {
 	return d.path
 }
 
-func (d *DummyMutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(&d.match, obj, ns)
+func (d *DummyMutator) Matches(mutable *types.Mutable) bool {
+	matches, err := match.Matches(&d.match, mutable.Object, mutable.Namespace)
 	if err != nil {
 		return false
 	}
 	return matches
 }
 
-func (d *DummyMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (d *DummyMutator) Mutate(mutable *types.Mutable) (bool, error) {
 	t, _ := path.New(parser.Path{}, nil)
-	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d.value), obj)
+	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d.value), mutable.Object)
+}
+
+func (d *DummyMutator) UsesExternalData() bool {
+	return false
 }
 
 func (d *DummyMutator) String() string {

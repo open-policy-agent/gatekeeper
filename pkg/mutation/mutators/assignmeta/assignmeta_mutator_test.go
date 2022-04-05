@@ -1,9 +1,13 @@
 package assignmeta
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -40,30 +44,66 @@ func newAssignMetadataMutator(t *testing.T, path string, value mutationsunversio
 
 func TestAssignMetadata(t *testing.T) {
 	tests := []struct {
-		name  string
-		obj   *unstructured.Unstructured
-		path  string
-		value mutationsunversioned.AssignField
+		name     string
+		obj      *unstructured.Unstructured
+		path     string
+		value    mutationsunversioned.AssignField
+		expected interface{}
 	}{
 		{
 			name:  "metadata value",
 			path:  "metadata.labels.foo",
 			value: mutationsunversioned.AssignField{FromMetadata: &mutationsunversioned.FromMetadata{Field: mutationsunversioned.ObjName}},
 			obj:   newFoo(map[string]interface{}{}),
+			expected: map[string]interface{}{
+				"name": "my-foo",
+				"labels": map[string]interface{}{
+					"foo": "my-foo",
+				},
+			},
+		},
+		{
+			name: "external data placeholder",
+			path: "metadata.labels.foo",
+			value: mutationsunversioned.AssignField{
+				ExternalData: &unversioned.ExternalData{
+					Provider:   "some-provider",
+					DataSource: types.DataSourceUsername,
+				},
+			},
+			obj: newFoo(map[string]interface{}{}),
+			expected: map[string]interface{}{
+				"name": "my-foo",
+				"labels": map[string]interface{}{
+					"foo": &unversioned.ExternalDataPlaceholder{
+						Ref: &unversioned.ExternalData{
+							Provider:   "some-provider",
+							DataSource: types.DataSourceUsername,
+						},
+						ValueAtLocation: "kubernetes-admin",
+					},
+				},
+			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			*externaldata.ExternalDataEnabled = true
+			defer func() {
+				*externaldata.ExternalDataEnabled = false
+			}()
+
 			mutator := newAssignMetadataMutator(t, test.path, test.value)
 			obj := test.obj.DeepCopy()
-			_, err := mutator.Mutate(obj)
+			_, err := mutator.Mutate(&types.Mutable{Object: obj, Username: "kubernetes-admin"})
 			if err != nil {
 				t.Fatalf("failed mutation: %s", err)
 			}
-			labels := obj.GetLabels()
-			if labels["foo"] != "my-foo" {
-				t.Errorf("metadata.labels.foo = %v; wanted %v", labels["foo"], "my-foo")
+
+			labels := obj.Object["metadata"]
+			if !reflect.DeepEqual(labels, test.expected) {
+				t.Errorf("metadata = %v; wanted %v", labels, test.expected)
 			}
 		})
 	}

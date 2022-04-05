@@ -32,6 +32,7 @@ import (
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -105,6 +106,8 @@ func init() {
 	_ = configv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
 	_ = mutationsv1alpha1.AddToScheme(scheme)
+	_ = mutationsv1beta1.AddToScheme(scheme)
+
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
 }
@@ -256,9 +259,11 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
+		mutationOpts.ProviderCache = providerCache
 	}
 	// initialize OPA
 	driver, err := local.New(args...)
@@ -273,7 +278,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		os.Exit(1)
 	}
 
-	mutationSystem := mutation.NewSystem(mutation.SystemOpts{Reporter: mutation.NewStatsReporter()})
+	mutationSystem := mutation.NewSystem(mutationOpts)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)

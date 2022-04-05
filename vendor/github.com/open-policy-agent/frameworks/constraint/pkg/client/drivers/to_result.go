@@ -37,47 +37,42 @@ func ToResults(constraints map[ConstraintKey]*unstructured.Unstructured, resultS
 func ToResult(constraints map[ConstraintKey]*unstructured.Unstructured, r rego.Result) (*types.Result, error) {
 	result := &types.Result{}
 
-	resultMapBinding, found := r.Bindings["result"]
+	resultMap, found, err := unstructured.NestedMap(r.Bindings, "result")
+	if err != nil {
+		return nil, fmt.Errorf("extracting result binding: %v", err)
+	}
+
 	if !found {
 		return nil, errors.New("no binding for result")
 	}
 
-	resultMap, ok := resultMapBinding.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("result binding was %T but want %T",
-			resultMapBinding, map[string]interface{}{})
+	message, found, err := unstructured.NestedString(resultMap, "msg")
+	if err != nil {
+		return nil, fmt.Errorf("extracting message binding: %v", err)
 	}
 
-	messageBinding, found := resultMap["msg"]
 	if !found {
 		return nil, errors.New("no binding for msg")
 	}
 
-	message, ok := messageBinding.(string)
-	if !ok {
-		return nil, fmt.Errorf("message binding was %T but want %T",
-			messageBinding, "")
-	}
 	result.Msg = message
 
 	result.Metadata = map[string]interface{}{
 		"details": resultMap["details"],
 	}
 
-	keyBinding, found := resultMap["key"]
+	keyMap, found, err := unstructured.NestedStringMap(resultMap, "key")
+	if err != nil {
+		return nil, fmt.Errorf("extracting key binding: %v", err)
+	}
+
 	if !found {
 		return nil, errors.New("no binding for Constraint key")
 	}
 
-	keyMap, ok := keyBinding.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("key binding was %T but want %T",
-			keyBinding, map[string]interface{}{})
-	}
-
 	key := ConstraintKey{
-		Kind: keyMap["kind"].(string),
-		Name: keyMap["name"].(string),
+		Kind: keyMap["kind"],
+		Name: keyMap["name"],
 	}
 
 	constraint := constraints[key]
