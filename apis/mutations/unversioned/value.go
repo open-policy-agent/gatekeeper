@@ -3,6 +3,7 @@ package unversioned
 import (
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 )
@@ -35,32 +36,54 @@ type AssignField struct {
 
 	// FromMetadata assigns a value from the specified metadata field.
 	FromMetadata *FromMetadata `json:"fromMetadata,omitempty"`
+
+	// ExternalData describes the external data provider to be used for mutation.
+	ExternalData *ExternalData `json:"externalData,omitempty"`
 }
 
-func (a *AssignField) GetValue(metadata types.MetadataGetter) (interface{}, error) {
+func (a *AssignField) GetValue(mutable *types.Mutable) (interface{}, error) {
 	if a == nil {
 		return nil, fmt.Errorf("assign is nil: %w", ErrInvalidAssignField)
 	}
 	if a.FromMetadata != nil {
-		return a.FromMetadata.GetValue(metadata)
+		return a.FromMetadata.GetValue(mutable.Object)
 	}
-	return a.Value.GetValue(), nil
+	if a.Value != nil {
+		return a.Value.GetValue(), nil
+	}
+
+	placeholder := a.ExternalData.GetPlaceholder()
+	if placeholder.Ref.DataSource == types.DataSourceUsername {
+		placeholder.ValueAtLocation = mutable.Username
+	}
+
+	return placeholder, nil
 }
 
 func (a *AssignField) Validate() error {
 	if a == nil {
 		return fmt.Errorf("assign is nil: %w", ErrInvalidAssignField)
 	}
-	if a.Value == nil && a.FromMetadata == nil {
-		return fmt.Errorf("assign must set one of `value` or `fromMetadata`: %w", ErrInvalidAssignField)
+	if a.Value == nil && a.FromMetadata == nil && a.ExternalData == nil {
+		return fmt.Errorf("assign must set one of `externalData`, `value` or `fromMetadata`: %w", ErrInvalidAssignField)
 	}
 
-	if a.Value != nil && a.FromMetadata != nil {
-		return fmt.Errorf("assign must only set one of `value` or `fromMetadata`: %w", ErrInvalidAssignField)
+	populated := false
+	for _, field := range []interface{}{a.Value, a.FromMetadata, a.ExternalData} {
+		if !reflect.ValueOf(field).IsNil() {
+			if populated {
+				return fmt.Errorf("assign must only set one of `externalData`, `value` or `fromMetadata`: %w", ErrInvalidAssignField)
+			}
+			populated = true
+		}
 	}
 
 	if a.FromMetadata != nil {
 		return a.FromMetadata.Validate()
+	}
+
+	if a.ExternalData != nil {
+		return a.ExternalData.Validate()
 	}
 
 	return nil

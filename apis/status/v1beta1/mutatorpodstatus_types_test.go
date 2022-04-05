@@ -1,9 +1,10 @@
-package v1beta1
+package v1beta1_test
 
 import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/testhelpers"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -20,7 +21,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	err := AddToScheme(scheme)
+	err := v1beta1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,16 +36,16 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		fakes.WithName(podName),
 	)
 
-	expectedStatus := &MutatorPodStatus{}
+	expectedStatus := &v1beta1.MutatorPodStatus{}
 	expectedStatus.SetName("some--gk--pod--m-dummymutator-a--mutator")
 	expectedStatus.SetNamespace(podNS)
 	expectedStatus.Status.ID = podName
 	expectedStatus.Status.Operations = operations.AssignedStringList()
 	expectedStatus.SetLabels(
 		map[string]string{
-			MutatorNameLabel: "a-mutator",
-			MutatorKindLabel: "DummyMutator",
-			PodLabel:         podName,
+			v1beta1.MutatorNameLabel: "a-mutator",
+			v1beta1.MutatorKindLabel: "DummyMutator",
+			v1beta1.PodLabel:         podName,
 		})
 
 	err = controllerutil.SetOwnerReference(pod, expectedStatus, scheme)
@@ -52,7 +53,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err := NewMutatorStatusForPod(pod, mutator.ID(), scheme)
+	status, err := v1beta1.NewMutatorStatusForPod(pod, mutator.ID(), scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +61,7 @@ func TestNewMutatorStatusForPod(t *testing.T) {
 	if diff := cmp.Diff(expectedStatus, status); diff != "" {
 		t.Fatal(diff)
 	}
-	cmVal, err := KeyForMutatorID(podName, mutator.ID())
+	cmVal, err := v1beta1.KeyForMutatorID(podName, mutator.ID())
 	if err != nil {
 		t.Fatal(err)
 	}

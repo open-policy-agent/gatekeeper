@@ -164,6 +164,31 @@ spec:
                   assign:
                     description: Assign.value holds the value to be assigned
                     properties:
+                      externalData:
+                        description: ExternalData describes the external data provider to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: DataSource specifies where to extract the data that will be sent to the external data provider as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: Default specifies the default value to use when the external data provider returns an error and the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: FailurePolicy specifies the policy to apply when the external data provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data provider.
+                            type: string
+                        type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified metadata field.
                         properties:
@@ -377,6 +402,31 @@ spec:
                   assign:
                     description: Assign.value holds the value to be assigned
                     properties:
+                      externalData:
+                        description: ExternalData describes the external data provider to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: DataSource specifies where to extract the data that will be sent to the external data provider as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: Default specifies the default value to use when the external data provider returns an error and the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: FailurePolicy specifies the policy to apply when the external data provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data provider.
+                            type: string
+                        type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified metadata field.
                         properties:

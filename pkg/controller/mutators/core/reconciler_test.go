@@ -254,6 +254,10 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 		m.path.String() != other.path.String()
 }
 
+func (m *fakeMutator) UsesExternalData() bool {
+	return false
+}
+
 type errSome struct{ id int }
 
 func newErrSome(id int) error { return &errSome{id: id} }

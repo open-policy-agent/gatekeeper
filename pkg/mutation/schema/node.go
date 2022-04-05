@@ -18,6 +18,10 @@ type node struct {
 	// Each node defines a distinct child definition. If multiple Nodes are defined
 	// for the same child, then there is a schema conflict.
 	Children map[string]map[parser.NodeType]node
+
+	// MustTerminate tracks which mutators require their path to terminate, i.e.
+	// the path must not be extended by any other mutation.
+	MustTerminate IDSet
 }
 
 // Add inserts the provided path, linked to the given ID.
@@ -28,17 +32,30 @@ type node struct {
 // spec.containers[name: foo].image
 // spec.containers.image
 //
+// If mustTerminate is true, any future paths that extend beyond this path will
+// result in a conflict, for example:
+//
+// spec.foo <- must terminate at foo
+// spec.foo.bar <- conflict since foo is a terminal node
+//
 // If the returned references is non-nil it contains at least two elements, one
 // of which is the passed id.
-func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType) IDSet {
+func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType, mustTerminate bool) IDSet {
 	if n.ReferencedBy == nil {
 		n.ReferencedBy = make(IDSet)
 	}
+	if n.MustTerminate == nil {
+		n.MustTerminate = make(IDSet)
+	}
+
 	// This node is referenced by the passed ID.
 	n.ReferencedBy[id] = true
 
 	// Base case; there is no more path to validate.
 	if len(path) == 0 {
+		if mustTerminate {
+			n.MustTerminate[id] = true
+		}
 		return nil
 	}
 
@@ -59,7 +76,7 @@ func (n *node) Add(id types.ID, path []parser.Node, terminalType parser.NodeType
 	// Add the remaining path to the appropriate child, collecting any conflicts
 	// found when adding it.
 	child := n.Children[childKey][childType]
-	conflicts := child.Add(id, path[1:], terminalType)
+	conflicts := child.Add(id, path[1:], terminalType, mustTerminate)
 	n.Children[childKey][childType] = child
 
 	// Detect conflicts at this node.
@@ -73,7 +90,7 @@ const ErrNotFound = util.Error("path not found")
 
 // Remove removes the id and path from the tree.
 // Panics if the ID is not defined or was Add()ed with a different path.
-func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeType) {
+func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeType, mustTerminate bool) {
 	// This ID no longer references this node.
 	if _, isReferenced := n.ReferencedBy[id]; isReferenced {
 		delete(n.ReferencedBy, id)
@@ -83,6 +100,11 @@ func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeT
 
 	if len(path) == 0 {
 		// No more path to remove.
+		if _, found := n.MustTerminate[id]; found && mustTerminate {
+			delete(n.MustTerminate, id)
+		} else if mustTerminate {
+			panic(fmt.Errorf("%s not found in MustTerminate IDSet", id))
+		}
 		return
 	}
 
@@ -101,7 +123,7 @@ func (n *node) Remove(id types.ID, path []parser.Node, terminalType parser.NodeT
 	}
 
 	child := n.Children[childKey][childType]
-	child.Remove(id, path[1:], terminalType)
+	child.Remove(id, path[1:], terminalType, mustTerminate)
 
 	// Delete the type from the child if it is no longer referenced.
 	if len(child.ReferencedBy) == 0 {
@@ -128,7 +150,11 @@ func (n *node) conflicts(childKey string) IDSet {
 		nTypes--
 	}
 
+	mustTerminate := false
+	hasGrandchildren := false
 	for nodeType, child := range n.Children[childKey] {
+		mustTerminate = mustTerminate || len(child.MustTerminate) > 0
+		hasGrandchildren = hasGrandchildren || len(child.Children) > 0
 		if nodeType == Unknown {
 			// If we don't know the type of a node, we assume it conflicts with nothing.
 			continue
@@ -138,6 +164,24 @@ func (n *node) conflicts(childKey string) IDSet {
 		// 2) the Child is a List and defines multiple keys.
 		if nTypes > 1 || nodeType == parser.ListNode && len(child.Children) > 1 {
 			conflicts = merge(conflicts, child.ReferencedBy)
+		}
+	}
+
+	// we can return here if one of the following is true:
+	// 1) we don't have to terminate at this node
+	// 2) we have to terminate at this node but we don't have grandchildren for this child key
+	if !mustTerminate || !hasGrandchildren {
+		return conflicts
+	}
+
+	// since we have to terminate at this node,
+	// the terminal node and its grandchildren are considered conflicts
+	for _, child := range n.Children[childKey] {
+		conflicts = merge(conflicts, child.MustTerminate)
+		for _, nodeMap := range child.Children {
+			for _, grandchild := range nodeMap {
+				conflicts = merge(conflicts, grandchild.ReferencedBy)
+			}
 		}
 	}
 
@@ -217,8 +261,9 @@ func (n *node) DeepCopy() *node {
 	}
 
 	result := &node{
-		ReferencedBy: make(IDSet),
-		Children:     make(map[string]map[parser.NodeType]node),
+		ReferencedBy:  make(IDSet),
+		Children:      make(map[string]map[parser.NodeType]node),
+		MustTerminate: n.MustTerminate,
 	}
 	for id := range n.ReferencedBy {
 		result.ReferencedBy[id] = true

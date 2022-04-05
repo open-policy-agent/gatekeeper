@@ -14,10 +14,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -57,8 +54,8 @@ type Mutator struct {
 // Mutator implements mutator.
 var _ types.Mutator = &Mutator{}
 
-func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	matches, err := match.Matches(&m.assignMetadata.Spec.Match, obj, ns)
+func (m *Mutator) Matches(mutable *types.Mutable) bool {
+	matches, err := match.Matches(&m.assignMetadata.Spec.Match, mutable.Object, mutable.Namespace)
 	if err != nil {
 		log.Error(err, "Matches failed for assign metadata", "assignMeta", m.assignMetadata.Name)
 		return false
@@ -66,16 +63,20 @@ func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
 	return matches
 }
 
-func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (m *Mutator) Mutate(mutable *types.Mutable) (bool, error) {
 	// Note: Performance here can be improved by ~3x by writing a specialized
 	// function instead of using a generic function. AssignMetadata only ever
 	// mutates metadata.annotations or metadata.labels, and we spend ~70% of
 	// compute covering cases that aren't valid for this Mutator.
-	value, err := m.assignMetadata.Spec.Parameters.Assign.GetValue(obj)
+	value, err := m.assignMetadata.Spec.Parameters.Assign.GetValue(mutable)
 	if err != nil {
 		return false, err
 	}
-	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(value), obj)
+	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(value), mutable.Object)
+}
+
+func (m *Mutator) UsesExternalData() bool {
+	return m.assignMetadata.Spec.Parameters.Assign.ExternalData != nil
 }
 
 func (m *Mutator) ID() types.ID {
@@ -133,6 +134,9 @@ func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (
 	potentialValue := assignMeta.Spec.Parameters.Assign
 	if err := potentialValue.Validate(); err != nil {
 		return nil, err
+	}
+	if potentialValue.ExternalData != nil && potentialValue.ExternalData.DataSource != types.DataSourceUsername {
+		return nil, fmt.Errorf("only username data source is supported for assignmetadata %s", assignMeta.GetName())
 	}
 
 	if potentialValue.Value != nil {

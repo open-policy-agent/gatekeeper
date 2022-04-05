@@ -82,6 +82,9 @@ func sendResponse(results *[]externaldata.Item, systemErr string, w http.Respons
 	response := externaldata.ProviderResponse{
 		APIVersion: apiVersion,
 		Kind:       "ProviderResponse",
+		Response: externaldata.Response{
+			Idempotent: true,
+		},
 	}
 
 	if results != nil {
