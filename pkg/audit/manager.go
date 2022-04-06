@@ -222,7 +222,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	// log constraints with violations
 	for gvknn := range updateLists {
 		ar := updateLists[gvknn][0]
-		logConstraint(am.log, gvknn, string(ar.enforcementAction), totalViolationsPerConstraint[gvknn])
+		logConstraint(am.log, &gvknn, string(ar.enforcementAction), totalViolationsPerConstraint[gvknn])
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
@@ -849,7 +849,7 @@ func (ucloop *updateConstraintLoop) update(ctx context.Context, constraintsGVKs 
 	ucloop.log.Info("starting update constraints loop", "constraints to update", fmt.Sprintf("%v", ucloop.uc))
 
 	updateLoop := func() (bool, error) {
-		for key, _ := range ucloop.uc {
+		for key := range ucloop.uc {
 			select {
 			case <-ucloop.stop:
 				return true, nil
@@ -920,7 +920,7 @@ func logFinish(l logr.Logger) {
 	)
 }
 
-func logConstraint(l logr.Logger, gvknn util.KindVersionName, enforcementAction string, totalViolations int64) {
+func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction string, totalViolations int64) {
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",

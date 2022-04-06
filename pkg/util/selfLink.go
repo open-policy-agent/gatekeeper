@@ -5,19 +5,19 @@ import (
 )
 
 type KindVersionName struct {
-	Group string
-	Kind    string
-	Version string
+	Group     string
+	Kind      string
+	Version   string
 	Namespace string
-	Name    string
+	Name      string
 }
 
 func GetUniqueKey(obj unstructured.Unstructured) KindVersionName {
 	return KindVersionName{
-		Group: obj.GetObjectKind().GroupVersionKind().Group,
-		Version: obj.GetObjectKind().GroupVersionKind().Version,
-		Kind:    obj.GetKind(),
-		Name:    obj.GetName(),
+		Group:     obj.GetObjectKind().GroupVersionKind().Group,
+		Version:   obj.GetObjectKind().GroupVersionKind().Version,
+		Kind:      obj.GetKind(),
+		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
 	}
 }
