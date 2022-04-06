@@ -10,16 +10,24 @@ metadata:
   name: gatekeeper-webhook-service
   namespace: '{{ .Release.Namespace }}'
 spec:
-  {{- if .Values.service }}
-  type: {{  .Values.service.type | default "ClusterIP" }}
-    {{- if .Values.service.loadBalancerIP }}
-  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
-    {{- end }}
-  {{- end }}
+  
   ports:
   - name: https-webhook-server
     port: 443
     targetPort: webhook-server
+{{- if .Values.service }}
+{{- if .Values.service.healthzPort }}
+  - name: http-webhook-healthz
+    port: {{ .Values.service.healthzPort }}
+    targetPort: healthz
+      {{- end }}
+  {{- end }}
+  {{- if .Values.service }}
+  type: {{ .Values.service.type | default "ClusterIP" }}
+    {{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+    {{- end }}
+  {{- end }}
   selector:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
