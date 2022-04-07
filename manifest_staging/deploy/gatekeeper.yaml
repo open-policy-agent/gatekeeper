@@ -2425,6 +2425,7 @@ spec:
       - args:
         - --operation=audit
         - --operation=status
+        - --operation=mutation-status
         - --logtostderr
         - --disable-opa-builtin={http.send}
         command:
@@ -2439,7 +2440,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.7.0
+        image: openpolicyagent/gatekeeper:v3.8.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -2543,7 +2544,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: openpolicyagent/gatekeeper:v3.7.0
+        image: openpolicyagent/gatekeeper:v3.8.0-rc.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

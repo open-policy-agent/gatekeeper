@@ -74,10 +74,11 @@ func Ast(x interface{}) ([]byte, error) {
 			unmangleWildcardVar(wildcards, n)
 
 		case *ast.Expr:
-			if n.IsCall() &&
-				ast.Member.Ref().Equal(n.Operator()) ||
-				ast.MemberWithKey.Ref().Equal(n.Operator()) {
+			switch {
+			case n.IsCall() && ast.Member.Ref().Equal(n.Operator()) || ast.MemberWithKey.Ref().Equal(n.Operator()):
 				extraFutureKeywordImports["in"] = true
+			case n.IsEvery():
+				extraFutureKeywordImports["every"] = true
 			}
 		}
 		if x.Loc() == nil {
@@ -109,7 +110,7 @@ func Ast(x interface{}) ([]byte, error) {
 	case *ast.Expr:
 		w.writeExpr(x, nil)
 	case *ast.With:
-		w.writeWith(x, nil)
+		w.writeWith(x, nil, false)
 	case *ast.Term:
 		w.writeTerm(x, nil)
 	case ast.Value:
@@ -451,7 +452,7 @@ func (w *writer) writeExpr(expr *ast.Expr, comments []*ast.Comment) []*ast.Comme
 			w.endLine()
 			w.startLine()
 		}
-		comments = w.writeWith(with, comments)
+		comments = w.writeWith(with, comments, indented)
 	}
 
 	return comments
@@ -555,9 +556,12 @@ func (w *writer) writeFunctionCallPlain(terms []*ast.Term, comments []*ast.Comme
 	return w.writeIterable(args, loc, closingLoc(0, 0, '(', ')', loc), comments, w.listWriter())
 }
 
-func (w *writer) writeWith(with *ast.With, comments []*ast.Comment) []*ast.Comment {
+func (w *writer) writeWith(with *ast.With, comments []*ast.Comment, indented bool) []*ast.Comment {
 	comments = w.insertComments(comments, with.Location)
-	w.write(" with ")
+	if !indented {
+		w.write(" ")
+	}
+	w.write("with ")
 	comments = w.writeTerm(with.Target, comments)
 	w.write(" as ")
 	return w.writeTerm(with.Value, comments)

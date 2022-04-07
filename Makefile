@@ -8,7 +8,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.7.0
+VERSION := v3.8.0-rc.1
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -94,7 +94,7 @@ all: lint test manager
 
 # Run tests
 native-test:
-	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -bench . -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -race -bench . -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
