@@ -57,7 +57,7 @@ var (
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	emptyAuditResults         []*updateListEntry
+	emptyAuditResults         []updateListEntry
 )
 
 // Manager allows us to audit resources periodically.
@@ -189,7 +189,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		return nil
 	}
 
-	updateLists := make(map[util.KindVersionName][]*updateListEntry)
+	updateLists := make(map[util.KindVersionName][]updateListEntry)
 	totalViolationsPerConstraint := make(map[util.KindVersionName]int64)
 	totalViolationsPerEnforcementAction := make(map[util.EnforcementAction]int64)
 	// resetting total violations per enforcement action
@@ -222,7 +222,7 @@ func (am *Manager) audit(ctx context.Context) error {
 	// log constraints with violations
 	for gvknn := range updateLists {
 		ar := updateLists[gvknn][0]
-		logConstraint(am.log, &gvknn, string(ar.enforcementAction), totalViolationsPerConstraint[gvknn])
+		logConstraint(am.log, &gvknn, ar.enforcementAction, totalViolationsPerConstraint[gvknn])
 	}
 
 	for k, v := range totalViolationsPerEnforcementAction {
@@ -241,7 +241,7 @@ func (am *Manager) audit(ctx context.Context) error {
 func (am *Manager) auditResources(
 	ctx context.Context,
 	constraintsGVK []schema.GroupVersionKind,
-	updateLists map[util.KindVersionName][]*updateListEntry,
+	updateLists map[util.KindVersionName][]updateListEntry,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
@@ -472,7 +472,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
-	updateLists map[util.KindVersionName][]*updateListEntry,
+	updateLists map[util.KindVersionName][]updateListEntry,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
 	timestamp string,
@@ -646,7 +646,7 @@ func (am *Manager) getAllConstraintKinds() ([]schema.GroupVersionKind, error) {
 }
 
 func (am *Manager) addAuditResponsesToUpdateLists(
-	updateLists map[util.KindVersionName][]*updateListEntry,
+	updateLists map[util.KindVersionName][]updateListEntry,
 	res []Result,
 	totalViolationsPerConstraint map[util.KindVersionName]int64,
 	totalViolationsPerEnforcementAction map[util.EnforcementAction]int64,
@@ -668,7 +668,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 			if len(msg) > msgSize {
 				msg = truncateString(msg, msgSize)
 			}
-			entry := &updateListEntry{
+			entry := updateListEntry{
 				group:             gvk.Group,
 				version:           gvk.Version,
 				kind:              gvk.Kind,
@@ -689,7 +689,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 	return nil
 }
 
-func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName][]*updateListEntry, timestamp string, totalViolations map[util.KindVersionName]int64) {
+func (am *Manager) writeAuditResults(ctx context.Context, constraintsGVKs []schema.GroupVersionKind, updateLists map[util.KindVersionName][]updateListEntry, timestamp string, totalViolations map[util.KindVersionName]int64) {
 	// if there is a previous reporting thread, close it before starting a new one
 	if am.ucloop != nil {
 		// this is closing the previous audit reporting thread
@@ -726,7 +726,7 @@ func (am *Manager) skipExcludedNamespace(obj *unstructured.Unstructured) (bool, 
 	return isNamespaceExcluded, err
 }
 
-func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []*updateListEntry, timestamp string, totalViolations int64) error {
+func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, instance *unstructured.Unstructured, auditResults []updateListEntry, timestamp string, totalViolations int64) error {
 	constraintName := instance.GetName()
 	ucloop.log.Info("updating constraint status", "constraintName", constraintName)
 	// create constraint status violations
@@ -806,7 +806,7 @@ type updateConstraintLoop struct {
 	client  client.Client
 	stop    chan struct{}
 	stopped chan struct{}
-	ul      map[util.KindVersionName][]*updateListEntry
+	ul      map[util.KindVersionName][]updateListEntry
 	ts      string
 	tv      map[util.KindVersionName]int64
 	log     logr.Logger
@@ -920,7 +920,7 @@ func logFinish(l logr.Logger) {
 	)
 }
 
-func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction string, totalViolations int64) {
+func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction util.EnforcementAction, totalViolations int64) {
 	l.Info(
 		"audit results for constraint",
 		logging.EventType, "constraint_audited",
