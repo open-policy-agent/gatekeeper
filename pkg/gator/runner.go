@@ -170,7 +170,7 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client Client) error
 		return err
 	}
 
-	_, err = client.AddTemplate(template)
+	_, err = client.AddTemplate(context.Background(), template)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrAddingTemplate, err)
 	}

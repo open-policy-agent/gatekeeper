@@ -342,17 +342,17 @@ func (e *eval) evalStep(iter evalIterator) error {
 
 	var defined bool
 	var err error
-
 	switch terms := expr.Terms.(type) {
 	case []*ast.Term:
-		if expr.IsEquality() {
+		switch {
+		case expr.IsEquality():
 			err = e.unify(terms[1], terms[2], func() error {
 				defined = true
 				err := iter(e)
 				e.traceRedo(expr)
 				return err
 			})
-		} else {
+		default:
 			err = e.evalCall(terms, func() error {
 				defined = true
 				err := iter(e)
@@ -376,6 +376,27 @@ func (e *eval) evalStep(iter evalIterator) error {
 			}
 			return nil
 		})
+	case *ast.Every:
+		eval := evalEvery{
+			e:    e,
+			expr: expr,
+			generator: ast.NewBody(
+				ast.Equality.Expr(
+					ast.RefTerm(terms.Domain, terms.Key).SetLocation(terms.Domain.Location),
+					terms.Value,
+				).SetLocation(terms.Domain.Location),
+			),
+			body: terms.Body,
+		}
+		err = eval.eval(func() error {
+			defined = true
+			err := iter(e)
+			e.traceRedo(expr)
+			return err
+		})
+
+	default: // guard-rail for adding extra (Expr).Terms types
+		return fmt.Errorf("got %T terms: %[1]v", terms)
 	}
 
 	if err != nil {
@@ -643,18 +664,12 @@ func (e *eval) evalNotPartialSupport(negationID uint64, expr *ast.Expr, unknowns
 	}
 
 	// Save expression that refers to support rule set.
-
-	terms := expr.Terms
-	expr.Terms = nil // Prevent unnecessary copying the terms.
-	cpy := expr.Copy()
-	expr.Terms = terms
+	cpy := expr.CopyWithoutTerms()
 
 	if len(args) > 0 {
 		terms := make([]*ast.Term, len(args)+1)
 		terms[0] = term
-		for i := 0; i < len(args); i++ {
-			terms[i+1] = args[i]
-		}
+		copy(terms[1:], args)
 		cpy.Terms = terms
 	} else {
 		cpy.Terms = term
@@ -2890,6 +2905,80 @@ func (e evalTerm) save(iter unifyIterator) error {
 		return e.e.biunify(ast.NewTerm(ref), e.rterm, e.bindings, e.rbindings, iter)
 	})
 
+}
+
+type evalEvery struct {
+	e         *eval
+	expr      *ast.Expr
+	generator ast.Body
+	body      ast.Body
+}
+
+func (e evalEvery) eval(iter unifyIterator) error {
+	// unknowns in domain or body: save the expression, PE its body
+	if e.e.unknown(e.generator, e.e.bindings) || e.e.unknown(e.body, e.e.bindings) {
+		return e.save(iter)
+	}
+
+	domain := e.e.closure(e.generator)
+	all := true // all generator evaluations yield one successful body evaluation
+
+	domain.traceEnter(e.expr)
+
+	err := domain.eval(func(child *eval) error {
+		if !all {
+			// NOTE(sr): Is this good enough? We don't have a "fail EE".
+			// This would do extra work, like iterating needlessly if domain was a large array.
+			return nil
+		}
+		body := child.closure(e.body)
+		body.findOne = true
+		body.traceEnter(e.body)
+		done := false
+		err := body.eval(func(*eval) error {
+			body.traceExit(e.body)
+			done = true
+			body.traceRedo(e.body)
+			return nil
+		})
+		if !done {
+			all = false
+		}
+
+		child.traceRedo(e.expr)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if all {
+		err := iter()
+		domain.traceExit(e.expr)
+		return err
+	}
+	domain.traceFail(e.expr)
+	return nil
+}
+
+func (e *evalEvery) save(iter unifyIterator) error {
+	cpy := e.expr.Copy()
+	every := cpy.Terms.(*ast.Every)
+
+	for i := range every.Body { // TODO(sr): is there an easier way?
+		switch t := every.Body[i].Terms.(type) {
+		case *ast.Term:
+			every.Body[i].Terms = e.e.bindings.Plug(t)
+		case []*ast.Term:
+			for j := range t {
+				t[j] = e.e.bindings.Plug(t[j])
+			}
+		}
+	}
+
+	every.Domain = e.e.bindings.plugNamespaced(every.Domain, e.e.caller.bindings)
+	cpy.Terms = every
+
+	return e.e.saveExpr(cpy, e.e.bindings, iter)
 }
 
 func (e *eval) comprehensionIndex(term *ast.Term) *ast.ComprehensionIndex {

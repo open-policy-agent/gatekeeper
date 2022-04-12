@@ -122,6 +122,15 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
 
+	w, err := wm.NewRegistrar(ctrlName, regEvents)
+	if err != nil {
+		return nil, err
+	}
+	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
+	if err != nil {
+		return nil, err
+	}
+
 	// via the registrar below.
 	constraintAdder := constraint.Adder{
 		Opa:              opa,
@@ -131,6 +140,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		Events:           cstrEvents,
 		Tracker:          tracker,
 		GetPod:           getPod,
+		IfWatching:       w.IfWatching,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := constraintAdder.Add(mgr); err != nil {
@@ -146,6 +156,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 			WatchManager:     wm,
 			ControllerSwitch: cs,
 			Events:           statusEvents,
+			IfWatching:       statusW.IfWatching,
 		}
 		if err := csAdder.Add(mgr); err != nil {
 			return nil, err
@@ -161,14 +172,6 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		}
 	}
 
-	w, err := wm.NewRegistrar(ctrlName, regEvents)
-	if err != nil {
-		return nil, err
-	}
-	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
-	if err != nil {
-		return nil, err
-	}
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
 		Client:        mgr.GetClient(),
@@ -419,7 +422,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// It's important that opa.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(unversionedCT); err != nil {
+	if _, err := r.opa.AddTemplate(ctx, unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}

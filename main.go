@@ -16,7 +16,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,6 +32,7 @@ import (
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -106,6 +106,8 @@ func init() {
 	_ = configv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
 	_ = mutationsv1alpha1.AddToScheme(scheme)
+	_ = mutationsv1beta1.AddToScheme(scheme)
+
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
 }
@@ -154,7 +156,7 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
-	webhooks := []rotator.WebhookInfo{}
+	var webhooks []rotator.WebhookInfo
 	webhooks = webhook.AppendValidationWebhookIfEnabled(webhooks)
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
@@ -257,19 +259,26 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
+		mutationOpts.ProviderCache = providerCache
 	}
 	// initialize OPA
-	driver := local.New(args...)
+	driver, err := local.New(args...)
+	if err != nil {
+		setupLog.Error(err, "unable to set up Driver")
+		os.Exit(1)
+	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
+		os.Exit(1)
 	}
 
-	mutationSystem := mutation.NewSystem(mutation.SystemOpts{Reporter: mutation.NewStatsReporter()})
+	mutationSystem := mutation.NewSystem(mutationOpts)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -294,6 +303,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
+	watchSet := watch.NewSet()
 	opts := controller.Dependencies{
 		Opa:              client,
 		WatchManger:      wm,
@@ -302,10 +312,10 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ProviderCache:    providerCache,
+		WatchSet:         watchSet,
 	}
 
-	ctx := context.Background()
-	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}
@@ -317,9 +327,11 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 			os.Exit(1)
 		}
 	}
+
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		if err := audit.AddToManager(mgr, client, processExcluder); err != nil {
+		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
+		if err := audit.AddToManager(mgr, client, processExcluder, auditCache); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

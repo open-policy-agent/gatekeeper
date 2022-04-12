@@ -26,6 +26,8 @@ import (
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
@@ -148,7 +150,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
 	}
 
-	if userErr, err := h.validateGatekeeperResources(&req); err != nil {
+	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
 		var code int32
 		if userErr {
 			code = http.StatusUnprocessableEntity
@@ -315,12 +317,12 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 // validateGatekeeperResources returns whether an issue is user error (vs internal) and any errors
 // validating internal resources.
-func (h *validationHandler) validateGatekeeperResources(req *admission.Request) (bool, error) {
+func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req *admission.Request) (bool, error) {
 	gvk := req.AdmissionRequest.Kind
 
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
-		return h.validateTemplate(req)
+		return h.validateTemplate(ctx, req)
 	case gvk.Group == "constraints.gatekeeper.sh":
 		return h.validateConstraint(req)
 	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
@@ -342,18 +344,33 @@ func (h *validationHandler) validateGatekeeperResources(req *admission.Request) 
 // Returns an error if the ConstraintTemplate fails validation.
 // The returned boolean is only true if error is non-nil and is a result of user
 // error.
-func (h *validationHandler) validateTemplate(req *admission.Request) (bool, error) {
+func (h *validationHandler) validateTemplate(ctx context.Context, req *admission.Request) (bool, error) {
 	templ, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
 		return false, err
 	}
 
 	unversioned := &templates.ConstraintTemplate{}
-	if err := runtimeScheme.Convert(templ, unversioned, nil); err != nil {
+	err = runtimeScheme.Convert(templ, unversioned, nil)
+	if err != nil {
 		return false, err
 	}
 
-	if err := h.opa.ValidateConstraintTemplate(unversioned); err != nil {
+	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
+	_, err = h.opa.CreateCRD(unversioned)
+	if err != nil {
+		return true, err
+	}
+
+	// Create a temporary Driver and attempt to add the Template to it. This
+	// ensures the Rego code both parses and compiles.
+	d, err := local.New()
+	if err != nil {
+		return false, fmt.Errorf("unable to create Driver: %v", err)
+	}
+
+	err = d.AddTemplate(ctx, unversioned)
+	if err != nil {
 		return true, err
 	}
 
@@ -459,6 +476,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 			return nil, errors.New("serving context canceled, aborting request")
 		}
 	}
+
 	trace, dump := h.tracingLevel(ctx, req)
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
@@ -482,7 +500,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		review.Namespace = ns
 	}
 
-	resp, err := h.opa.Review(ctx, review, constraintclient.Tracing(trace))
+	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
 	if resp != nil && trace {
 		log.Info(resp.TraceDump())
 	}

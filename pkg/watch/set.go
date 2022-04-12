@@ -30,6 +30,33 @@ type Set struct {
 	set map[schema.GroupVersionKind]bool
 }
 
+// RLock acquires a read lock on Set.
+func (w *Set) RLock() {
+	w.mux.RLock()
+}
+
+// RUnlock releases a read lock on Set.
+func (w *Set) RUnlock() {
+	w.mux.RUnlock()
+}
+
+// DoForEach locks Set to prevent mutations and executes f on every element
+// currently in the set.
+// Exits early if f returns an error.
+func (w *Set) DoForEach(f func(gvk schema.GroupVersionKind) error) error {
+	w.mux.RLock()
+	defer w.mux.RUnlock()
+
+	for gvk := range w.set {
+		err := f(gvk)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // NewSet constructs a new watchSet.
 func NewSet() *Set {
 	return &Set{
@@ -127,7 +154,9 @@ func (w *Set) Equals(other *Set) bool {
 	return reflect.DeepEqual(w.set, otherSet)
 }
 
-func (w *Set) Replace(other *Set) {
+// Replace locks Set for mutation, replaces Set with other, and then executes
+// any passed callbacks before releasing the lock.
+func (w *Set) Replace(other *Set, fns ...func()) {
 	otherSet := other.Dump()
 	w.mux.Lock()
 	defer w.mux.Unlock()
@@ -137,6 +166,10 @@ func (w *Set) Replace(other *Set) {
 		newSet[k] = v
 	}
 	w.set = newSet
+
+	for _, fn := range fns {
+		fn()
+	}
 }
 
 func (w *Set) Contains(gvk schema.GroupVersionKind) bool {

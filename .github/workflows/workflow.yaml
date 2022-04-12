@@ -42,7 +42,7 @@ jobs:
       uses: golangci/golangci-lint-action@v2
       with:
         # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-        version: v1.43.0
+        version: v1.45.2
 
   test:
     name: "Unit test"
@@ -69,7 +69,7 @@ jobs:
           KUBEBUILDER_VERSION: 2.3.1
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@v2.1.0
+        uses: codecov/codecov-action@v3
         with:
           flags: unittests
           file: ./cover.out

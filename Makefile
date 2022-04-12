@@ -8,7 +8,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.7.0
+VERSION := v3.8.0-rc.1
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -25,7 +25,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.43.0
+GOLANGCI_LINT_VERSION := v1.45.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -94,7 +94,7 @@ all: lint test manager
 
 # Run tests
 native-test:
-	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -bench . -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -race -bench . -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -257,7 +257,7 @@ lint:
 		golangci-lint run -v
 
 # Generate code
-generate: __conversion-gen __controller-gen target-template-source
+generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
@@ -356,12 +356,6 @@ ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
-
-# Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
-target-template-source:
-	@printf "package target\n\n// This file is generated from pkg/target/regolib/src.rego via \"make target-template-source\"\n// Do not modify this file directly!\n\nconst templSrc = \`" > pkg/target/target_template_source.go
-	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/; s/data\[\"{{.ConstraintsRoot}}\"\]/{{.ConstraintsRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
-	@printf "\`\n" >> pkg/target/target_template_source.go
 
 # Push the docker image
 docker-push:

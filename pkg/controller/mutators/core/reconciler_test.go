@@ -105,17 +105,17 @@ func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Obj
 
 	switch o := obj.(type) {
 	case *fakeMutatorObject:
-		mo, ok := got.object.(*fakeMutatorObject)
+		g, ok := got.object.(*fakeMutatorObject)
 		if !ok {
-			return fmt.Errorf("got got.object type %T, want %T", got.object, fakeMutatorObject{})
+			return fmt.Errorf("got.object is type %T, want %T", got.object, &fakeMutatorObject{})
 		}
-		*o = *mo
+		*o = *g
 	case *statusv1beta1.MutatorPodStatus:
-		mo, ok := got.object.(*statusv1beta1.MutatorPodStatus)
+		g, ok := got.object.(*statusv1beta1.MutatorPodStatus)
 		if !ok {
-			return fmt.Errorf("got got.object type %T, want %T", got.object, statusv1beta1.MutatorPodStatus{})
+			return fmt.Errorf("got.object is type %T, want %T", got.object, &statusv1beta1.MutatorPodStatus{})
 		}
-		*o = *mo
+		*o = *g
 	default:
 		return fmt.Errorf("unrecognized type %T", obj)
 	}
@@ -252,6 +252,10 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 	return m.id != other.id ||
 		m.terminal != other.terminal ||
 		m.path.String() != other.path.String()
+}
+
+func (m *fakeMutator) UsesExternalData() bool {
+	return false
 }
 
 type errSome struct{ id int }

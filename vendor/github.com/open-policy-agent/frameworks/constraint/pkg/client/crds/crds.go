@@ -22,11 +22,6 @@ func init() {
 	}
 }
 
-var supportedVersions = map[string]bool{
-	v1alpha1.SchemeGroupVersion.Version: true,
-	v1beta1.SchemeGroupVersion.Version:  true,
-}
-
 // CreateCRD takes a template and a schema and converts it to a CRD.
 func CreateCRD(templ *templates.ConstraintTemplate, schema *apiextensions.JSONSchemaProps) (*apiextensions.CustomResourceDefinition, error) {
 	crd := &apiextensions.CustomResourceDefinition{
