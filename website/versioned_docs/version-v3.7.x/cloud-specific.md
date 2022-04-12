@@ -11,9 +11,9 @@ Two ways of working around this:
 
 - create a new firewall rule from master to private nodes to open port `8443` (or any other custom port)
   - https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules
-- make the pod to run on privileged port 443 (need to run pod as root)
+- make the pod to run on privileged port 443 (need to run pod as root, or have `NET_BIND_SERVICE` capability)
   - update Gatekeeper deployment manifest spec:
-    - remove `securityContext` settings that force the pods not to run as root
+    - add `NET_BIND_SERVICE` to `securityContext.capabilities.add` to allow binding on privileged ports as non-root
     - update port from `8443` to `443`
     ```yaml
     containers:
@@ -23,6 +23,10 @@ Two ways of working around this:
       - containerPort: 443
         name: webhook-server
         protocol: TCP
+      securityContext:
+        capabilities:
+          drop: ["all"]
+          add: ["NET_BIND_SERVICE"]
     ```
 
 ## Running on OpenShift 4.x
