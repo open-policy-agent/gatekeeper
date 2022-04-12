@@ -1,7 +1,5 @@
 package handler
 
-import "github.com/open-policy-agent/opa/storage"
-
 // Cacher is a type - usually a Handler - which needs to cache state.
 // Handlers only need implement this interface if they have need of a cache.
 // Handlers which do not implement Cacher are assumed to be stateless from
@@ -22,25 +20,25 @@ type Cacher interface {
 type Cache interface {
 	// Add inserts a new object into Cache with identifier key. If an object
 	// already exists, replaces the object at key.
-	Add(relPath storage.Path, object interface{}) error
+	Add(relPath []string, object interface{}) error
 
 	// Remove deletes the object at key from Cache. Deletion succeeds if key
 	// does not exist.
 	// Remove always succeeds; if for some reason key cannot be deleted the application
 	// should panic.
-	Remove(relPath storage.Path)
+	Remove(relPath []string)
 }
 
 type NoCache struct{}
 
-func (n NoCache) Add(relPath storage.Path, object interface{}) error {
+func (n NoCache) Add(relPath []string, object interface{}) error {
 	return nil
 }
 
-func (n NoCache) Get(relPath storage.Path) (interface{}, error) {
+func (n NoCache) Get(relPath []string) (interface{}, error) {
 	return nil, nil
 }
 
-func (n NoCache) Remove(relPath storage.Path) {}
+func (n NoCache) Remove(relPath []string) {}
 
 var _ Cache = NoCache{}

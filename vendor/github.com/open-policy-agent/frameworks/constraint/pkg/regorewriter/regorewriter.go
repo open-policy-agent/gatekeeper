@@ -280,7 +280,7 @@ func (r *RegoRewriter) checkImport(i *ast.Import) error {
 	}
 
 	if isSubRef(inputRefPrefix, importRef) {
-		return fmt.Errorf("%w: bad import", ErrInvalidImport)
+		return fmt.Errorf("%w: cannot import input: %q", ErrInvalidImport, importRef)
 	}
 
 	for _, libPrefix := range r.allowedLibPrefixes {
@@ -289,7 +289,11 @@ func (r *RegoRewriter) checkImport(i *ast.Import) error {
 		}
 	}
 
-	return fmt.Errorf("%w: bad import", ErrInvalidImport)
+	if isFutureRef(importRef) {
+		return nil
+	}
+
+	return fmt.Errorf("%w: bad import: %q", ErrInvalidImport, importRef)
 }
 
 // checkDataReferences checks that all data references are directed to allowed lib prefixes or

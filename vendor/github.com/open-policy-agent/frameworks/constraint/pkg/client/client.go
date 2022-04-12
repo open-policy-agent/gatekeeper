@@ -18,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const statusField = "status"
+
 // Client tracks ConstraintTemplates and Constraints for a set of Targets.
 // Allows validating reviews against Constraints.
 //
