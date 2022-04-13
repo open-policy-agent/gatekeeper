@@ -139,7 +139,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: logs
@@ -179,7 +179,7 @@ jobs:
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: helm-logs
@@ -227,7 +227,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-externaldata-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: externaldata-logs
