@@ -46,13 +46,13 @@ After a minor release (`vX.Y.0`) has been released, we will immediately tag the 
 
 Once we are ready to release the new minor version, we will create a release branch (`release-X.Y+1`) from the master branch and create a release candidate tag (`vX.Y+1.Z-rc.0`) based on the release branch. This allows us to isolate the release candidates in its own branch so that future pull requests that are being merged to the master branch will not cause any regressions. Unlike beta, we only increment our release candidates (e.g. `vX.Y+1.Z-rc.0` -> `vX.Y+1.Z-rc.1`) when we decided to cherry-pick merged pull requests to the release branch. We also do not recommend using release candidates of Gatekeeper in a production environment.
 
-Once we are confident in our latest release candidate, we will tag the release branch with a stable release (`vX.Y+1.0`), and the development cycle to start all over again. We recommend using stable releases of Gatekeeper in a production environment. We also encourage users upgrade to the latest stable patch version (`vX.Y+1.Z`) for bug fixes, security fixes, and performance improvements.
+Once we are confident in our latest release candidate, we will tag the release branch with a stable release (`vX.Y+1.0`), and the development cycle will start all over again. We recommend using stable releases of Gatekeeper in a production environment. We also encourage users to upgrade to the latest stable patch releases (`vX.Y+1.Z`) for bug fixes, security fixes, and performance improvements.
 
-For patch releases (e.g. `vX.Y.1`), refer to the [cherry picking](#cherry-picking) on how to cherry-pick merged pull requests to an existing release branch.
+For patch releases (e.g. `vX.Y.1`), refer to the [cherry picking](#cherry-picking) section on how to cherry-pick merged pull requests to an existing release branch.
 
 ## Release Pull Requests
 
-Before we create each release, we need to create a release pull request against the master ot the release branch. Once they are merged, we will tag the release based on the latest commit. We have a [GitHub Actions workflow](#[TODO](https://github.com/open-policy-agent/gatekeeper/actions/workflows/release-pr.yaml)) that automates the creation of release pull request.
+Before we cut a release, we need to create a release pull request against the HEAD of the release branch. Once it is merged, we will create the release tag on the latest commit. We have a [GitHub Actions workflow](https://github.com/open-policy-agent/gatekeeper/actions/workflows/release-pr.yaml) that automates the creation of release pull requests.
 
 ![Release PR Workflow](images/release-pr-workflow.png)
 
@@ -62,7 +62,7 @@ Before we create each release, we need to create a release pull request against 
 
 1. Click "Run workflow" and input the version you would like to create a release pull request for.
 
-During the workflow, it will create the release manifests, promote the manifests from `manifest_staging/charts` and `manifest_staging/deploy` to `charts` and `deploy` folders respectively, and create the release pull request.
+During the workflow, it will create the release manifests, promote the manifests from `manifest_staging/charts` and `manifest_staging/deploy` to `charts` and `deploy` folders respectively, and create the release pull request on behalf of the release author.
 
 ## Building and releasing
 
