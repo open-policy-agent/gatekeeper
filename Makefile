@@ -8,7 +8,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.8.0-rc.1
+VERSION := v3.8.0-rc.2
 
 KIND_VERSION ?= 0.11.0
 # note: k8s version pinned since KIND image availability lags k8s releases
