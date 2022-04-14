@@ -13,7 +13,9 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -24,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -343,6 +346,75 @@ func TestReviewRequest(t *testing.T) {
 		maxThreads = 1
 		t.Run(tt.Name+" with max threads", testFn)
 	}
+}
+
+func TestReviewDefaultNS(t *testing.T) {
+	cfg := &v1alpha1.Config{
+		Spec: v1alpha1.ConfigSpec{
+			Match: []v1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []util.Wildcard{"default"},
+					Processes:          []string{"*"},
+				},
+			},
+			Validation: v1alpha1.Validation{
+				Traces: []v1alpha1.Trace{},
+			},
+		},
+	}
+	maxThreads := -1
+	testFn := func(t *testing.T) {
+		ctx := context.Background()
+		opa, err := makeOpaClient()
+		if err != nil {
+			t.Fatalf("Could not initialize OPA: %s", err)
+		}
+		if _, err := opa.AddTemplate(ctx, validRegoTemplate()); err != nil {
+			t.Fatalf("could not add template: %s", err)
+		}
+		if _, err := opa.AddConstraint(ctx, validRegoTemplateConstraint()); err != nil {
+			t.Fatalf("could not add constraint: %s", err)
+		}
+		pe := process.New()
+		pe.Add(cfg.Spec.Match)
+		handler := validationHandler{
+			opa: opa,
+			webhookHandler: webhookHandler{
+				injectedConfig:  cfg,
+				client:          &nsGetter{},
+				reader:          &nsGetter{},
+				processExcluder: pe,
+			},
+		}
+		if maxThreads > 0 {
+			handler.semaphore = make(chan struct{}, maxThreads)
+		}
+		review := admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind: metav1.GroupVersionKind{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+				Object: runtime.RawExtension{
+					Raw: []byte(
+						`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+				},
+				Namespace: "default",
+			},
+		}
+		resp := handler.Handle(context.Background(), review)
+		if err != nil {
+			t.Errorf("err = %s; want nil", err)
+		}
+		if !resp.Allowed {
+			t.Error("allowed = false; want true")
+		}
+	}
+	t.Run("unlimited threads", testFn)
+
+	maxThreads = 1
+	t.Run("with max threads", testFn)
 }
 
 func TestConstraintValidation(t *testing.T) {

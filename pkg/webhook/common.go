@@ -134,6 +134,7 @@ func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
 		return false, err
 	}
+	obj.SetNamespace(req.Namespace)
 
 	isNamespaceExcluded, err := h.processExcluder.IsNamespaceExcluded(excludedProcess, obj)
 	if err != nil {
