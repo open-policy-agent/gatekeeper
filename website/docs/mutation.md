@@ -347,3 +347,7 @@ spec:
         nameservers:
         - 1.2.3.4
 ```
+
+### External Data
+
+See [External Data For Gatekeeper Mutating Webhook](externaldata.md#external-data-for-gatekeeper-mutating-webhook).

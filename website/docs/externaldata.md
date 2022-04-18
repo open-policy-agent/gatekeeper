@@ -5,7 +5,7 @@ title: External Data
 
 > ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
 
-> 🚧  Mutation is not yet supported with external data.
+> 🚧  Mutation is supported with external data starting from v3.8.0.
 
 ## Motivation
 
@@ -41,10 +41,10 @@ You can also enable external data by installing or upgrading Helm chart by setti
 ```sh
 helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
 	--set enableExternalData=true \
-	--set controllerManager.dnsPolicy=ClusterFirst,audit.dnsPolicy=ClusterFirst
+	# if you want to enable mutation logging and annotating
+	--set logMutations=true \
+	--set mutationAnnotations=true
 ```
-
-> Please note that setting dnsPolicy is a workaround for a bug that is already fixed and will be available in a future release.
 
 ### Dev/Test
 
@@ -56,22 +56,9 @@ Providers are designed to be in-cluster components that can communicate with ext
 
 Example provider can be found at: https://github.com/open-policy-agent/gatekeeper/tree/master/test/externaldata/dummy-provider
 
-## Provider implementation
+### API (v1alpha1)
 
-Provider is an HTTP server that listens on a port and responds to [ProviderRequest](#ProviderRequest) with [ProviderResponse](#ProviderResponse).
-
-As part of [ProviderResponse](#ProviderResponse), the provider can return a list of items. Each item is a JSON object with the following fields:
-- `Key`: the key that was sent to the provider
-- `Value`: the value that was returned from the provider for that key
-- `Error`: an error message if the provider returned an error for that key
-
-If there is a system error, the provider should return the system error message in the `SystemError` field.
-
-> 📎 Recommendation is for provider implementations to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
-
-Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
-
-## Gatekeeper Provider custom resource
+#### `Provider`
 
 Provider resource defines the provider and the configuration for it.
 
@@ -85,35 +72,9 @@ spec:
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
 ```
 
-## External data for Gatekeeper validating webhook
+#### `ProviderRequest`
 
-External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
-
-`external_data` is a function that takes a request and returns a response. The request is a JSON object with the following fields:
-- `Provider`: the name of the provider to query
-- `Keys`: the list of keys to send to the provider
-
-e.g.,
-```rego
-  # build a list of keys containing images for batching
-  my_list := [img | img = input.review.object.spec.template.spec.containers[_].image]
-
-  # send external data request
-  response := external_data({"provider": "my-provider", "keys": my_list})
-```
-
-Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
-
-> 📎 To avoid multiple calls to the same provider, recommendation is to batch the keys list to send a single request.
-
-Example template:
-https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
-
-## API
-### Version v1alpha1
-#### ProviderRequest
-
-Request is the API request that is sent to the external data provider.
+`ProviderRequest` is the API request that is sent to the external data provider.
 
 ```go
 // ProviderRequest is the API request for the external data provider.
@@ -133,9 +94,9 @@ type Request struct {
 }
 ```
 
-#### ProviderResponse
+#### `ProviderResponse`
 
-Response is the API response that a provider must return.
+`ProviderResponse` is the API response that a provider must return.
 
 ```go
 // ProviderResponse is the API response from a provider.
@@ -169,3 +130,185 @@ type Item struct {
 	Error string `json:"error,omitempty"`
 }
 ```
+
+### Implementation
+
+Provider is an HTTP server that listens on a port and responds to [`ProviderRequest`](#providerrequest) with [`ProviderResponse`](#providerresponse).
+
+As part of [`ProviderResponse`](#providerresponse), the provider can return a list of items. Each item is a JSON object with the following fields:
+- `Key`: the key that was sent to the provider
+- `Value`: the value that was returned from the provider for that key
+- `Error`: an error message if the provider returned an error for that key
+
+If there is a system error, the provider should return the system error message in the `SystemError` field.
+
+> 📎 Recommendation is for provider implementations to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
+
+Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
+
+## External data for Gatekeeper validating webhook
+
+External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
+
+`external_data` is a function that takes a request and returns a response. The request is a JSON object with the following fields:
+- `provider`: the name of the provider to query
+- `keys`: the list of keys to send to the provider
+
+e.g.,
+```rego
+  # build a list of keys containing images for batching
+  my_list := [img | img = input.review.object.spec.template.spec.containers[_].image]
+
+  # send external data request
+  response := external_data({"provider": "my-provider", "keys": my_list})
+```
+
+Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
+
+> 📎 To avoid multiple calls to the same provider, recommendation is to batch the keys list to send a single request.
+
+Example template:
+https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
+
+## External data for Gatekeeper mutating webhook
+
+External data can be used in conjunction with [Gatekeeper mutating webhook](mutation.md).
+
+### API
+
+You can specify the details of the external data provider in the `spec.parameters.assign.externalData` field of `AssignMetadata` and `Assign`.
+
+> Note: `spec.parameters.assign.externalData`, `spec.parameters.assign.value` and `spec.parameters.assign.fromMetadata` are mutually exclusive.
+
+| Field                            | Description                                                                                                                                                 |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `provider`<br/>String             | The name of the external data provider.                                                                                                                     |
+| `dataSource`<br/>DataSource       | Specifies where to extract the data that will be sent to the external data provider.<br/>- `ValueAtLocation` (default): extracts an array of values from the path that will be modified. See [mutation intent](mutation.md#intent) for more details.<br/>- `Username`: The name of the Kubernetes user who initiated the admission request.  |
+| `failurePolicy`<br/>FailurePolicy | The policy to apply when the external data provider returns an error.<br/>- `UseDefault`: use the default value specified in `spec.parameters.assign.externalData.default`<br/>- `Ignore`: ignore the error and do not perform any mutations.<br/>- `Fail` (default): do not perform any mutations and return the error to the user.                                       |
+| `default`<br/>String              | The default value to use when the external data provider returns an error and the failure policy is set to `UseDefault`.                                    |
+
+### `AssignMetadata`
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: annotate-owner
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "metadata.annotations.owner"
+  parameters:
+    assign:
+      externalData:
+      provider: my-provider
+      dataSource: Username
+```
+
+<details>
+<summary>Provider response</summary>
+
+```json
+{
+  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "kind": "ProviderResponse",
+  "response": {
+    "idempotent": true,
+    "items": [
+      {
+        "key": "kubernetes-admin",
+        "value": "kubernetes-admin-mutated"
+      }
+    ]
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Mutated object</summary>
+
+```yaml
+...
+metadata:
+  annotations:
+    owner: kubernetes-admin-mutated
+...
+```
+
+</details>
+
+### `Assign`
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: Assign
+metadata:
+  name: mutate-images
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assign:
+      externalData:
+        provider: my-provider
+        dataSource: ValueAtLocation
+        failurePolicy: UseDefault
+        default: busybox:latest
+```
+
+<details>
+<summary>Provider response</summary>
+
+```json
+{
+  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "kind": "ProviderResponse",
+  "response": {
+    "idempotent": true,
+    "items": [
+      {
+        "key": "nginx",
+        "value": "nginx:v1.2.3"
+      }
+    ]
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Mutated object</summary>
+
+```yaml
+...
+spec:
+  containers:
+    - name: nginx
+      image: nginx:v1.2.3
+...
+```
+
+</details>
+
+### Limitations
+
+There are several limitations when using external data with the mutating webhook:
+
+- Only supports mutation of `string` fields (e.g. `.spec.containers[name:*].image`).
+- `AssignMetadata` only supports `dataSource: Username`.
+- `ModifySet` does not support external data.
+- Multiple mutations to the same object are applied alphabetically based on the name of the mutation CRDs. If you have an external data mutation and a non-external data mutation with the same `spec.location`, the final result might not be what you expected. Currently, there is no way to enforce custom ordering of mutations but the issue is being tracked [here](https://github.com/open-policy-agent/gatekeeper/issues/1133).
