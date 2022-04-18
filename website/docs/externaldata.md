@@ -40,10 +40,7 @@ You can also enable external data by installing or upgrading Helm chart by setti
 
 ```sh
 helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
-	--set enableExternalData=true \
-	# if you want to enable mutation logging and annotating
-	--set logMutations=true \
-	--set mutationAnnotations=true
+	--set enableExternalData=true
 ```
 
 ### Dev/Test
@@ -204,8 +201,8 @@ spec:
   parameters:
     assign:
       externalData:
-      provider: my-provider
-      dataSource: Username
+        provider: my-provider
+        dataSource: Username
 ```
 
 <details>
@@ -220,7 +217,7 @@ spec:
     "items": [
       {
         "key": "kubernetes-admin",
-        "value": "kubernetes-admin-mutated"
+        "value": "admin@example.com"
       }
     ]
   }
@@ -236,7 +233,7 @@ spec:
 ...
 metadata:
   annotations:
-    owner: kubernetes-admin-mutated
+    owner: admin@example.com
 ...
 ```
 
@@ -309,6 +306,6 @@ spec:
 There are several limitations when using external data with the mutating webhook:
 
 - Only supports mutation of `string` fields (e.g. `.spec.containers[name:*].image`).
-- `AssignMetadata` only supports `dataSource: Username`.
+- `AssignMetadata` only supports `dataSource: Username` because `AssignMetadata` only supports creation of `metadata.annotations` and `metadata.labels`. `dataSource: ValueAtLocation` will not return any data.
 - `ModifySet` does not support external data.
 - Multiple mutations to the same object are applied alphabetically based on the name of the mutation CRDs. If you have an external data mutation and a non-external data mutation with the same `spec.location`, the final result might not be what you expected. Currently, there is no way to enforce custom ordering of mutations but the issue is being tracked [here](https://github.com/open-policy-agent/gatekeeper/issues/1133).
