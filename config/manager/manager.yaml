@@ -51,7 +51,7 @@ spec:
             - "--exempt-namespace=gatekeeper-system"
             - "--operation=webhook"
             - "--operation=mutation-webhook"
-          image: openpolicyagent/gatekeeper:v3.7.1
+          image: openpolicyagent/gatekeeper:v3.7.2
           imagePullPolicy: Always
           name: manager
           ports:
@@ -141,7 +141,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-          image: openpolicyagent/gatekeeper:v3.7.1
+          image: openpolicyagent/gatekeeper:v3.7.2
           imagePullPolicy: Always
           livenessProbe:
             httpGet:
