@@ -103,6 +103,7 @@ func (d *Driver) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 // AddConstraint adds Constraint to Rego storage. Future calls to Query will
 // be evaluated against Constraint if the Constraint's key is passed.
 func (d *Driver) AddConstraint(ctx context.Context, constraint *unstructured.Unstructured) error {
+	// Note that this discards "status" as we only copy spec.parameters.
 	params, _, err := unstructured.NestedFieldNoCopy(constraint.Object, "spec", "parameters")
 	if err != nil {
 		return fmt.Errorf("%w: %v", constraints.ErrInvalidConstraint, err)

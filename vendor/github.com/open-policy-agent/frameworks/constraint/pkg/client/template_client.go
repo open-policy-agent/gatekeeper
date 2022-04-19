@@ -81,8 +81,11 @@ func (e *templateClient) AddConstraint(constraint *unstructured.Unstructured) (b
 		return false, err
 	}
 
+	cpy := constraint.DeepCopy()
+	delete(cpy.Object, statusField)
+
 	e.constraints[constraint.GetName()] = &constraintClient{
-		constraint:        constraint.DeepCopy(),
+		constraint:        cpy,
 		matchers:          matchers,
 		enforcementAction: enforcementAction,
 	}

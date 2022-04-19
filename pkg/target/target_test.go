@@ -15,7 +15,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
-	"github.com/open-policy-agent/opa/storage"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -398,7 +397,7 @@ func TestProcessData(t *testing.T) {
 		name        string
 		obj         interface{}
 		wantHandled bool
-		wantPath    storage.Path
+		wantPath    []string
 		wantErr     error
 	}{
 		{
@@ -905,7 +904,7 @@ func TestMatcher_Match(t *testing.T) {
 
 			if tt.cachedNs != nil {
 				key := clusterScopedKey(corev1.SchemeGroupVersion.WithKind("Namespace"), tt.cachedNs.Name)
-				m.cache.AddNamespace(key.String(), tt.cachedNs)
+				m.cache.AddNamespace(toKey(key), tt.cachedNs)
 			}
 
 			handled, review, err := target.HandleReview(tt.req)

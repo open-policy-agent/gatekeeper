@@ -34,59 +34,39 @@ If you want to run the script with dry run mode, set `DRY_RUN` to `true`.
 
 Cherry pick script is copied over from https://github.com/kubernetes/kubernetes/blob/master/hack/cherry_pick_pull.sh. For more information, see https://github.com/kubernetes/community/blob/master/contributors/devel/sig-release/cherry-picks.md
 
-## Versioning
+## Release Cadence
 
-1. Obtain a copy of the repository.
+There are three version tracks for the Gatekeeper project:
 
-	```
-	git clone git@github.com:open-policy-agent/gatekeeper.git
-	```
+1. Beta (`vX.Y.Z-beta.A`)
+1. Release Candidate (`vX.Y.Z-rc.B`)
+1. Stable (`vX.Y.Z`)
 
-1. If this is a patch release for a release branch, check out applicable branch, such as `release-3.1`. If not, branch should be `master`
+After a minor release (`vX.Y.0`) has been released, we will immediately tag the master branch with `vX.Y+1.Z-beta.0` in preparation for our next minor release (`vX.Y+1.0`). We will periodically increment the beta version (e.g. `vX.Y+1.Z-beta.0` -> `vX.Y+1.Z-beta.1`) to give the users a chance to test bug fixes and experimental features we introduce to the master branch. However, we do not recommend using beta versions of Gatekeeper in a production environment.
 
-1. Execute the release-patch target to generate patch. Give the semantic version of the release:
+Once we are ready to release the new minor version, we will create a release branch (`release-X.Y+1`) from the master branch and create a release candidate tag (`vX.Y+1.Z-rc.0`) based on the release branch. This allows us to isolate the release candidates in its own branch so that future pull requests that are being merged to the master branch will not cause any regressions. Unlike beta, we only increment our release candidates (e.g. `vX.Y+1.Z-rc.0` -> `vX.Y+1.Z-rc.1`) when we decided to cherry-pick merged pull requests to the release branch. We also do not recommend using release candidates of Gatekeeper in a production environment.
 
-	```
-	make release-manifest NEWVERSION=v3.0.4-beta.x
-	```
+Once we are confident in our latest release candidate, we will tag the release branch with a stable release (`vX.Y+1.0`), and the development cycle will start all over again. We recommend using stable releases of Gatekeeper in a production environment. We also encourage users to upgrade to the latest stable patch releases (`vX.Y+1.Z`) for bug fixes, security fixes, and performance improvements.
 
-1. Promote staging manifest to release.
+For patch releases (e.g. `vX.Y.1`), refer to the [cherry picking](#cherry-picking) section on how to cherry-pick merged pull requests to an existing release branch.
 
-	```
-	make promote-staging-manifest
-	```
+## Release Pull Requests
 
-1. If it's a new minor release (e.g. v3.**6**.x -> 3.**7**.0), tag docs to be versioned. Make sure to keep patch version as `.x` for a minor release.
+Before we cut a release, we need to create a release pull request against the HEAD of the release branch. Once it is merged, we will create the release tag on the latest commit. We have a [GitHub Actions workflow](https://github.com/open-policy-agent/gatekeeper/actions/workflows/release-pr.yaml) that automates the creation of release pull requests.
 
-	```
-	make version-docs NEWVERSION=v3.7.x
-	```
+![Release PR Workflow](images/release-pr-workflow.png)
 
-	This will create/update the following files and directories under `/website`: (example: https://github.com/open-policy-agent/gatekeeper/pull/1656)
-	```
-	versioned_docs/
-	versioned_sidebars/
-	versions.json
-	```
+1. Click the "Actions" tab.
 
-1. Preview the changes:
+1. Click the "create_release_pull_request" workflow.
 
-	```
-	git status
-	git diff
-	```
+1. Click "Run workflow" and input the version you would like to create a release pull request for.
+
+During the workflow, it will create the release manifests, promote the manifests from `manifest_staging/charts` and `manifest_staging/deploy` to `charts` and `deploy` folders respectively, and create the release pull request on behalf of the release author.
 
 ## Building and releasing
 
-1. Commit the changes and push to remote repository to create a pull request.
-
-	```
-	git checkout -b release-<NEW VERSION>
-	git commit -a -s -m "Prepare <NEW VERSION> release"
-	git push <YOUR FORK>
-	```
-
-2. Once the PR is merged to `master` or `release` branch (`<BRANCH NAME>` below), tag that commit with release version and push tags to remote repository.
+1. Once the release pull request is merged to `master` or `release` branch (`<BRANCH NAME>` below), tag that commit with release version and push tags to remote repository.
 
 	```
 	git checkout <BRANCH NAME>

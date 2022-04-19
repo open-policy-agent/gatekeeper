@@ -3,7 +3,6 @@ package handler
 import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/crds"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
-	"github.com/open-policy-agent/opa/storage"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -27,7 +26,7 @@ type TargetHandler interface {
 	//	data.inventory.x.y.z would return []string{"x", "y", "z"}
 	//	inventoryFormat: the data as an object that can be cast into JSON and suitable for storage in the inventory
 	//	err: any error encountered
-	ProcessData(data interface{}) (handle bool, key storage.Path, inventoryFormat interface{}, err error)
+	ProcessData(data interface{}) (handle bool, key []string, inventoryFormat interface{}, err error)
 
 	// HandleReview determines if this target handler will handle an individual
 	// resource review and if so, builds the `review` field of the input object.
