@@ -56,22 +56,9 @@ Providers are designed to be in-cluster components that can communicate with ext
 
 Example provider can be found at: https://github.com/open-policy-agent/gatekeeper/tree/master/test/externaldata/dummy-provider
 
-## Provider implementation
+### API (v1alpha1)
 
-Provider is an HTTP server that listens on a port and responds to [ProviderRequest](#ProviderRequest) with [ProviderResponse](#ProviderResponse).
-
-As part of [ProviderResponse](#ProviderResponse), the provider can return a list of items. Each item is a JSON object with the following fields:
-- `Key`: the key that was sent to the provider
-- `Value`: the value that was returned from the provider for that key
-- `Error`: an error message if the provider returned an error for that key
-
-If there is a system error, the provider should return the system error message in the `SystemError` field.
-
-> 📎 Recommendation is for provider implementations to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
-
-Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
-
-## Gatekeeper Provider custom resource
+#### `Provider`
 
 Provider resource defines the provider and the configuration for it.
 
@@ -85,35 +72,9 @@ spec:
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
 ```
 
-## External data for Gatekeeper validating webhook
+#### `ProviderRequest`
 
-External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
-
-`external_data` is a function that takes a request and returns a response. The request is a JSON object with the following fields:
-- `Provider`: the name of the provider to query
-- `Keys`: the list of keys to send to the provider
-
-e.g.,
-```rego
-  # build a list of keys containing images for batching
-  my_list := [img | img = input.review.object.spec.template.spec.containers[_].image]
-
-  # send external data request
-  response := external_data({"provider": "my-provider", "keys": my_list})
-```
-
-Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
-
-> 📎 To avoid multiple calls to the same provider, recommendation is to batch the keys list to send a single request.
-
-Example template:
-https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
-
-## API
-### Version v1alpha1
-#### ProviderRequest
-
-Request is the API request that is sent to the external data provider.
+`ProviderRequest` is the API request that is sent to the external data provider.
 
 ```go
 // ProviderRequest is the API request for the external data provider.
@@ -133,9 +94,9 @@ type Request struct {
 }
 ```
 
-#### ProviderResponse
+#### `ProviderResponse`
 
-Response is the API response that a provider must return.
+`ProviderResponse` is the API response that a provider must return.
 
 ```go
 // ProviderResponse is the API response from a provider.
@@ -169,3 +130,42 @@ type Item struct {
 	Error string `json:"error,omitempty"`
 }
 ```
+
+### Implementation
+
+Provider is an HTTP server that listens on a port and responds to [`ProviderRequest`](#providerrequest) with [`ProviderResponse`](#providerresponse).
+
+As part of [`ProviderResponse`](#providerresponse), the provider can return a list of items. Each item is a JSON object with the following fields:
+- `Key`: the key that was sent to the provider
+- `Value`: the value that was returned from the provider for that key
+- `Error`: an error message if the provider returned an error for that key
+
+If there is a system error, the provider should return the system error message in the `SystemError` field.
+
+> 📎 Recommendation is for provider implementations to keep a timeout such as maximum of 1-2 seconds for the provider to respond.
+
+Example provider implementation: https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/provider.go
+
+## External data for Gatekeeper validating webhook
+
+External data adds a [custom OPA built-in function](https://www.openpolicyagent.org/docs/latest/extensions/#custom-built-in-functions-in-go) called `external_data` to Rego. This function is used to query external data providers.
+
+`external_data` is a function that takes a request and returns a response. The request is a JSON object with the following fields:
+- `provider`: the name of the provider to query
+- `keys`: the list of keys to send to the provider
+
+e.g.,
+```rego
+  # build a list of keys containing images for batching
+  my_list := [img | img = input.review.object.spec.template.spec.containers[_].image]
+
+  # send external data request
+  response := external_data({"provider": "my-provider", "keys": my_list})
+```
+
+Response example: [[`"my-key"`, `"my-value"`, `""`], [`"another-key"`, `42`, `""`], [`"bad-key"`, `""`, `"error message"`]]
+
+> 📎 To avoid multiple calls to the same provider, recommendation is to batch the keys list to send a single request.
+
+Example template:
+https://github.com/open-policy-agent/gatekeeper/blob/master/test/externaldata/dummy-provider/policy/template.yaml
