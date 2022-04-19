@@ -253,9 +253,6 @@ spec:
     versions: ["v1"]
   match:
     scope: Namespaced
-    kinds:
-    - apiGroups: ["*"]
-      kinds: ["Pod"]
   location: "spec.containers[name:*].image"
   parameters:
     assign:
