@@ -5,6 +5,8 @@ title: Exempting Namespaces
 
 ## Exempting Namespaces from Gatekeeper using config resource
 
+> The "Config" resource must be named `config` for it to be reconciled by Gatekeeper. Gatekeeper will ignore the resource if you do not name it `config`.
+
 The config resource can be used as follows to exclude namespaces from certain processes for all constraints in the cluster. An asterisk can be used for wildcard matching (e.g. `kube-*`). To exclude namespaces at a constraint level, use `excludedNamespaces` in the [constraint](howto.md#constraints) instead.
 
 ```yaml
