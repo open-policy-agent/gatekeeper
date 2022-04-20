@@ -2477,6 +2477,7 @@ spec:
         volumeMounts:
         - mountPath: /tmp/audit
           name: tmp-volume
+      dnsPolicy: ClusterFirst
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
@@ -2585,6 +2586,7 @@ spec:
         - mountPath: /certs
           name: cert
           readOnly: true
+      dnsPolicy: ClusterFirst
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical

@@ -96,6 +96,7 @@ spec:
             capabilities:
               drop:
                 - all
+      dnsPolicy: ClusterFirst
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
@@ -180,6 +181,7 @@ spec:
             runAsGroup: 999
             runAsNonRoot: true
             runAsUser: 1000
+      dnsPolicy: ClusterFirst
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       nodeSelector:
