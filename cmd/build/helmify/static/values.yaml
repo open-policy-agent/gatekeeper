@@ -156,5 +156,6 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
+  tolerations: []
 rbac:
   create: true
