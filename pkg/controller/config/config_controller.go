@@ -17,6 +17,7 @@ package config
 
 import (
 	"context"
+	"flag"
 	"fmt"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -24,16 +25,18 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
-	"github.com/open-policy-agent/gatekeeper/pkg/keys"
+	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -49,7 +52,10 @@ const (
 	finalizerName = "finalizers.gatekeeper.sh/config"
 )
 
-var log = logf.Log.WithName("controller").WithValues("kind", "Config")
+var (
+	log                = logf.Log.WithName("controller").WithValues("kind", "Config")
+	configResourceName = flag.String("config-name", "config", "The name of the config.gatekeeper.sh/v1alpha1 resource to use. Must be in the same namespace as controller")
+)
 
 type Adder struct {
 	Opa              *constraintclient.Client
@@ -205,9 +211,9 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 		}
 	}
 
-	// Fetch the Config instance
-	if request.NamespacedName != keys.Config {
-		log.Info("Ignoring unsupported config name", "namespace", request.NamespacedName.Namespace, "name", request.NamespacedName.Name)
+	// Skip Reconcile if resource is not selected by flag
+	if !resourceIsReconcilable(request.NamespacedName) {
+		log.V(logging.DebugLevel).Info("Ignoring config", "resource", request.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 	exists := true
@@ -313,6 +319,11 @@ func (r *ReconcileConfig) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// helper - check if the config resource being reconciled is the one we want
+func resourceIsReconcilable(in types.NamespacedName) bool {
+	return types.NamespacedName{Namespace: util.GetNamespace(), Name: *configResourceName} == in
 }
 
 func (r *ReconcileConfig) wipeCacheIfNeeded(ctx context.Context) error {

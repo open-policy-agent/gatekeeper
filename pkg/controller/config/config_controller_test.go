@@ -57,7 +57,7 @@ import (
 )
 
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{
-	Name:      "config",
+	Name:      "test-config",
 	Namespace: "gatekeeper-system",
 }}
 
@@ -98,7 +98,7 @@ func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	instance := &configv1alpha1.Config{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
+			Name:      "test-config",
 			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{
@@ -716,7 +716,7 @@ func configFor(kinds []schema.GroupVersionKind) *configv1alpha1.Config {
 			Kind:       "Config",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "config",
+			Name:      "test-config",
 			Namespace: "gatekeeper-system",
 		},
 		Spec: configv1alpha1.ConfigSpec{

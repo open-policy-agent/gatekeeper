@@ -37,6 +37,9 @@ import (
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
+	// set --config-name flag to test-config for test purposes
+	*configResourceName = "test-config"
+
 	t := &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,

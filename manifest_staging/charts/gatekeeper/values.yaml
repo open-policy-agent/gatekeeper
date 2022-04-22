@@ -72,6 +72,7 @@ podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
 controllerManager:
+  configName: config
   exemptNamespaces: []
   exemptNamespacePrefixes: []
   hostNetwork: false
@@ -111,6 +112,7 @@ controllerManager:
     runAsNonRoot: true
     runAsUser: 1000
 audit:
+  configName: config
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888

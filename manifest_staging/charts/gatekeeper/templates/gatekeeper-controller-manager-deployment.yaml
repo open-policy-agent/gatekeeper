@@ -58,6 +58,7 @@ spec:
         - --enable-external-data={{ .Values.enableExternalData }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
+        - --config-name={{ .Values.controllerManager.configName }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         

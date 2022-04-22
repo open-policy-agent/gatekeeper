@@ -60,6 +60,7 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
+        - --config-name={{ .Values.audit.configName }}
         command:
         - /manager
         env:
