@@ -2,20 +2,13 @@ package metrics
 
 import (
 	"context"
-	"flag"
-	"fmt"
-	"strings"
 
-	"go.opencensus.io/stats/view"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics/registry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var (
-	metricsBackend = flag.String("metrics-backend", "Prometheus", "Backend used for metrics")
-	prometheusPort = flag.Int("prometheus-port", 8888, "Prometheus port for metrics backend")
-)
-
-const prometheusExporter = "prometheus"
+var log = logf.Log.WithName("metrics")
 
 var _ manager.Runnable = &runner{}
 
@@ -40,52 +33,22 @@ func (r *runner) Start(ctx context.Context) error {
 	log.Info("Starting metrics runner")
 	defer log.Info("Stopping metrics runner workers")
 	errCh := make(chan error)
-	go func() { errCh <- r.newMetricsExporter() }()
+	exporters := registry.Exporters()
+	for i := range exporters {
+		startExporter := exporters[i]
+		go func() {
+			if err := startExporter(ctx); err != nil {
+				errCh <- err
+			}
+		}()
+	}
 	select {
 	case <-ctx.Done():
-		return r.shutdownMetricsExporter(ctx)
+		return nil
 	case err := <-errCh:
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func (r *runner) newMetricsExporter() error {
-	mb := strings.ToLower(*metricsBackend)
-	log.Info("metrics", "backend", mb)
-	switch mb {
-	// Prometheus is the only exporter for now
-	case prometheusExporter:
-		e, err := newPrometheusExporter()
-		if err != nil {
-			return err
-		}
-
-		srv := startPrometheusExporter(e)
-		view.RegisterExporter(e)
-
-		// listenAndServe only exits on failure.
-		return listenAndServe(srv)
-	default:
-		return fmt.Errorf("unsupported metrics backend %v", *metricsBackend)
-	}
-}
-
-func (r *runner) shutdownMetricsExporter(ctx context.Context) error {
-	mb := strings.ToLower(*metricsBackend)
-	switch mb {
-	case prometheusExporter:
-		log.Info("shutting down prometheus server")
-		if curPromSrv != nil {
-			if err := curPromSrv.Shutdown(ctx); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		log.Info("nothing to shutdown for unsupported metrics backend %v", *metricsBackend)
-		return nil
-	}
 }
