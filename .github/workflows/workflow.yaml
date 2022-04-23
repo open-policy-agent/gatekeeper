@@ -54,7 +54,7 @@ jobs:
   test:
     name: "Unit test"
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
