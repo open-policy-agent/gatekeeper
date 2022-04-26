@@ -95,7 +95,10 @@ spec:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
           {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      affinity:
+        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
       nodeSelector:
         kubernetes.io/os: linux
-
+      tolerations:
+        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 {{- end }}
