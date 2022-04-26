@@ -12,15 +12,16 @@ import (
 	ctlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-const Name = "prometheus"
+const (
+	Name      = "prometheus"
+	namespace = "gatekeeper"
+)
 
-var curPromSrv *http.Server
-
-var log = logf.Log.WithName("prometheus-exporter")
-
-var prometheusPort = flag.Int("prometheus-port", 8888, "Prometheus port for metrics backend")
-
-const namespace = "gatekeeper"
+var (
+	curPromSrv     *http.Server
+	log            = logf.Log.WithName("prometheus-exporter")
+	prometheusPort = flag.Int("prometheus-port", 8888, "Prometheus port for metrics backend")
+)
 
 func Start(ctx context.Context) error {
 	e, err := newExporter()
@@ -57,7 +58,7 @@ func newExporter() (*prometheus.Exporter, error) {
 		Gatherer:   ctlmetrics.Registry,
 	})
 	if err != nil {
-		log.Error(err, "Failed to create the Prometheus exporter.")
+		log.Error(err, "Failed to create the Prometheus exporter")
 		return nil, err
 	}
 	return e, nil

@@ -8,9 +8,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const Name = "opencensus"
-
-const metricPrefix = "gatekeeper"
+const (
+	Name         = "opencensus"
+	metricPrefix = "gatekeeper"
+)
 
 var log = logf.Log.WithName("opencensus-exporter")
 
