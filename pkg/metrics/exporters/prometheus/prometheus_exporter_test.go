@@ -27,7 +27,7 @@ func TestPrometheusExporter(t *testing.T) {
 	// TODO: This test should actually check that the exporter is able to serve requests.
 	time.Sleep(100 * time.Millisecond)
 
-	if curPromSrv.Addr != expectedAddr {
-		t.Errorf("Expected address %v but got %v", expectedAddr, curPromSrv.Addr)
+	if srv.Addr != expectedAddr {
+		t.Errorf("Expected address %v but got %v", expectedAddr, srv.Addr)
 	}
 }

@@ -18,7 +18,6 @@ const (
 )
 
 var (
-	curPromSrv     *http.Server
 	log            = logf.Log.WithName("prometheus-exporter")
 	prometheusPort = flag.Int("prometheus-port", 8888, "Prometheus port for metrics backend")
 )
@@ -67,7 +66,7 @@ func newExporter() (*prometheus.Exporter, error) {
 func newPromSrv(e http.Handler, port int) *http.Server {
 	sm := http.NewServeMux()
 	sm.Handle("/metrics", e)
-	curPromSrv = &http.Server{
+	curPromSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
 		Handler: sm,
 	}
