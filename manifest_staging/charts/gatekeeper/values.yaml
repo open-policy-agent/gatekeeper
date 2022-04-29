@@ -34,6 +34,7 @@ postInstall:
       tag: v3.9.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+    extraNamespaces: []
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
