@@ -40,6 +40,8 @@ spec:
             - --overwrite
           securityContext:
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
+      tolerations:
+        {{- toYaml .Values.postInstall.labelNamespace.tolerations | nindent 8 }}
 ---
 apiVersion: v1
 kind: ServiceAccount
