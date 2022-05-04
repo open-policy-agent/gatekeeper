@@ -34,7 +34,8 @@ violation[response] {
   }
 
   # Run the Template with Constraint.
-  data.template.violation[r] with input as inp with data.inventory as data.external
+  inventory[inv]
+  data.template.violation[r] with input as inp with data.inventory as inv
 
   # Construct the response, defaulting "details" to empty object if it is not
   # specified.
@@ -45,6 +46,12 @@ violation[response] {
   }
 }
 
+inventory[inv] {
+	inv = data.external
+}
+inventory[{}] {
+	not data.external
+}
 `
 )
 
