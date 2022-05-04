@@ -215,7 +215,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.2.0
 ## explicit; go 1.16
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20220404153932-8066162cf5e2
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20220504225309-3462b1a344f3
 ## explicit; go 1.17
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
