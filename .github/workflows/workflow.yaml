@@ -274,7 +274,7 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
-    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-')) && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, test, build_test, helm_build_test, scan_vulnerabilities]
     timeout-minutes: 30
     permissions:
