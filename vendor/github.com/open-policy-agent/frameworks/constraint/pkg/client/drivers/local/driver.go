@@ -90,7 +90,7 @@ func (d *Driver) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 func (d *Driver) RemoveTemplate(ctx context.Context, templ *templates.ConstraintTemplate) error {
 	kind := templ.Spec.CRD.Spec.Names.Kind
 
-	constraintParent := storage.Path{"constraint", kind}
+	constraintParent := storage.Path{"constraints", kind}
 
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
@@ -281,28 +281,38 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 }
 
 func (d *Driver) Dump(ctx context.Context) (string, error) {
-	dt := make(map[string]map[string]rego.ResultSet)
+	// we want to create:
+	// targetName.modules.kind.moduleName = contents
+	// targetName.data = data
+	dt := make(map[string]map[string]interface{})
 
 	compilers := d.compilers.list()
 	for targetName, targetCompilers := range compilers {
-		targetData := make(map[string]rego.ResultSet)
+		targetModules := make(map[string]map[string]string)
 
 		for kind, compiler := range targetCompilers {
-			rs, _, err := d.eval(ctx, compiler, targetName, []string{"data"}, nil)
-			if err != nil {
-				return "", err
+			kindModules := make(map[string]string)
+			for modname, contents := range compiler.Modules {
+				kindModules[modname] = contents.String()
 			}
-			targetData[kind] = rs
+			targetModules[kind] = kindModules
+		}
+		dt[targetName] = map[string]interface{}{}
+		dt[targetName]["modules"] = targetModules
+
+		emptyCompiler := ast.NewCompiler().WithCapabilities(d.compilers.capabilities)
+
+		rs, _, err := d.eval(ctx, emptyCompiler, targetName, []string{}, nil)
+		if err != nil {
+			return "", err
 		}
 
-		dt[targetName] = targetData
+		if len(rs) != 0 && len(rs[0].Expressions) != 0 {
+			dt[targetName]["data"] = rs[0].Expressions[0].Value
+		}
 	}
 
-	resp := map[string]interface{}{
-		"data": dt,
-	}
-
-	b, err := json.MarshalIndent(resp, "", "   ")
+	b, err := json.MarshalIndent(dt, "", "   ")
 	if err != nil {
 		return "", err
 	}
