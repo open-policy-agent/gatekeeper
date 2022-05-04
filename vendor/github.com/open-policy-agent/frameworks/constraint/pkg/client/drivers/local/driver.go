@@ -289,7 +289,7 @@ func (d *Driver) Dump(ctx context.Context) (string, error) {
 		targetData := make(map[string]rego.ResultSet)
 
 		for kind, compiler := range targetCompilers {
-			rs, _, err := d.eval(ctx, compiler, targetName, []string{"data"}, nil)
+			rs, _, err := d.eval(ctx, compiler, targetName, []string{}, nil)
 			if err != nil {
 				return "", err
 			}
