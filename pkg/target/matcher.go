@@ -83,5 +83,5 @@ func gkReviewToObject(req *gkReview) (*unstructured.Unstructured, *unstructured.
 		}
 	}
 
-	return obj, oldObj, req.Unstable.Namespace, nil
+	return obj, oldObj, req.namespace, nil
 }
