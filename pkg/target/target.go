@@ -90,9 +90,9 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 	case *admissionv1.AdmissionRequest:
 		review = &gkReview{AdmissionRequest: *data}
 	case AugmentedReview:
-		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
 	case *AugmentedReview:
-		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, Unstable: unstable{Namespace: data.Namespace}}
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
 	case AugmentedUnstructured:
 		review, err = augmentedUnstructuredToAdmissionRequest(data)
 		if err != nil {
@@ -126,7 +126,7 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkRevi
 		return nil, err
 	}
 
-	review.Unstable = unstable{Namespace: obj.Namespace}
+	review.namespace = obj.Namespace
 
 	return review, nil
 }
