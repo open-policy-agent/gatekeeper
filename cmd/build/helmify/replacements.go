@@ -57,6 +57,8 @@ var replacements = map[string]string{
 
 	"- HELMSUBST_MUTATION_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}`,
 
+	"- HELMSUBST_METRICS_BACKEND_ARG": `{{- range $backend := .Values.metricsBackends -}}{{ printf "%s%s" "- --metrics-backend=" $backend | nindent 8 }}{{- end }}`,
+
 	"- HELMSUBST_MUTATION_STATUS_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.mutatingWebhookFailurePolicy }}`,
