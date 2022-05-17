@@ -1,0 +1,63 @@
+{{- if not .Values.disableValidatingWebhook }}
+{{- if .Values.postInstall.probeWebhook.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gatekeeper-probe-webhook-post-install
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: '{{ template "gatekeeper.name" . }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.postInstall.probeWebhook.image.pullSecrets }}
+      imagePullSecrets:
+      {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
+      {{- end }}
+      nodeSelector:
+        kubernetes.io/os: linux
+      volumes:
+      - name: cert
+        secret:
+          secretName: gatekeeper-webhook-server-cert
+      containers:
+        - name: curl-post
+          image: "{{ .Values.postInstall.probeWebhook.image.repository }}:{{ .Values.postInstall.probeWebhook.image.tag }}"
+          imagePullPolicy: {{ .Values.postInstall.probeWebhook.image.pullPolicy }}
+          args:
+            - "--retry"
+            - "99999"
+            - "--retry-max-time"
+            - "{{ .Values.postInstall.probeWebhook.waitTimeout }}"
+            - "--retry-delay"
+            - "1"
+            - "--max-time"
+            - "{{ .Values.postInstall.probeWebhook.httpTimeout }}"
+            {{- if .Values.postInstall.probeWebhook.insecureHTTPS }}
+            - "--insecure"
+            {{- else }}
+            - "--cacert"
+            - /certs/ca.crt
+            {{- end }}
+            - "-v"
+            - "https://gatekeeper-webhook-service.{{ .Release.Namespace }}.svc/v1/admitlabel?timeout=2s"
+          securityContext:
+            {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
+          volumeMounts:
+            - mountPath: /certs
+              name: cert
+              readOnly: true
+{{- end }}
+{{- end }}
