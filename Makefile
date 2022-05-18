@@ -10,9 +10,9 @@ ENABLE_EXTERNAL_DATA ?= false
 
 VERSION := v3.9.0-beta.0
 
-KIND_VERSION ?= 0.11.0
+KIND_VERSION ?= 0.13.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.23.0
+KUBERNETES_VERSION ?= 1.24.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
