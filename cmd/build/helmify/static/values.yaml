@@ -8,6 +8,7 @@ disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookExemptNamespacesLabels: {}
+validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 enableDeleteOperations: false
@@ -16,6 +17,7 @@ enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookExemptNamespacesLabels: {}
+mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutationAnnotations: false
