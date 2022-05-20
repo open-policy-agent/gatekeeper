@@ -60,7 +60,10 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        {{- range $backend := .Values.metricsBackends -}}{{ printf "%s%s" "- --metrics-backend=" $backend | nindent 8 }}{{- end }}
+        
+        {{- range .Values.metricsBackends}}
+        - --metrics-backend={{ . }}
+        {{- end }}
         command:
         - /manager
         env:
