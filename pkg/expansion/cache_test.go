@@ -46,7 +46,7 @@ type modifySetData struct {
 	parameters mutationsunversioned.ModifySetParameters
 }
 
-func assignFromData(data assignData) mutationsunversioned.Assign {
+func assignFromData(data *assignData) mutationsunversioned.Assign {
 	return mutationsunversioned.Assign{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Assign",
@@ -62,7 +62,7 @@ func assignFromData(data assignData) mutationsunversioned.Assign {
 	}
 }
 
-func newAssign(data assignData, t *testing.T) types.Mutator {
+func newAssign(data *assignData, t *testing.T) types.Mutator {
 	a := assignFromData(data)
 	mut, err := assign.MutatorForAssign(&a)
 	if err != nil {
@@ -72,7 +72,7 @@ func newAssign(data assignData, t *testing.T) types.Mutator {
 	return mut
 }
 
-func assignMetadataFromData(data assignMetadataData) mutationsunversioned.AssignMetadata {
+func assignMetadataFromData(data *assignMetadataData) mutationsunversioned.AssignMetadata {
 	return mutationsunversioned.AssignMetadata{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AssignMetadata",
@@ -87,7 +87,7 @@ func assignMetadataFromData(data assignMetadataData) mutationsunversioned.Assign
 	}
 }
 
-func newAssignMetadata(data assignMetadataData, t *testing.T) types.Mutator {
+func newAssignMetadata(data *assignMetadataData, t *testing.T) types.Mutator {
 	am := assignMetadataFromData(data)
 	mut, err := assignmeta.MutatorForAssignMetadata(&am)
 	if err != nil {
@@ -97,7 +97,7 @@ func newAssignMetadata(data assignMetadataData, t *testing.T) types.Mutator {
 	return mut
 }
 
-func modifySetFromData(data modifySetData) mutationsunversioned.ModifySet {
+func modifySetFromData(data *modifySetData) mutationsunversioned.ModifySet {
 	return mutationsunversioned.ModifySet{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ModifySet",
@@ -113,7 +113,7 @@ func modifySetFromData(data modifySetData) mutationsunversioned.ModifySet {
 	}
 }
 
-func newModifySet(data modifySetData, t *testing.T) types.Mutator {
+func newModifySet(data *modifySetData, t *testing.T) types.Mutator {
 	ms := modifySetFromData(data)
 	mut, err := modifyset.MutatorForModifySet(&ms)
 	if err != nil {
@@ -123,7 +123,7 @@ func newModifySet(data modifySetData, t *testing.T) types.Mutator {
 	return mut
 }
 
-func newTemplate(data templateData) *mutationsunversioned.TemplateExpansion {
+func newTemplate(data *templateData) *mutationsunversioned.TemplateExpansion {
 	return &mutationsunversioned.TemplateExpansion{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "TemplateExpansion",
@@ -152,7 +152,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		{
 			name: "adding 2 valid templates",
 			add: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -166,7 +166,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -182,7 +182,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			check: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -196,7 +196,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -216,7 +216,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		{
 			name: "adding template with empty name returns error",
 			add: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -237,7 +237,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		{
 			name: "removing a template with empty name returns error",
 			add: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -253,7 +253,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			remove: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -269,7 +269,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			check: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -290,7 +290,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		{
 			name: "adding 2 templates, removing 1",
 			add: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -304,7 +304,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -320,7 +320,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			remove: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -336,7 +336,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			check: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -357,7 +357,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		{
 			name: "updating an existing template",
 			add: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -371,7 +371,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"Baz"},
@@ -387,7 +387,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}),
 			},
 			check: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"Baz"},
@@ -448,7 +448,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 }
 
 func TestUpsertRemoveMutator(t *testing.T) {
-	assignImagePullForPods := newAssign(assignData{
+	assignImagePullForPods := newAssign(&assignData{
 		name: "always-pull-image-pods",
 		apply: []match.ApplyTo{{
 			Groups:   []string{""},
@@ -467,7 +467,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		},
 	}, t)
 
-	assignImagePullUpdated := newAssign(assignData{
+	assignImagePullUpdated := newAssign(&assignData{
 		name: "always-pull-image-pods",
 		apply: []match.ApplyTo{{
 			Groups:   []string{""},
@@ -486,7 +486,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		},
 	}, t)
 
-	assignMetadataAddAnnotation := newAssignMetadata(assignMetadataData{
+	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
 		name: "add-annotation",
 		match: match.Match{
 			Origin: "Generated",
@@ -504,7 +504,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		},
 	}, t)
 
-	modifySetRemoveErrLog := newModifySet(modifySetData{
+	modifySetRemoveErrLog := newModifySet(&modifySetData{
 		name: "remove-err-logging",
 		match: match.Match{
 			Origin: "Generated",
@@ -545,7 +545,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		},
 		{
 			name: "adding mutator without 'origin: Generated' returns error",
-			add: []types.Mutator{newAssign(assignData{
+			add: []types.Mutator{newAssign(&assignData{
 				name: "always-pull-image-pods",
 				apply: []match.ApplyTo{{
 					Groups:   []string{""},
@@ -635,7 +635,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 }
 
 func TestMutatorsForGVK(t *testing.T) {
-	assignImagePullForPods := newAssign(assignData{
+	assignImagePullForPods := newAssign(&assignData{
 		name: "always-pull-image-pods",
 		apply: []match.ApplyTo{{
 			Groups:   []string{""},
@@ -654,7 +654,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 	}, t)
 
-	assignDontMatchPod := newAssign(assignData{
+	assignDontMatchPod := newAssign(&assignData{
 		name: "assign-dont-match-pods",
 		apply: []match.ApplyTo{{
 			Groups:   []string{""},
@@ -673,7 +673,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 	}, t)
 
-	assignMetadataAddAnnotation := newAssignMetadata(assignMetadataData{
+	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
 		name: "add-annotation",
 		match: match.Match{
 			Origin: "Generated",
@@ -691,7 +691,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 	}, t)
 
-	modifySetRemoveErrLog := newModifySet(modifySetData{
+	modifySetRemoveErrLog := newModifySet(&modifySetData{
 		name: "remove-err-logging",
 		match: match.Match{
 			Origin: "Generated",
@@ -835,7 +835,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				Kind:    "Deployment",
 			},
 			addTemplates: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -849,7 +849,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -865,7 +865,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				}),
 			},
 			want: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -889,7 +889,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				Kind:    "Deployment",
 			},
 			addTemplates: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -903,7 +903,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -919,7 +919,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				}),
 			},
 			want: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -933,7 +933,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}),
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -952,7 +952,7 @@ func TestTemplatesForGVK(t *testing.T) {
 		{
 			name: "adding 1 templates, 0 match",
 			addTemplates: []*mutationsunversioned.TemplateExpansion{
-				newTemplate(templateData{
+				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},

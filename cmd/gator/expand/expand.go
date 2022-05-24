@@ -57,7 +57,7 @@ const (
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "n", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.  Cannot be used in tandem with stdin.")
 	Cmd.Flags().StringVarP(&flagFormat, flagNameFormat, "f", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
-	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output file path. If the file already exists, it will be overwritten."))
+	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", "Output file path. If the file already exists, it will be overwritten.")
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -92,7 +92,7 @@ func run(cmd *cobra.Command, args []string) {
 func printResources(resources []*unstructured.Unstructured) {
 	fmt.Println()
 	for i, res := range resources {
-		fmt.Printf(prettyPrint(res))
+		fmt.Print(prettyPrint(res))
 		if i != len(resources)-1 {
 			fmt.Println(delimeter)
 		}
@@ -106,7 +106,7 @@ func resourcesToFile(resources []*unstructured.Unstructured, path string) error 
 	}
 
 	for i, res := range resources {
-		fmt.Fprintf(file, prettyPrint(res))
+		fmt.Fprint(file, prettyPrint(res))
 		if i != len(resources)-1 {
 			fmt.Fprintln(file, delimeter)
 		}

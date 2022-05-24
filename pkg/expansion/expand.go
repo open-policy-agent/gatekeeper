@@ -44,7 +44,7 @@ func ExpandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 
 	cache, err := NewExpansionCache(mutators, templates)
 	if err != nil {
-		return nil, fmt.Errorf("error creating ExpansionCache: %s", err)
+		return nil, fmt.Errorf("error creating Cache: %s", err)
 	}
 
 	var resultants []*unstructured.Unstructured
@@ -127,11 +127,13 @@ func sortResources(resources []*unstructured.Unstructured) ([]*unstructured.Unst
 
 	for _, r := range resources {
 		k := r.GetKind()
-		if _, exists := MutatorTypes[k]; exists {
+		_, isMutator := MutatorTypes[k]
+		switch {
+		case isMutator:
 			mutators = append(mutators, r)
-		} else if k == "TemplateExpansion" {
+		case k == "TemplateExpansion":
 			templates = append(templates, r)
-		} else {
+		default:
 			generators = append(generators, r)
 		}
 	}

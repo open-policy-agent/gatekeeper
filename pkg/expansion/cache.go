@@ -10,13 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type ExpansionCache struct {
+type Cache struct {
 	lock      sync.Mutex
 	mutators  map[types.ID]types.Mutator
 	templates map[string]*mutationsunversioned.TemplateExpansion
 }
 
-func (ec *ExpansionCache) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
+func (ec *Cache) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -29,7 +29,7 @@ func (ec *ExpansionCache) UpsertTemplate(template *mutationsunversioned.Template
 	return nil
 }
 
-func (ec *ExpansionCache) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
+func (ec *Cache) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -42,7 +42,7 @@ func (ec *ExpansionCache) RemoveTemplate(template *mutationsunversioned.Template
 	return nil
 }
 
-func (ec *ExpansionCache) UpsertMutator(mut types.Mutator) error {
+func (ec *Cache) UpsertMutator(mut types.Mutator) error {
 	if !mut.ExpandsGenerators() {
 		return fmt.Errorf("cannot add mutator to cache that does not have 'origin: Generated' field")
 	}
@@ -60,7 +60,7 @@ func (ec *ExpansionCache) UpsertMutator(mut types.Mutator) error {
 	return nil
 }
 
-func (ec *ExpansionCache) RemoveMutator(mut types.Mutator) error {
+func (ec *Cache) RemoveMutator(mut types.Mutator) error {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -74,8 +74,8 @@ func (ec *ExpansionCache) RemoveMutator(mut types.Mutator) error {
 	return nil
 }
 
-// MutatorsForGVK returns a slice of mutators that apply to specified GVK
-func (ec *ExpansionCache) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mutator {
+// MutatorsForGVK returns a slice of mutators that apply to specified GVK.
+func (ec *Cache) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mutator {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -92,8 +92,8 @@ func (ec *ExpansionCache) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mu
 	return muts
 }
 
-// TemplatesForGVK returns a slice of TemplateExpansions that match a given gvk
-func (ec *ExpansionCache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutationsunversioned.TemplateExpansion {
+// TemplatesForGVK returns a slice of TemplateExpansions that match a given gvk.
+func (ec *Cache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutationsunversioned.TemplateExpansion {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -109,28 +109,24 @@ func (ec *ExpansionCache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutatio
 	return templates
 }
 
-func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversioned.TemplateExpansion) (*ExpansionCache, error) {
-	ec := &ExpansionCache{
+func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversioned.TemplateExpansion) (*Cache, error) {
+	ec := &Cache{
 		lock:      sync.Mutex{},
 		mutators:  map[types.ID]types.Mutator{},
 		templates: map[string]*mutationsunversioned.TemplateExpansion{},
 	}
 
-	if mutators != nil {
-		for _, m := range mutators {
-			if !m.ExpandsGenerators() {
-				continue
-			}
-			if err := ec.UpsertMutator(m); err != nil {
-				return nil, err
-			}
+	for _, m := range mutators {
+		if !m.ExpandsGenerators() {
+			continue
+		}
+		if err := ec.UpsertMutator(m); err != nil {
+			return nil, err
 		}
 	}
-	if templates != nil {
-		for _, t := range templates {
-			if err := ec.UpsertTemplate(t); err != nil {
-				return nil, err
-			}
+	for _, t := range templates {
+		if err := ec.UpsertTemplate(t); err != nil {
+			return nil, err
 		}
 	}
 

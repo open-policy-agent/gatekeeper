@@ -55,7 +55,7 @@ func newUnstructDeployment(name string, image string) *unstructured.Unstructured
 	}
 }
 
-func newUnstructTemplate(data templateData, t *testing.T) *unstructured.Unstructured {
+func newUnstructTemplate(data *templateData, t *testing.T) *unstructured.Unstructured {
 	temp := newTemplate(data)
 	u, err := objectToUnstruct(temp, temp.GroupVersionKind())
 	if err != nil {
@@ -77,7 +77,7 @@ func newUnstructTemplate(data templateData, t *testing.T) *unstructured.Unstruct
 	return &u
 }
 
-func newUnstructAssign(data assignData, t *testing.T) *unstructured.Unstructured {
+func newUnstructAssign(data *assignData, t *testing.T) *unstructured.Unstructured {
 	a := assignFromData(data)
 	u, err := objectToUnstruct(&a, a.GroupVersionKind())
 	if err != nil {
@@ -86,7 +86,7 @@ func newUnstructAssign(data assignData, t *testing.T) *unstructured.Unstructured
 	return &u
 }
 
-func newUnstructAssignMetadata(data assignMetadataData, t *testing.T) *unstructured.Unstructured {
+func newUnstructAssignMetadata(data *assignMetadataData, t *testing.T) *unstructured.Unstructured {
 	a := assignMetadataFromData(data)
 	u, err := objectToUnstruct(&a, a.GroupVersionKind())
 	if err != nil {
@@ -95,7 +95,7 @@ func newUnstructAssignMetadata(data assignMetadataData, t *testing.T) *unstructu
 	return &u
 }
 
-func newUnstructModifySet(data modifySetData, t *testing.T) *unstructured.Unstructured {
+func newUnstructModifySet(data *modifySetData, t *testing.T) *unstructured.Unstructured {
 	ms := modifySetFromData(data)
 	u, err := objectToUnstruct(&ms, ms.GroupVersionKind())
 	if err != nil {
@@ -130,7 +130,7 @@ func TestConvertTemplateExpansion(t *testing.T) {
 	}{
 		{
 			name: "convert valid template expansion",
-			unstruct: newUnstructTemplate(templateData{
+			unstruct: newUnstructTemplate(&templateData{
 				name: "test1",
 				apply: []match.ApplyTo{{
 					Groups:   []string{"apps"},
@@ -144,7 +144,7 @@ func TestConvertTemplateExpansion(t *testing.T) {
 					Kind:    "Pod",
 				},
 			}, t),
-			want: newTemplate(templateData{
+			want: newTemplate(&templateData{
 				name: "test1",
 				apply: []match.ApplyTo{{
 					Groups:   []string{"apps"},
@@ -168,11 +168,12 @@ func TestConvertTemplateExpansion(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := convertTemplateExpansion(tc.unstruct)
-			if tc.wantErr && err == nil {
+			switch {
+			case tc.wantErr && err == nil:
 				t.Fatalf("expected error, got nil")
-			} else if !tc.wantErr && err != nil {
+			case !tc.wantErr && err != nil:
 				t.Fatalf("unexpected error calling convertTemplateExpansion: %s", err)
-			} else if tc.wantErr {
+			case tc.wantErr:
 				return
 			}
 
@@ -193,7 +194,7 @@ func TestConvertAssign(t *testing.T) {
 	}{
 		{
 			name: "convert valid assign",
-			unstruct: newUnstructAssign(assignData{
+			unstruct: newUnstructAssign(&assignData{
 				name: "always-pull-image-pods",
 				apply: []match.ApplyTo{{
 					Groups:   []string{""},
@@ -211,7 +212,7 @@ func TestConvertAssign(t *testing.T) {
 					},
 				},
 			}, t),
-			want: assignFromData(assignData{
+			want: assignFromData(&assignData{
 				name: "always-pull-image-pods",
 				apply: []match.ApplyTo{{
 					Groups:   []string{""},
@@ -262,7 +263,7 @@ func TestConvertAssignMetadata(t *testing.T) {
 	}{
 		{
 			name: "convert valid assignmetadata",
-			unstruct: newUnstructAssignMetadata(assignMetadataData{
+			unstruct: newUnstructAssignMetadata(&assignMetadataData{
 				name: "add-annotation",
 				match: match.Match{
 					Origin: "Generated",
@@ -279,7 +280,7 @@ func TestConvertAssignMetadata(t *testing.T) {
 					},
 				},
 			}, t),
-			want: assignMetadataFromData(assignMetadataData{
+			want: assignMetadataFromData(&assignMetadataData{
 				name: "add-annotation",
 				match: match.Match{
 					Origin: "Generated",
@@ -329,7 +330,7 @@ func TestConvertModifySet(t *testing.T) {
 	}{
 		{
 			name: "convert valid modifyset",
-			unstruct: newUnstructModifySet(modifySetData{
+			unstruct: newUnstructModifySet(&modifySetData{
 				name: "remove-err-logging",
 				match: match.Match{
 					Origin: "Generated",
@@ -346,7 +347,7 @@ func TestConvertModifySet(t *testing.T) {
 					Values:    mutationsunversioned.Values{FromList: []interface{}{"--alsologtostderr"}},
 				},
 			}, t),
-			want: modifySetFromData(modifySetData{
+			want: modifySetFromData(&modifySetData{
 				name: "remove-err-logging",
 				match: match.Match{
 					Origin: "Generated",
@@ -403,7 +404,7 @@ func TestExpandResources(t *testing.T) {
 			name: "expand 1 deployment, 1 assign mutator, 1 template",
 			resources: []*unstructured.Unstructured{
 				newUnstructDeployment("test-deployment", "nginx"),
-				newUnstructTemplate(templateData{
+				newUnstructTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -417,7 +418,7 @@ func TestExpandResources(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}, t),
-				newUnstructAssign(assignData{
+				newUnstructAssign(&assignData{
 					name: "always-pull-image-pods",
 					apply: []match.ApplyTo{{
 						Groups:   []string{""},
@@ -468,7 +469,7 @@ func TestExpandResources(t *testing.T) {
 			name: "expand 1 deployment, 1 assign, 1 assignmeta, 1 modifyset, 1 template",
 			resources: []*unstructured.Unstructured{
 				newUnstructDeployment("test-deployment", "nginx"),
-				newUnstructTemplate(templateData{
+				newUnstructTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -482,7 +483,7 @@ func TestExpandResources(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}, t),
-				newUnstructAssign(assignData{
+				newUnstructAssign(&assignData{
 					name: "always-pull-image-pods",
 					apply: []match.ApplyTo{{
 						Groups:   []string{""},
@@ -500,7 +501,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructAssignMetadata(assignMetadataData{
+				newUnstructAssignMetadata(&assignMetadataData{
 					name: "add-annotation",
 					match: match.Match{
 						Origin: "Generated",
@@ -517,7 +518,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructModifySet(modifySetData{
+				newUnstructModifySet(&modifySetData{
 					name: "remove-err-logging",
 					match: match.Match{
 						Origin: "Generated",
@@ -573,7 +574,7 @@ func TestExpandResources(t *testing.T) {
 			name: "expand 1 deployment, 2 matching mutators, 1 non matching mutator, 1 template",
 			resources: []*unstructured.Unstructured{
 				newUnstructDeployment("test-deployment", "nginx"),
-				newUnstructTemplate(templateData{
+				newUnstructTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -587,7 +588,7 @@ func TestExpandResources(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}, t),
-				newUnstructAssign(assignData{
+				newUnstructAssign(&assignData{
 					name: "always-pull-image-pods",
 					apply: []match.ApplyTo{{
 						Groups:   []string{""},
@@ -605,7 +606,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructAssignMetadata(assignMetadataData{
+				newUnstructAssignMetadata(&assignMetadataData{
 					name: "add-annotation",
 					match: match.Match{
 						Origin: "Generated",
@@ -622,7 +623,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructModifySet(modifySetData{
+				newUnstructModifySet(&modifySetData{
 					name: "remove-err-logging",
 					match: match.Match{
 						Origin: "Generated",
@@ -676,7 +677,7 @@ func TestExpandResources(t *testing.T) {
 			resources: []*unstructured.Unstructured{
 				newUnstructDeployment("test-deployment", "nginx"),
 				newUnstructDeployment("test-deployment2", "redis"),
-				newUnstructTemplate(templateData{
+				newUnstructTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
 						Groups:   []string{"apps"},
@@ -690,7 +691,7 @@ func TestExpandResources(t *testing.T) {
 						Kind:    "Pod",
 					},
 				}, t),
-				newUnstructAssign(assignData{
+				newUnstructAssign(&assignData{
 					name: "always-pull-image-pods",
 					apply: []match.ApplyTo{{
 						Groups:   []string{""},
@@ -708,7 +709,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructAssignMetadata(assignMetadataData{
+				newUnstructAssignMetadata(&assignMetadataData{
 					name: "add-annotation",
 					match: match.Match{
 						Origin: "Generated",
@@ -725,7 +726,7 @@ func TestExpandResources(t *testing.T) {
 						},
 					},
 				}, t),
-				newUnstructModifySet(modifySetData{
+				newUnstructModifySet(&modifySetData{
 					name: "remove-err-logging",
 					match: match.Match{
 						Origin: "Generated",
