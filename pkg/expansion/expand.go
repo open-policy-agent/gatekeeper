@@ -50,9 +50,10 @@ func ExpandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 	var resultants []*unstructured.Unstructured
 	for _, gen := range generators {
 		temps := cache.TemplatesForGVK(gen.GroupVersionKind())
-		for _, t := range temps {
+		for i := 0; i < len(temps); i++ {
+			t := temps[i]
 			muts := cache.MutatorsForGVK(t.Spec.GeneratedGVK)
-			result, err := ExpandGenerator(gen, t, muts)
+			result, err := ExpandGenerator(gen, &t, muts)
 			if err != nil {
 				return nil, fmt.Errorf("error expanding generator: %s", err)
 			}
@@ -63,7 +64,7 @@ func ExpandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 	return resultants, nil
 }
 
-func ExpandGenerator(generator *unstructured.Unstructured, template mutationsunversioned.TemplateExpansion, mutators []types.Mutator) (*unstructured.Unstructured, error) {
+func ExpandGenerator(generator *unstructured.Unstructured, template *mutationsunversioned.TemplateExpansion, mutators []types.Mutator) (*unstructured.Unstructured, error) {
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand generator for template with no source")
@@ -164,14 +165,14 @@ func createResultantKind(gvk schema.GroupVersionKind, source map[string]interfac
 	return &resource, nil
 }
 
-func convertTemplateExpansions(templates []*unstructured.Unstructured) ([]mutationsunversioned.TemplateExpansion, error) {
-	convertedTemplates := make([]mutationsunversioned.TemplateExpansion, len(templates))
+func convertTemplateExpansions(templates []*unstructured.Unstructured) ([]*mutationsunversioned.TemplateExpansion, error) {
+	convertedTemplates := make([]*mutationsunversioned.TemplateExpansion, len(templates))
 	for i, t := range templates {
 		te, err := convertTemplateExpansion(t)
 		if err != nil {
 			return nil, err
 		}
-		convertedTemplates[i] = te
+		convertedTemplates[i] = &te
 	}
 
 	return convertedTemplates, nil

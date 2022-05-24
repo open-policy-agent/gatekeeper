@@ -57,7 +57,7 @@ func newUnstructDeployment(name string, image string) *unstructured.Unstructured
 
 func newUnstructTemplate(data templateData, t *testing.T) *unstructured.Unstructured {
 	temp := newTemplate(data)
-	u, err := objectToUnstruct(&temp, temp.GroupVersionKind())
+	u, err := objectToUnstruct(temp, temp.GroupVersionKind())
 	if err != nil {
 		t.Fatalf("error converting template to unstructured: %s", err)
 	}
@@ -125,7 +125,7 @@ func TestConvertTemplateExpansion(t *testing.T) {
 	tests := []struct {
 		name     string
 		unstruct *unstructured.Unstructured
-		want     mutationsunversioned.TemplateExpansion
+		want     *mutationsunversioned.TemplateExpansion
 		wantErr  bool
 	}{
 		{
@@ -172,9 +172,11 @@ func TestConvertTemplateExpansion(t *testing.T) {
 				t.Fatalf("expected error, got nil")
 			} else if !tc.wantErr && err != nil {
 				t.Fatalf("unexpected error calling convertTemplateExpansion: %s", err)
+			} else if tc.wantErr {
+				return
 			}
 
-			diff := cmp.Diff(got, tc.want)
+			diff := cmp.Diff(&got, tc.want)
 			if diff != "" {
 				t.Errorf("got value:  \n%s\n, wanted: \n%s\n\n diff: \n%s", prettyResource(got), prettyResource(tc.want), diff)
 			}

@@ -13,10 +13,10 @@ import (
 type ExpansionCache struct {
 	lock      sync.Mutex
 	mutators  map[types.ID]types.Mutator
-	templates map[string]mutationsunversioned.TemplateExpansion
+	templates map[string]*mutationsunversioned.TemplateExpansion
 }
 
-func (ec *ExpansionCache) UpsertTemplate(template mutationsunversioned.TemplateExpansion) error {
+func (ec *ExpansionCache) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -25,11 +25,11 @@ func (ec *ExpansionCache) UpsertTemplate(template mutationsunversioned.TemplateE
 		return fmt.Errorf("cannot upsert template with empty name")
 	}
 
-	ec.templates[k] = *template.DeepCopy()
+	ec.templates[k] = template.DeepCopy()
 	return nil
 }
 
-func (ec *ExpansionCache) RemoveTemplate(template mutationsunversioned.TemplateExpansion) error {
+func (ec *ExpansionCache) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
 	ec.lock.Lock()
 	defer ec.lock.Unlock()
 
@@ -101,7 +101,7 @@ func (ec *ExpansionCache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutatio
 	for _, t := range ec.templates {
 		for _, apply := range t.Spec.ApplyTo {
 			if apply.Matches(gvk) {
-				templates = append(templates, t)
+				templates = append(templates, *t)
 			}
 		}
 	}
@@ -109,11 +109,11 @@ func (ec *ExpansionCache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutatio
 	return templates
 }
 
-func NewExpansionCache(mutators []types.Mutator, templates []mutationsunversioned.TemplateExpansion) (*ExpansionCache, error) {
+func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversioned.TemplateExpansion) (*ExpansionCache, error) {
 	ec := &ExpansionCache{
 		lock:      sync.Mutex{},
 		mutators:  map[types.ID]types.Mutator{},
-		templates: map[string]mutationsunversioned.TemplateExpansion{},
+		templates: map[string]*mutationsunversioned.TemplateExpansion{},
 	}
 
 	if mutators != nil {
