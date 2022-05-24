@@ -14,24 +14,17 @@ import (
 )
 
 const (
-	examples = `  # test a manifest containing Kubernetes objects, Constraint Templates, and Constraints
-  gator test --filename="manifest.yaml"
+	examples = `  # expand resources in a manifest
+  gator expand --filename="manifest.yaml"
 
-  # test a directory
-  gator test --filename="config-and-policies/"
+  # expand a directory
+  gator expand --filename="config-and-policies/"
 
   # Use multiple inputs
-  gator test --filename="manifest.yaml" --filename="templates-and-constraints/"
+  gator expand --filename="manifest.yaml" --filename="templates-and-constraints/"
 
-  # Receive input from stdin
-  cat manifest.yaml | gator test
-
-  # Output structured violations data
-  gator test --filename="manifest.yaml" --output=json
-
-  Note: The alpha "gator test" has been renamed to "gator verify".  "gator
-  verify" verifies individual Constraint Templates against suites of tests, where "gator
-  test" evaluates sets of resources against sets of Constraints and Templates.`
+  # Output JSON to file
+  gator expand --filename="manifest.yaml" --format=json --outputfile=results.yaml `
 )
 
 var Cmd = &cobra.Command{
