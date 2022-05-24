@@ -32,6 +32,9 @@ type Mutator interface {
 	Mutate(mutable *Mutable) (bool, error)
 	// UsesExternalData returns true if the mutation uses external data.
 	UsesExternalData() bool
+	// ExpandsGenerators returns true if the mutation is used to expand generator
+	// resources
+	ExpandsGenerators() bool
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences

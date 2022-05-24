@@ -53,6 +53,10 @@ func (d *DummyMutator) UsesExternalData() bool {
 	return false
 }
 
+func (d *DummyMutator) ExpandsGenerators() bool {
+	return false
+}
+
 func (d *DummyMutator) String() string {
 	return ""
 }

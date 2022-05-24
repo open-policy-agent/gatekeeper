@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/open-policy-agent/gatekeeper/cmd/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/verify"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ const version = "alpha"
 var commands = []*cobra.Command{
 	verify.Cmd,
 	test.Cmd,
+	expand.Cmd,
 }
 
 func init() {

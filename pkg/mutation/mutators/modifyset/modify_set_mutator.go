@@ -75,6 +75,10 @@ func (m *Mutator) UsesExternalData() bool {
 	return false
 }
 
+func (m *Mutator) ExpandsGenerators() bool {
+	return m.modifySet.Spec.Match.Origin == "Generated"
+}
+
 func (m *Mutator) ID() types.ID {
 	return m.id
 }

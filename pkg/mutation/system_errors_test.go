@@ -50,6 +50,10 @@ func (e errorMutator) UsesExternalData() bool {
 	return false
 }
 
+func (e errorMutator) ExpandsGenerators() bool {
+	return false
+}
+
 func (e errorMutator) ID() types.ID {
 	return types.ID{}
 }

@@ -69,6 +69,10 @@ func (m *fakeMutator) UsesExternalData() bool {
 	return false
 }
 
+func (m *fakeMutator) ExpandsGenerators() bool {
+	return false
+}
+
 func (m *fakeMutator) TerminalType() parser.NodeType {
 	return mutationschema.Unknown
 }

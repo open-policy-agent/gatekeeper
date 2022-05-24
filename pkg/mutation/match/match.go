@@ -22,7 +22,12 @@ const Wildcard = "*"
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
-	Kinds []Kinds `json:"kinds,omitempty"`
+	// Origin determines if the mutator should be used to expand generator
+	// resources. Accepts `Generated` and `Default` (defaults to `Default`). A
+	// value of `Generated` will cause the mutator to be used to expand generator
+	// resources, while `Default` will cause the mutator to be applied normally.
+	Origin string  `json:"origin,omitempty"`
+	Kinds  []Kinds `json:"kinds,omitempty"`
 	// Scope determines if cluster-scoped and/or namespaced-scoped resources
 	// are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
 	Scope apiextensionsv1.ResourceScope `json:"scope,omitempty"`
@@ -250,7 +255,7 @@ func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	case apiextensionsv1.NamespaceScoped:
 		return !isNamespace && hasNamespace, nil
 	default:
-		// This includes invalid scopes, such as typos like "cluster" or "Namspace".
+		// This includes invalid scopes, such as typos like "cluster" or "Namespace".
 		return true, nil
 	}
 }
