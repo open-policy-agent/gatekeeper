@@ -157,6 +157,12 @@ var replacements = map[string]string{
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
         {{- end }}`,
+
+	"- HELMSUBST_METRICS_BACKEND_ARG": `
+        {{- range .Values.metricsBackends}}
+        - --metrics-backend={{ . }}
+        {{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES": `
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
