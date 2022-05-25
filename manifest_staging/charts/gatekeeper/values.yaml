@@ -114,6 +114,7 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  extraRules: []
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
