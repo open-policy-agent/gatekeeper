@@ -13,14 +13,13 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type templateData struct {
 	name         string
 	apply        []match.ApplyTo
 	source       string
-	generatedGVK schema.GroupVersionKind
+	generatedGVK mutationsunversioned.GeneratedGVK
 }
 
 type assignData struct {
@@ -160,7 +159,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -174,7 +173,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Bar",
@@ -190,7 +189,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -204,7 +203,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Bar",
@@ -224,7 +223,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -245,7 +244,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -261,7 +260,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -277,7 +276,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -298,7 +297,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -312,7 +311,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -328,7 +327,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -344,7 +343,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -365,7 +364,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -379,7 +378,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v9000"},
 					}},
 					source: "spec.something",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v9000",
 						Kind:    "Bar",
@@ -395,7 +394,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Versions: []string{"v9000"},
 					}},
 					source: "spec.something",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v9000",
 						Kind:    "Bar",
@@ -711,13 +710,13 @@ func TestMutatorsForGVK(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		gvk      schema.GroupVersionKind
+		gvk      mutationsunversioned.GeneratedGVK
 		mutators []types.Mutator
 		want     []types.Mutator
 	}{
 		{
 			name: "assign mutator matches v1 pod",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -727,7 +726,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "assign metadata mutator matches v1 pod",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -737,7 +736,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "modify set matches v1 pod",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -747,7 +746,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "3 mutators match v1 pod",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -765,7 +764,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "no matching mutators",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -775,7 +774,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "no mutators, no matches",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -785,7 +784,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		},
 		{
 			name: "1 mutator matches, 1 mutator does not match",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -804,7 +803,7 @@ func TestMutatorsForGVK(t *testing.T) {
 				t.Errorf("error creating expansion cache: %s", err)
 			}
 
-			got := ec.MutatorsForGVK(tc.gvk)
+			got := ec.MutatorsForGVK(genGVKToSchemaGVK(tc.gvk))
 			if len(got) != len(tc.want) {
 				t.Errorf("got %d mutators, want %d", len(got), len(tc.want))
 			}
@@ -823,13 +822,13 @@ func TestMutatorsForGVK(t *testing.T) {
 func TestTemplatesForGVK(t *testing.T) {
 	tests := []struct {
 		name         string
-		gvk          schema.GroupVersionKind
+		gvk          mutationsunversioned.GeneratedGVK
 		addTemplates []*mutationsunversioned.TemplateExpansion
 		want         []*mutationsunversioned.TemplateExpansion
 	}{
 		{
 			name: "adding 2 templates, 1 match",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "apps",
 				Version: "v1",
 				Kind:    "Deployment",
@@ -843,7 +842,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -857,7 +856,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Bar",
@@ -873,7 +872,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -883,7 +882,7 @@ func TestTemplatesForGVK(t *testing.T) {
 		},
 		{
 			name: "adding 2 templates, 2 matches",
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "apps",
 				Version: "v1",
 				Kind:    "Deployment",
@@ -897,7 +896,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -911,7 +910,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Bar",
@@ -927,7 +926,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -941,7 +940,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Bar",
@@ -960,7 +959,7 @@ func TestTemplatesForGVK(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -968,7 +967,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				}),
 			},
 			want: []*mutationsunversioned.TemplateExpansion{},
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v9000",
 				Kind:    "CronJob",
@@ -978,7 +977,7 @@ func TestTemplatesForGVK(t *testing.T) {
 			name:         "no templates, no matches",
 			addTemplates: []*mutationsunversioned.TemplateExpansion{},
 			want:         []*mutationsunversioned.TemplateExpansion{},
-			gvk: schema.GroupVersionKind{
+			gvk: mutationsunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
 				Kind:    "Pod",
@@ -992,7 +991,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				t.Fatalf("failed to create cache: %s", err)
 			}
 
-			got := ec.TemplatesForGVK(tc.gvk)
+			got := ec.TemplatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
 			wantSorted := make([]mutationsunversioned.TemplateExpansion, len(tc.want))
 			for i := 0; i < len(tc.want); i++ {

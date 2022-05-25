@@ -19,7 +19,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -41,7 +40,13 @@ type TemplateExpansionSpec struct {
 
 	// GeneratedGVK specifies the GVK of the resources which the generator
 	// resource creates.
-	GeneratedGVK schema.GroupVersionKind `json:"generatedGVK,omitempty"`
+	GeneratedGVK GeneratedGVK `json:"generatedGVK,omitempty"`
+}
+
+type GeneratedGVK struct {
+	Group   string `json:"group,omitempty"`
+	Version string `json:"version,omitempty"`
+	Kind    string `json:"kind,omitempty"`
 }
 
 // TemplateExpansionStatus defines the observed state of TemplateExpansion.

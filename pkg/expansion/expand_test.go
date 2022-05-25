@@ -61,19 +61,6 @@ func newUnstructTemplate(data *templateData, t *testing.T) *unstructured.Unstruc
 	if err != nil {
 		t.Fatalf("error converting template to unstructured: %s", err)
 	}
-	// Manually fix upper-cased GVK keys (i.e. "Group" -> "group")
-	gvk, _, err := unstructured.NestedStringMap(u.Object, "spec", "generatedGVK")
-	if err != nil {
-		t.Fatalf("error getting spec.generatedGVK from unstruct: %s", err)
-	}
-	newGVK := map[string]string{
-		"group":   gvk["Group"],
-		"version": gvk["Version"],
-		"kind":    gvk["Kind"],
-	}
-	if err := unstructured.SetNestedStringMap(u.Object, newGVK, "spec", "generatedGVK"); err != nil {
-		t.Fatalf("error setting spec.generatedGVK: %s", err)
-	}
 	return &u
 }
 
@@ -138,7 +125,7 @@ func TestConvertTemplateExpansion(t *testing.T) {
 					Versions: []string{"v1"},
 				}},
 				source: "spec.template",
-				generatedGVK: schema.GroupVersionKind{
+				generatedGVK: mutationsunversioned.GeneratedGVK{
 					Group:   "",
 					Version: "v1",
 					Kind:    "Pod",
@@ -152,7 +139,7 @@ func TestConvertTemplateExpansion(t *testing.T) {
 					Versions: []string{"v1"},
 				}},
 				source: "spec.template",
-				generatedGVK: schema.GroupVersionKind{
+				generatedGVK: mutationsunversioned.GeneratedGVK{
 					Group:   "",
 					Version: "v1",
 					Kind:    "Pod",
@@ -412,7 +399,7 @@ func TestExpandResources(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -477,7 +464,7 @@ func TestExpandResources(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -582,7 +569,7 @@ func TestExpandResources(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",
@@ -685,7 +672,7 @@ func TestExpandResources(t *testing.T) {
 						Versions: []string{"v1"},
 					}},
 					source: "spec.template",
-					generatedGVK: schema.GroupVersionKind{
+					generatedGVK: mutationsunversioned.GeneratedGVK{
 						Group:   "",
 						Version: "v1",
 						Kind:    "Pod",

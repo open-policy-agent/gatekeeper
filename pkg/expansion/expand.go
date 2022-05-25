@@ -52,7 +52,7 @@ func ExpandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 		temps := cache.TemplatesForGVK(gen.GroupVersionKind())
 		for i := 0; i < len(temps); i++ {
 			t := temps[i]
-			muts := cache.MutatorsForGVK(t.Spec.GeneratedGVK)
+			muts := cache.MutatorsForGVK(genGVKToSchemaGVK(t.Spec.GeneratedGVK))
 			result, err := ExpandGenerator(gen, &t, muts)
 			if err != nil {
 				return nil, fmt.Errorf("error expanding generator: %s", err)
@@ -69,7 +69,7 @@ func ExpandGenerator(generator *unstructured.Unstructured, template *mutationsun
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand generator for template with no source")
 	}
-	resultantGVK := template.Spec.GeneratedGVK
+	resultantGVK := genGVKToSchemaGVK(template.Spec.GeneratedGVK)
 	emptyGVK := schema.GroupVersionKind{}
 	if resultantGVK == emptyGVK {
 		return nil, fmt.Errorf("cannot expand generator for template with empty generatedGVK")
@@ -149,6 +149,14 @@ func sortMutators(mutators []types.Mutator) {
 
 func mutatorSortKey(mutator types.Mutator) string {
 	return mutator.String()
+}
+
+func genGVKToSchemaGVK(gvk mutationsunversioned.GeneratedGVK) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind,
+	}
 }
 
 func createResultantKind(gvk schema.GroupVersionKind, source map[string]interface{}, mutators []types.Mutator) (*unstructured.Unstructured, error) {
