@@ -790,11 +790,14 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 	namespace := obj.GetNamespace()
 	name := obj.GetName()
 
+	fmt.Println("RUNNING DELETE FOR ", gvk, namespace, name)
+
 	if gvk.Empty() {
 		// We can't send a proper delete request with an Unstructured without
 		// filling in GVK. The alternative would be to require tests to construct
 		// a valid Scheme or provide a factory method for the type to delete - this
 		// is easier.
+		fmt.Println("empty GVK for", gvk, namespace, name)
 		t.Fatalf("gvk for %v/%v %T is empty",
 			namespace, name, obj)
 	}
@@ -806,6 +809,7 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		toDelete := makeUnstructured(gvk, namespace, name)
 		err := c.Delete(ctx, toDelete)
 		if apierrors.IsNotFound(err) {
+			fmt.Println("DELETE NOT FOUND FOR ", gvk, namespace, name)
 			return
 		} else if err != nil {
 			t.Fatal(err)
@@ -814,12 +818,14 @@ func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
+			fmt.Println("CHECKING DELETE FOR ", gvk, namespace, name)
 			// Construct a single-use Unstructured to send the Get request. It isn't
 			// safe to reuse Unstructureds for each retry as Get modifies its input.
 			toGet := makeUnstructured(gvk, namespace, name)
 			key := client.ObjectKey{Namespace: namespace, Name: name}
 			err2 := c.Get(ctx, key, toGet)
 			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
+				fmt.Println("DELETE SUCCEEDED FOR ", gvk, namespace, name)
 				return nil
 			}
 
