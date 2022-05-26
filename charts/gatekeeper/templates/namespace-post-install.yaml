@@ -36,6 +36,9 @@ spec:
             - label
             - ns
             - {{ .Release.Namespace }}
+            {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
+            - {{ . }}
+            {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
             - --overwrite
           securityContext:
@@ -76,6 +79,9 @@ rules:
       - patch
     resourceNames:
       - {{ .Release.Namespace }}
+      {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
+      - {{ . }}
+      {{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
