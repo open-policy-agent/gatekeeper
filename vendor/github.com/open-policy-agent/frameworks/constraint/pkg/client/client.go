@@ -45,7 +45,7 @@ type Client struct {
 }
 
 // CreateCRD creates a CRD from template.
-func (c *Client) CreateCRD(templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
+func (c *Client) CreateCRD(ctx context.Context, templ *templates.ConstraintTemplate) (*apiextensions.CustomResourceDefinition, error) {
 	if templ == nil {
 		return nil, fmt.Errorf("%w: got nil ConstraintTemplate",
 			clienterrors.ErrInvalidConstraintTemplate)
@@ -61,7 +61,7 @@ func (c *Client) CreateCRD(templ *templates.ConstraintTemplate) (*apiextensions.
 		return nil, err
 	}
 
-	return createCRD(templ, target)
+	return createCRD(ctx, templ, target)
 }
 
 // AddTemplate adds the template source code to OPA and registers the CRD with the client for
@@ -129,7 +129,7 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 		return resp, err
 	}
 
-	crd, err := createCRD(templ, target)
+	crd, err := createCRD(ctx, templ, target)
 	if err != nil {
 		return resp, err
 	}
@@ -614,7 +614,7 @@ func (c *Client) getTargetHandler(templ *templates.ConstraintTemplate) (handler.
 }
 
 // createCRD creates the Template's CRD and validates the result.
-func createCRD(templ *templates.ConstraintTemplate, target handler.TargetHandler) (*apiextensions.CustomResourceDefinition, error) {
+func createCRD(ctx context.Context, templ *templates.ConstraintTemplate, target handler.TargetHandler) (*apiextensions.CustomResourceDefinition, error) {
 	sch := crds.CreateSchema(templ, target)
 
 	crd, err := crds.CreateCRD(templ, sch)
@@ -622,7 +622,7 @@ func createCRD(templ *templates.ConstraintTemplate, target handler.TargetHandler
 		return nil, err
 	}
 
-	err = crds.ValidateCRD(crd)
+	err = crds.ValidateCRD(ctx, crd)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
 	}

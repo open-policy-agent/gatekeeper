@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/open-policy-agent/opa/ast/location"
 	"github.com/open-policy-agent/opa/internal/debug"
 	"github.com/open-policy-agent/opa/internal/gojsonschema"
 	"github.com/open-policy-agent/opa/metrics"
@@ -258,12 +259,13 @@ func NewCompiler() *Compiler {
 		metricName string
 		f          func()
 	}{
-		{"CheckDuplicateImports", "compile_stage_check_duplicate_imports", c.checkDuplicateImports},
-		{"CheckKeywordOverrides", "compile_stage_check_keyword_overrides", c.checkKeywordOverrides},
 		// Reference resolution should run first as it may be used to lazily
 		// load additional modules. If any stages run before resolution, they
 		// need to be re-run after resolution.
 		{"ResolveRefs", "compile_stage_resolve_refs", c.resolveAllRefs},
+		{"CheckKeywordOverrides", "compile_stage_check_keyword_overrides", c.checkKeywordOverrides},
+		{"CheckDuplicateImports", "compile_stage_check_duplicate_imports", c.checkDuplicateImports},
+		{"RemoveImports", "compile_stage_remove_imports", c.removeImports},
 		{"SetModuleTree", "compile_stage_set_module_tree", c.setModuleTree},
 		{"SetRuleTree", "compile_stage_set_rule_tree", c.setRuleTree},
 		// The local variable generator must be initialized after references are
@@ -274,6 +276,9 @@ func NewCompiler() *Compiler {
 		{"CheckVoidCalls", "compile_stage_check_void_calls", c.checkVoidCalls},
 		{"RewritePrintCalls", "compile_stage_rewrite_print_calls", c.rewritePrintCalls},
 		{"RewriteExprTerms", "compile_stage_rewrite_expr_terms", c.rewriteExprTerms},
+		{"ParseMetadataBlocks", "compile_stage_parse_metadata_blocks", c.parseMetadataBlocks},
+		{"SetAnnotationSet", "compile_stage_set_annotationset", c.setAnnotationSet},
+		{"RewriteRegoMetadataCalls", "compile_stage_rewrite_rego_metadata_calls", c.rewriteRegoMetadataCalls},
 		{"SetGraph", "compile_stage_set_graph", c.setGraph},
 		{"RewriteComprehensionTerms", "compile_stage_rewrite_comprehension_terms", c.rewriteComprehensionTerms},
 		{"RewriteRefsInHead", "compile_stage_rewrite_refs_in_head", c.rewriteRefsInHead},
@@ -285,7 +290,6 @@ func NewCompiler() *Compiler {
 		{"RewriteEquals", "compile_stage_rewrite_equals", c.rewriteEquals},
 		{"RewriteDynamicTerms", "compile_stage_rewrite_dynamic_terms", c.rewriteDynamicTerms},
 		{"CheckRecursion", "compile_stage_check_recursion", c.checkRecursion},
-		{"SetAnnotationSet", "compile_stage_set_annotationset", c.setAnnotationSet},
 		{"CheckTypes", "compile_stage_check_types", c.checkTypes}, // must be run after CheckRecursion
 		{"CheckUnsafeBuiltins", "compile_state_check_unsafe_builtins", c.checkUnsafeBuiltins},
 		{"CheckDeprecatedBuiltins", "compile_state_check_deprecated_builtins", c.checkDeprecatedBuiltins},
@@ -631,7 +635,8 @@ func (c *Compiler) GetRulesDynamicWithOpts(ref Ref, opts RulesOptions) []*Rule {
 	set := map[*Rule]struct{}{}
 	var walk func(node *TreeNode, i int)
 	walk = func(node *TreeNode, i int) {
-		if i >= len(ref) {
+		switch {
+		case i >= len(ref):
 			// We've reached the end of the reference and want to collect everything
 			// under this "prefix".
 			node.DepthFirst(func(descendant *TreeNode) bool {
@@ -641,7 +646,8 @@ func (c *Compiler) GetRulesDynamicWithOpts(ref Ref, opts RulesOptions) []*Rule {
 				}
 				return descendant.Hide
 			})
-		} else if i == 0 || IsConstant(ref[i].Value) {
+
+		case i == 0 || IsConstant(ref[i].Value):
 			// The head of the ref is always grounded.  In case another part of the
 			// ref is also grounded, we can lookup the exact child.  If it's not found
 			// we can immediately return...
@@ -655,7 +661,8 @@ func (c *Compiler) GetRulesDynamicWithOpts(ref Ref, opts RulesOptions) []*Rule {
 				// Otherwise, we continue using the child node.
 				walk(child, i+1)
 			}
-		} else {
+
+		default:
 			// This part of the ref is a dynamic term.  We can't know what it refers
 			// to and will just need to try all of the children.
 			for _, child := range node.Children {
@@ -803,15 +810,11 @@ func (c *Compiler) checkRuleConflicts() {
 		kinds := map[DocKind]struct{}{}
 		defaultRules := 0
 		arities := map[int]struct{}{}
-		declared := false
 
 		for _, rule := range node.Values {
 			r := rule.(*Rule)
 			kinds[r.Head.DocKind()] = struct{}{}
 			arities[len(r.Head.Args)] = struct{}{}
-			if r.Head.Assign {
-				declared = true
-			}
 			if r.Default {
 				defaultRules++
 			}
@@ -819,9 +822,7 @@ func (c *Compiler) checkRuleConflicts() {
 
 		name := Var(node.Key.(String))
 
-		if declared && len(node.Values) > 1 {
-			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "rule named %v redeclared at %v", name, node.Values[1].(*Rule).Loc()))
-		} else if len(kinds) > 1 || len(arities) > 1 {
+		if len(kinds) > 1 || len(arities) > 1 {
 			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "conflicting rules named %v found", name))
 		} else if defaultRules > 1 {
 			c.err(NewError(TypeErr, node.Values[0].(*Rule).Loc(), "multiple default rules named %s found", name))
@@ -1425,9 +1426,6 @@ func (c *Compiler) resolveAllRefs() {
 				}
 			}
 		}
-
-		// Once imports have been resolved, they are no longer needed.
-		mod.Imports = nil
 	}
 
 	if c.moduleLoader != nil {
@@ -1449,6 +1447,12 @@ func (c *Compiler) resolveAllRefs() {
 
 		sort.Strings(c.sorted)
 		c.resolveAllRefs()
+	}
+}
+
+func (c *Compiler) removeImports() {
+	for name := range c.Modules {
+		c.Modules[name].Imports = nil
 	}
 }
 
@@ -1726,6 +1730,222 @@ func (c *Compiler) rewriteDynamicTerms() {
 			return false
 		})
 	}
+}
+
+func (c *Compiler) parseMetadataBlocks() {
+	// Only parse annotations if rego.metadata built-ins are called
+	regoMetadataCalled := false
+	for _, name := range c.sorted {
+		mod := c.Modules[name]
+		WalkExprs(mod, func(expr *Expr) bool {
+			if isRegoMetadataChainCall(expr) || isRegoMetadataRuleCall(expr) {
+				regoMetadataCalled = true
+			}
+			return regoMetadataCalled
+		})
+
+		if regoMetadataCalled {
+			break
+		}
+	}
+
+	if regoMetadataCalled {
+		// NOTE: Possible optimization: only parse annotations for modules on the path of rego.metadata-calling module
+		for _, name := range c.sorted {
+			mod := c.Modules[name]
+
+			if len(mod.Annotations) == 0 {
+				var errs Errors
+				mod.Annotations, errs = parseAnnotations(mod.Comments)
+				errs = append(errs, attachAnnotationsNodes(mod)...)
+				for _, err := range errs {
+					c.err(err)
+				}
+			}
+		}
+	}
+}
+
+func (c *Compiler) rewriteRegoMetadataCalls() {
+	eqFactory := newEqualityFactory(c.localvargen)
+
+	_, chainFuncAllowed := c.builtins[RegoMetadataChain.Name]
+	_, ruleFuncAllowed := c.builtins[RegoMetadataRule.Name]
+
+	for _, name := range c.sorted {
+		mod := c.Modules[name]
+
+		WalkRules(mod, func(rule *Rule) bool {
+			var firstChainCall *Expr
+			var firstRuleCall *Expr
+
+			WalkExprs(rule, func(expr *Expr) bool {
+				if chainFuncAllowed && firstChainCall == nil && isRegoMetadataChainCall(expr) {
+					firstChainCall = expr
+				} else if ruleFuncAllowed && firstRuleCall == nil && isRegoMetadataRuleCall(expr) {
+					firstRuleCall = expr
+				}
+				return firstChainCall != nil && firstRuleCall != nil
+			})
+
+			chainCalled := firstChainCall != nil
+			ruleCalled := firstRuleCall != nil
+
+			if chainCalled || ruleCalled {
+				body := make(Body, 0, len(rule.Body)+2)
+
+				var metadataChainVar Var
+				if chainCalled {
+					// Create and inject metadata chain for rule
+
+					chain, err := createMetadataChain(c.annotationSet.Chain(rule))
+					if err != nil {
+						c.err(err)
+						return false
+					}
+
+					chain.Location = firstChainCall.Location
+					eq := eqFactory.Generate(chain)
+					metadataChainVar = eq.Operands()[0].Value.(Var)
+					body.Append(eq)
+				}
+
+				var metadataRuleVar Var
+				if ruleCalled {
+					// Create and inject metadata for rule
+
+					var metadataRuleTerm *Term
+
+					a := getPrimaryRuleAnnotations(c.annotationSet, rule)
+					if a != nil {
+						annotObj, err := a.toObject()
+						if err != nil {
+							c.err(err)
+							return false
+						}
+						metadataRuleTerm = NewTerm(*annotObj)
+					} else {
+						// If rule has no annotations, assign an empty object
+						metadataRuleTerm = ObjectTerm()
+					}
+
+					metadataRuleTerm.Location = firstRuleCall.Location
+					eq := eqFactory.Generate(metadataRuleTerm)
+					metadataRuleVar = eq.Operands()[0].Value.(Var)
+					body.Append(eq)
+				}
+
+				for _, expr := range rule.Body {
+					body.Append(expr)
+				}
+				rule.Body = body
+
+				vis := func(b Body) bool {
+					for _, err := range rewriteRegoMetadataCalls(&metadataChainVar, &metadataRuleVar, b, &c.RewrittenVars) {
+						c.err(err)
+					}
+					return false
+				}
+				WalkBodies(rule.Head, vis)
+				WalkBodies(rule.Body, vis)
+			}
+
+			return false
+		})
+	}
+}
+
+func getPrimaryRuleAnnotations(as *AnnotationSet, rule *Rule) *Annotations {
+	annots := as.GetRuleScope(rule)
+
+	if len(annots) == 0 {
+		return nil
+	}
+
+	// Sort by annotation location; chain must start with annotations declared closest to rule, then going outward
+	sort.SliceStable(annots, func(i, j int) bool {
+		return annots[i].Location.Compare(annots[j].Location) > 0
+	})
+
+	return annots[0]
+}
+
+func rewriteRegoMetadataCalls(metadataChainVar *Var, metadataRuleVar *Var, body Body, rewrittenVars *map[Var]Var) Errors {
+	var errs Errors
+
+	WalkClosures(body, func(x interface{}) bool {
+		switch x := x.(type) {
+		case *ArrayComprehension:
+			errs = rewriteRegoMetadataCalls(metadataChainVar, metadataRuleVar, x.Body, rewrittenVars)
+		case *SetComprehension:
+			errs = rewriteRegoMetadataCalls(metadataChainVar, metadataRuleVar, x.Body, rewrittenVars)
+		case *ObjectComprehension:
+			errs = rewriteRegoMetadataCalls(metadataChainVar, metadataRuleVar, x.Body, rewrittenVars)
+		case *Every:
+			errs = rewriteRegoMetadataCalls(metadataChainVar, metadataRuleVar, x.Body, rewrittenVars)
+		}
+		return true
+	})
+
+	for i := range body {
+		expr := body[i]
+		var metadataVar Var
+
+		if metadataChainVar != nil && isRegoMetadataChainCall(expr) {
+			metadataVar = *metadataChainVar
+		} else if metadataRuleVar != nil && isRegoMetadataRuleCall(expr) {
+			metadataVar = *metadataRuleVar
+		} else {
+			continue
+		}
+
+		// NOTE(johanfylling): An alternative strategy would be to walk the body and replace all operands[0]
+		// usages with *metadataChainVar
+		operands := expr.Operands()
+		var newExpr *Expr
+		if len(operands) > 0 { // There is an output var to rewrite
+			rewrittenVar := operands[0]
+			newExpr = Equality.Expr(rewrittenVar, NewTerm(metadataVar))
+		} else { // No output var, just rewrite expr to metadataVar
+			newExpr = NewExpr(NewTerm(metadataVar))
+		}
+
+		newExpr.Generated = true
+		newExpr.Location = expr.Location
+		body.Set(newExpr, i)
+	}
+
+	return errs
+}
+
+func isRegoMetadataChainCall(x *Expr) bool {
+	return x.IsCall() && x.Operator().Equal(RegoMetadataChain.Ref())
+}
+
+func isRegoMetadataRuleCall(x *Expr) bool {
+	return x.IsCall() && x.Operator().Equal(RegoMetadataRule.Ref())
+}
+
+func createMetadataChain(chain []*AnnotationsRef) (*Term, *Error) {
+
+	metaArray := NewArray()
+	for _, link := range chain {
+		p := link.Path.toArray().
+			Slice(1, -1) // Dropping leading 'data' element of path
+		obj := NewObject(
+			Item(StringTerm("path"), NewTerm(p)),
+		)
+		if link.Annotations != nil {
+			annotObj, err := link.Annotations.toObject()
+			if err != nil {
+				return nil, err
+			}
+			obj.Insert(StringTerm("annotations"), NewTerm(*annotObj))
+		}
+		metaArray = metaArray.Append(NewTerm(obj))
+	}
+
+	return NewTerm(metaArray), nil
 }
 
 func (c *Compiler) rewriteLocalVars() {
@@ -2630,6 +2850,19 @@ func (n *TreeNode) Child(k Value) *TreeNode {
 	return nil
 }
 
+// Find dereferences ref along the tree
+func (n *TreeNode) Find(ref Ref) *TreeNode {
+	node := n
+	for _, r := range ref {
+		child := node.Child(r.Value)
+		if child == nil {
+			return nil
+		}
+		node = child
+	}
+	return node
+}
+
 // DepthFirst performs a depth-first traversal of the rule tree rooted at n. If
 // f returns true, traversal will not continue to the children of n.
 func (n *TreeNode) DepthFirst(f func(node *TreeNode) bool) {
@@ -2683,7 +2916,7 @@ func NewGraph(modules map[string]*Module, list func(Ref) []*Rule) *Graph {
 		})
 	}
 
-	// Walk over all rules, add them to graph, and build adjencency lists.
+	// Walk over all rules, add them to graph, and build adjacency lists.
 	for _, module := range modules {
 		WalkRules(module, func(a *Rule) bool {
 			graph.addNode(a)
@@ -4548,57 +4781,112 @@ func rewriteWithModifier(c *Compiler, f *equalityFactory, expr *Expr) ([]*Expr, 
 
 	var result []*Expr
 	for i := range expr.With {
-		err := validateTarget(c, expr.With[i].Target)
+		eval, err := validateWith(c, expr, i)
 		if err != nil {
 			return nil, err
 		}
 
-		if requiresEval(expr.With[i].Value) {
+		if eval {
 			eq := f.Generate(expr.With[i].Value)
 			result = append(result, eq)
 			expr.With[i].Value = eq.Operand(0)
 		}
 	}
 
-	// If any of the with modifiers in this expression were rewritten then result
-	// will be non-empty. In this case, the expression will have been modified and
-	// it should also be added to the result.
-	if len(result) > 0 {
-		result = append(result, expr)
-	}
-	return result, nil
+	return append(result, expr), nil
 }
 
-func validateTarget(c *Compiler, term *Term) *Error {
-	if !isInputRef(term) && !isDataRef(term) {
-		return NewError(TypeErr, term.Location, "with keyword target must reference existing %v or %v", InputRootDocument, DefaultRootDocument)
+func validateWith(c *Compiler, expr *Expr, i int) (bool, *Error) {
+	target, value := expr.With[i].Target, expr.With[i].Value
+
+	// Ensure that values that are built-ins are rewritten to Ref (not Var)
+	if v, ok := value.Value.(Var); ok {
+		if _, ok := c.builtins[v.String()]; ok {
+			value.Value = Ref([]*Term{NewTerm(v)})
+		}
 	}
 
-	if isDataRef(term) {
-		ref := term.Value.(Ref)
+	switch {
+	case isDataRef(target):
+		ref := target.Value.(Ref)
 		node := c.RuleTree
 		for i := 0; i < len(ref)-1; i++ {
 			child := node.Child(ref[i].Value)
 			if child == nil {
 				break
 			} else if len(child.Values) > 0 {
-				return NewError(CompileErr, term.Loc(), "with keyword cannot partially replace virtual document(s)")
+				return false, NewError(CompileErr, target.Loc(), "with keyword cannot partially replace virtual document(s)")
 			}
 			node = child
 		}
 
 		if node != nil {
+			// NOTE(sr): at this point in the compiler stages, we don't have a fully-populated
+			// TypeEnv yet -- so we have to make do with this check to see if the replacement
+			// target is a function. It's probably wrong for arity-0 functions, but those are
+			// and edge case anyways.
 			if child := node.Child(ref[len(ref)-1].Value); child != nil {
-				for _, value := range child.Values {
-					if len(value.(*Rule).Head.Args) > 0 {
-						return NewError(CompileErr, term.Loc(), "with keyword cannot replace functions")
+				for _, v := range child.Values {
+					if len(v.(*Rule).Head.Args) > 0 {
+						if validateWithFunctionValue(c.builtins, c.RuleTree, value) {
+							return false, nil
+						}
 					}
 				}
 			}
 		}
+	case isInputRef(target): // ok, valid
+	case isBuiltinRefOrVar(c.builtins, target):
 
+		// NOTE(sr): first we ensure that parsed Var builtins (`count`, `concat`, etc)
+		// are rewritten to their proper Ref convention
+		if v, ok := target.Value.(Var); ok {
+			target.Value = Ref([]*Term{NewTerm(v)})
+		}
+
+		targetRef := target.Value.(Ref)
+		bi := c.builtins[targetRef.String()] // safe because isBuiltinRefOrVar checked this
+		if err := validateWithBuiltinTarget(bi, targetRef, target.Loc()); err != nil {
+			return false, err
+		}
+
+		if validateWithFunctionValue(c.builtins, c.RuleTree, value) {
+			return false, nil
+		}
+	default:
+		return false, NewError(TypeErr, target.Location, "with keyword target must reference existing %v, %v, or a function", InputRootDocument, DefaultRootDocument)
+	}
+	return requiresEval(value), nil
+}
+
+func validateWithBuiltinTarget(bi *Builtin, target Ref, loc *location.Location) *Error {
+	switch bi.Name {
+	case Equality.Name,
+		RegoMetadataChain.Name,
+		RegoMetadataRule.Name:
+		return NewError(CompileErr, loc, "with keyword replacing built-in function: replacement of %q invalid", bi.Name)
+	}
+
+	switch {
+	case target.HasPrefix(Ref([]*Term{VarTerm("internal")})):
+		return NewError(CompileErr, loc, "with keyword replacing built-in function: replacement of internal function %q invalid", target)
+
+	case bi.Relation:
+		return NewError(CompileErr, loc, "with keyword replacing built-in function: target must not be a relation")
+
+	case bi.Decl.Result() == nil:
+		return NewError(CompileErr, loc, "with keyword replacing built-in function: target must not be a void function")
 	}
 	return nil
+}
+
+func validateWithFunctionValue(bs map[string]*Builtin, ruleTree *TreeNode, value *Term) bool {
+	if v, ok := value.Value.(Ref); ok {
+		if ruleTree.Find(v) != nil { // ref exists in rule tree
+			return true
+		}
+	}
+	return isBuiltinRefOrVar(bs, value)
 }
 
 func isInputRef(term *Term) bool {
@@ -4615,6 +4903,15 @@ func isDataRef(term *Term) bool {
 		if ref.HasPrefix(DefaultRootRef) {
 			return true
 		}
+	}
+	return false
+}
+
+func isBuiltinRefOrVar(bs map[string]*Builtin, term *Term) bool {
+	switch v := term.Value.(type) {
+	case Ref, Var:
+		_, ok := bs[v.String()]
+		return ok
 	}
 	return false
 }

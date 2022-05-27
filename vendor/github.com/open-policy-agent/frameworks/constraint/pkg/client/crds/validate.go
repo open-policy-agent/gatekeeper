@@ -1,6 +1,7 @@
 package crds
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -43,8 +44,8 @@ func ValidateTargets(templ *templates.ConstraintTemplate) error {
 }
 
 // ValidateCRD calls the CRD package's validation on an internal representation of the CRD.
-func ValidateCRD(crd *apiextensions.CustomResourceDefinition) error {
-	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(crd)
+func ValidateCRD(ctx context.Context, crd *apiextensions.CustomResourceDefinition) error {
+	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(ctx, crd)
 	if len(errs) > 0 {
 		return errs.ToAggregate()
 	}
