@@ -110,9 +110,9 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 	a.GetPod = getPod
 }
 
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
 
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
+func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
@@ -333,7 +333,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	unversionedProposedCRD, err := r.opa.CreateCRD(unversionedCT)
+	unversionedProposedCRD, err := r.opa.CreateCRD(ctx, unversionedCT)
 	if err != nil {
 		logger.Error(err, "CRD creation error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
