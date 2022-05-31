@@ -1,8 +1,10 @@
 # Image URL to use all building/pushing image targets
 REPOSITORY ?= openpolicyagent/gatekeeper
 CRD_REPOSITORY ?= openpolicyagent/gatekeeper-crds
+GATOR_REPOSITORY ?= openpolicyagent/gator
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
+GATOR_IMG := $(GATOR_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
@@ -287,11 +289,14 @@ docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):dev
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):dev
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(VERSION)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(VERSION)
 
 # Push for Dev
 docker-push-dev: docker-tag-dev
@@ -299,11 +304,14 @@ docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):dev
 	@docker push $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker push $(CRD_REPOSITORY):dev
+	@docker push $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker push $(GATOR_REPOSITORY):dev
 
 # Push for Release
 docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(CRD_REPOSITORY):$(VERSION)
+	@docker push $(GATOR_REPOSITORY):$(VERSION)
 
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
@@ -347,6 +355,18 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push
+
+# Build gator image
+docker-buildx-gator-dev:
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
+		-t ${GATOR_REPOSITORY}:dev \
+		-f gator.Dockerfile . --push
+
+docker-buildx-gator-release:
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${VERSION} \
+		-f gator.Dockerfile . --push
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
