@@ -44,6 +44,13 @@ func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, err
 func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 	start := time.Now()
 
+	if s.Skip {
+		return SuiteResult{
+			Path:    s.Path,
+			Skipped: true,
+		}
+	}
+
 	results, err := r.runTests(ctx, filter, s.Path, s.Tests)
 
 	return SuiteResult{
@@ -60,7 +67,7 @@ func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, 
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		if !filter.MatchesTest(t) {
+		if t.Skip || !filter.MatchesTest(t) {
 			results[i] = r.skipTest(t)
 			continue
 		}
@@ -109,7 +116,7 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 	results := make([]CaseResult, len(t.Cases))
 
 	for i, c := range t.Cases {
-		if !filter.MatchesCase(t.Name, c.Name) {
+		if c.Skip || !filter.MatchesCase(t.Name, c.Name) {
 			results[i] = r.skipCase(c)
 			continue
 		}

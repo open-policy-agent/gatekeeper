@@ -294,6 +294,129 @@ tests:
 			wantErr: nil,
 		},
 		{
+			name:      "skip case",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests:
+- template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - object: allow.yaml
+    skip: true
+  - object: deny.yaml
+    assertions:
+    - violations: 2
+      message: "some message"
+`),
+				},
+			},
+			want: []*Suite{{
+				Path: "test.yaml",
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Object: "allow.yaml",
+						Skip:   true,
+					}, {
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromInt(2),
+							Message:    pointer.StringPtr("some message"),
+						}},
+					}},
+				}},
+			}},
+			wantErr: nil,
+		},
+		{
+			name:      "skip test",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+tests:
+- template: template.yaml
+  constraint: constraint.yaml
+  skip: true
+  cases:
+  - object: allow.yaml
+  - object: deny.yaml
+    assertions:
+    - violations: 2
+      message: "some message"
+`),
+				},
+			},
+			want: []*Suite{{
+				Path: "test.yaml",
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Skip:       true,
+					Cases: []*Case{{
+						Object: "allow.yaml",
+					}, {
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromInt(2),
+							Message:    pointer.StringPtr("some message"),
+						}},
+					}},
+				}},
+			}},
+			wantErr: nil,
+		},
+		{
+			name:      "skip suite",
+			target:    "test.yaml",
+			recursive: false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+skip: true
+tests:
+- template: template.yaml
+  constraint: constraint.yaml
+  cases:
+  - object: allow.yaml
+  - object: deny.yaml
+    assertions:
+    - violations: 2
+      message: "some message"
+`),
+				},
+			},
+			want: []*Suite{{
+				Path: "test.yaml",
+				Skip: true,
+				Tests: []Test{{
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Object: "allow.yaml",
+					}, {
+						Object: "deny.yaml",
+						Assertions: []Assertion{{
+							Violations: intStrFromInt(2),
+							Message:    pointer.StringPtr("some message"),
+						}},
+					}},
+				}},
+			}},
+			wantErr: nil,
+		},
+		{
 			name:      "suite with empty assertions",
 			target:    "test.yaml",
 			recursive: false,
