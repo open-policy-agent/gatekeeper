@@ -133,6 +133,10 @@ func (ks *kindSet) Write() error {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
 			}
 
+			if name == "gatekeeper-manager-role" && kind == "Role" {
+				obj += "{{- with .Values.controllerManager.extraRules }}\n  {{- toYaml . | nindent 0 }}\n{{- end }}\n"
+			}
+
 			if isRbacKind(kind) {
 				obj = "{{- if .Values.rbac.create }}\n" + obj + "{{- end }}\n"
 			}
