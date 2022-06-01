@@ -70,11 +70,13 @@ func init() {
 	}
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
+// Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper). But include "services/status" for constraints that mitigate CVE-2020-8554.
+// You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*;pods/ephemeralcontainers;pods/exec;pods/log;pods/eviction;pods/portforward;pods/proxy;pods/attach;pods/binding;deployments/scale;replicasets/scale;statefulsets/scale;replicationcontrollers/scale;services/proxy;nodes/proxy;services/status,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
-func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, _ *mutation.System) error {
 	if !operations.IsAssigned(operations.Webhook) {
 		return nil
 	}
@@ -357,7 +359,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	}
 
 	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
-	_, err = h.opa.CreateCRD(unversioned)
+	_, err = h.opa.CreateCRD(ctx, unversioned)
 	if err != nil {
 		return true, err
 	}
