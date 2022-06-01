@@ -38,6 +38,16 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
+  probeWebhook:
+    enabled: true
+    image:
+      repository: curlimages/curl
+      tag: 7.83.1
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    waitTimeout: 60
+    httpTimeout: 2
+    insecureHTTPS: false
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
