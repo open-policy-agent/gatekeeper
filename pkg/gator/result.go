@@ -28,6 +28,9 @@ type SuiteResult struct {
 	// TestResults are the results of running the tests for each defined
 	// Template/Constraint pair.
 	TestResults []TestResult
+
+	// Skipped is whether this Suite was skipped and not run.
+	Skipped bool
 }
 
 // IsFailure returns true if there was a problem running the Suite, or one of the
