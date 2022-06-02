@@ -24,6 +24,9 @@ import (
 	"os"
 	"time"
 
+	// set GOMAXPROCS to the number of container cores, if known.
+	_ "go.uber.org/automaxprocs"
+
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
