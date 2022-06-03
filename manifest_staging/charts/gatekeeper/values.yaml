@@ -34,7 +34,7 @@ postInstall:
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.1
+      tag: v3.9.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -62,7 +62,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.1
+      tag: v3.9.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
   securityContext:
@@ -77,7 +77,7 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.9.0-beta.1
+  release: v3.9.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations:
