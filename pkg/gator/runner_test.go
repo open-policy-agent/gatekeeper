@@ -203,6 +203,139 @@ func TestRunner_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "skip Case",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Skip:       true,
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Skipped: true,
+					}},
+				}, {
+					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "skip Test",
+			suite: Suite{
+				Tests: []Test{{
+					Skip:       true,
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Skipped: true,
+				}, {
+					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "skip Suite",
+			suite: Suite{
+				Skip: true,
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				Skipped: true,
+			},
+		},
+		{
 			name: "invalid object",
 			suite: Suite{
 				Tests: []Test{{
