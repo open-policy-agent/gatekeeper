@@ -14,6 +14,9 @@ type Suite struct {
 
 	// Path is the filepath of this Suite on disk.
 	Path string `json:"-"`
+
+	// Skip, if true, skips this Suite.
+	Skip bool `json:"skip"`
 }
 
 // Test defines a Template&Constraint pair to instantiate, and Cases to
@@ -31,6 +34,9 @@ type Test struct {
 
 	// Cases are the test cases to run on the instantiated Constraint.
 	Cases []*Case `json:"cases,omitempty"`
+
+	// Skip, if true, skips this Test.
+	Skip bool `json:"skip"`
 }
 
 // Case runs Constraint against a YAML object.
@@ -51,4 +57,7 @@ type Case struct {
 	// If no assertions are present, assumes reviewing Object produces no
 	// violations.
 	Assertions []Assertion `json:"assertions"`
+
+	// Skip, if true, skips this Case.
+	Skip bool `json:"skip"`
 }

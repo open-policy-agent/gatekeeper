@@ -169,6 +169,7 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
@@ -183,6 +184,7 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade:
@@ -196,6 +198,7 @@ e2e-helm-upgrade:
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
