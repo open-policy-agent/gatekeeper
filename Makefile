@@ -360,13 +360,13 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 		-f crd.Dockerfile .staging/crds/ --push
 
 # Build gator image
-docker-buildx-gator-dev:
+docker-buildx-gator-dev: docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
 		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
 		-t ${GATOR_REPOSITORY}:dev \
 		-f gator.Dockerfile . --push
 
-docker-buildx-gator-release:
+docker-buildx-gator-release: docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
 		-t ${GATOR_REPOSITORY}:${VERSION} \
 		-f gator.Dockerfile . --push
