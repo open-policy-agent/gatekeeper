@@ -38,4 +38,6 @@ var (
 	// ErrConvertingTemplate means we were able to parse a template, but not convert
 	// it into the version-independent format.
 	ErrConvertingTemplate = errors.New("unable to convert template")
+
+	ErrValidConstraint = errors.New("constraint did not fail schema validation")
 )
