@@ -29,7 +29,10 @@ webhooks:
     {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.mutatingWebhookObjectSelector }}
   reinvocationPolicy: {{ .Values.mutatingWebhookReinvocationPolicy }}
