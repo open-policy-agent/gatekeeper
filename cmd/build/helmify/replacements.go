@@ -67,7 +67,10 @@ var replacements = map[string]string{
     {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.mutatingWebhookObjectSelector }}`,
@@ -95,7 +98,10 @@ var replacements = map[string]string{
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.validatingWebhookObjectSelector }}`,
