@@ -44,7 +44,7 @@ func ExpandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 
 	cache, err := NewExpansionCache(mutators, templates)
 	if err != nil {
-		return nil, fmt.Errorf("error creating Cache: %s", err)
+		return nil, fmt.Errorf("error creating System: %s", err)
 	}
 
 	var resultants []*unstructured.Unstructured

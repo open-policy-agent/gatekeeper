@@ -5,50 +5,55 @@ import (
 	"sync"
 
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type Cache struct {
+type System struct {
 	lock      sync.Mutex
 	mutators  map[types.ID]types.Mutator
 	templates map[string]*mutationsunversioned.TemplateExpansion
 }
 
-func (ec *Cache) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+func keyForTemplate(template *mutationsunversioned.TemplateExpansion) string {
+	return template.ObjectMeta.Name
+}
 
-	k := template.ObjectMeta.Name
+func (s *System) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	k := keyForTemplate(template)
 	if k == "" {
 		return fmt.Errorf("cannot upsert template with empty name")
 	}
 
-	ec.templates[k] = template.DeepCopy()
+	s.templates[k] = template.DeepCopy()
 	return nil
 }
 
-func (ec *Cache) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+func (s *System) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	k := template.ObjectMeta.Name
+	k := keyForTemplate(template)
 	if k == "" {
 		return fmt.Errorf("cannot remove template with empty name")
 	}
 
-	delete(ec.templates, k)
+	delete(s.templates, k)
 	return nil
 }
 
-func (ec *Cache) UpsertMutator(mut types.Mutator) error {
+func (s *System) UpsertMutator(mut types.Mutator) error {
 	if !mut.ExpandsGenerators() {
 		return fmt.Errorf("cannot add mutator to cache that does not have 'origin: Generated' field")
 	}
 
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	k := mut.ID()
 	emptyID := types.ID{}
@@ -56,13 +61,13 @@ func (ec *Cache) UpsertMutator(mut types.Mutator) error {
 		return fmt.Errorf("cannot upsert mutator with empty ID")
 	}
 
-	ec.mutators[k] = mut
+	s.mutators[k] = mut
 	return nil
 }
 
-func (ec *Cache) RemoveMutator(mut types.Mutator) error {
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+func (s *System) RemoveMutator(mut types.Mutator) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	k := mut.ID()
 	emptyID := types.ID{}
@@ -70,20 +75,20 @@ func (ec *Cache) RemoveMutator(mut types.Mutator) error {
 		return fmt.Errorf("cannot remove mutator with empty ID")
 	}
 
-	delete(ec.mutators, k)
+	delete(s.mutators, k)
 	return nil
 }
 
 // MutatorsForGVK returns a slice of mutators that apply to specified GVK.
-func (ec *Cache) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mutator {
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+func (s *System) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mutator {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)
 	mutable := &types.Mutable{Object: u}
 	var muts []types.Mutator
-	for _, mut := range ec.mutators {
+	for _, mut := range s.mutators {
 		if mut.Matches(mutable) {
 			muts = append(muts, mut)
 		}
@@ -93,12 +98,12 @@ func (ec *Cache) MutatorsForGVK(gvk schema.GroupVersionKind) []types.Mutator {
 }
 
 // TemplatesForGVK returns a slice of TemplateExpansions that match a given gvk.
-func (ec *Cache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutationsunversioned.TemplateExpansion {
-	ec.lock.Lock()
-	defer ec.lock.Unlock()
+func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []mutationsunversioned.TemplateExpansion {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	var templates []mutationsunversioned.TemplateExpansion
-	for _, t := range ec.templates {
+	for _, t := range s.templates {
 		for _, apply := range t.Spec.ApplyTo {
 			if apply.Matches(gvk) {
 				templates = append(templates, *t)
@@ -109,8 +114,8 @@ func (ec *Cache) TemplatesForGVK(gvk schema.GroupVersionKind) []mutationsunversi
 	return templates
 }
 
-func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversioned.TemplateExpansion) (*Cache, error) {
-	ec := &Cache{
+func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversioned.TemplateExpansion) (*System, error) {
+	ec := &System{
 		lock:      sync.Mutex{},
 		mutators:  map[types.ID]types.Mutator{},
 		templates: map[string]*mutationsunversioned.TemplateExpansion{},
@@ -131,4 +136,21 @@ func NewExpansionCache(mutators []types.Mutator, templates []*mutationsunversion
 	}
 
 	return ec, nil
+}
+
+func V1Alpha1TemplateToUnversioned(expansion *v1alpha1.TemplateExpansion) *mutationsunversioned.TemplateExpansion {
+	return &mutationsunversioned.TemplateExpansion{
+		TypeMeta:   expansion.TypeMeta,
+		ObjectMeta: expansion.ObjectMeta,
+		Spec: mutationsunversioned.TemplateExpansionSpec{
+			ApplyTo:        expansion.Spec.ApplyTo,
+			TemplateSource: expansion.Spec.TemplateSource,
+			GeneratedGVK: mutationsunversioned.GeneratedGVK{
+				Group:   expansion.Spec.GeneratedGVK.Group,
+				Version: expansion.Spec.GeneratedGVK.Version,
+				Kind:    expansion.Spec.GeneratedGVK.Kind,
+			},
+		},
+		Status: mutationsunversioned.TemplateExpansionStatus{},
+	}
 }
