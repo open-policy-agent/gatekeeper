@@ -134,6 +134,9 @@ spec:
                       pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
+                  origin:
+                    description: Origin determines if the mutator should be used to expand generator resources. Accepts `Generated` and `Default` (defaults to `Default`). A value of `Generated` will cause the mutator to be used to expand generator resources, while `Default` will cause the mutator to be applied normally.
+                    type: string
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
@@ -341,6 +344,9 @@ spec:
                       pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
+                  origin:
+                    description: Origin determines if the mutator should be used to expand generator resources. Accepts `Generated` and `Default` (defaults to `Default`). A value of `Generated` will cause the mutator to be used to expand generator resources, while `Default` will cause the mutator to be applied normally.
+                    type: string
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
