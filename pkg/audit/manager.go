@@ -80,6 +80,8 @@ type Manager struct {
 
 // StatusViolation represents each violation under status.
 type StatusViolation struct {
+	Group             string `json:"group"`
+	Version           string `json:"version"`
 	Kind              string `json:"kind"`
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
@@ -736,6 +738,8 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
 		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			statusViolations = append(statusViolations, StatusViolation{
+				Group:             ar.group,
+				Version:           ar.version,
 				Kind:              ar.kind,
 				Name:              ar.name,
 				Namespace:         ar.namespace,
