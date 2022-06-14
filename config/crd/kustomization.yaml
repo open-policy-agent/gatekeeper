@@ -6,9 +6,10 @@ resources:
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
-- bases/mutations.gatekeeper.sh_assign.yaml  
+- bases/mutations.gatekeeper.sh_assign.yaml
 - bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - bases/mutations.gatekeeper.sh_modifyset.yaml
+- bases/mutations.gatekeeper.sh_templateexpansion.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 bases:

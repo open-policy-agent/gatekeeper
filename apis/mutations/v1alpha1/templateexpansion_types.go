@@ -61,7 +61,6 @@ type TemplateExpansionStatus struct {
 // +kubebuilder:resource:path="templateexpansion"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
 // TemplateExpansion is the Schema for the assign API.
 type TemplateExpansion struct {
