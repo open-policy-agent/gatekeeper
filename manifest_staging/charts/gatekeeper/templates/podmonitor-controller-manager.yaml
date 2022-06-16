@@ -1,0 +1,26 @@
+{{- if .Values.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gatekeeper-controller-manager
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+    {{- with .Values.podMonitor.extraLabels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - '{{ .Release.Namespace }}'
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      control-plane: controller-manager
+      release: '{{ .Release.Name }}'
+  podMetricsEndpoints:
+    - port: metrics
+{{- end }}
