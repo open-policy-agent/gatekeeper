@@ -34,7 +34,7 @@ postInstall:
       tag: v3.9.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
-    tolerations: []
+  tolerations: []
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -52,7 +52,7 @@ preUninstall:
       tag: v3.9.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
-    tolerations: []
+  tolerations: []
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
