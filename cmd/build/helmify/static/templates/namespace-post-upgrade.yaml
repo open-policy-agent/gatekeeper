@@ -30,9 +30,9 @@ spec:
         kubernetes.io/os: linux
       {{- if .Values.postUpgrade.probeWebhook.enabled }}
       volumes:
-      {{- include "gatekeeper.postUpgradeWebhookProbeVolume" . | nindent 8 }}
+      {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
       initContainers:
-      {{- include "gatekeeper.postUpgradeWebhookProbeContainer" . | nindent 8 }}
+      {{- include "gatekeeper.postInstallWebhookProbeContainer" . | nindent 8 }}
       {{- end }}
       containers:
         - name: kubectl-label
