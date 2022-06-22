@@ -15,6 +15,9 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "create", "update", "patch"]
+{{- with .Values.controllerManager.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
@@ -104,3 +107,4 @@ spec:
       tolerations:
         {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 {{- end }}
+
