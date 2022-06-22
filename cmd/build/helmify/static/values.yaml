@@ -38,6 +38,15 @@ postUpgrade:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 postInstall:
   labelNamespace:
     enabled: true

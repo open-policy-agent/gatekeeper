@@ -28,12 +28,6 @@ spec:
       serviceAccount: gatekeeper-update-namespace-label-post-upgrade
       nodeSelector:
         kubernetes.io/os: linux
-      {{- if .Values.postUpgrade.probeWebhook.enabled }}
-      volumes:
-      {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
-      initContainers:
-      {{- include "gatekeeper.postInstallWebhookProbeContainer" . | nindent 8 }}
-      {{- end }}
       containers:
         - name: kubectl-label
           image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
