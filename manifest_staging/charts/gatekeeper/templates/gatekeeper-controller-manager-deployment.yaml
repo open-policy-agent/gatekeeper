@@ -25,7 +25,11 @@ spec:
   template:
     metadata:
       annotations:
-        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- if .Values.openshift.enabled }} 
+	{{- toYaml .Values.openshift.podAnnotations | trim | nindent 8 }}  
+	{{- else }}
+	{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+	{{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'

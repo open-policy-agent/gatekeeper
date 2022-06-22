@@ -49,7 +49,11 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
-	`HELMSUBST_ANNOTATIONS: ""`: `{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
+	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.openshift.enabled }} 
+	{{- toYaml .Values.openshift.podAnnotations | trim | nindent 8 }}  
+	{{- else }}
+	{{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+	{{- end }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 

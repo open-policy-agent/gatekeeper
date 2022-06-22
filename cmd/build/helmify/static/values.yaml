@@ -174,3 +174,6 @@ upgradeCRDs:
   tolerations: []
 rbac:
   create: true
+openshift:
+  enabled: false
+  podAnnotations: {}
