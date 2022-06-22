@@ -96,7 +96,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -104,6 +104,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array
@@ -334,7 +338,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -342,6 +346,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array
@@ -581,7 +589,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -589,6 +597,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array
@@ -785,7 +797,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -793,6 +805,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array
@@ -1607,7 +1623,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -1615,6 +1631,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array
@@ -1818,7 +1838,7 @@ spec:
                     type: array
                   kinds:
                     items:
-                      description: Kinds accepts a list of objects with apiGroups and kinds fields that list the groups/kinds of objects to which the mutation will apply. If multiple groups/kinds objects are specified, only one match is needed for the resource to be in scope.
+                      description: Kinds accepts a list of objects with apiGroups, kinds and versions fields that list the groups/versions/kinds of objects to which the mutation will apply. If multiple groups/versions/kinds objects are specified, only one match is needed for the resource to be in scope.
                       properties:
                         apiGroups:
                           description: APIGroups is the API groups the resources belong to. '*' is all groups. If '*' is present, the length of the slice must be one. Required.
@@ -1826,6 +1846,10 @@ spec:
                             type: string
                           type: array
                         kinds:
+                          items:
+                            type: string
+                          type: array
+                        versions:
                           items:
                             type: string
                           type: array

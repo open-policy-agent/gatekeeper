@@ -76,6 +76,21 @@ func TestMatch(t *testing.T) {
 			wantMatch: false,
 		},
 		{
+			name:   "don't match empty groups/kinds in other version",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group", Version: "v1"}, "", "name"),
+			matcher: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{},
+						APIGroups: []string{},
+						Versions:  []string{"v1beta1"},
+					},
+				},
+			},
+			namespace: nil,
+			wantMatch: false,
+		},
+		{
 			name:   "match kind with wildcard",
 			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			matcher: Match{
@@ -83,6 +98,21 @@ func TestMatch(t *testing.T) {
 					{
 						Kinds:     []string{Wildcard},
 						APIGroups: []string{Wildcard},
+					},
+				},
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "match version with wildcard",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group", Version: "v1"}, "", "name"),
+			matcher: Match{
+				Kinds: []Kinds{
+					{
+						Kinds:     []string{Wildcard},
+						APIGroups: []string{Wildcard},
+						Versions:  []string{Wildcard},
 					},
 				},
 			},

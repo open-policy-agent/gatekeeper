@@ -55,9 +55,9 @@ type Match struct {
 	Name util.Wildcard `json:"name,omitempty"`
 }
 
-// Kinds accepts a list of objects with apiGroups and kinds fields
-// that list the groups/kinds of objects to which the mutation will apply.
-// If multiple groups/kinds objects are specified,
+// Kinds accepts a list of objects with apiGroups, kinds and versions fields
+// that list the groups/versions/kinds of objects to which the mutation will apply.
+// If multiple groups/versions/kinds objects are specified,
 // only one match is needed for the resource to be in scope.
 // +kubebuilder:object:generate=true
 type Kinds struct {
@@ -66,6 +66,7 @@ type Kinds struct {
 	// Required.
 	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
 	Kinds     []string `json:"kinds,omitempty"`
+	Versions  []string `json:"versions,omitempty"`
 }
 
 // Matches verifies if the given object belonging to the given namespace
@@ -221,7 +222,8 @@ func kindsMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, err
 		}
 
 		groupMatches := len(kk.APIGroups) == 0 || contains(kk.APIGroups, Wildcard) || contains(kk.APIGroups, gvk.Group)
-		if groupMatches {
+		versionMatches := len(kk.Versions) == 0 || contains(kk.Versions, Wildcard) || contains(kk.Versions, gvk.Version)
+		if groupMatches && versionMatches {
 			return true, nil
 		}
 	}

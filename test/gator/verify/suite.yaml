@@ -13,3 +13,7 @@ tests:
     object: deny.yaml
     assertions:
     - violations: yes
+  - name: foo-not-bar-v2
+    object: allow-v2.yaml
+    assertions:
+    - violations: no

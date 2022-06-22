@@ -135,6 +135,26 @@ spec:
         }
 `
 
+	TemplateNeverValidateKind = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: nevervalidatekind
+spec:
+  crd:
+    spec:
+      names:
+        kind: NeverValidateKind
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8snevervalidate
+        violation[{"msg": msg}] {
+          true
+          msg := "never validate"
+        }
+`
+
 	ConstraintAlwaysValidate = `
 kind: AlwaysValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -182,6 +202,19 @@ spec:
     namespaceSelector:
       matchLabels:
         bar: qux
+`
+
+	ConstraintMatchKind = `
+kind: NeverValidateKind
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-kind
+spec:
+  match:
+    kinds:
+      - apiGroups: ["extensions", "networking.k8s.io"]
+        versions: ["v1beta1"]
+        kinds: ["Ingress"]
 `
 
 	ConstraintNeverValidate = `
@@ -278,6 +311,19 @@ kind: Object
 apiVersion: group.sh/v1
 metadata:
   name: object`
+
+	ObjectMatchedKind = `
+kind: Ingress
+apiVersion: networking.k8s.io/v1beta1
+metadata:
+  name: matched-ingress
+`
+	ObjectNotMatchedKind = `
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: not-matched-ingress
+`
 
 	NamespaceSelected = `
 kind: Namespace

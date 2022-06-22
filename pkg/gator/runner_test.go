@@ -875,6 +875,49 @@ func TestRunner_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "resource match",
+			suite: Suite{
+				Tests: []Test{{
+					Name:       "resource match Constraint",
+					Template:   "template.yaml",
+					Constraint: "constraint.yaml",
+					Cases: []*Case{{
+						Name:       "matching-kind",
+						Object:     "matching-kind.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}, {
+						Name:       "not-matching-kind",
+						Object:     "not-matching-kind.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidateKind),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintMatchKind),
+				},
+				"matching-kind.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectMatchedKind),
+				},
+				"not-matching-kind.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ObjectNotMatchedKind),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Name: "resource match Constraint",
+					CaseResults: []CaseResult{{
+						Name: "matching-kind",
+					}, {
+						Name: "not-matching-kind",
+					}},
+				}},
+			},
+		},
+		{
 			name: "cluster scope",
 			suite: Suite{
 				Tests: []Test{{

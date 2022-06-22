@@ -6,6 +6,7 @@ spec:
   match:
     kinds:
       - apiGroups: [""]
+        versions: ["v1"]
         kinds: ["FooIsBar"]
   parameters:
     foo: "bar"

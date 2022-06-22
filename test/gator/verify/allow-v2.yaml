@@ -1,0 +1,3 @@
+kind: FooIsBar
+apiVersion: v2
+foo: qux
