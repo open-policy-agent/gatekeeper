@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
@@ -644,7 +644,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: client.ErrMissingConstraintTemplate,
+					Error: constraintclient.ErrMissingConstraintTemplate,
 				}},
 			},
 		},

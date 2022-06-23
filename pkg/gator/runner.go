@@ -90,7 +90,13 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 
 	err := r.tryAddConstraint(ctx, suiteDir, t)
 	var results []CaseResult
-	if err == nil && !t.Invalid {
+	if t.Invalid {
+		if errors.Is(err, constraints.ErrSchema) {
+			err = nil
+		} else {
+			err = fmt.Errorf("%w: got error %v but want %v", ErrValidConstraint, err, constraints.ErrSchema)
+		}
+	} else if err == nil {
 		results, err = r.runCases(ctx, suiteDir, filter, t)
 	}
 
@@ -124,12 +130,6 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) 
 	}
 
 	_, err = client.AddConstraint(ctx, cObj)
-	if t.Invalid {
-		if errors.Is(err, constraints.ErrSchema) {
-			return nil
-		}
-		return fmt.Errorf("%w: got error %v but want %v", ErrValidConstraint, err, constraints.ErrSchema)
-	}
 	return err
 }
 
