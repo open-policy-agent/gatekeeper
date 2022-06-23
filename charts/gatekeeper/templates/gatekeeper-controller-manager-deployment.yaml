@@ -58,21 +58,21 @@ spec:
         - --enable-external-data={{ .Values.enableExternalData }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
-        
+
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
-        
+
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
         {{- end }}
-        
+
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
         {{- end }}
-        
+
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}
@@ -132,6 +132,8 @@ spec:
       {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
+      podSecurityContext:
+        {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
