@@ -2,12 +2,12 @@
 
 ## Overview
 
-This document describes Gatekeeper project release management, which includes release versioning, supported releases, and supported upgrades. 
+This document describes Gatekeeper project release management, which includes release versioning, supported releases, and supported upgrades.
 
 ## Legend
 
 - **X.Y.Z** refers to the version (git tag) of Gatekeeper that is released. This is the version of the Gatekeeper image and the Chart version.
-- **Breaking changes** refer to schema changes, flag changes, and behavior changes of Gatekeeper that may require a clean install during upgrade and it may introduce changes that could break backward compatibility. 
+- **Breaking changes** refer to schema changes, flag changes, and behavior changes of Gatekeeper that may require a clean install during upgrade and it may introduce changes that could break backward compatibility.
 - **Milestone** should be designed to include feature sets to accommodate 2 months release cycles including test gates. GitHub milestones are used by maintainers to manage each release. PRs and Issues for each release should be created as part of a corresponding milestone.
 - **Patch releases** refer to applicable fixes, including security fixes, may be backported to support releases, depending on severity and feasibility.
 - **Test gates** should include soak tests and upgrade tests from the last minor version.
@@ -20,7 +20,7 @@ The rest of the doc will cover the release process for the following kinds of re
 
 **Major Releases**
 
-No plan to move to 4.0.0 unless there is a major design change like an incompatible API change in the project 
+No plan to move to 4.0.0 unless there is a major design change like an incompatible API change in the project
 
 **Minor Releases**
 
@@ -37,26 +37,30 @@ No plan to move to 4.0.0 unless there is a major design change like an incompati
     - Release candidate release, cut from master branch
 - X.Y.0 (Branch: master)
     - Released every ~ 2 months
-    - Stable release, cut from master when X.Y milestone is complete 
+    - Stable release, cut from master when X.Y milestone is complete
 
 **Patch Releases**
 
 - Patch Releases X.Y.Z, Z > 0 (Branch: release-X.Y, only cut when a patch is needed)
     - No breaking changes
-    - Applicable fixes, including security fixes, may be cherry-picked from master into the latest supported minor release-X.Y branches. 
+    - Applicable fixes, including security fixes, may be cherry-picked from master into the latest supported minor release-X.Y branches.
     - Patch release, cut from a release-X.Y branch
 
 ## Supported Releases
 
 Applicable fixes, including security fixes, may be cherry-picked into the release branch, depending on severity and feasibility. Patch releases are cut from that branch as needed.
 
-We expect users to stay reasonably up-to-date with the versions of Gatekeeper they use in production, but understand that it may take time to upgrade. We expect users to be running approximately the latest patch release of a given minor release and encourage users to upgrade as soon as possible. 
+We expect users to stay reasonably up-to-date with the versions of Gatekeeper they use in production, but understand that it may take time to upgrade. We expect users to be running approximately the latest patch release of a given minor release and encourage users to upgrade as soon as possible.
 
 We expect to "support" n (current) and n-1 major.minor releases. "Support" means we expect users to be running that version in production. For example, when v3.3.0 comes out, v3.1.x will no longer be supported for patches and we encourage users to upgrade to a supported version as soon as possible.
 
 ## Supported Kubernetes Versions
 
-Gatekeeper is assumed to be compatible with n-4 versions of the latest stable Kubernetes release per [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). If you choose to use Gatekeeper with a version of Kubernetes that it does not support, you are using it at your own risk.
+Gatekeeper is assumed to be compatible with the [current Kubernetes Supported Versions](https://kubernetes.io/releases/patch-releases/#detailed-release-history-for-active-branches) per [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/).
+
+For example, if Gatekeeper _supported_ versions are v3.7 and v3.8, and Kubernetes _supported_ versions are v1.22, v1.23, v1.24, then all supported Gatekeeper versions (v3.7, v3.8) are assumed to be compatible with all supported Kubernetes versions (v1.22, v1.23, v1.24). If Kubernetes v1.25 is released later, then Gatekeeper v3.7 and v3.8 will be assumed to be compatible with v1.25 if those Gatekeeper versions are still supported at that time.
+
+If you choose to use Gatekeeper with a version of Kubernetes that it does not support, you are using it at your own risk.
 
 ## Upgrades
 
@@ -64,4 +68,4 @@ Users should be able to run both X.Y and X.Y + 1 simultaneously in order to supp
 
 ## Acknowledgement
 
-This document builds on the ideas and implementations of release processes from projects like Kubernetes and Helm. 
+This document builds on the ideas and implementations of release processes from projects like Kubernetes and Helm.
