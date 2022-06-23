@@ -114,10 +114,6 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
-  podSecurityContext:
-    fsGroup: 999
-    supplementalGroups:
-      - 999
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
