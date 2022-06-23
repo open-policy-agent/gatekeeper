@@ -38,16 +38,6 @@ postInstall:
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
-  probeWebhook:
-    enabled: true
-    image:
-      repository: curlimages/curl
-      tag: 7.83.1
-      pullPolicy: IfNotPresent
-      pullSecrets: []
-    waitTimeout: 60
-    httpTimeout: 2
-    insecureHTTPS: false
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -124,7 +114,10 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
-  extraRules: []
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
@@ -151,6 +144,10 @@ audit:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
 crds:
   resources: {}
   securityContext:

@@ -60,7 +60,7 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        
+
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
@@ -117,6 +117,8 @@ spec:
       priorityClassName:  {{ .Values.audit.priorityClassName }}
       {{- end }}
       serviceAccountName: gatekeeper-admin
+      securityContext:
+        {{- toYaml .Values.audit.securityContext | nindent 8}}
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
