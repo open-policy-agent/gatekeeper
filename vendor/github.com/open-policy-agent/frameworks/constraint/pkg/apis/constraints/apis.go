@@ -19,7 +19,14 @@ const (
 	EnforcementActionDeny = "deny"
 )
 
-var ErrInvalidConstraint = errors.New("invalid Constraint")
+var (
+	// ErrInvalidConstraint is a generic error that a Constraint is invalid for
+	// some reason.
+	ErrInvalidConstraint = errors.New("invalid Constraint")
+
+	// ErrSchema is a specific error that a Constraint failed schema validation.
+	ErrSchema = errors.New("schema validation failed")
+)
 
 // GetEnforcementAction returns a Constraint's enforcementAction, which indicates
 // what should be done if a review violates a Constraint, or the Constraint fails

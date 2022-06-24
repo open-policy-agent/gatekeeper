@@ -392,4 +392,58 @@ spec:
   selector:
     key: value
 `
+
+	TemplateRequiredLabel = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the parameters field
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          ns := [n | data.inventory.cluster.v1.Namespace[n]]
+          msg := sprintf("I can grab namespaces... %v ... and dump the inventory... %v", [ns, data.inventory])
+        }
+`
+
+	ConstraintRequireLabelInvalid = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: required-labels
+spec:
+  parameters:
+    labels: "abc"
+`
+
+	ConstraintRequireLabelValid = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: required-labels
+spec:
+  parameters:
+    labels: ["abc"]
+`
 )
