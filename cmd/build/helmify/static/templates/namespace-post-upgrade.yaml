@@ -1,0 +1,108 @@
+{{- if .Values.postUpgrade.labelNamespace.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gatekeeper-update-namespace-label-post-upgrade
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        app: '{{ template "gatekeeper.name" . }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.postUpgrade.labelNamespace.image.pullSecrets }}
+      imagePullSecrets:
+      {{- .Values.postUpgrade.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
+      {{- end }}
+      serviceAccount: gatekeeper-update-namespace-label-post-upgrade
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: kubectl-label
+          image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
+          imagePullPolicy: {{ .Values.postUpgrade.labelNamespace.image.pullPolicy }}
+          args:
+            - label
+            - ns
+            - {{ .Release.Namespace }}
+            {{- range .Values.postUpgrade.labelNamespace.extraNamespaces }}
+            - {{ . }}
+            {{- end }}
+            - admission.gatekeeper.sh/ignore=no-self-managing
+            - --overwrite
+          securityContext:
+            {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gatekeeper-update-namespace-label-post-upgrade
+  labels:
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+---
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gatekeeper-update-namespace-label-post-upgrade
+  labels:
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - update
+      - patch
+    resourceNames:
+      - {{ .Release.Namespace }}
+      {{- range .Values.postUpgrade.labelNamespace.extraNamespaces }}
+      - {{ . }}
+      {{- end }}
+{{- end }}
+---
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gatekeeper-update-namespace-label-post-upgrade
+  labels:
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gatekeeper-update-namespace-label-post-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: gatekeeper-update-namespace-label-post-upgrade
+    namespace: {{ .Release.Namespace | quote }}
+{{- end }}
+{{- end }}
