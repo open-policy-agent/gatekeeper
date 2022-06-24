@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
@@ -155,6 +156,50 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					Error: ErrInvalidSuite,
+				}},
+			},
+		},
+		{
+			name: "want invalid Constraint",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Invalid:    true,
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateRequiredLabel),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintRequireLabelInvalid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{}},
+			},
+		},
+		{
+			name: "want invalid Constraint but Constraint valid",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Invalid:    true,
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateRequiredLabel),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintRequireLabelValid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Error: ErrValidConstraint,
 				}},
 			},
 		},
@@ -599,7 +644,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingConstraint,
+					Error: constraintclient.ErrMissingConstraintTemplate,
 				}},
 			},
 		},

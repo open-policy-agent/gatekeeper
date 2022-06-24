@@ -26,7 +26,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
 	github.com/open-policy-agent/cert-controller v0.3.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20220527154834-b482a682709a
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20220603201627-e8d94b2fcf7a
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/spf13/cobra v1.4.0

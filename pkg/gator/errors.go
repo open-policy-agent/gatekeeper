@@ -38,4 +38,7 @@ var (
 	// ErrConvertingTemplate means we were able to parse a template, but not convert
 	// it into the version-independent format.
 	ErrConvertingTemplate = errors.New("unable to convert template")
+	// ErrValidConstraint occurs when a test's configuration signals an expectation
+	// that a constraint should fail validation but no validation error is raised.
+	ErrValidConstraint = errors.New("constraint should have failed schema validation")
 )
