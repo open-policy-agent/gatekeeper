@@ -177,7 +177,7 @@ spec:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:
         HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""
-      podSecurityContext:
+      securityContext:
         HELMSUBST_DEPLOYMENT_AUDIT_POD_SECURITY_CONTEXT: ""
       affinity:
         HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""

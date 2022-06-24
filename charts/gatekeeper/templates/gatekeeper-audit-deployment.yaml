@@ -118,7 +118,7 @@ spec:
       {{- end }}
       serviceAccountName: gatekeeper-admin
       securityContext:
-        {{- toYaml .Values.audit.securityContext | nindent 8}}
+        {{- toYaml .Values.audit.podSecurityContext | nindent 8}}
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
