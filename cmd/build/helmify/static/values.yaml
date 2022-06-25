@@ -80,8 +80,7 @@ image:
   release: v3.9.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
-podAnnotations:
-  {container.seccomp.security.alpha.kubernetes.io/manager: runtime/default}
+podAnnotations: {}
 podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
@@ -174,6 +173,3 @@ upgradeCRDs:
   tolerations: []
 rbac:
   create: true
-openshift:
-  enabled: false
-  podAnnotations: {}
