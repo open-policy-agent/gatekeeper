@@ -32,7 +32,7 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/*
-Create flage to discover if Openshift environment
+Create flag to discover if Openshift environment
 */}}
 {{- define "isOpenshift" -}}
 {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") -}}
