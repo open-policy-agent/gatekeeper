@@ -25,12 +25,12 @@ spec:
   template:
     metadata:
       annotations:
-        {{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+        {{- if eq (include "isOpenshift" .) "false" }} 
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
         {{- end }}
         {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
-        {{- end}}
+        {{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'

@@ -49,12 +49,12 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
-	`HELMSUBST_ANNOTATIONS: ""`: `{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") }} 
+	`HELMSUBST_ANNOTATIONS: ""`: `{{- if eq (include "isOpenshift" .) "false" }} 
         container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
         {{- end }}
         {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
-        {{- end}}`,
+        {{- end }}`,
         
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
