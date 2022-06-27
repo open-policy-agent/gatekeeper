@@ -33,6 +33,7 @@ Generally, design docs are on Google docs:
 * [Metrics Design Issue](https://github.com/open-policy-agent/gatekeeper/issues/157#issuecomment-553015292)
 * [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
 * [Compiler Sharding Design](https://docs.google.com/document/d/1ibCxaI-7HyWyDjQNL4iDRMHnrauufIMJ1D6LwIKdlsI/edit)
+* [External Data TLS Support](https://docs.google.com/document/d/1GjV3WeC2bgQ3j37_mMpY9hr7YOAqzSJ6jDSu-DVrcmU/edit?usp=sharing)
 
 ## Roadmap (in development)
 * See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)

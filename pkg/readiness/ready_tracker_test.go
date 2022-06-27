@@ -310,8 +310,9 @@ func Test_Provider(t *testing.T) {
 		}
 
 		want := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://demo",
-			Timeout: 1,
+			URL:                   "http://demo",
+			Timeout:               1,
+			InsecureTLSSkipVerify: true,
 		}
 		if diff := cmp.Diff(want, instance.Spec); diff != "" {
 			t.Fatal(diff)

@@ -111,6 +111,9 @@ spec:
           {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
@@ -127,6 +130,10 @@ spec:
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-webhook-server-cert
       {{- if .Values.audit.writeToRAMDisk }}
       - emptyDir:
           medium: Memory

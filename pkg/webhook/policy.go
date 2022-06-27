@@ -25,10 +25,12 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
@@ -337,6 +339,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateAssign(req)
 	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
 		return h.validateModifySet(req)
+	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
+		return h.validateProvider(req)
 	}
 
 	return false, nil
@@ -461,6 +465,24 @@ func (h *validationHandler) validateModifySet(req *admission.Request) (bool, err
 		return true, err
 	}
 
+	return false, nil
+}
+
+func (h *validationHandler) validateProvider(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	provider := &v1alpha1.Provider{}
+	if err := runtimeScheme.Convert(obj, provider, nil); err != nil {
+		return false, err
+	}
+
+	// Ensure that it is possible to insert the Provider into the cache.
+	cache := externaldata.NewCache()
+	if err := cache.Upsert(provider); err != nil {
+		return true, err
+	}
 	return false, nil
 }
 

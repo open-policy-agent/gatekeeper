@@ -5,3 +5,4 @@ metadata:
 spec:
   url: http://demo
   timeout: 1
+  insecureTLSSkipVerify: true
