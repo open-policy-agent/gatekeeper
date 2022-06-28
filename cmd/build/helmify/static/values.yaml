@@ -29,7 +29,6 @@ logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
-enableRuntimeDefaultSeccompProfile: true
 postInstall:
   labelNamespace:
     enabled: true
