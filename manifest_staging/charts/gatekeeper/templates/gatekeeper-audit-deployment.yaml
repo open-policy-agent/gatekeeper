@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    control-plane: audit-controller
+    gatekeeper.sh/operation: audit
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-audit
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      chart: '{{ template "gatekeeper.name" . }}'
+      control-plane: audit-controller
+      gatekeeper.sh/operation: audit
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+{{- include "gatekeeper.podLabels" . }}
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        control-plane: audit-controller
+        gatekeeper.sh/operation: audit
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      affinity:
+        {{- toYaml .Values.audit.affinity | nindent 8 }}
+      automountServiceAccountToken: true
+      containers:
+      - {{- if .Values.image.release }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
+        {{- else }}
+        image: {{ .Values.image.repository }}
+        {{- end }}
+        args:
+        - --audit-interval={{ .Values.auditInterval }}
+        - --log-level={{ .Values.logLevel }}
+        - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --audit-from-cache={{ .Values.auditFromCache }}
+        - --audit-chunk-size={{ .Values.auditChunkSize }}
+        - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
+        - --emit-audit-events={{ .Values.emitAuditEvents }}
+        - --operation=audit
+        - --operation=status
+        {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
+        - --logtostderr
+        - --health-addr=:{{ .Values.audit.healthPort }}
+        - --prometheus-port={{ .Values.audit.metricsPort }}
+        - --enable-external-data={{ .Values.enableExternalData }}
+        
+        {{- range .Values.metricsBackends}}
+        - --metrics-backend={{ . }}
+        {{- end }}
+        command:
+        - /manager
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: CONTAINER_NAME
+          value: manager
+        imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ .Values.audit.healthPort }}
+        name: manager
+        ports:
+        - containerPort: {{ .Values.audit.metricsPort }}
+          name: metrics
+          protocol: TCP
+        - containerPort: {{ .Values.audit.healthPort }}
+          name: healthz
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ .Values.audit.healthPort }}
+        resources:
+          {{- toYaml .Values.audit.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.audit.securityContext | nindent 10}}
+        volumeMounts:
+        - mountPath: /tmp/audit
+          name: tmp-volume
+      dnsPolicy: {{ .Values.audit.dnsPolicy }}
+      hostNetwork: {{ .Values.audit.hostNetwork }}
+      imagePullSecrets:
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
+      {{- if .Values.audit.priorityClassName }}
+      priorityClassName:  {{ .Values.audit.priorityClassName }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.audit.podSecurityContext | nindent 8 }}
+      serviceAccountName: gatekeeper-admin
+      terminationGracePeriodSeconds: 60
+      tolerations:
+        {{- toYaml .Values.audit.tolerations | nindent 8 }}
+      volumes:
+      {{- if .Values.audit.writeToRAMDisk }}
+      - emptyDir:
+          medium: Memory
+      {{ else }}
+      - emptyDir: {}
+      {{- end }}
+        name: tmp-volume

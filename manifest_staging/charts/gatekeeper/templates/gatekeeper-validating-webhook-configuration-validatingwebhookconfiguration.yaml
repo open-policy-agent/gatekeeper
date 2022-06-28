@@ -1,0 +1,98 @@
+{{- if not .Values.disableValidatingWebhook }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: gatekeeper-webhook-service
+      namespace: '{{ .Release.Namespace }}'
+      path: /v1/admit
+  failurePolicy: {{ .Values.validatingWebhookFailurePolicy }}
+  matchPolicy: Exact
+  name: validation.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: admission.gatekeeper.sh/ignore
+      operator: DoesNotExist
+    
+    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
+    {{- end }}
+  objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
+  rules:
+  {{- if .Values.validatingWebhookCustomRules }}
+  {{- toYaml .Values.validatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
+  - apiGroups:
+    - '*'
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    {{- if .Values.enableDeleteOperations }}
+    - DELETE
+    {{- end }}
+    resources:
+    - '*'
+    # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
+    # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+    - 'pods/ephemeralcontainers'
+    - 'pods/exec'
+    - 'pods/log'
+    - 'pods/eviction'
+    - 'pods/portforward'
+    - 'pods/proxy'
+    - 'pods/attach'
+    - 'pods/binding'
+    - 'deployments/scale'
+    - 'replicasets/scale'
+    - 'statefulsets/scale'
+    - 'replicationcontrollers/scale'
+    - 'services/proxy'
+    - 'nodes/proxy'
+    # For constraints that mitigate CVE-2020-8554
+    - 'services/status'
+  {{- end }}
+  sideEffects: None
+  timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: gatekeeper-webhook-service
+      namespace: '{{ .Release.Namespace }}'
+      path: /v1/admitlabel
+  failurePolicy: {{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}
+  matchPolicy: Exact
+  name: check-ignore-label.gatekeeper.sh
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - namespaces
+  sideEffects: None
+  timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
+{{- end }}

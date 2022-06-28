@@ -1,0 +1,23 @@
+{{- if .Values.resourceQuota }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-critical-pods
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  hard:
+    pods: {{ .Values.podCountLimit }}
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - {{ .Values.controllerManager.priorityClassName }}
+      - {{ .Values.audit.priorityClassName }}
+{{- end }}

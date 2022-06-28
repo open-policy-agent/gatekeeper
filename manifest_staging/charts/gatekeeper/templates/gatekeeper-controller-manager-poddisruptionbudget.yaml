@@ -1,0 +1,26 @@
+{{- if .Capabilities.APIVersions.Has "policy/v1/PodDisruptionBudget" }}
+apiVersion: policy/v1
+{{ else }}
+apiVersion: policy/v1beta1
+{{ end -}}
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  minAvailable: {{ .Values.pdb.controllerManager.minAvailable }}
+  selector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      chart: '{{ template "gatekeeper.name" . }}'
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
