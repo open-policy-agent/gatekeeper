@@ -23,7 +23,7 @@ import "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 //   - k*-system
 //
 // See the following regexr to test this regex: https://regexr.com/6dgdj
-const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
 func matchSchema() apiextensions.JSONSchemaProps {
 	// Define some repeatedly used sections
