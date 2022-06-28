@@ -84,6 +84,7 @@ podAnnotations: {}
 podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
+enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   exemptNamespaces: []
   exemptNamespacePrefixes: []
