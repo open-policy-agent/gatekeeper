@@ -33,7 +33,7 @@ import (
 	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 	resourcepb "github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1"
 	timestamppb "github.com/golang/protobuf/ptypes/timestamp"
-	promvalue "github.com/prometheus/prometheus/pkg/value"
+	promvalue "github.com/prometheus/prometheus/model/value"
 	distributionpb "google.golang.org/genproto/googleapis/api/distribution"
 	labelpb "google.golang.org/genproto/googleapis/api/label"
 	googlemetricpb "google.golang.org/genproto/googleapis/api/metric"

@@ -2,11 +2,13 @@ package gator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 	"time"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -86,7 +88,17 @@ func (r *Runner) skipTest(t Test) TestResult {
 func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
 	start := time.Now()
 
-	results, err := r.runCases(ctx, suiteDir, filter, t)
+	err := r.tryAddConstraint(ctx, suiteDir, t)
+	var results []CaseResult
+	if t.Invalid {
+		if errors.Is(err, constraints.ErrSchema) {
+			err = nil
+		} else {
+			err = fmt.Errorf("%w: got error %v but want %v", ErrValidConstraint, err, constraints.ErrSchema)
+		}
+	} else if err == nil {
+		results, err = r.runCases(ctx, suiteDir, filter, t)
+	}
 
 	return TestResult{
 		Name:        t.Name,
@@ -94,6 +106,31 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 		Runtime:     Duration(time.Since(start)),
 		CaseResults: results,
 	}
+}
+
+func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
+	client, err := r.newClient()
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrCreatingClient, err)
+	}
+
+	err = r.addTemplate(suiteDir, t.Template, client)
+	if err != nil {
+		return err
+	}
+
+	constraintPath := t.Constraint
+	if constraintPath == "" {
+		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
+	}
+
+	cObj, err := readConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
+	if err != nil {
+		return err
+	}
+
+	_, err = client.AddConstraint(ctx, cObj)
+	return err
 }
 
 // runCases executes every Case in the Test. Returns the results for every Case,
@@ -106,11 +143,6 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 		}
 
 		return c, nil
-	}
-
-	_, err := newClient()
-	if err != nil {
-		return nil, err
 	}
 
 	results := make([]CaseResult, len(t.Cases))
