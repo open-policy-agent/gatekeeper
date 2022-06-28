@@ -32,17 +32,6 @@ Create chart name and version as used by the chart label.
 {{- end -}}
 
 {{/*
-Create flag to discover if Openshift environment
-*/}}
-{{- define "isOpenshift" -}}
-{{- if not (.Capabilities.APIVersions.Has "security.openshift.io/v1") -}}
-false
-{{- else -}}
-true
-{{- end -}}
-{{- end -}}
-
-{{/*
 Adds additional pod labels to the common ones
 */}}
 {{- define "gatekeeper.podLabels" -}}
