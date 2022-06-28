@@ -120,7 +120,7 @@ spec:
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
-          {{ if .Values.enableRuntimeDefaultSeccompProfile }}
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
           seccompProfile:
             type: RuntimeDefault
           {{- end }}
