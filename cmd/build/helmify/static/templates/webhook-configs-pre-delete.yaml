@@ -16,6 +16,8 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
         release: '{{ .Release.Name }}'
