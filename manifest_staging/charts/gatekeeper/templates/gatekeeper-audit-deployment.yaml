@@ -25,7 +25,9 @@ spec:
   template:
     metadata:
       annotations:
+        {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
@@ -103,6 +105,10 @@ spec:
         resources:
           {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
         - mountPath: /tmp/audit

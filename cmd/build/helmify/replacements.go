@@ -29,7 +29,11 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""`: `{{- toYaml .Values.audit.affinity | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.audit.securityContext | nindent 10}}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
+          {{- toYaml .Values.audit.securityContext | nindent 10}}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""`: `{{- toYaml .Values.audit.tolerations | nindent 8 }}`,
 
@@ -43,7 +47,11 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- toYaml .Values.controllerManager.affinity | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.controllerManager.securityContext | nindent 10}}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
+          {{- toYaml .Values.controllerManager.securityContext | nindent 10}}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""`: `{{- toYaml .Values.controllerManager.tolerations | nindent 8 }}`,
 
@@ -53,7 +61,9 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
-	`HELMSUBST_ANNOTATIONS: ""`: `{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
+	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- end }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
