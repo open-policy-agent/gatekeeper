@@ -72,6 +72,8 @@ spec:
   template:
     metadata:
       name: gatekeeper-update-crds-hook
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never

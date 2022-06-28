@@ -33,7 +33,14 @@ type Test struct {
 	Constraint string `json:"constraint"`
 
 	// Cases are the test cases to run on the instantiated Constraint.
+	// Mutually exclusive with Invalid.
 	Cases []*Case `json:"cases,omitempty"`
+
+	// Invalid, if true, specifies that the Constraint is expected to be invalid
+	// for the Template. For example - a required field is missing or is of the
+	// wrong type.
+	// Mutually exclusive with Cases.
+	Invalid bool `json:"invalid"`
 
 	// Skip, if true, skips this Test.
 	Skip bool `json:"skip"`

@@ -29,6 +29,24 @@ logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
+postUpgrade:
+  labelNamespace:
+    enabled: false
+    image:
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.9.0-beta.2
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    extraNamespaces: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 postInstall:
   labelNamespace:
     enabled: true
