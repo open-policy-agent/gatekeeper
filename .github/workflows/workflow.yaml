@@ -273,6 +273,40 @@ jobs:
             done
           done
 
+  benchmark:
+    name: "Benchmark"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # TODO
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Download release benchmark file
+        run: ...#TODO
+
+      - name: Run benchmarks
+        run: make benchmark-test BENCHMARK_FILE_NAME=pr_benchmarks.txt
+
+      - name: Compare benchmarks
+        id: get-comment-body
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          benchstat pr_benchmarks.txt release_benchmarks.txt > results.txt
+          body=$(cat results.txt)
+          echo ::set-output name=body::$body
+
+      - name: Create commit comment
+        uses: peter-evans/commit-comment@v1
+        with:
+          body: ${{ steps.get-comment-body.outputs.body }}
+          sha: ${{ github.event.pull_request.head.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
@@ -414,6 +448,11 @@ jobs:
         env:
           PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
 
+      - name: Run benchmarks
+        run: |
+          make benchmark-test BENCHMARK_FILE_NAME=release_benchmarks.txt
+          mv benchmarks.txt _dist/release_benchmarks.txt
+
       - name: Create GitHub release
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
         with:
@@ -422,6 +461,7 @@ jobs:
           files: |
             _dist/sha256sums.txt
             _dist/*.tar.gz
+            _dist/release_benchmarks.txt
 
       - name: Publish Helm chart
         uses: stefanprodan/helm-gh-pages@v1.7.0
