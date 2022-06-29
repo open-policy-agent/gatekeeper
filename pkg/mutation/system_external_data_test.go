@@ -343,7 +343,10 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 	}
 	defer os.Remove(clientCertFile.Name())
 
-	_, _ = clientCertFile.WriteString(clientCert)
+	_, err = clientCertFile.WriteString(clientCert)
+	if err != nil {
+		t.Fatal(err)
+	}
 	clientCertFile.Close()
 
 	clientKeyFile, err := ioutil.TempFile("", "client-key")
@@ -352,7 +355,10 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 	}
 	defer os.Remove(clientKeyFile.Name())
 
-	_, _ = clientKeyFile.WriteString(clientKey)
+	_, err = clientKeyFile.WriteString(clientKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	clientKeyFile.Close()
 
 	clientCertWatcher, err = certwatcher.New(clientCertFile.Name(), clientKeyFile.Name())
