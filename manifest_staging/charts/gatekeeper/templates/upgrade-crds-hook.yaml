@@ -104,4 +104,3 @@ spec:
       tolerations:
         {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 {{- end }}
-
