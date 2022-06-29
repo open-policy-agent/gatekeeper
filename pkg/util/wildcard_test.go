@@ -70,13 +70,13 @@ func TestMatches(t *testing.T) {
 			matches:   true,
 		},
 		{
-			name:      "wild card at suffix and prefix, multiple hyphens",
+			name:      "wild card at suffid and end, multiple hypens, no match",
 			w:         Wildcard("*-kube-*"),
 			candidate: "my-kub-controller",
 			matches:   false,
 		},
 		{
-			name:      "wild card at suffix and prefix, multiple hyphens",
+			name:      "wild card at suffix and prefix, multiple hyphens, no match",
 			w:         Wildcard("*-kube-*"),
 			candidate: "my-controller-manager",
 			matches:   false,
