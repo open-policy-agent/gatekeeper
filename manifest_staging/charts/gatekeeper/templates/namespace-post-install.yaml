@@ -90,7 +90,7 @@ rules:
       {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
       - {{ . }}
       {{- end }}
-{{- with .Values.controllerManager.extraRules }}
+{{- with .Values.postInstall.labelNamespace.extraRules }}
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
