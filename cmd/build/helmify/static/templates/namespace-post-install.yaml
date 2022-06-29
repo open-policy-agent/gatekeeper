@@ -90,9 +90,6 @@ rules:
       {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
       - {{ . }}
       {{- end }}
-{{- with .Values.controllerManager.extraRules }}
-  {{- toYaml . | nindent 2 }}
-{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
