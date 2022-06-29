@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	// set GOMAXPROCS to the number of container cores, if known.
 	_ "go.uber.org/automaxprocs"
 
@@ -316,6 +317,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
+	expansionSystem := expansion.NewSystem()
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -348,6 +350,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
+		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
 		WatchSet:         watchSet,
 	}
@@ -359,7 +362,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
+		webhookDeps := webhook.Dependencies{
+			OpaClient:       client,
+			ProcessExcluder: processExcluder,
+			MutationSystem:  mutationSystem,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}

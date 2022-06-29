@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplatestatus"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -111,6 +112,8 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 }
 
 func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(_ *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 

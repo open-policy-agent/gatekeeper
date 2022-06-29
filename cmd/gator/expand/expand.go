@@ -7,10 +7,19 @@ import (
 	"os"
 	"path/filepath"
 
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -36,6 +45,7 @@ var Cmd = &cobra.Command{
 }
 
 var allowedExtensions = []string{".yaml", ".yml", ".json"}
+var MutatorTypes = map[string]bool{"Assign": true, "AssignMetadata": true, "ModifySet": true}
 
 var (
 	flagFilenames []string
@@ -69,7 +79,7 @@ func run(cmd *cobra.Command, args []string) {
 		errFatalf("no input data identified\n")
 	}
 
-	resultants, err := expansion.ExpandResources(unstrucs)
+	resultants, err := expandResources(unstrucs)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -86,6 +96,172 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	} else {
 		os.Exit(0)
+	}
+}
+
+func expandResources(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	expSystem := expansion.NewSystem()
+	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
+	generators, unstructMutators, unstructTemplates := sortResources(resources)
+
+	mutators, err := convertMutators(unstructMutators)
+	if err != nil {
+		return nil, fmt.Errorf("error converting mutators: %s", err)
+	}
+	for _, mut := range mutators {
+		if err := mutSystem.Upsert(mut); err != nil {
+			return nil, fmt.Errorf("error upserting mutation: %s", err)
+		}
+	}
+
+	templates, err := convertTemplateExpansions(unstructTemplates)
+	if err != nil {
+		return nil, fmt.Errorf("error converting template expansions: %s", err)
+	}
+	for _, t := range templates {
+		if err := expSystem.UpsertTemplate(t); err != nil {
+			return nil, fmt.Errorf("error upserting template: %s", err)
+		}
+	}
+
+	var resultants []*unstructured.Unstructured
+	for _, gen := range generators {
+		temps := expSystem.TemplatesForGVK(gen.GroupVersionKind())
+		resultants, err = expSystem.ExpandGenerator(gen, temps)
+		if err != nil {
+			return nil, fmt.Errorf("error expanding generator: %s", err)
+		}
+		for _, res := range resultants {
+			mutable := &mutationtypes.Mutable{
+				Object:   res,
+				Username: "gatekeeper-admin",
+			}
+			_, err = mutSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
+			if err != nil {
+				return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
+			}
+		}
+	}
+
+	return resultants, nil
+}
+
+func convertTemplateExpansions(templates []*unstructured.Unstructured) ([]*mutationsunversioned.TemplateExpansion, error) {
+	convertedTemplates := make([]*mutationsunversioned.TemplateExpansion, len(templates))
+	for i, t := range templates {
+		te, err := convertTemplateExpansion(t)
+		if err != nil {
+			return nil, err
+		}
+		convertedTemplates[i] = &te
+	}
+
+	return convertedTemplates, nil
+}
+
+func convertMutators(mutators []*unstructured.Unstructured) ([]types.Mutator, error) {
+	var muts []types.Mutator
+
+	for _, m := range mutators {
+		switch m.GetKind() {
+		case "Assign":
+			a, err := convertAssign(m)
+			if err != nil {
+				return nil, err
+			}
+			mut, err := assign.MutatorForAssign(&a)
+			if err != nil {
+				return nil, err
+			}
+			muts = append(muts, mut)
+		case "AssignMetadata":
+			a, err := convertAssignMetadata(m)
+			if err != nil {
+				return nil, err
+			}
+			mut, err := assignmeta.MutatorForAssignMetadata(&a)
+			if err != nil {
+				return nil, err
+			}
+			muts = append(muts, mut)
+		case "ModifySet":
+			ms, err := convertModifySet(m)
+			if err != nil {
+				return nil, err
+			}
+			mut, err := modifyset.MutatorForModifySet(&ms)
+			if err != nil {
+				return nil, err
+			}
+			muts = append(muts, mut)
+		default:
+			return muts, fmt.Errorf("cannot convert mutator of kind %q", m.GetKind())
+		}
+	}
+
+	return muts, nil
+}
+
+func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) error {
+	if u == nil {
+		return fmt.Errorf("cannot convert nil unstructured to type")
+	}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), obj)
+	return err
+}
+
+func convertTemplateExpansion(u *unstructured.Unstructured) (mutationsunversioned.TemplateExpansion, error) {
+	te := mutationsunversioned.TemplateExpansion{}
+	err := convertUnstructuredToTyped(u, &te)
+	return te, err
+}
+
+func convertAssign(u *unstructured.Unstructured) (mutationsunversioned.Assign, error) {
+	a := mutationsunversioned.Assign{}
+	err := convertUnstructuredToTyped(u, &a)
+	return a, err
+}
+
+func convertAssignMetadata(u *unstructured.Unstructured) (mutationsunversioned.AssignMetadata, error) {
+	am := mutationsunversioned.AssignMetadata{}
+	err := convertUnstructuredToTyped(u, &am)
+	return am, err
+}
+
+func convertModifySet(u *unstructured.Unstructured) (mutationsunversioned.ModifySet, error) {
+	ms := mutationsunversioned.ModifySet{}
+	err := convertUnstructuredToTyped(u, &ms)
+	return ms, err
+}
+
+// sortResources sorts a list of resources into mutators, generators, template expansions and return
+// them respectively.
+func sortResources(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, []*unstructured.Unstructured, []*unstructured.Unstructured) {
+	var generators []*unstructured.Unstructured
+	var mutators []*unstructured.Unstructured
+	var templates []*unstructured.Unstructured
+
+	for _, r := range resources {
+		k := r.GetKind()
+		_, isMutator := MutatorTypes[k]
+		switch {
+		case isMutator:
+			mutators = append(mutators, r)
+		case k == "TemplateExpansion":
+			templates = append(templates, r)
+		default:
+			generators = append(generators, r)
+		}
+	}
+
+	return generators, mutators, templates
+}
+
+func genGVKToSchemaGVK(gvk mutationsunversioned.GeneratedGVK) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind,
 	}
 }
 

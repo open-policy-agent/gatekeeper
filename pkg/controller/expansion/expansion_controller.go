@@ -5,7 +5,6 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -44,6 +43,10 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {}
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
 
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {
+	a.ExpansionSystem = expansionSystem
+}
+
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
 type Reconciler struct {
@@ -55,10 +58,10 @@ type Reconciler struct {
 func newReconciler(mgr manager.Manager, system *expansion.System) *Reconciler {
 	// START DEBUG
 	// TODO figure out how to actually inject the correct expansion system
-	system, err := expansion.NewExpansionCache(nil, nil)
-	if err != nil {
-		log.Error(err, "big issue creating expansion system")
-	}
+	//system, err := expansion.NewSystem(nil, nil)
+	//if err != nil {
+	//	log.Error(err, "big issue creating expansion system")
+	//}
 	// END DEBUG
 	return &Reconciler{Client: mgr.GetClient(), system: system}
 }
@@ -75,10 +78,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	log.Info("Reconcile", "request", request)
+	log.Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	te := &mutationsunversioned.TemplateExpansion{}
+	te := &v1alpha1.TemplateExpansion{}
 	err := r.Get(ctx, request.NamespacedName, te)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -86,18 +89,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 		deleted = true
 	}
-	log.Info("reconcile got template: %+v", te) // TODO delete
+
+	unversionedTe := expansion.V1Alpha1TemplateToUnversioned(te)
 
 	if deleted {
-		if err := r.system.RemoveTemplate(te); err != nil {
-			log.Info("removing template with name: %s", te.Name) // TODO delete
+		// unversionedTe will be an empty struct. We set the metadata name, which is
+		// used as a key to delete it from the expansion system
+		unversionedTe.ObjectMeta.Name = request.Name
+		if err := r.system.RemoveTemplate(unversionedTe); err != nil {
 			return reconcile.Result{}, err
 		}
+		log.Info("removed template expansion", "template name", unversionedTe.ObjectMeta.Name)
 	} else {
-		if err := r.system.UpsertTemplate(te); err != nil {
-			log.Info("upserting template with name: %s", te.Name) // TODO delete
+		if err := r.system.UpsertTemplate(unversionedTe); err != nil {
 			return reconcile.Result{}, err
 		}
+		log.Info("upserted template expansion", "template name", unversionedTe.ObjectMeta.Name)
 	}
 
 	return reconcile.Result{}, nil

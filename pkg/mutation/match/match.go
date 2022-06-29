@@ -22,11 +22,12 @@ const Wildcard = "*"
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
-	// Origin determines if the mutator should be used to expand generator
-	// resources. Accepts `Generated` and `Default` (defaults to `Default`). A
-	// value of `Generated` will cause the mutator to be used to expand generator
-	// resources, while `Default` will cause the mutator to be applied normally.
-	Origin string  `json:"origin,omitempty"`
+	// Source determines if the mutator should be used to expand generator
+	// resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A
+	// value of `Generated` will cause the mutator only be applied when expanding
+	// generator resources, while `Original` will cause the mutator to be applied
+	// resources going through the mutation webhook.
+	Source string  `json:"source,omitempty"`
 	Kinds  []Kinds `json:"kinds,omitempty"`
 	// Scope determines if cluster-scoped and/or namespaced-scoped resources
 	// are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)

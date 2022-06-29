@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
@@ -61,6 +62,8 @@ func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
 func (a *Adder) InjectTracker(t *readiness.Tracker) {}
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(mutationSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 

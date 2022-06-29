@@ -406,7 +406,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewExpansionCache(nil, nil)
+			ec, err := NewSystem(nil, nil)
 			if err != nil {
 				t.Fatalf("failed to create cache: %s", err)
 			}
@@ -456,7 +456,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		}},
 		location: "spec.containers[name: *].imagePullPolicy",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 		},
 		parameters: mutationsunversioned.Parameters{
@@ -475,7 +475,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 		}},
 		location: "spec.containers[name: *].imagePullPolicy",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Namespaced",
 		},
 		parameters: mutationsunversioned.Parameters{
@@ -488,7 +488,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
 		name: "add-annotation",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 			Kinds: []match.Kinds{{
 				APIGroups: []string{"*"},
@@ -506,7 +506,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 	modifySetRemoveErrLog := newModifySet(&modifySetData{
 		name: "remove-err-logging",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 		},
 		location: "spec.containers[name: *].args",
@@ -592,7 +592,7 @@ func TestUpsertRemoveMutator(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewExpansionCache(nil, nil)
+			ec, err := NewSystem(nil, nil)
 			if err != nil {
 				t.Fatalf("failed to create cache: %s", err)
 			}
@@ -643,7 +643,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		}},
 		location: "spec.containers[name: *].imagePullPolicy",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 		},
 		parameters: mutationsunversioned.Parameters{
@@ -662,7 +662,7 @@ func TestMutatorsForGVK(t *testing.T) {
 		}},
 		location: "spec.containers[name: *].imagePullPolicy",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 		},
 		parameters: mutationsunversioned.Parameters{
@@ -675,7 +675,7 @@ func TestMutatorsForGVK(t *testing.T) {
 	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
 		name: "add-annotation",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 			Kinds: []match.Kinds{{
 				APIGroups: []string{"*"},
@@ -693,7 +693,7 @@ func TestMutatorsForGVK(t *testing.T) {
 	modifySetRemoveErrLog := newModifySet(&modifySetData{
 		name: "remove-err-logging",
 		match: match.Match{
-			Origin: "Generated",
+			Source: "Generated",
 			Scope:  "Cluster",
 		},
 		location: "spec.containers[name: *].args",
@@ -798,7 +798,7 @@ func TestMutatorsForGVK(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewExpansionCache(tc.mutators, nil)
+			ec, err := NewSystem(tc.mutators, nil)
 			if err != nil {
 				t.Errorf("error creating expansion cache: %s", err)
 			}
@@ -986,7 +986,7 @@ func TestTemplatesForGVK(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewExpansionCache(nil, tc.addTemplates)
+			ec, err := NewSystem(nil, tc.addTemplates)
 			if err != nil {
 				t.Fatalf("failed to create cache: %s", err)
 			}

@@ -10,6 +10,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	SourceTypeOriginal  = "Original"
+	SourceTypeGenerated = "Generated"
+	SourceTypeAll       = "All"
+)
+
+// SourceType specifies which types of mutators should be applied. A mutator's
+// type is determined by its Match.Source field.
+type SourceType string
+
 // ID represent the identifier of a mutation object.
 type ID struct {
 	Group     string
@@ -32,9 +42,8 @@ type Mutator interface {
 	Mutate(mutable *Mutable) (bool, error)
 	// UsesExternalData returns true if the mutation uses external data.
 	UsesExternalData() bool
-	// ExpandsGenerators returns true if the mutation is used to expand generator
-	// resources
-	ExpandsGenerators() bool
+	// Source returns which type of resources the mutation should apply to.
+	Source() SourceType
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences

@@ -36,12 +36,14 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -50,6 +52,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -79,7 +82,7 @@ func init() {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
-func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, _ *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if !operations.IsAssigned(operations.Webhook) {
 		return nil
 	}
@@ -94,12 +97,14 @@ func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, process
 		scheme.Scheme,
 		corev1.EventSource{Component: "gatekeeper-webhook"})
 	handler := &validationHandler{
-		opa: opa,
+		opa:             deps.OpaClient,
+		mutationSystem:  deps.MutationSystem,
+		expansionSystem: deps.ExpansionSystem,
 		webhookHandler: webhookHandler{
 			client:          mgr.GetClient(),
 			reader:          mgr.GetAPIReader(),
 			reporter:        reporter,
-			processExcluder: processExcluder,
+			processExcluder: deps.ProcessExcluder,
 			eventRecorder:   recorder,
 			gkNamespace:     util.GetNamespace(),
 		},
@@ -125,8 +130,10 @@ var _ admission.Handler = &validationHandler{}
 
 type validationHandler struct {
 	webhookHandler
-	opa       *constraintclient.Client
-	semaphore chan struct{}
+	opa             *constraintclient.Client
+	mutationSystem  *mutation.System
+	expansionSystem *expansion.System
+	semaphore       chan struct{}
 }
 
 // Handle the validation request
@@ -344,6 +351,7 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateModifySet(req)
 	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
 		return h.validateProvider(req)
+		// TODO add case here to validate ExpansionTemplate
 	}
 
 	return false, nil
@@ -505,6 +513,81 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
+	review, err := h.createReview(ctx, req)
+
+	// Check if the requested resource is a generator resource that is configured
+	// to be expanded by TemplateExpansions
+	gvk := schema.GroupVersionKind{
+		Group:   req.Kind.Group,
+		Version: req.Kind.Version,
+		Kind:    req.Kind.Kind,
+	}
+	expansionTemps := h.expansionSystem.TemplatesForGVK(gvk)
+	// If there are no matching ExpansionTemplates, review the resource normally
+	if len(expansionTemps) == 0 {
+		return h.review(ctx, review, trace, dump)
+	}
+
+	// Convert the request's generator resource to unstructured for expansion
+	obj := &unstructured.Unstructured{}
+	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
+		return nil, fmt.Errorf("error decoding generator resource %s: %s", req.Name, err)
+	}
+	obj.SetNamespace(req.Namespace)
+
+	// Expand the generator and apply mutators to the resultant resources
+	resultants, err := h.expansionSystem.ExpandGenerator(obj, expansionTemps)
+	if err != nil {
+		return nil, fmt.Errorf("error expanding generator: %s", err)
+	}
+	for _, res := range resultants {
+		mutable := &mutationtypes.Mutable{
+			Object:    res,
+			Namespace: review.Namespace,
+			Username:  req.AdmissionRequest.UserInfo.Username,
+		}
+		_, err := h.mutationSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
+		if err != nil {
+			return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
+		}
+	}
+
+	generatorResp, err := h.review(ctx, review, trace, dump)
+	if err != nil {
+		return nil, fmt.Errorf("failed to review generator resource %s: %s", req.Name, err)
+	}
+
+	var resultantResps []*rtypes.Responses
+	for _, res := range resultants {
+		resp, err := h.review(ctx, res, trace, dump)
+		if err != nil {
+			return nil, fmt.Errorf("error reviewing resultant resource: %s", err)
+		}
+		resultantResps = append(resultantResps, resp)
+	}
+
+	aggregateResponses(req.Name, generatorResp, resultantResps)
+	return generatorResp, nil
+}
+
+func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {
+	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
+	if resp != nil && trace {
+		log.Info(resp.TraceDump())
+	}
+	if dump {
+		dump, err := h.opa.Dump(ctx)
+		if err != nil {
+			log.Error(err, "dump error")
+		} else {
+			log.Info(dump)
+		}
+	}
+
+	return resp, err
+}
+
+func (h *validationHandler) createReview(ctx context.Context, req *admission.Request) (*target.AugmentedReview, error) {
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
 	// https://github.com/open-policy-agent/gatekeeper/issues/792
@@ -527,19 +610,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		review.Namespace = ns
 	}
 
-	resp, err := h.opa.Review(ctx, review, drivers.Tracing(trace))
-	if resp != nil && trace {
-		log.Info(resp.TraceDump())
-	}
-	if dump {
-		dump, err := h.opa.Dump(ctx)
-		if err != nil {
-			log.Error(err, "dump error")
-		} else {
-			log.Info(dump)
-		}
-	}
-	return resp, err
+	return review, nil
 }
 
 func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
