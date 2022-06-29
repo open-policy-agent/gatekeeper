@@ -51,6 +51,12 @@ func TestMatches(t *testing.T) {
 			candidate: "kube-system",
 			matches:   false,
 		},
+                {
+                        name:      "asterrisk on suffix and prefix",
+                        w:         Wildcard("*-kube-*"),
+                        candidate: "test-kube-test",
+                        matches:   true,
+                },
 	}
 
 	for _, tc := range tcs {
