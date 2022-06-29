@@ -52,10 +52,16 @@ func TestMatches(t *testing.T) {
 			matches:   false,
 		},
 		{
-			name:      "asterrisk on suffix and prefix",
+			name:      "wildcard suffix and prefix match",
 			w:         Wildcard("*-kube-*"),
 			candidate: "test-kube-test",
 			matches:   true,
+		},
+		{
+			name:      "no wildcard, only hypens at suffix and prefix",
+			w:         Wildcard("-kube-"),
+			candidate: "test-kube-test",
+			matches:   false,
 		},
 	}
 
