@@ -16,8 +16,8 @@ type Wildcard string
 func (w Wildcard) Matches(candidate string) bool {
 	wStr := string(w)
 	switch {
-        case strings.HasPrefix(wStr, "*") && strings.HasSuffix(wStr, "*"):
-                return strings.Contains(candidate, strings.TrimSuffix(strings.TrimPrefix(wStr, "*"), "*"))
+	case strings.HasPrefix(wStr, "*") && strings.HasSuffix(wStr, "*"):
+		return strings.Contains(candidate, strings.TrimSuffix(strings.TrimPrefix(wStr, "*"), "*"))
 	case strings.HasPrefix(wStr, "*"):
 		return strings.HasSuffix(candidate, strings.TrimPrefix(wStr, "*"))
 	case strings.HasSuffix(wStr, "*"):
