@@ -215,7 +215,7 @@ func TestMutation(t *testing.T) {
 				}
 			}
 
-			mutated, err := c.Mutate(&types.Mutable{Object: toMutate})
+			mutated, err := c.Mutate(&types.Mutable{Object: toMutate}, types.SourceTypeAll)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("got Mutate() error = %v, want %v", err, tc.wantErr)
 			}
@@ -289,7 +289,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 		gotMutated, gotErr := s.Mutate(&types.Mutable{
 			Object:    u,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
-		})
+		}, types.SourceTypeAll)
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -310,7 +310,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 		gotMutated, gotErr := s.Mutate(&types.Mutable{
 			Object:    u2,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
-		})
+		}, types.SourceTypeAll)
 		if gotMutated {
 			t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
 		}
@@ -332,7 +332,7 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 		gotMutated, gotErr := s.Mutate(&types.Mutable{
 			Object:    u3,
 			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
-		})
+		}, types.SourceTypeAll)
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -377,7 +377,7 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 	gotMutated, gotErr := s.Mutate(&types.Mutable{
 		Object:    u,
 		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
-	})
+	}, types.SourceTypeAll)
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
@@ -431,7 +431,7 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	gotMutated, gotErr := s.Mutate(&types.Mutable{
 		Object:    u,
 		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
-	})
+	}, types.SourceTypeAll)
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
@@ -517,7 +517,7 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	}
 
 	toMutate := &unstructured.Unstructured{Object: converted}
-	_, err = s.Mutate(&types.Mutable{Object: toMutate})
+	_, err = s.Mutate(&types.Mutable{Object: toMutate}, types.SourceTypeAll)
 	if err != nil {
 		t.Fatal("Mutate failed unexpectedly", err)
 	}
@@ -561,7 +561,7 @@ func TestSystem_Mutate_InverseMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mutated, err := s.Mutate(&types.Mutable{Object: obj})
+	mutated, err := s.Mutate(&types.Mutable{Object: obj}, types.SourceTypeAll)
 	if mutated {
 		t.Errorf("got Mutate() = %t, want %t", mutated, false)
 	}

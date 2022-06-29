@@ -190,7 +190,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("System mutates a resource", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
-		_, err := mSys.Mutate(&types.Mutable{Object: u})
+		_, err := mSys.Mutate(&types.Mutable{Object: u}, types.SourceTypeOriginal)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +216,7 @@ func TestReconcile(t *testing.T) {
 			u := &unstructured.Unstructured{}
 			u.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"})
 
-			_, err := mSys.Mutate(&types.Mutable{Object: u})
+			_, err := mSys.Mutate(&types.Mutable{Object: u}, types.SourceTypeOriginal)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -197,7 +197,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Namespace: ns,
 		Username:  req.AdmissionRequest.UserInfo.Username,
 	}
-	mutated, err := h.mutationSystem.Mutate(mutable)
+	mutated, err := h.mutationSystem.Mutate(mutable, mutationtypes.SourceTypeOriginal)
 	if err != nil {
 		log.Error(err, "failed to mutate object", "object", string(req.Object.Raw))
 		return admission.Errored(int32(http.StatusInternalServerError), err)
