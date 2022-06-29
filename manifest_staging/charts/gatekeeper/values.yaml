@@ -19,7 +19,7 @@ mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
-mutatingWebhookTimeoutSeconds: 1
+mutatingWebhookTimeoutSeconds: 3
 mutatingWebhookCustomRules: {}
 mutationAnnotations: false
 auditChunkSize: 500

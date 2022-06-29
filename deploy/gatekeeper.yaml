@@ -2658,7 +2658,7 @@ webhooks:
     resources:
     - '*'
   sideEffects: None
-  timeoutSeconds: 1
+  timeoutSeconds: 3
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
