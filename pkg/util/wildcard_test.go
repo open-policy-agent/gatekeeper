@@ -63,6 +63,12 @@ func TestMatches(t *testing.T) {
 			candidate: "test-kube-test",
 			matches:   false,
 		},
+		{
+			name:      "wild card at suffix and prefix, multiple hyphens",
+			w:         Wildcard("*-kube-*"),
+			candidate: "test-dev-kube-dev-test",
+			matches:   true,
+		},
 	}
 
 	for _, tc := range tcs {
