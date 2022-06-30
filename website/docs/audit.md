@@ -45,18 +45,26 @@ status:
   enforced: true
   violations:
   - enforcementAction: deny
+    group: ""
+    version: v1
     kind: Namespace
     message: 'you must provide labels: {"gatekeeper"}'
     name: default
   - enforcementAction: deny
+    group: ""
+    version: v1
     kind: Namespace
     message: 'you must provide labels: {"gatekeeper"}'
     name: gatekeeper-system
   - enforcementAction: deny
+    group: ""
+    version: v1
     kind: Namespace
     message: 'you must provide labels: {"gatekeeper"}'
     name: kube-public
   - enforcementAction: deny
+    group: ""
+    version: v1
     kind: Namespace
     message: 'you must provide labels: {"gatekeeper"}'
     name: kube-system
