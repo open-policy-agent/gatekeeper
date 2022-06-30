@@ -142,6 +142,7 @@ spec:
             - --operation=mutation-status
             - --logtostderr
             - --disable-opa-builtin={http.send}
+            - --disable-cert-rotation
           command:
             - /manager
           image: openpolicyagent/gatekeeper:v3.9.0-beta.2

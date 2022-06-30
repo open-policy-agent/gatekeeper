@@ -66,6 +66,7 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
         command:
         - /manager
         env:

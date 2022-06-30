@@ -462,7 +462,7 @@ func TestSystem_getTLSCertificate(t *testing.T) {
 				clientCertWatcher: nil,
 			},
 			want:    nil,
-			wantErr: false,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {

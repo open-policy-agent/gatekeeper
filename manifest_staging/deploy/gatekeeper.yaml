@@ -2434,6 +2434,7 @@ spec:
         - --operation=mutation-status
         - --logtostderr
         - --disable-opa-builtin={http.send}
+        - --disable-cert-rotation
         command:
         - /manager
         env:

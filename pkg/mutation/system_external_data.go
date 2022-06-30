@@ -193,7 +193,7 @@ func (s *System) mutateWithExternalData(object *unstructured.Unstructured, exter
 // getTLSCertificate returns the gatekeeper's TLS certificate.
 func (s *System) getTLSCertificate() (*tls.Certificate, error) {
 	if s.clientCertWatcher == nil {
-		return nil, nil
+		return nil, fmt.Errorf("external data client certificate watcher is not initialized")
 	}
 
 	return s.clientCertWatcher.GetCertificate(nil)

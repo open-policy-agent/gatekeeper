@@ -82,6 +82,7 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
+            - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
@@ -152,6 +153,7 @@ spec:
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
             - HELMSUBST_METRICS_BACKEND_ARG
+            - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:

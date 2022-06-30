@@ -191,7 +191,7 @@ func main() {
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && (operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook)) {
+	if !*disableCertRotation {
 		setupLog.Info("setting up cert rotation")
 
 		keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
