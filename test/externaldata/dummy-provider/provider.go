@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -19,9 +21,30 @@ const (
 
 func main() {
 	fmt.Println("starting server...")
-	http.HandleFunc("/validate", processTimeout(validate, timeout))
 
-	if err := http.ListenAndServe(":8090", nil); err != nil {
+	// load Gatekeeper's CA certificate
+	caCert, err := ioutil.ReadFile("/tmp/gatekeeper/ca.crt")
+	if err != nil {
+		panic(err)
+	}
+
+	clientCAs := x509.NewCertPool()
+	clientCAs.AppendCertsFromPEM(caCert)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/validate", processTimeout(validate, timeout))
+
+	server := &http.Server{
+		Addr:    ":8090",
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  clientCAs,
+			MinVersion: tls.VersionTLS13,
+		},
+	}
+
+	if err := server.ListenAndServeTLS("/etc/ssl/certs/server.crt", "/etc/ssl/certs/server.key"); err != nil {
 		panic(err)
 	}
 }

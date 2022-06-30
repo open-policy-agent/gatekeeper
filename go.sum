@@ -954,10 +954,10 @@ github.com/onsi/gomega v1.17.0/go.mod h1:HnhC7FXeEQY45zxNK3PPoIUhzk/80Xly9PcubAl
 github.com/onsi/gomega v1.18.1/go.mod h1:0q+aL8jAiMXy9hbwj2mr5GziHiwhAIQpFmmtT5hitRs=
 github.com/onsi/gomega v1.19.0 h1:4ieX6qQjPP/BfC3mpsAtIGGlxTWPeA3Inl/7DtXw1tw=
 github.com/onsi/gomega v1.19.0/go.mod h1:LY+I3pBVzYsTBU1AnDwOSxaYi9WoWiqgwooUqq9yPro=
-github.com/open-policy-agent/cert-controller v0.3.0 h1:9eUgN3yYMZsfyW7qdW8+CX9YZCUb5R5JfRTj0cqaSVg=
-github.com/open-policy-agent/cert-controller v0.3.0/go.mod h1:uOQW+2tMU51vSxy1Yt162oVUTMdqLuotC0aObQxrh6k=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621170157-36b73e182701 h1:WpDMWWpLte6RGs4UruGQ+/iuKD6WBSVCgvs4Sc/IKco=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621170157-36b73e182701/go.mod h1:2+TcEyrHgPQqnLpYiLMME0Zt/zW1pRe7EbD6YHeN/Js=
+github.com/open-policy-agent/cert-controller v0.4.0 h1:AQntgNq7fsoHgnoKrOk0lpRyab1na09vibeJCX4YBCs=
+github.com/open-policy-agent/cert-controller v0.4.0/go.mod h1:uOQW+2tMU51vSxy1Yt162oVUTMdqLuotC0aObQxrh6k=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621232220-a0dd2a57505b h1:GiWKMGVBxWi1LSRyPO3J/nt9H470XDkIb40FTYIflZw=
+github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621232220-a0dd2a57505b/go.mod h1:20OhJ1ThhHMRfpeLXwaSjffYq1qtTHlWgtpY1gV8ekg=
 github.com/open-policy-agent/opa v0.41.0 h1:XDTkP8bcUVuY8WOVbRY4e/KZW31+f+/cxisPc0TPe5E=
 github.com/open-policy-agent/opa v0.41.0/go.mod h1:+kB8/8/4meTlq6ZmYRnvrL5nNrykd2eckDx4O6rk/dA=
 github.com/opencontainers/go-digest v0.0.0-20170106003457-a6d0ee40d420/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=

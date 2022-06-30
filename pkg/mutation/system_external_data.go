@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"sync"
@@ -47,7 +48,12 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		return nil
 	}
 
-	externalData, errors := s.sendRequests(providerKeys)
+	clientCert, err := s.getTLSCertificate()
+	if err != nil {
+		return fmt.Errorf("failed to get client TLS certificate: %w", err)
+	}
+
+	externalData, errors := s.sendRequests(providerKeys, clientCert)
 	if err := s.mutateWithExternalData(obj, externalData, errors); err != nil {
 		return err
 	}
@@ -56,7 +62,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 }
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(providerKeys map[string]sets.String, clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -83,7 +89,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]m
 		go func(provider *v1alpha1.Provider, keys []string) {
 			defer wg.Done()
 
-			resp, _, err := fn(context.Background(), provider, keys)
+			resp, _, err := fn(context.Background(), provider, keys, clientCert)
 
 			mutex.Lock()
 			defer mutex.Unlock()
@@ -182,6 +188,15 @@ func (s *System) mutateWithExternalData(object *unstructured.Unstructured, exter
 	}
 
 	return errorsutil.NewAggregate(mutate(object.Object))
+}
+
+// getTLSCertificate returns the gatekeeper's TLS certificate.
+func (s *System) getTLSCertificate() (*tls.Certificate, error) {
+	if s.clientCertWatcher == nil {
+		return nil, fmt.Errorf("external data client certificate watcher is not initialized")
+	}
+
+	return s.clientCertWatcher.GetCertificate(nil)
 }
 
 // validateExternalDataResponse validates the given external data response.
