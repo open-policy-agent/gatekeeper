@@ -46,6 +46,7 @@ var (
 const (
 	serviceAccountName = "gatekeeper-admin"
 	mutationsGroup     = "mutations.gatekeeper.sh"
+	externalDataGroup  = "externaldata.gatekeeper.sh"
 	namespaceKind      = "Namespace"
 )
 

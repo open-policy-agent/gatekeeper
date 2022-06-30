@@ -2092,6 +2092,12 @@ spec:
           spec:
             description: Spec defines the Provider specifications.
             properties:
+              caBundle:
+                description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
+                type: string
+              insecureTLSSkipVerify:
+                description: InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
+                type: boolean
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
@@ -2428,6 +2434,7 @@ spec:
         - --operation=mutation-status
         - --logtostderr
         - --disable-opa-builtin={http.send}
+        - --disable-cert-rotation
         command:
         - /manager
         env:
@@ -2482,6 +2489,9 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
         volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
       nodeSelector:
@@ -2490,6 +2500,10 @@ spec:
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-webhook-server-cert
       - emptyDir: {}
         name: tmp-volume
 ---

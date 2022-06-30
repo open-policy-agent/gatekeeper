@@ -20,8 +20,9 @@ func init() {
 			Name: ExternalDataProviderName,
 		},
 		Spec: v1alpha1.ProviderSpec{
-			URL:     "http://localhost:8080/validate",
-			Timeout: 1,
+			URL:                   "http://localhost:8080/validate",
+			Timeout:               1,
+			InsecureTLSSkipVerify: true,
 		},
 	})
 }

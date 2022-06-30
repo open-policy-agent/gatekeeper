@@ -25,8 +25,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
-	github.com/open-policy-agent/cert-controller v0.3.0
-	github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621170157-36b73e182701
+	github.com/open-policy-agent/cert-controller v0.4.0
+	github.com/open-policy-agent/frameworks/constraint v0.0.0-20220621232220-a0dd2a57505b
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/spf13/cobra v1.5.0

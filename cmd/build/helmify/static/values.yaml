@@ -102,6 +102,7 @@ controllerManager:
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: false
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -142,6 +143,7 @@ audit:
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: true
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}

@@ -146,6 +146,7 @@ e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-build-load-externaldata-image: docker-buildx-builder
+	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
@@ -446,8 +447,8 @@ tilt-prepare:
 	rm -rf .tiltbuild/charts/gatekeeper
 	cp -R manifest_staging/charts/gatekeeper .tiltbuild/charts
 	# disable some configs from the security context so we can perform live update
-	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
-	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/values.yaml
+	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/values.yaml
 
 tilt: generate manifests tilt-prepare
 	tilt up

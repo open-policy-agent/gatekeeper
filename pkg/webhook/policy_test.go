@@ -122,6 +122,27 @@ spec:
       - apiGroups: [""]
         kinds: ["Pod"]
 `
+
+	validProvider = `
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: dummy-provider
+spec:
+  url: https://localhost:8080/validate
+  timeout: 1
+  caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIwekNDQVgyZ0F3SUJBZ0lKQUkvTTdCWWp3Qit1TUEwR0NTcUdTSWIzRFFFQkJRVUFNRVV4Q3pBSkJnTlYKQkFZVEFrRlZNUk13RVFZRFZRUUlEQXBUYjIxbExWTjBZWFJsTVNFd0h3WURWUVFLREJoSmJuUmxjbTVsZENCWAphV1JuYVhSeklGQjBlU0JNZEdRd0hoY05NVEl3T1RFeU1qRTFNakF5V2hjTk1UVXdPVEV5TWpFMU1qQXlXakJGCk1Rc3dDUVlEVlFRR0V3SkJWVEVUTUJFR0ExVUVDQXdLVTI5dFpTMVRkR0YwWlRFaE1COEdBMVVFQ2d3WVNXNTAKWlhKdVpYUWdWMmxrWjJsMGN5QlFkSGtnVEhSa01Gd3dEUVlKS29aSWh2Y05BUUVCQlFBRFN3QXdTQUpCQU5MSgpoUEhoSVRxUWJQa2xHM2liQ1Z4d0dNUmZwL3Y0WHFoZmRRSGRjVmZIYXA2TlE1V29rLzR4SUErdWkzNS9NbU5hCnJ0TnVDK0JkWjF0TXVWQ1BGWmNDQXdFQUFhTlFNRTR3SFFZRFZSME9CQllFRkp2S3M4UmZKYVhUSDA4VytTR3YKelF5S24wSDhNQjhHQTFVZEl3UVlNQmFBRkp2S3M4UmZKYVhUSDA4VytTR3Z6UXlLbjBIOE1Bd0dBMVVkRXdRRgpNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUZCUUFEUVFCSmxmZkpIeWJqREd4Uk1xYVJtRGhYMCs2djAyVFVLWnNXCnI1UXVWYnBRaEg2dSswVWdjVzBqcDlRd3B4b1BUTFRXR1hFV0JCQnVyeEZ3aUNCaGtRK1YKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+`
+
+	providerWithNoCA = `
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: dummy-provider
+spec:
+  url: https://localhost:8080/validate
+  timeout: 1
+`
 )
 
 func validRegoTemplate() *templates.ConstraintTemplate {
@@ -831,6 +852,59 @@ func TestValidateConfigResource(t *testing.T) {
 			}
 			if !tt.Err && err != nil {
 				t.Errorf("Did not expect error but received: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		want     bool
+		wantErr  bool
+	}{
+		{
+			name:     "valid provider",
+			provider: validProvider,
+			want:     false,
+			wantErr:  false,
+		},
+		{
+			name:     "invalid provider",
+			provider: "invalid",
+			want:     false,
+			wantErr:  true,
+		},
+		{
+			name:     "provider with no CA",
+			provider: providerWithNoCA,
+			want:     true,
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &validationHandler{}
+			b, err := yaml.YAMLToJSON([]byte(tt.provider))
+			if err != nil {
+				t.Fatalf("Error parsing yaml: %s", err)
+			}
+
+			req := &atypes.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{
+						Raw: b,
+					},
+				},
+			}
+			got, err := h.validateProvider(req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validationHandler.validateProvider() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validationHandler.validateProvider() = %v, want %v", got, tt.want)
 			}
 		})
 	}

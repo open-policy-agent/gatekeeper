@@ -60,6 +60,7 @@ spec:
         - --enable-external-data={{ .Values.enableExternalData }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
+        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}

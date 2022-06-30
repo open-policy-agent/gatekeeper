@@ -278,10 +278,26 @@ __namespace_exclusion_test() {
     skip "skipping external data tests"
   fi
 
-  # deployment, service and provider for dummy-provider
-  run kubectl apply -f test/externaldata/dummy-provider/manifest
+  if [ ! -f test/externaldata/dummy-provider/certs/ca.crt ]; then
+    echo "Missing dummy-provider's CA cert. Please run test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh to generate it."
+    exit 1
+  fi
+
+  tmp=$(mktemp -d)
+
+  # inject caBundle into the provider YAML
+  cat <<EOF > ${tmp}/provider.yaml
+$(cat test/externaldata/dummy-provider/manifest/provider.yaml)
+  caBundle: $(cat test/externaldata/dummy-provider/certs/ca.crt | base64 | tr -d '\n')
+EOF
+
+  run kubectl apply -f ${tmp}/provider.yaml
   assert_success
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider"
+  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml
+  assert_success
+  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml
+  assert_success
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n gatekeeper-system"
 
   # validation test
   kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
