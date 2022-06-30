@@ -3,6 +3,7 @@ package local
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"github.com/open-policy-agent/opa/topdown/print"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
 const (
@@ -61,6 +63,13 @@ type Driver struct {
 
 	// sendRequestToProvider allows Rego to send requests to the provider specified in external_data.
 	sendRequestToProvider externaldata.SendRequestToProvider
+
+	// enableExternalDataClientAuth enables the injection of a TLS certificate into an HTTP client
+	// that is used to communicate with providers.
+	enableExternalDataClientAuth bool
+
+	// clientCertWatcher is a watcher for the TLS certificate used to communicate with providers.
+	clientCertWatcher *certwatcher.CertWatcher
 }
 
 // AddTemplate adds templ to Driver. Normalizes modules into usable forms for
@@ -319,6 +328,18 @@ func (d *Driver) Dump(ctx context.Context) (string, error) {
 	}
 
 	return string(b), nil
+}
+
+func (d *Driver) getTLSCertificate() (*tls.Certificate, error) {
+	if !d.enableExternalDataClientAuth {
+		return nil, nil
+	}
+
+	if d.clientCertWatcher == nil {
+		return nil, fmt.Errorf("certWatcher should not be nil when enableExternalDataClientAuth is true")
+	}
+
+	return d.clientCertWatcher.GetCertificate(nil)
 }
 
 // rewriteModulePackage rewrites the module's package path to path.

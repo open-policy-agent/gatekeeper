@@ -9,6 +9,7 @@ import (
 	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown/print"
 	opatypes "github.com/open-policy-agent/opa/types"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
 type Arg func(*Driver) error
@@ -110,6 +111,22 @@ func DisableBuiltins(builtins ...string) Arg {
 		}
 
 		d.compilers.capabilities.Builtins = newBuiltins
+
+		return nil
+	}
+}
+
+func AddExternalDataClientCertWatcher(clientCertWatcher *certwatcher.CertWatcher) Arg {
+	return func(d *Driver) error {
+		d.clientCertWatcher = clientCertWatcher
+
+		return nil
+	}
+}
+
+func EnableExternalDataClientAuth() Arg {
+	return func(d *Driver) error {
+		d.enableExternalDataClientAuth = true
 
 		return nil
 	}

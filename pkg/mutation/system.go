@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 )
 
 // ErrNotConverging reports that applying all Mutators isn't converging.
@@ -31,6 +32,7 @@ type System struct {
 	newUUID                           func() uuid.UUID
 	providerCache                     *externaldata.ProviderCache
 	sendRequestToExternalDataProvider externaldata.SendRequestToProvider
+	clientCertWatcher                 *certwatcher.CertWatcher
 }
 
 // SystemOpts allows for optional dependencies to be passed into the mutation System.
@@ -39,6 +41,7 @@ type SystemOpts struct {
 	NewUUID                           func() uuid.UUID
 	ProviderCache                     *externaldata.ProviderCache
 	SendRequestToExternalDataProvider externaldata.SendRequestToProvider
+	ClientCertWatcher                 *certwatcher.CertWatcher
 }
 
 // NewSystem initializes an empty mutation system.
@@ -55,6 +58,7 @@ func NewSystem(options SystemOpts) *System {
 		newUUID:                           options.NewUUID,
 		providerCache:                     options.ProviderCache,
 		sendRequestToExternalDataProvider: options.SendRequestToExternalDataProvider,
+		clientCertWatcher:                 options.ClientCertWatcher,
 	}
 }
 
