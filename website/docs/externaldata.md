@@ -312,11 +312,11 @@ There are several limitations when using external data with the mutating webhook
 
 Since external data providers are in-cluster HTTP servers backed by Kubernetes services, communication is not encrypted by default. This can potentially lead to security issues such as request eavesdropping, tampering, and man-in-the-middle attack.
 
-To further harden the security posture of the external data feature, starting from v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers. In this section, we will describe the steps required to configure them.
+To further harden the security posture of the external data feature, starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers. In this section, we will describe the steps required to configure them.
 
 ### Prerequisites
 
-- Upgrade the Gatekeeper deployment to at least **v3.9.0**.
+- A Gatekeeper deployment **v3.9.0+**.
 - The certificate of your certificate authority (CA) in PEM format.
 - The certificate of your external data provider in PEM format, signed by the CA above.
 - The private key of the external data provider in PEM format.
