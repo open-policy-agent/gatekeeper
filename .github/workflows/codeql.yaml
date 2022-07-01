@@ -3,8 +3,6 @@ name: "CodeQL"
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
   schedule:
     - cron: "0 7 * * 1" # Mondays at 7:00 AM
 
