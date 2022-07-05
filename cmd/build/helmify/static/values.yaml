@@ -51,7 +51,7 @@ image:
 podAnnotations:
   {container.seccomp.security.alpha.kubernetes.io/manager: runtime/default}
 podLabels: {}
-podCountLimit: 100
+podCountLimit: "100"
 secretAnnotations: {}
 controllerManager:
   exemptNamespaces: []
