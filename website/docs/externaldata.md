@@ -359,7 +359,11 @@ openssl x509 -req -extfile <(printf "subjectAltName=DNS:<service name>.<service 
 
 ### How Gatekeeper trusts the external data provider (TLS)
 
-To enable one-way TLS, your external data provider should enable any TLS-related configurations for their HTTP server. For example, for Go's built-in [`HTTP server`](https://pkg.go.dev/net/http#Server) implementation, you can use [`ListenAndServeTLS`](https://pkg.go.dev/net/http#ListenAndServeTLS).
+To enable one-way TLS, your external data provider should enable any TLS-related configurations for their HTTP server. For example, for Go's built-in [`HTTP server`](https://pkg.go.dev/net/http#Server) implementation, you can use [`ListenAndServeTLS`](https://pkg.go.dev/net/http#ListenAndServeTLS):
+
+```go
+server.ListenAndServeTLS("/etc/ssl/certs/server.crt", "/etc/ssl/certs/server.key")
+```
 
 In addition, the provider is also responsible for supplying the certificate authority (CA) certificate as part of the Provider spec so that Gatekeeper can verify the authenticity of the external data provider's certificate.
 
@@ -386,7 +390,7 @@ spec:
 
 Gatekeeper attaches its certificate as part of the HTTPS request to the external data provider. To verify the authenticity of the Gatekeeper certificate, the external data provider must have access to Gatekeeper's CA certificate. There are several ways to do this:
 
-1. Deploy your external data provider to the `gatekeeper-system` namespace. By default, [`cert-controller`](https://github.com/open-policy-agent/cert-controller) is used to generate and rotate Gatekeeper's webhook certificate. The content of the certificate is stored as a Kubernetes secret called `gatekeeper-webhook-server-cert` in the `gatekeeper-system` namespace. In your external provider deployment, you can access Gatekeeper's certificate by adding the following `volume` and `volumeMount` so that your server can trust Gatekeeper's CA certificate:
+1. Deploy your external data provider to the same namespace as your Gatekeeper deployment. By default, [`cert-controller`](https://github.com/open-policy-agent/cert-controller) is used to generate and rotate Gatekeeper's webhook certificate. The content of the certificate is stored as a Kubernetes secret called `gatekeeper-webhook-server-cert` in the Gatekeeper namespace e.g. `gatekeeper-system`. In your external provider deployment, you can access Gatekeeper's certificate by adding the following `volume` and `volumeMount` to the provider deployment so that your server can trust Gatekeeper's CA certificate:
 
 ```yaml
 volumeMounts:
@@ -402,4 +406,25 @@ volumes:
           path: ca.crt
 ```
 
-2. With `cert-controller` disabled, you can use a cluster-wide, well-known CA certificate for Gatekeeper so that your external data provider can trust it without being deployed to the `gatekeeper-system` namespace.
+After that, you can attach Gatekeeper's CA certificate in your TLS config and enable any client authentication-related settings. For example:
+
+```go
+caCert, err := ioutil.ReadFile("/tmp/gatekeeper/ca.crt")
+if err != nil {
+	panic(err)
+}
+
+clientCAs := x509.NewCertPool()
+clientCAs.AppendCertsFromPEM(caCert)
+
+server := &http.Server{
+	Addr:    ":8090",
+	TLSConfig: &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  clientCAs,
+		MinVersion: tls.VersionTLS13,
+	},
+}
+```
+
+2. If `cert-controller` is disabled via the `--disable-cert-rotation` flag, you can use a cluster-wide, well-known CA certificate for Gatekeeper so that your external data provider can trust it without being deployed to the `gatekeeper-system` namespace.
