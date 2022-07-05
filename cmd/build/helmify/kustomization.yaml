@@ -79,6 +79,18 @@ patchesJson6902:
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
         path: /spec/template/spec/containers/0/image
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsGroup
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
   - target:
       kind: Deployment
       name: gatekeeper-controller-manager
@@ -95,6 +107,18 @@ patchesJson6902:
         path: /spec/template/spec/affinity/podAntiAffinity
       - op: remove
         path: /spec/template/spec/containers/0/image
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsGroup
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
   - target:
       kind: Service
       name: webhook-service

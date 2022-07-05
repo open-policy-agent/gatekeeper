@@ -152,6 +152,38 @@ spec:
     excludedNamespaces: ["excluded"]
 `
 
+	ConstraintIncludedNamespace = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    namespaces: ["included"]
+`
+
+	ConstraintClusterScope = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    scope: "Cluster"
+`
+
+	ConstraintNamespaceSelector = `
+kind: NeverValidate
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: never-validate-namespace
+spec:
+  match:
+    namespaceSelector:
+      matchLabels:
+        bar: qux
+`
+
 	ConstraintNeverValidate = `
 kind: NeverValidate
 apiVersion: constraints.gatekeeper.sh/v1beta1
@@ -214,6 +246,21 @@ metadata:
   namespace: excluded
 `
 
+	ObjectNamespaceScope = `
+kind: Object
+apiVersion: group.sh/v1
+metadata:
+  name: object
+  namespace: foo
+`
+
+	ObjectClusterScope = `
+kind: Object
+apiVersion: group.sh/v1
+metadata:
+  name: object
+`
+
 	ObjectInvalid = `
 kind Object
 apiVersion: group.sh/v1
@@ -231,6 +278,23 @@ kind: Object
 apiVersion: group.sh/v1
 metadata:
   name: object`
+
+	NamespaceSelected = `
+kind: Namespace
+apiVersion: /v1
+metadata:
+  name: foo
+  labels:
+    bar: qux
+`
+	NamespaceNotSelected = `
+kind: Namespace
+apiVersion: /v1
+metadata:
+  name: foo
+  labels:
+    bar: bar
+`
 
 	TemplateReferential = `
 apiVersion: templates.gatekeeper.sh/v1beta1
@@ -327,5 +391,59 @@ spec:
     - port: 443
   selector:
     key: value
+`
+
+	TemplateRequiredLabel = `
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the parameters field
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          ns := [n | data.inventory.cluster.v1.Namespace[n]]
+          msg := sprintf("I can grab namespaces... %v ... and dump the inventory... %v", [ns, data.inventory])
+        }
+`
+
+	ConstraintRequireLabelInvalid = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: required-labels
+spec:
+  parameters:
+    labels: "abc"
+`
+
+	ConstraintRequireLabelValid = `
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: required-labels
+spec:
+  parameters:
+    labels: ["abc"]
 `
 )

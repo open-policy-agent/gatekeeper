@@ -111,3 +111,8 @@ func (f *FakeInformer) LastSyncResourceVersion() string {
 func (f *FakeInformer) SetWatchErrorHandler(cache.WatchErrorHandler) error {
 	return nil
 }
+
+// SetTransform does nothing.  TODO(community): Implement this.
+func (f *FakeInformer) SetTransform(t cache.TransformFunc) error {
+	return nil
+}

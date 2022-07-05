@@ -51,23 +51,6 @@ func validateTargetNames(ts []handler.TargetHandler) []string {
 	return invalid
 }
 
-// AllowedDataFields sets the fields under `data` that Rego in ConstraintTemplates
-// can access. If unset, all fields can be accessed. Only fields recognized by
-// the system can be enabled.
-func AllowedDataFields(fields ...string) Opt {
-	return func(c *Client) error {
-		for _, field := range fields {
-			if !validDataFields[field] {
-				return fmt.Errorf("%w: invalid data field %q; allowed fields are: %v",
-					ErrCreatingClient, field, validDataFields)
-			}
-		}
-
-		c.AllowedDataFields = fields
-		return nil
-	}
-}
-
 // Driver defines the Rego execution environment.
 func Driver(d drivers.Driver) Opt {
 	return func(client *Client) error {

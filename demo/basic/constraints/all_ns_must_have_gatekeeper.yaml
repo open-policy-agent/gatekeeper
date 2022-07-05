@@ -8,5 +8,4 @@ spec:
       - apiGroups: [""]
         kinds: ["Namespace"]
   parameters:
-    labels:
-      - key : "gatekeeper"
+    labels: ["gatekeeper"]

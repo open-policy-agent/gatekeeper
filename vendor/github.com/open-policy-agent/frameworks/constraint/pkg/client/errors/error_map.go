@@ -49,3 +49,7 @@ func (e *ErrorMap) Is(target error) bool {
 
 	return true
 }
+
+func (e *ErrorMap) Add(key string, err error) {
+	(*e)[key] = err
+}

@@ -99,11 +99,11 @@ func (s *Sources) Write() error {
 			if err != nil {
 				return err
 			}
-			if err = os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 				return err
 			}
 			glog.Infof("Writing %s", path)
-			if err = ioutil.WriteFile(path, content, 0o600); err != nil {
+			if err := ioutil.WriteFile(path, content, 0o600); err != nil {
 				return err
 			}
 		}

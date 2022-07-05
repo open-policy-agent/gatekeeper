@@ -117,6 +117,38 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `LastValue`
 
+## Mutation
+
+- Name: `gatekeeper_mutator_ingestion_count`
+
+    Description: `Total number of Mutator ingestion actions`
+
+    Tags:
+
+    - `status`: [`active`, `error`]
+
+    Aggregation: `Count`
+
+- Name: `gatekeeper_mutator_ingestion_duration_seconds`
+
+    Description: `The distribution of Mutator ingestion durations`
+
+    Tags:
+
+    - `status`: [`active`, `error`]
+
+    Aggregation: `Distribution`
+
+- Name: `gatekeeper_mutators`
+
+    Description: `The current number of Mutator objects`
+
+    Tags:
+
+    - `status`: [`active`, `error`]
+
+    Aggregation: `Count`
+
 ## Sync
 
 - Name: `gatekeeper_sync`

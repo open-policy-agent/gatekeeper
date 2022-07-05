@@ -3,7 +3,7 @@ package gator
 import (
 	"context"
 
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -12,7 +12,7 @@ import (
 type Client interface {
 	// AddTemplate adds a Template to the Client. Templates define the structure
 	// and parameters of potential Constraints.
-	AddTemplate(templ *templates.ConstraintTemplate) (*types.Responses, error)
+	AddTemplate(ctx context.Context, templ *templates.ConstraintTemplate) (*types.Responses, error)
 
 	// AddConstraint adds a Constraint to the Client. Must map to one of the
 	// previously-added Templates.
@@ -29,10 +29,5 @@ type Client interface {
 	RemoveData(ctx context.Context, data interface{}) (*types.Responses, error)
 
 	// Review runs all Constraints against obj.
-	Review(ctx context.Context, obj interface{}, opts ...constraintclient.QueryOpt) (*types.Responses, error)
-
-	// Audit makes sure the cached state of the system satisfies all stored constraints.
-	// On error, the responses return value will still be populated so that
-	// partial results can be analyzed.
-	Audit(ctx context.Context, opts ...constraintclient.QueryOpt) (*types.Responses, error)
+	Review(ctx context.Context, obj interface{}, opts ...drivers.QueryOpt) (*types.Responses, error)
 }

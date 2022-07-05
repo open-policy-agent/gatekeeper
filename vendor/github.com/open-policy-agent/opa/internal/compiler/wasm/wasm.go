@@ -8,10 +8,9 @@ package wasm
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm/opa"
@@ -183,6 +182,11 @@ var builtinsUsingRE2 = [...]string{
 	builtinsFunctions[ast.RegexMatchDeprecated.Name],
 	builtinsFunctions[ast.RegexFindAllStringSubmatch.Name],
 	builtinsFunctions[ast.GlobMatch.Name],
+}
+
+func IsWasmEnabled(bi string) bool {
+	_, ok := builtinsFunctions[bi]
+	return ok
 }
 
 type externalFunc struct {
@@ -852,7 +856,7 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 	for i := range fn.Blocks {
 		instrs, err := c.compileBlock(fn.Blocks[i])
 		if err != nil {
-			return errors.Wrapf(err, "block %d", i)
+			return fmt.Errorf("block %d: %w", i, err)
 		}
 		if i < len(fn.Blocks)-1 { // not the last block: wrap in `block` instr
 			if withControlInstr(instrs) { // unless we don't need to
@@ -1074,8 +1078,8 @@ func (c *Compiler) compileBlock(block *ir.Block) ([]instruction.Instruction, err
 				instrs = append(instrs, instruction.I32Eqz{})
 				instrs = append(instrs, instruction.BrIf{Index: 0})
 			} else {
-				// Booleans and strings would lead to the BrIf (since opa_value_get
-				// on them returns 0), so let's skip that.
+				// Booleans and string sources would lead to the BrIf (since opa_value_get
+				// on them returns 0), so let's skip trying that.
 				instrs = append(instrs, instruction.Br{Index: 0})
 				break
 			}
@@ -1484,7 +1488,7 @@ func (c *Compiler) compileCallDynamicStmt(stmt *ir.CallDynamicStmt, result *[]in
 		instruction.CallIndirect{Index: typeIndex}, // [arg0 arg1 tbl_idx] -> [res]
 		instruction.TeeLocal{Index: c.local(stmt.Result)},
 		instruction.I32Eqz{},
-		instruction.BrIf{Index: 2}, // mapping found, "undefined" result counts
+		instruction.BrIf{Index: 3}, // mapping found, "undefined" result counts
 	)
 
 	*result = append(*result, instrs...)

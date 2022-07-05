@@ -49,6 +49,6 @@ func BenchmarkSystem_Mutate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		u := &unstructured.Unstructured{}
 
-		_, _ = s.Mutate(u, nil)
+		_, _ = s.Mutate(&types.Mutable{Object: u})
 	}
 }

@@ -16,10 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -41,11 +38,12 @@ type Mutator struct {
 // Mutator implements mutatorWithSchema.
 var _ schema.MutatorWithSchema = &Mutator{}
 
-func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	if !match.AppliesTo(m.assign.Spec.ApplyTo, obj) {
+func (m *Mutator) Matches(mutable *types.Mutable) bool {
+	gvk := mutable.Object.GetObjectKind().GroupVersionKind()
+	if !match.AppliesTo(m.assign.Spec.ApplyTo, gvk) {
 		return false
 	}
-	matches, err := match.Matches(&m.assign.Spec.Match, obj, ns)
+	matches, err := match.Matches(&m.assign.Spec.Match, mutable.Object, mutable.Namespace)
 	if err != nil {
 		log.Error(err, "Matches failed for assign", "assign", m.assign.Name)
 		return false
@@ -57,12 +55,16 @@ func (m *Mutator) TerminalType() parser.NodeType {
 	return schema.Unknown
 }
 
-func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
-	value, err := m.assign.Spec.Parameters.Assign.GetValue(obj)
+func (m *Mutator) Mutate(mutable *types.Mutable) (bool, error) {
+	value, err := m.assign.Spec.Parameters.Assign.GetValue(mutable)
 	if err != nil {
 		return false, err
 	}
-	return core.Mutate(m.Path(), m.tester, core.NewDefaultSetter(value), obj)
+	return core.Mutate(m.Path(), m.tester, core.NewDefaultSetter(value), mutable.Object)
+}
+
+func (m *Mutator) UsesExternalData() bool {
+	return m.assign.Spec.Parameters.Assign.ExternalData != nil
 }
 
 func (m *Mutator) ID() types.ID {
@@ -152,8 +154,13 @@ func MutatorForAssign(assign *mutationsunversioned.Assign) (*Mutator, error) {
 		}
 	}
 
-	if potentialValues.FromMetadata != nil && path.Nodes[len(path.Nodes)-1].Type() == parser.ListNode {
-		return nil, errors.New("cannot assign a metadata field to a list")
+	if path.Nodes[len(path.Nodes)-1].Type() == parser.ListNode {
+		if potentialValues.FromMetadata != nil {
+			return nil, errors.New("cannot assign a metadata field to a list")
+		}
+		if potentialValues.ExternalData != nil {
+			return nil, errors.New("cannot assign external data response to a list")
+		}
 	}
 
 	id := types.MakeID(assign)

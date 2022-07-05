@@ -66,8 +66,9 @@ func TestReconcile(t *testing.T) {
 			Name: "my-provider",
 		},
 		Spec: externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 10,
+			URL:                   "http://my-provider:8080",
+			Timeout:               10,
+			InsecureTLSSkipVerify: true,
 		},
 	}
 
@@ -82,7 +83,11 @@ func TestReconcile(t *testing.T) {
 
 	// initialize OPA
 	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
-	driver := local.New(args...)
+	driver, err := local.New(args...)
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opa, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -126,8 +131,9 @@ func TestReconcile(t *testing.T) {
 		}
 
 		want := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 10,
+			URL:                   "http://my-provider:8080",
+			Timeout:               10,
+			InsecureTLSSkipVerify: true,
 		}
 		if diff := cmp.Diff(want, entry.Spec); diff != "" {
 			t.Fatal(diff)
@@ -150,8 +156,9 @@ func TestReconcile(t *testing.T) {
 		}
 
 		wantSpec := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 20,
+			URL:                   "http://my-provider:8080",
+			Timeout:               20,
+			InsecureTLSSkipVerify: true,
 		}
 		if diff := cmp.Diff(wantSpec, entry.Spec); diff != "" {
 			t.Fatal(diff)

@@ -1,18 +1,20 @@
 # Image URL to use all building/pushing image targets
 REPOSITORY ?= openpolicyagent/gatekeeper
 CRD_REPOSITORY ?= openpolicyagent/gatekeeper-crds
+GATOR_REPOSITORY ?= openpolicyagent/gator
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
+GATOR_IMG := $(GATOR_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.7.0
+VERSION := v3.9.0-beta.2
 
-KIND_VERSION ?= 0.11.0
+KIND_VERSION ?= 0.13.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.23.0
+KUBERNETES_VERSION ?= 1.24.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
@@ -25,7 +27,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.43.0
+GOLANGCI_LINT_VERSION := v1.45.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -94,7 +96,7 @@ all: lint test manager
 
 # Run tests
 native-test:
-	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -bench . -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -race -bench . -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
@@ -144,6 +146,7 @@ e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-build-load-externaldata-image: docker-buildx-builder
+	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
@@ -167,6 +170,7 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
@@ -181,6 +185,7 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade:
@@ -194,6 +199,7 @@ e2e-helm-upgrade:
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
@@ -257,7 +263,7 @@ lint:
 		golangci-lint run -v
 
 # Generate code
-generate: __conversion-gen __controller-gen target-template-source
+generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
@@ -287,11 +293,14 @@ docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):dev
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):dev
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(VERSION)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(VERSION)
 
 # Push for Dev
 docker-push-dev: docker-tag-dev
@@ -299,11 +308,14 @@ docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):dev
 	@docker push $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker push $(CRD_REPOSITORY):dev
+	@docker push $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker push $(GATOR_REPOSITORY):dev
 
 # Push for Release
 docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(CRD_REPOSITORY):$(VERSION)
+	@docker push $(GATOR_REPOSITORY):$(VERSION)
 
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
@@ -348,6 +360,18 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push
 
+# Build gator image
+docker-buildx-gator-dev: docker-buildx-builder
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
+		-t ${GATOR_REPOSITORY}:dev \
+		-f gator.Dockerfile . --push
+
+docker-buildx-gator-release: docker-buildx-builder
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${VERSION} \
+		-f gator.Dockerfile . --push
+
 # Update manager_image_patch.yaml with image tag
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
@@ -356,12 +380,6 @@ ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
-
-# Rebuild pkg/target/target_template_source.go to pull in pkg/target/regolib/src.rego
-target-template-source:
-	@printf "package target\n\n// This file is generated from pkg/target/regolib/src.rego via \"make target-template-source\"\n// Do not modify this file directly!\n\nconst templSrc = \`" > pkg/target/target_template_source.go
-	@sed -e "s/data\[\"{{.DataRoot}}\"\]/{{.DataRoot}}/; s/data\[\"{{.ConstraintsRoot}}\"\]/{{.ConstraintsRoot}}/" pkg/target/regolib/src.rego >> pkg/target/target_template_source.go
-	@printf "\`\n" >> pkg/target/target_template_source.go
 
 # Push the docker image
 docker-push:
@@ -429,8 +447,8 @@ tilt-prepare:
 	rm -rf .tiltbuild/charts/gatekeeper
 	cp -R manifest_staging/charts/gatekeeper .tiltbuild/charts
 	# disable some configs from the security context so we can perform live update
-	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
-	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/values.yaml
+	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/values.yaml
 
 tilt: generate manifests tilt-prepare
 	tilt up

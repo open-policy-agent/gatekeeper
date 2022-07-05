@@ -15,24 +15,15 @@ Check out the [installation instructions](https://open-policy-agent.github.io/ga
 
 ## Documentation
 
-Please see the [docs](https://open-policy-agent.github.io/gatekeeper/website/docs/howto) for more in-depth information.
+Please see the [Gatekeeper website](https://open-policy-agent.github.io/gatekeeper/website/docs/howto) for more in-depth information.
 
 ## Policy Library
 
 See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
 
-## Community
+## Community & Contributing
 
-Join us to help define the direction and implementation of this project!
-
-- Join the [`#kubernetes-policy`](https://openpolicyagent.slack.com/messages/CDTN970AX)
-  channel on [OPA Slack](https://slack.openpolicyagent.org/).
-
-- Join [weekly meetings](https://docs.google.com/document/d/1A1-Q-1OMw3QODs1wT6eqfLTagcGmgzAJAjJihiO3T48/edit)
-  to discuss development, issues, use cases, etc.
-
-- Use [GitHub Issues](https://github.com/open-policy-agent/gatekeeper/issues)
-  to file bugs, request features, or ask questions asynchronously.
+Please refer to [Gatekeeper's contribution guide](https://open-policy-agent.github.io/gatekeeper/website/docs/help) to find out how you can help.
 
 ## Code of conduct
 
@@ -40,9 +31,4 @@ This project is governed by the [CNCF Code of conduct](https://github.com/cncf/f
 
 ## Security
 
-Please report vulnerabilities by email to [open-policy-agent-security](mailto:open-policy-agent-security@googlegroups.com).
-We will send a confirmation message to acknowledge that we have received the
-report and then we will send additional messages to follow up once the issue
-has been investigated.
-
-For details on the security release process please refer to the [open-policy-agent/opa/SECURITY.md](https://github.com/open-policy-agent/opa/blob/main/SECURITY.md) file.
+For details on how to report vulnerabilities and security release process, please refer to [Gatekeeper Security](https://open-policy-agent.github.io/gatekeeper/website/docs/security) for more information.

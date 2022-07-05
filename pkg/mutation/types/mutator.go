@@ -6,8 +6,6 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -29,9 +27,11 @@ func (id ID) String() string {
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
-	Matches(obj client.Object, ns *corev1.Namespace) bool
+	Matches(mutable *Mutable) bool
 	// Mutate applies the mutation to the given object
-	Mutate(obj *unstructured.Unstructured) (bool, error)
+	Mutate(mutable *Mutable) (bool, error)
+	// UsesExternalData returns true if the mutation uses external data.
+	UsesExternalData() bool
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences

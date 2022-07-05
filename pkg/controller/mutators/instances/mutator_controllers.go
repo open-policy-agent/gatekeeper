@@ -34,7 +34,7 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	// events is shared across all mutators that can affect the implied schema
 	// of kinds to be mutated, since these mutators can set each other into conflict
 	events := make(chan event.GenericEvent, eventQueueSize)
-	eventsSource := &source.Channel{Source: events}
+	eventsSource := &source.Channel{Source: events, DestBufferSize: 1024}
 	scheme := mgr.GetScheme()
 
 	assign := core.Adder{

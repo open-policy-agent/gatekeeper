@@ -7,9 +7,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestSystem_Mutate_Fail(t *testing.T) {
@@ -23,7 +21,7 @@ func TestSystem_Mutate_Fail(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(u, nil)
+	gotMutated, gotErr := s.Mutate(&types.Mutable{Object: u})
 
 	if gotMutated != false {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
@@ -40,12 +38,16 @@ type errorMutator struct {
 
 var _ types.Mutator = &errorMutator{}
 
-func (e errorMutator) Matches(client.Object, *corev1.Namespace) bool {
+func (e errorMutator) Matches(*types.Mutable) bool {
 	return true
 }
 
-func (e errorMutator) Mutate(*unstructured.Unstructured) (bool, error) {
+func (e errorMutator) Mutate(*types.Mutable) (bool, error) {
 	return false, e.err
+}
+
+func (e errorMutator) UsesExternalData() bool {
+	return false
 }
 
 func (e errorMutator) ID() types.ID {

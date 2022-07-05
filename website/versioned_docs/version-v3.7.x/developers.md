@@ -24,7 +24,7 @@ Kind cluster with a local registry will enable faster image pushing and pulling:
 
 ### Create `tilt-settings.json`
 
-`tilt-settings.json` contains various settings that developers can customize when deploying gatekeeper to your local kind cluster. Developers can creat the JSON file under the project root directory:
+`tilt-settings.json` contains various settings that developers can customize when deploying gatekeeper to a local kind cluster. Developers can create the JSON file under the project root directory:
 
 ```json
 {

@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
@@ -131,6 +131,10 @@ func (ks *kindSet) Write() error {
 
 			if kind == DeploymentKind {
 				obj = strings.Replace(obj, "      labels:", "      labels:\n{{- include \"gatekeeper.podLabels\" . }}", 1)
+			}
+
+			if name == "gatekeeper-manager-role" && kind == "Role" {
+				obj += "{{- with .Values.controllerManager.extraRules }}\n  {{- toYaml . | nindent 0 }}\n{{- end }}\n"
 			}
 
 			if isRbacKind(kind) {

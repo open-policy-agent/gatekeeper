@@ -110,9 +110,9 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 	a.GetPod = getPod
 }
 
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
 
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
+func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 // newReconciler returns a new reconcile.Reconciler
 // cstrEvents is the channel from which constraint controller will receive the events
@@ -121,6 +121,15 @@ func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
 func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.Manager, cs *watch.ControllerSwitch, tracker *readiness.Tracker, cstrEvents <-chan event.GenericEvent, regEvents chan<- event.GenericEvent, getPod func(context.Context) (*corev1.Pod, error)) (*ReconcileConstraintTemplate, error) {
 	// constraintsCache contains total number of constraints and shared mutex
 	constraintsCache := constraint.NewConstraintsCache()
+
+	w, err := wm.NewRegistrar(ctrlName, regEvents)
+	if err != nil {
+		return nil, err
+	}
+	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
+	if err != nil {
+		return nil, err
+	}
 
 	// via the registrar below.
 	constraintAdder := constraint.Adder{
@@ -131,6 +140,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		Events:           cstrEvents,
 		Tracker:          tracker,
 		GetPod:           getPod,
+		IfWatching:       w.IfWatching,
 	}
 	// Create subordinate controller - we will feed it events dynamically via watch
 	if err := constraintAdder.Add(mgr); err != nil {
@@ -146,6 +156,7 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 			WatchManager:     wm,
 			ControllerSwitch: cs,
 			Events:           statusEvents,
+			IfWatching:       statusW.IfWatching,
 		}
 		if err := csAdder.Add(mgr); err != nil {
 			return nil, err
@@ -161,14 +172,6 @@ func newReconciler(mgr manager.Manager, opa *constraintclient.Client, wm *watch.
 		}
 	}
 
-	w, err := wm.NewRegistrar(ctrlName, regEvents)
-	if err != nil {
-		return nil, err
-	}
-	statusW, err := wm.NewRegistrar(ctrlName+"-status", regEvents)
-	if err != nil {
-		return nil, err
-	}
 	r := newStatsReporter()
 	reconciler := &ReconcileConstraintTemplate{
 		Client:        mgr.GetClient(),
@@ -330,7 +333,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	unversionedProposedCRD, err := r.opa.CreateCRD(unversionedCT)
+	unversionedProposedCRD, err := r.opa.CreateCRD(ctx, unversionedCT)
 	if err != nil {
 		logger.Error(err, "CRD creation error")
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
@@ -419,7 +422,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	// It's important that opa.AddTemplate() is called first. That way we can
 	// rely on a template's existence in OPA to know whether a watch needs
 	// to be removed
-	if _, err := r.opa.AddTemplate(unversionedCT); err != nil {
+	if _, err := r.opa.AddTemplate(ctx, unversionedCT); err != nil {
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
@@ -477,7 +480,8 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 
 func (r *ReconcileConstraintTemplate) handleDelete(
 	ctx context.Context,
-	ct *templates.ConstraintTemplate) (reconcile.Result, error) {
+	ct *templates.ConstraintTemplate,
+) (reconcile.Result, error) {
 	logger := logger.WithValues("name", ct.GetName())
 	logger.Info("removing from watcher registry")
 	gvk := makeGvk(ct.Spec.CRD.Spec.Names.Kind)

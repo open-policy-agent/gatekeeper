@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type Operation string
@@ -32,7 +33,9 @@ var (
 		MutationWebhook,
 		Webhook,
 	}
-	operations = newOperationSet()
+
+	operationsMtx sync.RWMutex
+	operations    = newOperationSet()
 )
 
 type opSet struct {
@@ -85,6 +88,9 @@ func init() {
 // AssignedOperations returns a map of operations assigned to the pod.
 func AssignedOperations() map[Operation]bool {
 	ret := make(map[Operation]bool)
+	operationsMtx.RLock()
+	defer operationsMtx.RUnlock()
+
 	for k, v := range operations.assignedOperations {
 		ret[k] = v
 	}
@@ -93,25 +99,42 @@ func AssignedOperations() map[Operation]bool {
 
 // IsAssigned returns true when the provided operation is assigned to the pod.
 func IsAssigned(op Operation) bool {
+	operationsMtx.RLock()
+	defer operationsMtx.RUnlock()
+
 	return operations.assignedOperations[op]
 }
 
 // AssignedStringList returns a list of all operations assigned to the pod
 // as a sorted list of strings.
 func AssignedStringList() []string {
+	// Use a read lock so we can exit early without potentially having multiple
+	// threads try to write this simultaneously.
+	operationsMtx.RLock()
+	gotList := operations.assignedStringList
+	operationsMtx.RUnlock()
+	if gotList != nil {
+		return gotList
+	}
+
+	operationsMtx.Lock()
+	defer operationsMtx.Unlock()
+	// Verify the list hasn't been set since we last checked.
 	if operations.assignedStringList != nil {
 		return operations.assignedStringList
 	}
+
 	var ret []string
 	for k := range operations.assignedOperations {
 		ret = append(ret, string(k))
 	}
 	sort.Strings(ret)
+
 	operations.assignedStringList = ret
 	return operations.assignedStringList
 }
 
-// HasValidationOperations() returns `true` if there
+// HasValidationOperations returns `true` if there
 // are any operations that would require a constraint/template controller.
 func HasValidationOperations() bool {
 	return IsAssigned(Audit) || IsAssigned(Status) || IsAssigned(Webhook)

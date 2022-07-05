@@ -74,7 +74,8 @@ func newReconciler(
 	reporter Reporter,
 	metricsCache *MetricsCache,
 	tracker *readiness.Tracker,
-	processExcluder *process.Excluder) reconcile.Reconciler {
+	processExcluder *process.Excluder,
+) reconcile.Reconciler {
 	return &ReconcileSync{
 		reader:          mgr.GetCache(),
 		scheme:          mgr.GetScheme(),

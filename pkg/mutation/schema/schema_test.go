@@ -7,40 +7,43 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ MutatorWithSchema = &fakeMutator{}
 
 type fakeMutator struct {
-	id       types.ID
-	bindings []schema.GroupVersionKind
-	pathStr  string
-	path     parser.Path
+	id               types.ID
+	bindings         []schema.GroupVersionKind
+	pathStr          string
+	path             parser.Path
+	usesExternalData bool
 }
 
-func newFakeMutator(id types.ID, pathStr string, bindings ...schema.GroupVersionKind) *fakeMutator {
+func newFakeMutator(id types.ID, pathStr string, usesExternalData bool, bindings ...schema.GroupVersionKind) *fakeMutator {
 	path, err := parser.Parse(pathStr)
 	if err != nil {
 		panic(err)
 	}
 	return &fakeMutator{
-		id:       id,
-		bindings: bindings,
-		pathStr:  pathStr,
-		path:     path,
+		id:               id,
+		bindings:         bindings,
+		pathStr:          pathStr,
+		path:             path,
+		usesExternalData: usesExternalData,
 	}
 }
 
-func (m *fakeMutator) Matches(_ client.Object, _ *corev1.Namespace) bool {
+func (m *fakeMutator) Matches(*types.Mutable) bool {
 	panic("should not be called")
 }
 
-func (m *fakeMutator) Mutate(_ *unstructured.Unstructured) (bool, error) {
+func (m *fakeMutator) Mutate(*types.Mutable) (bool, error) {
 	panic("should not be called")
+}
+
+func (m *fakeMutator) UsesExternalData() bool {
+	return m.usesExternalData
 }
 
 func (m *fakeMutator) Value(_ types.MetadataGetter) (interface{}, error) {
@@ -108,57 +111,87 @@ func TestDB_Upsert(t *testing.T) {
 		{
 			name:   "add mutator",
 			before: []MutatorWithSchema{},
-			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image",
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 				gvk("", "v1", "Pod")),
 			wantErr: nil,
 		},
 		{
 			name: "overwrite identical mutator",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("bar"), "spec.containers[name: foo].image",
+				newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 					gvk("", "v1", "Pod")),
 			},
-			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image",
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 				gvk("", "v1", "Pod")),
 			wantErr: nil,
 		},
 		{
 			name: "add conflicting mutator",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.containers.image",
+				newFakeMutator(id("foo"), "spec.containers.image", false,
 					gvk("", "v1", "Pod")),
 			},
-			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image",
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 				gvk("", "v1", "Pod")),
 			wantErr: NewErrConflictingSchema(IDSet{{Name: "bar"}: true, {Name: "foo"}: true}),
 		},
 		{
 			name: "add conflicting mutator of different type",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.containers.image",
+				newFakeMutator(id("foo"), "spec.containers.image", false,
 					gvk("", "v1", "Pod")),
 			},
-			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image",
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: foo].image", false,
 				gvk("", "v2", "Pod")),
 			wantErr: nil,
 		},
 		{
 			name: "overwrite mutator with conflicting one",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.containers.image",
+				newFakeMutator(id("foo"), "spec.containers.image", false,
 					gvk("", "v1", "Pod")),
 			},
-			toAdd: newFakeMutator(id("foo"), "spec.containers[name: foo].image",
+			toAdd: newFakeMutator(id("foo"), "spec.containers[name: foo].image", false,
 				gvk("", "v1", "Pod")),
 			wantErr: nil,
 		},
 		{
 			name: "globbed list does not conflict with non-globbed list",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.containers[name: foo].image",
+				newFakeMutator(id("foo"), "spec.containers[name: foo].image", false,
 					gvk("", "v1", "Pod")),
 			},
-			toAdd: newFakeMutator(id("bar"), "spec.containers[name: *].image",
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: *].image", false,
+				gvk("", "v1", "Pod")),
+			wantErr: nil,
+		},
+		{
+			name: "external data path conflicts with non-external data path",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.containers[name: foo].image", true,
+					gvk("", "v1", "Pod")),
+			},
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: *].image.test", false,
+				gvk("", "v1", "Pod")),
+			wantErr: NewErrConflictingSchema(IDSet{{Name: "bar"}: true, {Name: "foo"}: true}),
+		},
+		{
+			name: "non-external data path conflicts with external data path",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.containers[name: foo].image.test", false,
+					gvk("", "v1", "Pod")),
+			},
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: *].image", true,
+				gvk("", "v1", "Pod")),
+			wantErr: NewErrConflictingSchema(IDSet{{Name: "bar"}: true, {Name: "foo"}: true}),
+		},
+		{
+			name: "external data path do not conflict with external data path",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.containers[name: foo].image", true,
+					gvk("", "v1", "Pod")),
+			},
+			toAdd: newFakeMutator(id("bar"), "spec.containers[name: *].image", true,
 				gvk("", "v1", "Pod")),
 			wantErr: nil,
 		},
@@ -202,9 +235,9 @@ func TestDB_Remove(t *testing.T) {
 		{
 			name: "no conflict after removing",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.name.image",
+				newFakeMutator(id("foo"), "spec.name.image", false,
 					gvk("", "v1", "Role")),
-				newFakeMutator(id("bar"), "spec[name: foo].image",
+				newFakeMutator(id("bar"), "spec[name: foo].image", false,
 					gvk("", "v1", "Role")),
 			},
 			toRemove:           id("bar"),
@@ -215,11 +248,11 @@ func TestDB_Remove(t *testing.T) {
 		{
 			name: "still conflict after removing",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.name.image",
+				newFakeMutator(id("foo"), "spec.name.image", false,
 					gvk("", "v1", "Role")),
-				newFakeMutator(id("bar"), "spec[name: foo].image",
+				newFakeMutator(id("bar"), "spec[name: foo].image", false,
 					gvk("", "v1", "Role")),
-				newFakeMutator(id("qux"), "spec[name: foo].tag",
+				newFakeMutator(id("qux"), "spec[name: foo].tag", false,
 					gvk("", "v1", "Role")),
 			},
 			toRemove:           id("bar"),
@@ -230,12 +263,12 @@ func TestDB_Remove(t *testing.T) {
 		{
 			name: "conflicts are not transitive",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.name.image",
+				newFakeMutator(id("foo"), "spec.name.image", false,
 					gvk("", "v1", "Role")),
-				newFakeMutator(id("bar"), "spec[name: foo].image",
+				newFakeMutator(id("bar"), "spec[name: foo].image", false,
 					gvk("", "v1", "Role"),
 					gvk("", "v2", "Role")),
-				newFakeMutator(id("qux"), "spec[name: foo].tag",
+				newFakeMutator(id("qux"), "spec[name: foo].tag", false,
 					gvk("", "v2", "Role")),
 			},
 			toRemove: id("bar"),
@@ -247,18 +280,57 @@ func TestDB_Remove(t *testing.T) {
 		{
 			name: "multiple conflicts are preserved",
 			before: []MutatorWithSchema{
-				newFakeMutator(id("foo"), "spec.name.image",
+				newFakeMutator(id("foo"), "spec.name.image", false,
 					gvk("", "v1", "Role")),
-				newFakeMutator(id("bar"), "spec[name: rxc].image[tag: v1].id",
+				newFakeMutator(id("bar"), "spec[name: rxc].image[tag: v1].id", false,
 					gvk("", "v1", "Role"),
 					gvk("", "v2", "Role")),
-				newFakeMutator(id("qux"), "spec[name: rxc].image.tag.id",
+				newFakeMutator(id("qux"), "spec[name: rxc].image.tag.id", false,
 					gvk("", "v2", "Role")),
 			},
 			toRemove:           id("foo"),
 			toCheck:            id("qux"),
 			wantConflictBefore: true,
 			wantConflictAfter:  true,
+		},
+		{
+			name: "delete non-external data from external data",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.foo", true,
+					gvk("", "v1", "Role")),
+				newFakeMutator(id("bar"), "spec.foo.bar", false,
+					gvk("", "v1", "Role")),
+			},
+			toRemove:           id("bar"),
+			toCheck:            id("foo"),
+			wantConflictBefore: true,
+			wantConflictAfter:  false,
+		},
+		{
+			name: "delete external data from non-external data",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.foo", true,
+					gvk("", "v1", "Role")),
+				newFakeMutator(id("bar"), "spec.foo.bar", false,
+					gvk("", "v1", "Role")),
+			},
+			toRemove:           id("foo"),
+			toCheck:            id("bar"),
+			wantConflictBefore: true,
+			wantConflictAfter:  false,
+		},
+		{
+			name: "delete external data from external data",
+			before: []MutatorWithSchema{
+				newFakeMutator(id("foo"), "spec.foo", true,
+					gvk("", "v1", "Role")),
+				newFakeMutator(id("bar"), "spec.foo", true,
+					gvk("", "v1", "Role")),
+			},
+			toRemove:           id("foo"),
+			toCheck:            id("bar"),
+			wantConflictBefore: false,
+			wantConflictAfter:  false,
 		},
 	}
 

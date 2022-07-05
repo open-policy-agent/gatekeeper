@@ -40,7 +40,12 @@ spec:
         {{- toYaml .Values.controllerManager.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
-      - args:
+      - {{- if .Values.image.release }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.release }}
+        {{- else }}
+        image: {{ .Values.image.repository }}
+        {{- end }}
+        args:
         - --port={{ .Values.controllerManager.port }}
         - --health-addr=:{{ .Values.controllerManager.healthPort }}
         - --prometheus-port={{ .Values.controllerManager.metricsPort }}
@@ -51,6 +56,13 @@ spec:
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
+        - --log-mutations={{ .Values.logMutations }}
+        - --mutation-annotations={{ .Values.mutationAnnotations }}
+        
+        {{- range .Values.metricsBackends}}
+        - --metrics-backend={{ . }}
+        {{- end }}
+        {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
         {{- range .Values.disabledBuiltins}}
@@ -76,7 +88,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: '{{ .Values.image.repository }}:{{ .Values.image.release }}'
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: CONTAINER_NAME
+          value: manager
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         livenessProbe:
           httpGet:
@@ -100,14 +118,7 @@ spec:
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - all
-          readOnlyRootFilesystem: true
-          runAsGroup: 999
-          runAsNonRoot: true
-          runAsUser: 1000
+          {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
         - mountPath: /certs
           name: cert
@@ -118,7 +129,7 @@ spec:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}
-      {{- if .Values.controllerManager.priorityClassName }} 
+      {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
       serviceAccountName: gatekeeper-admin

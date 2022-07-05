@@ -16,11 +16,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -42,11 +39,12 @@ type Mutator struct {
 // Mutator implements mutatorWithSchema.
 var _ schema.MutatorWithSchema = &Mutator{}
 
-func (m *Mutator) Matches(obj client.Object, ns *corev1.Namespace) bool {
-	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, obj) {
+func (m *Mutator) Matches(mutable *types.Mutable) bool {
+	gvk := mutable.Object.GetObjectKind().GroupVersionKind()
+	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, gvk) {
 		return false
 	}
-	matches, err := match.Matches(&m.modifySet.Spec.Match, obj, ns)
+	matches, err := match.Matches(&m.modifySet.Spec.Match, mutable.Object, mutable.Namespace)
 	if err != nil {
 		log.Error(err, "Matches failed for modify set", "modifyset", m.modifySet.Name)
 		return false
@@ -58,16 +56,23 @@ func (m *Mutator) TerminalType() parser.NodeType {
 	return schema.Set
 }
 
-func (m *Mutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (m *Mutator) Mutate(mutable *types.Mutable) (bool, error) {
+	values := m.modifySet.Spec.Parameters.Values.DeepCopy().FromList
+
 	return core.Mutate(
 		m.Path(),
 		m.tester,
 		setter{
 			op:     m.modifySet.Spec.Parameters.Operation,
-			values: runtime.DeepCopyJSONValue(m.modifySet.Spec.Parameters.Values.FromList).([]interface{}),
+			values: values,
 		},
-		obj,
+		mutable.Object,
 	)
+}
+
+func (m *Mutator) UsesExternalData() bool {
+	// modify set doesn't use external data
+	return false
 }
 
 func (m *Mutator) ID() types.ID {

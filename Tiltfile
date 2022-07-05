@@ -19,7 +19,7 @@ if settings.get("trigger_mode", "auto").lower() == "manual":
 LDFLAGS = "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest"
 
 TILT_DOCKERFILE = """
-FROM golang:1.17 as tilt-helper
+FROM golang:1.18-bullseye as tilt-helper
 # Support live reloading with Tilt
 RUN wget --output-document /restart.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/restart.sh && \
     wget --output-document /start.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/start.sh && \
@@ -83,17 +83,34 @@ def build_crds():
 # deploy_gatekeeper defines the deploy process for the gatekeeper chart from manifest_staging/charts/gatekeeper.
 def deploy_gatekeeper():
     local("kubectl create namespace gatekeeper-system || true")
+
+    helm_values = settings.get("helm_values", {})
     k8s_yaml(helm(
         ".tiltbuild/charts/gatekeeper",
         name="gatekeeper",
         namespace="gatekeeper-system",
         values=[".tiltbuild/charts/gatekeeper/values.yaml"],
-        set=["{}={}".format(k, str(v).lower()) for k, v in settings.get("helm_values", []).items()],
+        set=["{}={}".format(k, str(v).lower()) for k, v in helm_values.items()],
     ))
 
     # add label to resources
     for resource in ["gatekeeper-audit", "gatekeeper-controller-manager", "gatekeeper-update-namespace-label", "gatekeeper-update-crds-hook"]:
         k8s_resource(resource, labels=["controllers"])
+
+    # port-foward the metrics server
+    if "audit.metricsPort" in helm_values:
+        port = int(helm_values["audit.metricsPort"])
+        k8s_resource(
+            workload="gatekeeper-audit",
+            port_forwards=[port_forward(port, name="View metrics", link_path="/metrics")],
+        )
+
+    if "controllerManager.metricsPort" in helm_values:
+        port = int(helm_values["controllerManager.metricsPort"])
+        k8s_resource(
+            workload="gatekeeper-controller-manager",
+            port_forwards=[port_forward(port, name="View metrics", link_path="/metrics")],
+        )
 
 build_manager()
 

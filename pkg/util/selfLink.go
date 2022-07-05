@@ -4,16 +4,20 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-type KindVersionResource struct {
-	kind     string
-	version  string
-	resource string
+type KindVersionName struct {
+	Group     string
+	Kind      string
+	Version   string
+	Namespace string
+	Name      string
 }
 
-func GetUniqueKey(obj unstructured.Unstructured) KindVersionResource {
-	return KindVersionResource{
-		version:  obj.GetAPIVersion(),
-		kind:     obj.GetKind(),
-		resource: obj.GetName(),
+func GetUniqueKey(obj unstructured.Unstructured) KindVersionName {
+	return KindVersionName{
+		Group:     obj.GetObjectKind().GroupVersionKind().Group,
+		Version:   obj.GetObjectKind().GroupVersionKind().Version,
+		Kind:      obj.GetKind(),
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 	}
 }

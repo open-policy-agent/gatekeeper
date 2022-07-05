@@ -46,7 +46,10 @@ func (c *Cache) TallyStatus() map[MutatorIngestionStatus]int {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
-	statusTally := make(map[MutatorIngestionStatus]int)
+	statusTally := map[MutatorIngestionStatus]int{
+		MutatorStatusActive: 0,
+		MutatorStatusError:  0,
+	}
 	for _, status := range c.cache {
 		statusTally[status.ingestion]++
 	}

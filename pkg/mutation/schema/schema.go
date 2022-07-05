@@ -75,6 +75,7 @@ func (db *DB) Upsert(mutator MutatorWithSchema) error {
 	}
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
+
 	return db.upsert(mutator)
 }
 
@@ -105,7 +106,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 			s = &node{}
 			db.schemas[gvk] = s
 		}
-		newConflicts := s.Add(id, path.Nodes, mutator.TerminalType())
+		newConflicts := s.Add(id, path.Nodes, mutator.TerminalType(), mutator.UsesExternalData())
 		conflicts = merge(conflicts, newConflicts)
 	}
 
@@ -123,6 +124,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 func (db *DB) Remove(id types.ID) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
+
 	db.remove(id)
 }
 
@@ -141,7 +143,7 @@ func (db *DB) remove(id types.ID) {
 			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", gvk)
 			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, gvk))
 		}
-		s.Remove(id, cachedMutator.Path().Nodes, cachedMutator.TerminalType())
+		s.Remove(id, cachedMutator.Path().Nodes, cachedMutator.TerminalType(), cachedMutator.UsesExternalData())
 		db.schemas[gvk] = s
 
 		if len(s.ReferencedBy) == 0 {
@@ -183,13 +185,15 @@ func (db *DB) remove(id types.ID) {
 func (db *DB) HasConflicts(id types.ID) bool {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
+
 	return db.conflicts[id]
 }
 
 func (db *DB) GetConflicts(id types.ID) IDSet {
 	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
 	mutator, ok := db.cachedMutators[id]
-	db.mutex.RUnlock()
 	if !ok {
 		return nil
 	}

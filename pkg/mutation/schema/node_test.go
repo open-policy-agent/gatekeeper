@@ -13,8 +13,9 @@ import (
 
 type idPath struct {
 	types.ID
-	path         string
-	terminalType parser.NodeType
+	path          string
+	terminalType  parser.NodeType
+	mustTerminate bool
 }
 
 func id(name string) types.ID {
@@ -29,12 +30,24 @@ func ids(names ...string) IDSet {
 	return result
 }
 
+func mustTerminate(names ...string) IDSet {
+	result := make(IDSet)
+	for _, n := range names {
+		result[id(n)] = true
+	}
+	return result
+}
+
 func ip(name string, path string) idPath {
 	return idPath{ID: id(name), path: path, terminalType: Unknown}
 }
 
 func ipt(name string, path string, terminalType parser.NodeType) idPath {
 	return idPath{ID: id(name), path: path, terminalType: terminalType}
+}
+
+func ipmt(name string, path string, mustTerminate bool) idPath {
+	return idPath{ID: id(name), path: path, terminalType: Unknown, mustTerminate: mustTerminate}
 }
 
 func gvk(group, version, kind string) schema.GroupVersionKind {
@@ -154,6 +167,68 @@ func TestNode_Add(t *testing.T) {
 				id("list-object"):   true,
 			},
 		},
+		{
+			name: "don't need to terminate",
+			before: []idPath{
+				ipmt("object", "spec.fields.foo", false),
+			},
+			add:  ip("more fields", "spec.fields.foo.bar"),
+			want: nil,
+		},
+		{
+			name: "must terminate for before",
+			before: []idPath{
+				ipmt("object", "spec.fields.foo", true),
+			},
+			add: ip("more fields", "spec.fields.foo.bar"),
+			want: IDSet{
+				id("object"):      true,
+				id("more fields"): true,
+			},
+		},
+		{
+			name: "must terminate for after",
+			before: []idPath{
+				ip("more fields", "spec.fields.foo.bar"),
+				ip("same-path", "spec.fields.foo"),
+			},
+			add: ipmt("object", "spec.fields.foo", true),
+			want: IDSet{
+				id("object"):      true,
+				id("more fields"): true,
+			},
+		},
+		{
+			name: "must terminate for before and after",
+			before: []idPath{
+				ipmt("object", "spec.fields.foo", true),
+				ip("object-2", "spec.fields.foo"),
+			},
+			add: ipmt("fields", "spec.fields", true),
+			want: IDSet{
+				id("object"):   true,
+				id("object-2"): true,
+				id("fields"):   true,
+			},
+		},
+		{
+			name: "must terminate for before and after with no conflict",
+			before: []idPath{
+				ipmt("object", "spec.fields.foo", true),
+				ip("object-2", "spec.fields.foo"),
+				ip("object-3", "spec.fields.baz"),
+			},
+			add:  ipmt("fields", "spec.fields.foo", true),
+			want: nil,
+		},
+		{
+			name: "must terminate for before with no conflict",
+			before: []idPath{
+				ipmt("object", "spec.fields.foo", true),
+			},
+			add:  ip("object-2", "spec.fields.baz"),
+			want: nil,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -164,14 +239,14 @@ func TestNode_Add(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes, p.terminalType)
+				root.Add(p.ID, path.Nodes, p.terminalType, p.mustTerminate)
 			}
 
 			path, err := parser.Parse(tc.add.path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			conflicts := root.Add(tc.add.ID, path.Nodes, tc.add.terminalType)
+			conflicts := root.Add(tc.add.ID, path.Nodes, tc.add.terminalType, tc.add.mustTerminate)
 			if diff := cmp.Diff(tc.want, conflicts); diff != "" {
 				t.Error(diff)
 			}
@@ -182,10 +257,11 @@ func TestNode_Add(t *testing.T) {
 func TestNode_RemovePanic(t *testing.T) {
 	// Remove should panic if the expected node is not found.
 	testCases := []struct {
-		name      string
-		before    []idPath
-		toRemove  idPath
-		wantPanic bool
+		name          string
+		before        []idPath
+		toRemove      idPath
+		mustTerminate bool
+		wantPanic     bool
 	}{
 		{
 			name:      "remove from empty",
@@ -217,6 +293,15 @@ func TestNode_RemovePanic(t *testing.T) {
 			toRemove:  ip("name", "spec"),
 			wantPanic: true,
 		},
+		{
+			name: "panic if remove must terminate",
+			before: []idPath{
+				ip("name", "spec.name"),
+			},
+			toRemove:      ip("name", "spec.name"),
+			mustTerminate: true,
+			wantPanic:     true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -227,7 +312,7 @@ func TestNode_RemovePanic(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes, Unknown)
+				root.Add(p.ID, path.Nodes, Unknown, p.mustTerminate)
 			}
 
 			pRemove, err := parser.Parse(tc.toRemove.path)
@@ -243,7 +328,7 @@ func TestNode_RemovePanic(t *testing.T) {
 					t.Errorf("expected Remove to succeed but panicked: %v", r)
 				}
 			}()
-			root.Remove(tc.toRemove.ID, pRemove.Nodes, Unknown)
+			root.Remove(tc.toRemove.ID, pRemove.Nodes, Unknown, tc.mustTerminate)
 		})
 	}
 }
@@ -365,6 +450,39 @@ func TestNode_Remove(t *testing.T) {
 			wantConflictBefore: nil,
 			wantConflictAfter:  nil,
 		},
+		{
+			name: "remove must terminate",
+			before: []idPath{
+				ipmt("object", "spec.foo", true),
+				ip("fields", "spec.foo.bar"),
+			},
+			toRemove:           []idPath{ipmt("object", "spec.foo", true)},
+			toCheck:            "spec.foo.bar",
+			wantConflictBefore: []types.ID{{Name: "fields"}, {Name: "object"}},
+			wantConflictAfter:  nil,
+		},
+		{
+			name: "remove non-must terminate",
+			before: []idPath{
+				ipmt("object", "spec.foo", true),
+				ip("fields", "spec.foo.bar"),
+			},
+			toRemove:           []idPath{ip("fields", "spec.foo.bar")},
+			toCheck:            "spec.foo",
+			wantConflictBefore: []types.ID{{Name: "fields"}, {Name: "object"}},
+			wantConflictAfter:  nil,
+		},
+		{
+			name: "remove must terminate from two must terminate",
+			before: []idPath{
+				ipmt("object", "spec.foo", true),
+				ipmt("object-2", "spec.foo", true),
+			},
+			toRemove:           []idPath{ip("object", "spec.foo")},
+			toCheck:            "spec.foo",
+			wantConflictBefore: nil,
+			wantConflictAfter:  nil,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -375,7 +493,7 @@ func TestNode_Remove(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(p.ID, path.Nodes, p.terminalType)
+				root.Add(p.ID, path.Nodes, p.terminalType, p.mustTerminate)
 			}
 
 			pCheck, err := parser.Parse(tc.toCheck)
@@ -392,7 +510,7 @@ func TestNode_Remove(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Remove(toRemove.ID, pRemove.Nodes, toRemove.terminalType)
+				root.Remove(toRemove.ID, pRemove.Nodes, toRemove.terminalType, false)
 			}
 
 			gotConflictAfter := root.GetConflicts(pCheck.Nodes, Unknown)
@@ -409,11 +527,13 @@ func TestNode_Add_Internals(t *testing.T) {
 	// desired.
 
 	testCases := []struct {
-		name         string
-		before       []string
-		toAdd        string
-		terminalType parser.NodeType
-		want         node
+		name                string
+		before              []string
+		toAdd               string
+		terminalType        parser.NodeType
+		beforeMustTerminate bool
+		mustTerminate       bool
+		want                node
 	}{
 		{
 			name:  "just root",
@@ -544,6 +664,122 @@ func TestNode_Add_Internals(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "must terminate",
+			before: []string{
+				"spec.name",
+			},
+			toAdd:         "spec",
+			mustTerminate: true,
+			want: node{
+				ReferencedBy: ids("0", "added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						parser.ObjectNode: node{
+							ReferencedBy: ids("0"),
+							Children: map[string]map[parser.NodeType]node{
+								"name": {
+									Unknown: node{
+										ReferencedBy: ids("0"),
+									},
+								},
+							},
+						},
+						Unknown: node{
+							ReferencedBy:  ids("added"),
+							MustTerminate: mustTerminate("added"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "before must terminate",
+			before: []string{
+				"spec",
+			},
+			toAdd:               "spec.name",
+			beforeMustTerminate: true,
+			want: node{
+				ReferencedBy: ids("0", "added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						parser.ObjectNode: node{
+							ReferencedBy: ids("added"),
+							Children: map[string]map[parser.NodeType]node{
+								"name": {
+									Unknown: node{
+										ReferencedBy: ids("added"),
+									},
+								},
+							},
+						},
+						Unknown: node{
+							ReferencedBy:  ids("0"),
+							MustTerminate: mustTerminate("0"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "two must terminate with same path",
+			before: []string{
+				"spec",
+			},
+			toAdd:               "spec",
+			beforeMustTerminate: true,
+			mustTerminate:       true,
+			want: node{
+				ReferencedBy: ids("0", "added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						Unknown: node{
+							ReferencedBy:  ids("0", "added"),
+							MustTerminate: mustTerminate("0", "added"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "same path - after with must terminate and before without",
+			before: []string{
+				"spec",
+			},
+			toAdd:         "spec",
+			mustTerminate: true,
+			want: node{
+				ReferencedBy: ids("0", "added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						Unknown: node{
+							ReferencedBy:  ids("0", "added"),
+							MustTerminate: mustTerminate("added"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "same path - before with must terminate and after without",
+			before: []string{
+				"spec",
+			},
+			toAdd:               "spec",
+			beforeMustTerminate: true,
+			want: node{
+				ReferencedBy: ids("0", "added"),
+				Children: map[string]map[parser.NodeType]node{
+					"spec": {
+						Unknown: node{
+							ReferencedBy:  ids("0", "added"),
+							MustTerminate: mustTerminate("0"),
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -555,7 +791,7 @@ func TestNode_Add_Internals(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root.Add(id(fmt.Sprint(i)), p.Nodes, Unknown)
+				root.Add(id(fmt.Sprint(i)), p.Nodes, Unknown, tc.beforeMustTerminate)
 			}
 			rootBefore := *root.DeepCopy()
 
@@ -567,13 +803,13 @@ func TestNode_Add_Internals(t *testing.T) {
 			if tc.terminalType == parser.NodeType("") {
 				tc.terminalType = Unknown
 			}
-			root.Add(id("added"), p.Nodes, tc.terminalType)
+			root.Add(id("added"), p.Nodes, tc.terminalType, tc.mustTerminate)
 
 			if diff := cmp.Diff(tc.want, root, cmpopts.EquateEmpty()); diff != "" {
 				t.Error(diff)
 			}
 
-			root.Remove(id("added"), p.Nodes, tc.terminalType)
+			root.Remove(id("added"), p.Nodes, tc.terminalType, tc.mustTerminate)
 
 			// We expect that adding and then removing the path causes no change.
 			if diff := cmp.Diff(rootBefore, root, cmpopts.EquateEmpty()); diff != "" {

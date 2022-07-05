@@ -2,16 +2,20 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/ghodss/yaml"
-	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
+	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -22,49 +26,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
-	invalidRegoTemplate = `
-apiVersion: templates.gatekeeper.sh/v1beta1
-kind: ConstraintTemplate
-metadata:
-  name: k8sbadrego
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sBadRego
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package badrego
-
-        violation[{"msg": msg}] {
-        msg := "I'm sure this will work"
-`
-
-	validRegoTemplate = `
-apiVersion: templates.gatekeeper.sh/v1beta1
-kind: ConstraintTemplate
-metadata:
-  name: k8sgoodrego
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sGoodRego
-  targets:
-    - target: admission.k8s.gatekeeper.sh
-      rego: |
-        package goodrego
-
-        violation[{"msg": msg}] {
-          msg := "Maybe this will work?"
-        }
-`
-
 	badLabelSelector = `
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sGoodRego
@@ -156,11 +122,90 @@ spec:
       - apiGroups: [""]
         kinds: ["Pod"]
 `
+
+	validProvider = `
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: dummy-provider
+spec:
+  url: https://localhost:8080/validate
+  timeout: 1
+  caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIwekNDQVgyZ0F3SUJBZ0lKQUkvTTdCWWp3Qit1TUEwR0NTcUdTSWIzRFFFQkJRVUFNRVV4Q3pBSkJnTlYKQkFZVEFrRlZNUk13RVFZRFZRUUlEQXBUYjIxbExWTjBZWFJsTVNFd0h3WURWUVFLREJoSmJuUmxjbTVsZENCWAphV1JuYVhSeklGQjBlU0JNZEdRd0hoY05NVEl3T1RFeU1qRTFNakF5V2hjTk1UVXdPVEV5TWpFMU1qQXlXakJGCk1Rc3dDUVlEVlFRR0V3SkJWVEVUTUJFR0ExVUVDQXdLVTI5dFpTMVRkR0YwWlRFaE1COEdBMVVFQ2d3WVNXNTAKWlhKdVpYUWdWMmxrWjJsMGN5QlFkSGtnVEhSa01Gd3dEUVlKS29aSWh2Y05BUUVCQlFBRFN3QXdTQUpCQU5MSgpoUEhoSVRxUWJQa2xHM2liQ1Z4d0dNUmZwL3Y0WHFoZmRRSGRjVmZIYXA2TlE1V29rLzR4SUErdWkzNS9NbU5hCnJ0TnVDK0JkWjF0TXVWQ1BGWmNDQXdFQUFhTlFNRTR3SFFZRFZSME9CQllFRkp2S3M4UmZKYVhUSDA4VytTR3YKelF5S24wSDhNQjhHQTFVZEl3UVlNQmFBRkp2S3M4UmZKYVhUSDA4VytTR3Z6UXlLbjBIOE1Bd0dBMVVkRXdRRgpNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUZCUUFEUVFCSmxmZkpIeWJqREd4Uk1xYVJtRGhYMCs2djAyVFVLWnNXCnI1UXVWYnBRaEg2dSswVWdjVzBqcDlRd3B4b1BUTFRXR1hFV0JCQnVyeEZ3aUNCaGtRK1YKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+`
+
+	providerWithNoCA = `
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: dummy-provider
+spec:
+  url: https://localhost:8080/validate
+  timeout: 1
+`
 )
+
+func validRegoTemplate() *templates.ConstraintTemplate {
+	return &templates.ConstraintTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: templatesv1beta1.SchemeGroupVersion.String(),
+			Kind:       "ConstraintTemplate",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "k8sgoodrego",
+		},
+		Spec: templates.ConstraintTemplateSpec{
+			CRD: templates.CRD{
+				Spec: templates.CRDSpec{
+					Names: templates.Names{
+						Kind: "K8sGoodRego",
+					},
+				},
+			},
+			Targets: []templates.Target{{
+				Target: target.Name,
+				Rego: `
+package goodrego
+
+        violation[{"msg": msg}] {
+          msg := "Maybe this will work?"
+        }`,
+			}},
+		},
+	}
+}
+
+func validRegoTemplateConstraint() *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+
+	u.SetGroupVersionKind(k8schema.GroupVersionKind{
+		Group:   constraints.Group,
+		Version: "v1beta1",
+		Kind:    "K8sGoodRego",
+	})
+	u.SetName("constraint")
+
+	return u
+}
+
+func invalidRegoTemplate() *templates.ConstraintTemplate {
+	template := validRegoTemplate()
+
+	template.Spec.Targets[0].Rego = `package badrego
+
+        violation[{"msg": msg}] {
+        msg := "I'm sure this will work"`
+
+	return template
+}
 
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
-	driver := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		return nil, err
+	}
+
 	c, err := constraintclient.NewClient(constraintclient.Targets(t), constraintclient.Driver(driver))
 	if err != nil {
 		return nil, err
@@ -171,17 +216,17 @@ func makeOpaClient() (*constraintclient.Client, error) {
 func TestTemplateValidation(t *testing.T) {
 	tc := []struct {
 		Name          string
-		Template      string
+		Template      *templates.ConstraintTemplate
 		ErrorExpected bool
 	}{
 		{
 			Name:          "Valid Template",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Template",
-			Template:      invalidRegoTemplate,
+			Template:      invalidRegoTemplate(),
 			ErrorExpected: true,
 		},
 	}
@@ -192,7 +237,8 @@ func TestTemplateValidation(t *testing.T) {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
-			b, err := yaml.YAMLToJSON([]byte(tt.Template))
+
+			b, err := json.Marshal(tt.Template)
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
@@ -210,7 +256,8 @@ func TestTemplateValidation(t *testing.T) {
 				},
 			}
 
-			_, err = handler.validateGatekeeperResources(review)
+			ctx := context.Background()
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -226,7 +273,7 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
+func (f *nsGetter) Get(_ context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -241,7 +288,7 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) Get(ctx context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
+func (f *errorNSGetter) Get(_ context.Context, key ctrlclient.ObjectKey, _ ctrlclient.Object) error {
 	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
 }
 
@@ -322,46 +369,115 @@ func TestReviewRequest(t *testing.T) {
 	}
 }
 
+func TestReviewDefaultNS(t *testing.T) {
+	cfg := &v1alpha1.Config{
+		Spec: v1alpha1.ConfigSpec{
+			Match: []v1alpha1.MatchEntry{
+				{
+					ExcludedNamespaces: []util.Wildcard{"default"},
+					Processes:          []string{"*"},
+				},
+			},
+			Validation: v1alpha1.Validation{
+				Traces: []v1alpha1.Trace{},
+			},
+		},
+	}
+	maxThreads := -1
+	testFn := func(t *testing.T) {
+		ctx := context.Background()
+		opa, err := makeOpaClient()
+		if err != nil {
+			t.Fatalf("Could not initialize OPA: %s", err)
+		}
+		if _, err := opa.AddTemplate(ctx, validRegoTemplate()); err != nil {
+			t.Fatalf("could not add template: %s", err)
+		}
+		if _, err := opa.AddConstraint(ctx, validRegoTemplateConstraint()); err != nil {
+			t.Fatalf("could not add constraint: %s", err)
+		}
+		pe := process.New()
+		pe.Add(cfg.Spec.Match)
+		handler := validationHandler{
+			opa: opa,
+			webhookHandler: webhookHandler{
+				injectedConfig:  cfg,
+				client:          &nsGetter{},
+				reader:          &nsGetter{},
+				processExcluder: pe,
+			},
+		}
+		if maxThreads > 0 {
+			handler.semaphore = make(chan struct{}, maxThreads)
+		}
+		review := admission.Request{
+			AdmissionRequest: admissionv1.AdmissionRequest{
+				Kind: metav1.GroupVersionKind{
+					Group:   "",
+					Version: "v1",
+					Kind:    "Pod",
+				},
+				Object: runtime.RawExtension{
+					Raw: []byte(
+						`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+				},
+				Namespace: "default",
+			},
+		}
+		resp := handler.Handle(context.Background(), review)
+		if err != nil {
+			t.Errorf("err = %s; want nil", err)
+		}
+		if !resp.Allowed {
+			t.Error("allowed = false; want true")
+		}
+	}
+	t.Run("unlimited threads", testFn)
+
+	maxThreads = 1
+	t.Run("with max threads", testFn)
+}
+
 func TestConstraintValidation(t *testing.T) {
 	tc := []struct {
 		Name          string
-		Template      string
+		Template      *templates.ConstraintTemplate
 		Constraint    string
 		ErrorExpected bool
 	}{
 		{
 			Name:          "Valid Constraint labelselector",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    goodLabelSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint labelselector",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    badLabelSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint namespaceselector",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    goodNamespaceSelector,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint namespaceselector",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    badNamespaceSelector,
 			ErrorExpected: true,
 		},
 		{
 			Name:          "Valid Constraint enforcementaction",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    goodEnforcementAction,
 			ErrorExpected: false,
 		},
 		{
 			Name:          "Invalid Constraint enforcementaction",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			Constraint:    badEnforcementAction,
 			ErrorExpected: true,
 		},
@@ -372,15 +488,9 @@ func TestConstraintValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			cstr := &templv1beta1.ConstraintTemplate{}
-			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
-				t.Fatalf("Could not instantiate template: %s", err)
-			}
-			unversioned := &templates.ConstraintTemplate{}
-			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
-				t.Fatalf("Could not convert to unversioned: %v", err)
-			}
-			if _, err := opa.AddTemplate(unversioned); err != nil {
+
+			ctx := context.Background()
+			if _, err := opa.AddTemplate(ctx, tt.Template); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
@@ -400,7 +510,7 @@ func TestConstraintValidation(t *testing.T) {
 					},
 				},
 			}
-			_, err = handler.validateGatekeeperResources(review)
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil && !tt.ErrorExpected {
 				t.Errorf("err = %s; want nil", err)
 			}
@@ -414,14 +524,14 @@ func TestConstraintValidation(t *testing.T) {
 func TestTracing(t *testing.T) {
 	tc := []struct {
 		Name          string
-		Template      string
+		Template      *templates.ConstraintTemplate
 		User          string
 		TraceExpected bool
 		Cfg           *v1alpha1.Config
 	}{
 		{
 			Name:          "Valid Trace",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			TraceExpected: true,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -443,7 +553,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong Kind",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			TraceExpected: false,
 			User:          "test@test.com",
 			Cfg: &v1alpha1.Config{
@@ -465,7 +575,7 @@ func TestTracing(t *testing.T) {
 		},
 		{
 			Name:          "Wrong User",
-			Template:      validRegoTemplate,
+			Template:      validRegoTemplate(),
 			TraceExpected: false,
 			User:          "other@test.com",
 			Cfg: &v1alpha1.Config{
@@ -486,6 +596,7 @@ func TestTracing(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tt := range tc {
 		maxThreads := -1
 		testFn := func(t *testing.T) {
@@ -493,21 +604,23 @@ func TestTracing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			cstr := &templv1beta1.ConstraintTemplate{}
-			if err := yaml.Unmarshal([]byte(tt.Template), cstr); err != nil {
-				t.Fatalf("Could not instantiate template: %s", err)
-			}
-			unversioned := &templates.ConstraintTemplate{}
-			if err := runtimeScheme.Convert(cstr, unversioned, nil); err != nil {
-				t.Fatalf("Could not convert to unversioned: %v", err)
-			}
-			if _, err := opa.AddTemplate(unversioned); err != nil {
+
+			ctx := context.Background()
+			_, err = opa.AddTemplate(ctx, tt.Template)
+			if err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
+
+			_, err = opa.AddConstraint(ctx, validRegoTemplateConstraint())
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
+
 			review := &atypes.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
@@ -527,7 +640,7 @@ func TestTracing(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error: %s", err)
 			}
-			_, err = handler.validateGatekeeperResources(review)
+			_, err = handler.validateGatekeeperResources(ctx, review)
 			if err != nil {
 				t.Errorf("unable to validate gatekeeper resources: %s", err)
 			}
@@ -739,6 +852,59 @@ func TestValidateConfigResource(t *testing.T) {
 			}
 			if !tt.Err && err != nil {
 				t.Errorf("Did not expect error but received: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		want     bool
+		wantErr  bool
+	}{
+		{
+			name:     "valid provider",
+			provider: validProvider,
+			want:     false,
+			wantErr:  false,
+		},
+		{
+			name:     "invalid provider",
+			provider: "invalid",
+			want:     false,
+			wantErr:  true,
+		},
+		{
+			name:     "provider with no CA",
+			provider: providerWithNoCA,
+			want:     true,
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &validationHandler{}
+			b, err := yaml.YAMLToJSON([]byte(tt.provider))
+			if err != nil {
+				t.Fatalf("Error parsing yaml: %s", err)
+			}
+
+			req := &atypes.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Object: runtime.RawExtension{
+						Raw: b,
+					},
+				},
+			}
+			got, err := h.validateProvider(req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validationHandler.validateProvider() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("validationHandler.validateProvider() = %v, want %v", got, tt.want)
 			}
 		})
 	}

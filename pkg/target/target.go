@@ -3,188 +3,138 @@ package target
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"path"
-	"sync"
-	"text/template"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// This pattern is meant to match:
-//
-//   REGULAR NAMESPACES
-//   - These are defined by this pattern: [a-z0-9]([-a-z0-9]*[a-z0-9])?
-//   - You'll see that this is the first two-thirds or so of the pattern below
-//
-//   PREFIX OR SUFFIX BASED WILDCARDS
-//   - A typical namespace must end in an alphanumeric character.  A prefixed wildcard
-//     can end in "*" (like `kube*`) or "-*" (like `kube-*`), and a suffixed wildcard
-//     can start with "*" (like `*system`) or "*-" (like `*-system`).
-//   - To implement this, we add either (\*|\*-)? as a prefix or (\*|-\*)? as a suffix.
-//     Using both prefixed wildcards and suffixed wildcards at once is not supported.  Therefore,
-//     this _does not_ allow the value to start _and_ end in a wildcard (like `*-*`).
-//   - Crucially, this _does not_ allow the value to start or end in a dash (like `-system` or `kube-`).
-//     That is not a valid namespace and not a wildcard, so it's disallowed.
-//
-//   Notably, this disallows other uses of the "*" character like:
-//   - *
-//   - k*-system
-//
-// See the following regexr to test this regex: https://regexr.com/6dgdj
-const wildcardNSPattern = `^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
-
-var _ handler.TargetHandler = &K8sValidationTarget{}
+// Name is the name of Gatekeeper's Kubernetes validation target.
+const Name = "admission.k8s.gatekeeper.sh"
 
 type K8sValidationTarget struct {
 	cache nsCache
 }
 
+var (
+	_ handler.TargetHandler = &K8sValidationTarget{}
+	_ handler.Cacher        = &K8sValidationTarget{}
+)
+
 func (h *K8sValidationTarget) GetName() string {
-	return "admission.k8s.gatekeeper.sh"
+	return Name
 }
 
-func (h *K8sValidationTarget) Add(key string, object interface{}) error {
-	ns, ok := object.(*corev1.Namespace)
-	if !ok {
-		return fmt.Errorf("%w: cannot cache type %T", ErrCachingType, object)
-	}
-	return h.cache.Add(key, ns)
-}
-
-func (h *K8sValidationTarget) Remove(key string) {
-	h.cache.Remove(key)
-}
-
-var libTempl = template.Must(template.New("library").Parse(templSrc))
-
-func (h *K8sValidationTarget) Library() *template.Template {
-	return libTempl
-}
-
-type WipeData struct{}
-
-func processWipeData() (bool, string, interface{}, error) {
-	return true, "", nil, nil
-}
-
-type AugmentedReview struct {
-	AdmissionRequest *admissionv1.AdmissionRequest
-	Namespace        *corev1.Namespace
-}
-
-type gkReview struct {
-	*admissionv1.AdmissionRequest
-	Unstable *unstable `json:"_unstable,omitempty"`
-}
-
-type AugmentedUnstructured struct {
-	Object    unstructured.Unstructured
-	Namespace *corev1.Namespace
-}
-
-type unstable struct {
-	Namespace *corev1.Namespace `json:"namespace,omitempty"`
-}
-
-func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) (bool, string, interface{}, error) {
+func (h *K8sValidationTarget) processUnstructured(o *unstructured.Unstructured) (bool, []string, interface{}, error) {
 	// Namespace will be "" for cluster objects
 	gvk := o.GetObjectKind().GroupVersionKind()
 	if gvk.Version == "" {
-		return true, "", nil, fmt.Errorf("resource %s has no version", o.GetName())
+		return true, nil, nil, fmt.Errorf("%w: resource %s has no version", ErrRequestObject, o.GetName())
 	}
 	if gvk.Kind == "" {
-		return true, "", nil, fmt.Errorf("resource %s has no kind", o.GetName())
+		return true, nil, nil, fmt.Errorf("%w: resource %s has no kind", ErrRequestObject, o.GetName())
 	}
 
+	var path []string
 	if o.GetNamespace() == "" {
-		return true, path.Join("cluster", url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+		path = clusterScopedKey(gvk, o.GetName())
+	} else {
+		path = namespaceScopedKey(o.GetNamespace(), gvk, o.GetName())
 	}
-	return true, path.Join("namespace", o.GetNamespace(), url.PathEscape(gvk.GroupVersion().String()), gvk.Kind, o.GetName()), o.Object, nil
+
+	return true, path, o.Object, nil
 }
 
-func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, string, interface{}, error) {
+func clusterScopedKey(gvk schema.GroupVersionKind, name string) []string {
+	return []string{"cluster", gvk.GroupVersion().String(), gvk.Kind, name}
+}
+
+func namespaceScopedKey(namespace string, gvk schema.GroupVersionKind, name string) []string {
+	return []string{"namespace", namespace, gvk.GroupVersion().String(), gvk.Kind, name}
+}
+
+func (h *K8sValidationTarget) ProcessData(obj interface{}) (bool, []string, interface{}, error) {
 	switch data := obj.(type) {
 	case unstructured.Unstructured:
 		return h.processUnstructured(&data)
 	case *unstructured.Unstructured:
 		return h.processUnstructured(data)
-	case WipeData, *WipeData:
-		return processWipeData()
+	case wipeData, *wipeData:
+		return true, nil, nil, nil
 	default:
-		return false, "", nil, nil
+		return false, nil, nil, nil
 	}
 }
 
 func (h *K8sValidationTarget) HandleReview(obj interface{}) (bool, interface{}, error) {
-	switch data := obj.(type) {
-	case admissionv1.AdmissionRequest:
-		return true, data, nil
-	case *admissionv1.AdmissionRequest:
-		return true, data, nil
-	case AugmentedReview:
-		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
-	case *AugmentedReview:
-		return true, &gkReview{AdmissionRequest: data.AdmissionRequest, Unstable: &unstable{Namespace: data.Namespace}}, nil
-	case AugmentedUnstructured:
-		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(data)
-		if err != nil {
-			return false, nil, err
-		}
-		return true, admissionRequest, nil
-	case *AugmentedUnstructured:
-		admissionRequest, err := augmentedUnstructuredToAdmissionRequest(*data)
-		if err != nil {
-			return false, nil, err
-		}
-		return true, admissionRequest, nil
-	case unstructured.Unstructured:
-		admissionRequest, err := unstructuredToAdmissionRequest(data)
-		if err != nil {
-			return false, nil, err
-		}
-		return true, admissionRequest, nil
-	case *unstructured.Unstructured:
-		admissionRequest, err := unstructuredToAdmissionRequest(*data)
-		if err != nil {
-			return false, nil, err
-		}
-		return true, admissionRequest, nil
-	}
-	return false, nil, nil
+	return h.handleReview(obj)
 }
 
-func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (gkReview, error) {
-	req, err := unstructuredToAdmissionRequest(obj.Object)
+// handleReview returns a complete *gkReview to pass to the Client.
+func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, error) {
+	var err error
+	var review *gkReview
+
+	switch data := obj.(type) {
+	case admissionv1.AdmissionRequest:
+		review = &gkReview{AdmissionRequest: data}
+	case *admissionv1.AdmissionRequest:
+		review = &gkReview{AdmissionRequest: *data}
+	case AugmentedReview:
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
+	case *AugmentedReview:
+		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
+	case AugmentedUnstructured:
+		review, err = augmentedUnstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
+	case *AugmentedUnstructured:
+		review, err = augmentedUnstructuredToAdmissionRequest(*data)
+		if err != nil {
+			return false, nil, err
+		}
+	case unstructured.Unstructured:
+		review, err = unstructuredToAdmissionRequest(&data)
+		if err != nil {
+			return false, nil, err
+		}
+	case *unstructured.Unstructured:
+		review, err = unstructuredToAdmissionRequest(data)
+		if err != nil {
+			return false, nil, err
+		}
+	default:
+		return false, nil, nil
+	}
+
+	return true, review, nil
+}
+
+func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkReview, error) {
+	review, err := unstructuredToAdmissionRequest(&obj.Object)
 	if err != nil {
-		return gkReview{}, err
+		return nil, err
 	}
 
-	review := gkReview{AdmissionRequest: &req, Unstable: &unstable{Namespace: obj.Namespace}}
-
-	if obj.Namespace != nil {
-		review.Namespace = obj.Namespace.Name
-	}
+	review.namespace = obj.Namespace
 
 	return review, nil
 }
 
-func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.AdmissionRequest, error) {
-	resourceJSON, err := json.Marshal(obj.Object)
+func unstructuredToAdmissionRequest(obj *unstructured.Unstructured) (*gkReview, error) {
+	resourceJSON, err := obj.MarshalJSON()
 	if err != nil {
-		return admissionv1.AdmissionRequest{}, errors.New("Unable to marshal JSON encoding of object")
+		return nil, fmt.Errorf("%w: unable to marshal JSON encoding of object", ErrRequestObject)
 	}
 
 	req := admissionv1.AdmissionRequest{
@@ -200,88 +150,7 @@ func unstructuredToAdmissionRequest(obj unstructured.Unstructured) (admissionv1.
 		Namespace: obj.GetNamespace(),
 	}
 
-	return req, nil
-}
-
-func getString(m map[string]interface{}, k string) (string, error) {
-	val, exists, err := unstructured.NestedFieldNoCopy(m, "kind", k)
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		return "", fmt.Errorf("review[kind][%s] does not exist", k)
-	}
-	s, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("review[kind][%s] is not a string: %+v", k, val)
-	}
-	return s, nil
-}
-
-// nestedMap augments unstructured.NestedMap to interpret a nil-valued field
-// as missing.
-func nestedMap(rmap map[string]interface{}, field string) (map[string]interface{}, bool, error) {
-	objMap, found, err := unstructured.NestedMap(rmap, field)
-	if err != nil || !found {
-		if val, found, err2 := unstructured.NestedFieldNoCopy(rmap, field); val == nil && found && err2 == nil {
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-	return objMap, true, nil
-}
-
-func (h *K8sValidationTarget) HandleViolation(result *types.Result) error {
-	rmap, ok := result.Review.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("could not cast review as map[string]: %+v", result.Review)
-	}
-	group, err := getString(rmap, "group")
-	if err != nil {
-		return err
-	}
-	version, err := getString(rmap, "version")
-	if err != nil {
-		return err
-	}
-	kind, err := getString(rmap, "kind")
-	if err != nil {
-		return err
-	}
-	var apiVersion string
-	if group == "" {
-		apiVersion = version
-	} else {
-		apiVersion = fmt.Sprintf("%s/%s", group, version)
-	}
-
-	objMap, found, err := nestedMap(rmap, "object")
-	if err != nil {
-		return errors.Wrap(err, "HandleViolation:NestedMap")
-	}
-	if !found {
-		objMap, found, err = nestedMap(rmap, "oldObject")
-		if err != nil {
-			return errors.Wrap(err, "HandleViolation:NestedMapOldObj")
-		}
-		if !found {
-			return errors.New("no object or oldObject returned in review")
-		}
-	}
-
-	objMap["apiVersion"] = apiVersion
-	objMap["kind"] = kind
-
-	js, err := json.Marshal(objMap)
-	if err != nil {
-		return errors.Wrap(err, "HandleViolation:Marshal(Object)")
-	}
-	obj := &unstructured.Unstructured{}
-	if err := json.Unmarshal(js, obj); err != nil {
-		return errors.Wrap(err, "HandleViolation:Unmarshal(unstructured)")
-	}
-	result.Resource = obj
-	return nil
+	return &gkReview{AdmissionRequest: req}, nil
 }
 
 func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
@@ -291,107 +160,7 @@ func propsWithDescription(props *apiextensions.JSONSchemaProps, description stri
 }
 
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
-	// Define some repeatedly used sections
-	wildcardNSList := apiextensions.JSONSchemaProps{
-		Type: "array",
-		Items: &apiextensions.JSONSchemaPropsOrArray{
-			Schema: &apiextensions.JSONSchemaProps{Type: "string", Pattern: wildcardNSPattern},
-		},
-	}
-
-	nullableStringList := apiextensions.JSONSchemaProps{
-		Type: "array",
-		Items: &apiextensions.JSONSchemaPropsOrArray{
-			Schema: &apiextensions.JSONSchemaProps{Type: "string", Nullable: true},
-		},
-	}
-
-	trueBool := true
-	labelSelectorSchema := apiextensions.JSONSchemaProps{
-		Type: "object",
-		Properties: map[string]apiextensions.JSONSchemaProps{
-			"matchLabels": {
-				Type:        "object",
-				Description: "A mapping of label keys to sets of allowed label values for those keys.  A selected resource will match all of these expressions.",
-				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
-					Allows: true,
-					Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-				},
-				XPreserveUnknownFields: &trueBool,
-			},
-			"matchExpressions": {
-				Type:        "array",
-				Description: "a list of label selection expressions. A selected resource will match all of these expressions.",
-				Items: &apiextensions.JSONSchemaPropsOrArray{
-					Schema: &apiextensions.JSONSchemaProps{
-						Type:        "object",
-						Description: "a selector that specifies a label key, a set of label values, an operator that defines the relationship between the two that will match the selector.",
-						Properties: map[string]apiextensions.JSONSchemaProps{
-							"key": {
-								Description: "the label key that the selector applies to.",
-								Type:        "string",
-							},
-							"operator": {
-								Type:        "string",
-								Description: "the relationship between the label and value set that defines a matching selection.",
-								Enum: []apiextensions.JSON{
-									"In",
-									"NotIn",
-									"Exists",
-									"DoesNotExist",
-								},
-							},
-							"values": {
-								Type:        "array",
-								Description: "a set of label values.",
-								Items: &apiextensions.JSONSchemaPropsOrArray{
-									Schema: &apiextensions.JSONSchemaProps{Type: "string"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Make sure to copy description changes into pkg/mutation/match/match.go's `Match` struct.
-	return apiextensions.JSONSchemaProps{
-		Type: "object",
-		Properties: map[string]apiextensions.JSONSchemaProps{
-			"kinds": {
-				Type: "array",
-				Items: &apiextensions.JSONSchemaPropsOrArray{
-					Schema: &apiextensions.JSONSchemaProps{
-						Type:        "object",
-						Description: "The Group and Kind of objects that should be matched.  If multiple groups/kinds combinations are specified, an incoming resource need only match one to be in scope.",
-						Properties: map[string]apiextensions.JSONSchemaProps{
-							"apiGroups": nullableStringList,
-							"kinds":     nullableStringList,
-						},
-					},
-				},
-			},
-			"namespaces":         *propsWithDescription(&wildcardNSList, "`namespaces` is a list of namespace names. If defined, a constraint only applies to resources in a listed namespace.  Namespaces also supports a prefix-based glob.  For example, `namespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
-			"excludedNamespaces": *propsWithDescription(&wildcardNSList, "`excludedNamespaces` is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix-based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`."),
-			"labelSelector":      *propsWithDescription(&labelSelectorSchema, "`labelSelector` is the combination of two optional fields: `matchLabels` and `matchExpressions`.  These two fields provide different methods of selecting or excluding k8s objects based on the label keys and values included in object metadata.  All selection expressions from both sections are ANDed to determine if an object meets the cumulative requirements of the selector."),
-			"namespaceSelector":  *propsWithDescription(&labelSelectorSchema, "`namespaceSelector` is a label selector against an object's containing namespace or the object itself, if the object is a namespace."),
-			"scope": {
-				Type:        "string",
-				Description: "`scope` determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)",
-				Enum: []apiextensions.JSON{
-					"*",
-					"Cluster",
-					"Namespaced",
-				},
-			},
-			"name": {
-				Type:        "string",
-				Description: "`name` is the name of an object.  If defined, it matches against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` matches both `pod-a` and `pod-b`.",
-				Pattern:     wildcardNSPattern,
-			},
-		},
-	}
+	return matchSchema()
 }
 
 func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) error {
@@ -442,7 +211,6 @@ func convertToLabelSelector(object map[string]interface{}) (*metav1.LabelSelecto
 	return obj, nil
 }
 
-// TODO: can we use generic for Unmarshal after go 1.18?
 func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 	j, err := json.Marshal(object)
 	if err != nil {
@@ -461,121 +229,18 @@ func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constrain
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 	}
+
 	if found && obj != nil {
-		match, err := convertToMatch(obj)
+		m, err := convertToMatch(obj)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
 		}
-		return &Matcher{match, &h.cache}, nil
+		return &Matcher{match: m, cache: &h.cache}, nil
 	}
-	return nil, fmt.Errorf("%w: %s %s has no match found", ErrCreatingMatcher, u.GetKind(), u.GetName())
+
+	return &Matcher{}, nil
 }
 
-// Matcher implements constraint.Matcher.
-type Matcher struct {
-	match *match.Match
-	cache *nsCache
+func (h *K8sValidationTarget) GetCache() handler.Cache {
+	return &h.cache
 }
-
-type nsCache struct {
-	lock  sync.RWMutex
-	cache map[string]*corev1.Namespace
-}
-
-func (nc *nsCache) Add(key string, ns *corev1.Namespace) error {
-	nc.lock.Lock()
-	defer nc.lock.Unlock()
-
-	if nc.cache == nil {
-		nc.cache = make(map[string]*corev1.Namespace)
-	}
-
-	nc.cache[key] = ns
-	return nil
-}
-
-func (nc *nsCache) Get(key string) (*corev1.Namespace, error) {
-	nc.lock.RLock()
-	defer nc.lock.RUnlock()
-
-	ns, ok := nc.cache[key]
-	if !ok {
-		return nil, nil
-	}
-	return ns, nil
-}
-
-func (nc *nsCache) Remove(key string) {
-	nc.lock.Lock()
-	defer nc.lock.Unlock()
-	delete(nc.cache, key)
-}
-
-func (m *Matcher) Match(review interface{}) (bool, error) {
-	var gkReq *gkReview
-	switch req := review.(type) {
-	case *gkReview:
-		gkReq = req
-	case gkReview:
-		gkReq = &req
-	default:
-		return false, fmt.Errorf("%w: expect %T, got %T", ErrReviewFormat, gkReview{}, review)
-	}
-
-	obj, oldObj, ns, err := gkReviewToObject(gkReq)
-	if err != nil {
-		return false, err
-	}
-
-	if ns == nil {
-		cachedNs, err := m.cache.Get(gkReq.Namespace)
-		if err != nil {
-			return false, err
-		}
-		ns = cachedNs
-	}
-
-	return matchAny(m, ns, &obj, &oldObj)
-}
-
-func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
-	nilObj := 0
-	for _, obj := range objs {
-		if obj.Object == nil {
-			nilObj++
-			continue
-		}
-		matched, err := match.Matches(m.match, obj, ns)
-		if err != nil {
-			return false, fmt.Errorf("%w: %v", ErrMatching, err)
-		}
-		if matched {
-			return true, nil
-		}
-	}
-	if nilObj == len(objs) {
-		return false, fmt.Errorf("%w: neither object nor old object are defined", ErrRequestObject)
-	}
-	return false, nil
-}
-
-func gkReviewToObject(req *gkReview) (obj, oldObj unstructured.Unstructured, ns *corev1.Namespace, err error) {
-	if req.Object.Raw != nil {
-		err = obj.UnmarshalJSON(req.Object.Raw)
-		if err != nil {
-			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview object %s", ErrRequestObject, string(req.Object.Raw))
-		}
-	}
-	if req.OldObject.Raw != nil {
-		err = oldObj.UnmarshalJSON(req.OldObject.Raw)
-		if err != nil {
-			return obj, oldObj, nil, fmt.Errorf("%w: failed to unmarshal gkReview oldObject %s", ErrRequestObject, string(req.Object.Raw))
-		}
-	}
-	return obj, oldObj, req.Unstable.Namespace, nil
-}
-
-var (
-	_ constraints.Matcher = &Matcher{}
-	_ handler.Cache       = &K8sValidationTarget{}
-)

@@ -1,10 +1,11 @@
-package v1beta1
+package v1beta1_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -23,7 +24,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	testutils.Setenv(t, "POD_NAMESPACE", podNS)
 
 	scheme := runtime.NewScheme()
-	err := AddToScheme(scheme)
+	err := v1beta1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,20 +40,20 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 	)
 
 	cstr := &unstructured.Unstructured{}
-	cstr.SetGroupVersionKind(schema.GroupVersionKind{Group: ConstraintsGroup, Version: "v1beta1", Kind: cstrKind})
+	cstr.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.ConstraintsGroup, Version: "v1beta1", Kind: cstrKind})
 	cstr.SetName(cstrName)
 
-	wantStatus := &ConstraintPodStatus{}
+	wantStatus := &v1beta1.ConstraintPodStatus{}
 	wantStatus.SetName("some--gk--pod-aconstraintkind-a--constraint")
 	wantStatus.SetNamespace(podNS)
 	wantStatus.Status.ID = podName
 	wantStatus.Status.Operations = operations.AssignedStringList()
 	wantStatus.SetLabels(
 		map[string]string{
-			ConstraintNameLabel:         "a-constraint",
-			ConstraintKindLabel:         "AConstraintKind",
-			PodLabel:                    podName,
-			ConstraintTemplateNameLabel: strings.ToLower(cstrKind),
+			v1beta1.ConstraintNameLabel:         "a-constraint",
+			v1beta1.ConstraintKindLabel:         "AConstraintKind",
+			v1beta1.PodLabel:                    podName,
+			v1beta1.ConstraintTemplateNameLabel: strings.ToLower(cstrKind),
 		})
 
 	err = controllerutil.SetOwnerReference(pod, wantStatus, scheme)
@@ -60,7 +61,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gotStatus, err := NewConstraintStatusForPod(pod, cstr, scheme)
+	gotStatus, err := v1beta1.NewConstraintStatusForPod(pod, cstr, scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 		t.Fatal(diff)
 	}
 
-	cmVal, err := KeyForConstraint(podName, cstr)
+	cmVal, err := v1beta1.KeyForConstraint(podName, cstr)
 	if err != nil {
 		t.Fatal(err)
 	}

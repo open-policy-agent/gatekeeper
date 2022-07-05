@@ -10,6 +10,7 @@ import (
 var (
 	dataVarTerm    = ast.VarTerm("data")
 	inputRefPrefix = ast.MustParseRef("input")
+	futureVarTerm  = ast.VarTerm("future")
 )
 
 // isDataRef returns true if the ast.Ref is referring to the "data" document.
@@ -20,6 +21,15 @@ func isDataRef(ref ast.Ref) bool {
 
 	firstTerm := ref[0]
 	return firstTerm.Equal(dataVarTerm)
+}
+
+func isFutureRef(ref ast.Ref) bool {
+	if len(ref) == 0 {
+		return false
+	}
+
+	firstTerm := ref[0]
+	return firstTerm.Equal(futureVarTerm)
 }
 
 // isSubRef returns true if sub is contained within base.

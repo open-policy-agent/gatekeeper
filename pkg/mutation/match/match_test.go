@@ -1,14 +1,12 @@
 package match
 
 import (
-	"encoding/json"
+	"errors"
 	"testing"
 
-	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,16 +15,28 @@ import (
 
 func TestMatch(t *testing.T) {
 	table := []struct {
-		tname       string
-		toMatch     *unstructured.Unstructured
-		match       Match
-		namespace   *corev1.Namespace
-		shouldMatch bool
+		name      string
+		object    *unstructured.Unstructured
+		matcher   Match
+		namespace *corev1.Namespace
+		wantMatch bool
+		wantErr   error
 	}{
 		{
-			tname:   "match empty group kinds",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			// Demonstrates why we need to use reflect in Matches to determine if obj
+			// is nil.
+			name:   "nil object",
+			object: nil,
+			matcher: Match{
+				NamespaceSelector: &metav1.LabelSelector{},
+			},
+			wantMatch: false,
+			wantErr:   ErrMatch,
+		},
+		{
+			name:   "match empty group kinds",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{},
@@ -34,27 +44,27 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "match empty kinds",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "match empty kinds",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "don't match empty kinds in other group",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "don't match empty kinds in other group",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{},
@@ -62,97 +72,97 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "match kind with *",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "match kind with wildcard",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
-						Kinds:     []string{"*"},
-						APIGroups: []string{"*"},
+						Kinds:     []string{Wildcard},
+						APIGroups: []string{Wildcard},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "match group and no kinds specified should match",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "match group and no kinds specified should match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 					{
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "match kind and no group specified should match",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "match kind and no group specified should match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds: []string{"kind", "neithermatching"},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "match kind and group explicit",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "match kind and group explicit",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 					{
 						Kinds:     []string{"notmatching", "kind"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "kind group don't matches",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "kind group doesn't match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 					{
 						Kinds:     []string{"notmatching", "kind"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "kind group don't matches",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "kind group don't match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Kinds: []Kinds{
 					{
 						Kinds:     []string{"notmatching", "neithermatching"},
-						APIGroups: []string{"*"},
+						APIGroups: []string{Wildcard},
 					},
 					{
 						Kinds:     []string{"notmatching", "kind"},
@@ -160,159 +170,216 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "namespace matches",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "namespace matches",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
+			matcher: Match{
 				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
 			},
-			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
-			shouldMatch: true,
+			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
+			wantMatch: true,
+		},
+		{
+			name:   "is a matching Namespace",
+			object: makeNamespace("matching"),
+			matcher: Match{
+				Namespaces: []util.Wildcard{"matching"},
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "is not a matching Namespace",
+			object: makeNamespace("non-matching"),
+			matcher: Match{
+				Namespaces: []util.Wildcard{"matching"},
+			},
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
 			// Ensures that namespaceMatch handles ns==nil
-			tname:   "namespaces configured, but cluster scoped",
-			toMatch: makeObject("kind", "group", "", "name"),
-			match: Match{
+			name:   "namespaces configured, but cluster scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
 			},
-			namespace:   nil,
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "namespace prefix matches",
-			toMatch: makeObject("kind", "group", "kube-system", "name"),
-			match: Match{
+			name:   "namespace prefix matches",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "kube-system", "name"),
+			matcher: Match{
 				Namespaces: []util.Wildcard{"nonmatching", "kube-*"},
 			},
-			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
-			shouldMatch: true,
+			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			wantMatch: true,
 		},
 		{
-			tname:   "namespace is not in the matches list",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
+			name:   "namespace is not in the matches list",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace2", "name"),
+			matcher: Match{
 				Namespaces: []util.Wildcard{"nonmatching", "notmatchingeither"},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "namespace fails if clusterscoped",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
-				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
-				Scope:      apiextensionsv1.ClusterScoped,
+			name:   "has namespace fails if cluster scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
+			matcher: Match{
+				Scope: apiextensionsv1.ClusterScoped,
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "namespace is excluded",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
-				Namespaces:         []util.Wildcard{"nonmatching", "namespace"},
+			name:   "has namespace succeeds if namespace scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
+			matcher: Match{
+				Scope: apiextensionsv1.NamespaceScoped,
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "has namespace succeeds if scope is typo",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
+			matcher: Match{
+				Scope: "cluster",
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "without namespace succeeds if cluster scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
+				Scope: apiextensionsv1.ClusterScoped,
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "without namespace fails if namespace scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
+				Scope: apiextensionsv1.NamespaceScoped,
+			},
+			namespace: nil,
+			wantMatch: false,
+		},
+		{
+			name:   "is namespace succeeds if cluster scoped",
+			object: makeNamespace("foo"),
+			matcher: Match{
+				Scope: apiextensionsv1.ClusterScoped,
+			},
+			namespace: nil,
+			wantMatch: true,
+		},
+		{
+			name:   "is namespace fails if namespace scoped",
+			object: makeNamespace("foo"),
+			matcher: Match{
+				Scope: apiextensionsv1.NamespaceScoped,
+			},
+			namespace: nil,
+			wantMatch: false,
+		},
+		{
+			name:   "object's namespace is excluded",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name"),
+			matcher: Match{
 				ExcludedNamespaces: []util.Wildcard{"namespace"},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
+		},
+		{
+			name:   "object is an excluded Namespace",
+			object: makeNamespace("excluded"),
+			matcher: Match{
+				ExcludedNamespaces: []util.Wildcard{"excluded"},
+			},
+			namespace: nil,
+			wantMatch: false,
+		},
+		{
+			name:   "object is not an excluded Namespace",
+			object: makeNamespace("not-excluded"),
+			matcher: Match{
+				ExcludedNamespaces: []util.Wildcard{"excluded"},
+			},
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
 			// Ensures that namespaceMatch handles ns==nil
-			tname:   "a namespace is excluded, but object is cluster scoped",
-			toMatch: makeObject("kind", "group", "", "name"),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
-				Namespaces:         []util.Wildcard{"nonmatching", "namespace"},
+			name:   "a namespace is excluded, but object is cluster scoped",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
+			matcher: Match{
 				ExcludedNamespaces: []util.Wildcard{"namespace"},
 			},
-			namespace:   nil,
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "namespace is excluded by wildcard match",
-			toMatch: makeObject("kind", "group", "kube-system", "name"),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
-				Namespaces:         []util.Wildcard{"nonmatching", "kube-*"},
+			name:   "namespace is excluded by wildcard match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "kube-system", "name"),
+			matcher: Match{
 				ExcludedNamespaces: []util.Wildcard{"kube-*"},
 			},
-			namespace:   &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
-			shouldMatch: false,
+			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			wantMatch: false,
 		},
 		{
-			tname:   "namespace scoped fails if cluster scoped",
-			toMatch: makeObject("kind", "group", "", "name"),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
-				Scope: apiextensionsv1.NamespaceScoped,
-			},
-			namespace:   nil,
-			shouldMatch: false,
-		},
-		{
-			tname: "label selector",
-			toMatch: makeObject("kind", "group", "", "name", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+			name: "label selector",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name", func(o *unstructured.Unstructured) {
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
+			matcher: Match{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname: "label selector not matching",
-			toMatch: makeObject("kind", "group", "", "name", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+			name: "invalid label selector",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name", func(o *unstructured.Unstructured) {
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
+			matcher: Match{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{{
+						Operator: "Invalid",
+					}},
 				},
+			},
+			namespace: nil,
+			wantMatch: false,
+			wantErr:   ErrMatch,
+		},
+		{
+			name: "label selector not matching",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name", func(o *unstructured.Unstructured) {
+				o.SetLabels(map[string]string{
+					"labelname": "labelvalue",
+				})
+			}),
+			matcher: Match{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname":        "labelvalue",
@@ -320,12 +387,12 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "namespace selector",
-			toMatch: makeObject("kind", "group", "", "name"),
+			name:   "namespace selector",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			namespace: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
@@ -334,24 +401,18 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
+			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
 					},
 				},
 			},
-			shouldMatch: true,
+			wantMatch: true,
 		},
 		{
-			tname:   "namespace selector not matching",
-			toMatch: makeObject("kind", "group", "foo", "name"),
+			name:   "invalid namespace selector",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			namespace: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
@@ -360,13 +421,28 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
+			matcher: Match{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{{
+						Operator: "Invalid",
+					}},
+				},
+			},
+			wantMatch: false,
+			wantErr:   ErrMatch,
+		},
+		{
+			name:   "namespace selector not matching",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "foo", "name"),
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "foo",
+					Labels: map[string]string{
+						"labelname": "labelvalue",
 					},
 				},
+			},
+			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
@@ -374,19 +450,13 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			shouldMatch: false,
+			wantMatch: false,
 		},
 		{
-			tname:     "namespace selector not matching, but cluster scoped",
-			toMatch:   makeObject("kind", "group", "", "name"),
+			name:      "namespace selector not matching, but cluster scoped",
+			object:    makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			namespace: nil,
-			match: Match{
-				Kinds: []Kinds{
-					{
-						Kinds:     []string{"kind"},
-						APIGroups: []string{"group"},
-					},
-				},
+			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
@@ -394,139 +464,127 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
-			shouldMatch: true,
+			wantMatch: true,
 		},
 		{
-			tname: "namespace selector is applied to the object, if the object is a namespace",
-			toMatch: makeNamespace("namespace", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+			name: "namespace selector is applied to the object, if the object is a namespace",
+			object: makeNamespace("namespace", func(o *unstructured.Unstructured) {
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
 			namespace: nil,
-			match: Match{
+			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "labelvalue",
 					},
 				},
 			},
-			shouldMatch: true,
+			wantMatch: true,
 		},
 		{
-			tname: "namespace selector is applied to the namespace, and does not match",
-			toMatch: makeNamespace("namespace", func(o *unstructured.Unstructured) {
-				meta, _ := meta.Accessor(o)
-				meta.SetLabels(map[string]string{
+			name: "namespace selector is applied to the namespace, and does not match",
+			object: makeNamespace("namespace", func(o *unstructured.Unstructured) {
+				o.SetLabels(map[string]string{
 					"labelname": "labelvalue",
 				})
 			}),
 			namespace: nil,
-			match: Match{
+			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"labelname": "badvalue",
 					},
 				},
 			},
-			shouldMatch: false,
+			wantMatch: false,
 		},
 		{
-			tname:   "match name",
-			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
-			match: Match{
+			name:      "namespace selector error on missing Namespace",
+			object:    makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "foo", "name"),
+			namespace: nil,
+			matcher: Match{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"labelname": "badvalue",
+					},
+				},
+			},
+			wantMatch: false,
+			wantErr:   ErrMatch,
+		},
+		{
+			name:   "match name",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name-foo"),
+			matcher: Match{
 				Name: "name-foo",
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "match wildcard name",
-			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
-			match: Match{
+			name:   "match wildcard name",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name-foo"),
+			matcher: Match{
 				Name: "name-*",
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: true,
+			namespace: nil,
+			wantMatch: true,
 		},
 		{
-			tname:   "missing asterisk in name wildcard does not match",
-			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
-			match: Match{
+			name:   "missing asterisk in name wildcard does not match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name-foo"),
+			matcher: Match{
 				Name: "name-",
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "wrong name does not match",
-			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
-			match: Match{
+			name:   "wrong name does not match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name-foo"),
+			matcher: Match{
 				Name: "name-bar",
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 		{
-			tname:   "no match with correct name and wrong namespace",
-			toMatch: makeObject("kind", "group", "namespace", "name-foo"),
-			match: Match{
+			name:   "no match with correct name and wrong namespace",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
+			matcher: Match{
 				Name:       "name-foo",
 				Namespaces: []util.Wildcard{"other-namespace"},
 			},
-			namespace:   &corev1.Namespace{},
-			shouldMatch: false,
+			namespace: nil,
+			wantMatch: false,
 		},
 	}
+
 	for _, tc := range table {
-		t.Run(tc.tname, func(t *testing.T) {
-			ns := tc.namespace
-			nsgk := schema.GroupKind{Group: "", Kind: "Namespace"}
-			if tc.toMatch.GetObjectKind().GroupVersionKind().GroupKind() == nsgk {
-				b, err := json.Marshal(tc.toMatch.Object)
-				if err != nil {
-					t.Fatal(err)
-				}
-				ns = &corev1.Namespace{}
-				if err := json.Unmarshal(b, ns); err != nil {
-					t.Fatal(err)
-				}
+		t.Run(tc.name, func(t *testing.T) {
+			matches, err := Matches(&tc.matcher, tc.object, tc.namespace)
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("got Matches() err %v, want %v", err, tc.name)
 			}
-			// namespace is not populated in the object metadata for mutation requests
-			tc.toMatch.SetNamespace("")
-			matches, err := Matches(&tc.match, tc.toMatch, ns)
-			if err != nil {
-				t.Error("Match failed for ", tc.tname)
-			}
-			if matches != tc.shouldMatch {
-				t.Errorf("%s: expecting match to be %v, was %v", tc.tname, tc.shouldMatch, matches)
+			if matches != tc.wantMatch {
+				t.Errorf("%s: expecting match to be %v, was %v", tc.name, tc.wantMatch, matches)
 			}
 		})
 	}
 }
 
-func makeObject(kind, group, namespace, name string, options ...func(*unstructured.Unstructured)) *unstructured.Unstructured {
-	config := &configv1alpha1.Config{
-		TypeMeta: metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-	}
-	gvk := schema.GroupVersionKind{
-		Kind:    kind,
-		Group:   group,
-		Version: "v1",
-	}
-	config.APIVersion, config.Kind = gvk.ToAPIVersionAndKind()
-	unstruct, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(config)
+func makeObject(gvk schema.GroupVersionKind, namespace, name string, options ...func(*unstructured.Unstructured)) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
+	obj.SetGroupVersionKind(gvk)
+	obj.SetNamespace(namespace)
+	obj.SetName(name)
 
-	res := &unstructured.Unstructured{Object: unstruct}
 	for _, o := range options {
-		o(res)
+		o(obj)
 	}
-	return res
+	return obj
 }
 
 func makeNamespace(name string, options ...func(*unstructured.Unstructured)) *unstructured.Unstructured {
@@ -550,75 +608,117 @@ func makeNamespace(name string, options ...func(*unstructured.Unstructured)) *un
 
 func TestApplyTo(t *testing.T) {
 	table := []struct {
-		tname       string
-		toMatch     *unstructured.Unstructured
-		applyTo     []ApplyTo
-		shouldApply bool
+		name      string
+		gvk       schema.GroupVersionKind
+		applyTo   []ApplyTo
+		wantApply bool
 	}{
 		{
-			tname:   "one item, applies",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
+			name: "exact match",
+			gvk:  schema.GroupVersionKind{Group: "foo1", Version: "v1", Kind: "bar1"},
 			applyTo: []ApplyTo{
 				{
-					Groups:   []string{"group"},
-					Kinds:    []string{"kind"},
+					Groups:   []string{"foo1"},
 					Versions: []string{"v1"},
+					Kinds:    []string{"bar1"},
 				},
 			},
-			shouldApply: true,
+			wantApply: true,
 		},
 		{
-			tname:   "one item, many columns",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
+			name: "wrong group",
+			gvk:  schema.GroupVersionKind{Group: "foo1", Version: "v1", Kind: "bar1"},
+			applyTo: []ApplyTo{
+				{
+					Groups:   []string{"foo2"},
+					Versions: []string{"v1"},
+					Kinds:    []string{"bar1"},
+				},
+			},
+			wantApply: false,
+		},
+		{
+			name: "wrong version",
+			gvk:  schema.GroupVersionKind{Group: "foo1", Version: "v1", Kind: "bar1"},
+			applyTo: []ApplyTo{
+				{
+					Groups:   []string{"foo1"},
+					Versions: []string{"v2"},
+					Kinds:    []string{"bar1"},
+				},
+			},
+			wantApply: false,
+		},
+		{
+			name: "wrong Kind",
+			gvk:  schema.GroupVersionKind{Group: "foo1", Version: "v1", Kind: "bar1"},
+			applyTo: []ApplyTo{
+				{
+					Groups:   []string{"foo2"},
+					Versions: []string{"v1"},
+					Kinds:    []string{"bar1"},
+				},
+			},
+			wantApply: false,
+		},
+		{
+			name: "match one of each",
+			gvk:  schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "kind"},
 			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"aa", "bb", "group"},
-					Kinds:    []string{"aa", "bb", "kind"},
 					Versions: []string{"aa", "bb", "v1"},
+					Kinds:    []string{"aa", "bb", "kind"},
 				},
 			},
-			shouldApply: true,
+			wantApply: true,
 		},
 		{
-			tname:   "first don't match, second does",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
+			name: "match second",
+			gvk:  schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "kind"},
 			applyTo: []ApplyTo{
 				{
 					Groups:   []string{"group"},
-					Kinds:    []string{"not matching"},
 					Versions: []string{"v1"},
+					Kinds:    []string{"not matching"},
 				},
 				{
 					Groups:   []string{"group"},
-					Kinds:    []string{"kind"},
 					Versions: []string{"v1"},
+					Kinds:    []string{"kind"},
 				},
 			},
-			shouldApply: true,
+			wantApply: true,
 		},
 		{
-			tname:   "no one is matching",
-			toMatch: makeObject("kind", "group", "namespace", "name"),
+			name: "match none",
+			gvk:  schema.GroupVersionKind{Group: "foo1", Version: "v1", Kind: "bar1"},
 			applyTo: []ApplyTo{
 				{
-					Groups:   []string{"group"},
-					Kinds:    []string{"not matching"},
+					Groups:   []string{"foo2"},
 					Versions: []string{"v1"},
+					Kinds:    []string{"bar1"},
 				},
 				{
-					Groups:   []string{"neither", "neither1"},
-					Kinds:    []string{"kind"},
+					Groups:   []string{"foo1"},
+					Versions: []string{"v2"},
+					Kinds:    []string{"bar1"},
+				},
+				{
+					Groups:   []string{"foo1"},
 					Versions: []string{"v1"},
+					Kinds:    []string{"bar2"},
 				},
 			},
-			shouldApply: false,
+			wantApply: false,
 		},
 	}
+
 	for _, tc := range table {
-		t.Run(tc.tname, func(t *testing.T) {
-			appliesTo := AppliesTo(tc.applyTo, tc.toMatch)
-			if appliesTo != tc.shouldApply {
-				t.Errorf("%s: expecting match to be %v, was %v", tc.tname, tc.shouldApply, appliesTo)
+		t.Run(tc.name, func(t *testing.T) {
+			appliesTo := AppliesTo(tc.applyTo, tc.gvk)
+			if appliesTo != tc.wantApply {
+				t.Errorf("%s: expecting match to be %v, was %v", tc.name, tc.wantApply, appliesTo)
 			}
 		})
 	}

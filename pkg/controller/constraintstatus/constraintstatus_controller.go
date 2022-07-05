@@ -48,15 +48,15 @@ type Adder struct {
 	WatchManager     *watch.Manager
 	ControllerSwitch *watch.ControllerSwitch
 	Events           <-chan event.GenericEvent
-	AssumeDeleted    func(schema.GroupVersionKind) bool
+	IfWatching       func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
 	r := newReconciler(mgr, a.ControllerSwitch)
-	if a.AssumeDeleted != nil {
-		r.assumeDeleted = a.AssumeDeleted
+	if a.IfWatching != nil {
+		r.ifWatching = a.IfWatching
 	}
 	return add(mgr, r, a.Events)
 }
@@ -64,17 +64,18 @@ func (a *Adder) Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
 	mgr manager.Manager,
-	cs *watch.ControllerSwitch) *ReconcileConstraintStatus {
+	cs *watch.ControllerSwitch,
+) *ReconcileConstraintStatus {
 	return &ReconcileConstraintStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
 		writer:       mgr.GetClient(),
 		statusClient: mgr.GetClient(),
 		reader:       mgr.GetCache(),
 
-		cs:            cs,
-		scheme:        mgr.GetScheme(),
-		log:           log,
-		assumeDeleted: func(schema.GroupVersionKind) bool { return false },
+		cs:         cs,
+		scheme:     mgr.GetScheme(),
+		log:        log,
+		ifWatching: func(_ schema.GroupVersionKind, fn func() error) (bool, error) { return true, fn() },
 	}
 }
 
@@ -147,10 +148,10 @@ type ReconcileConstraintStatus struct {
 	writer       client.Writer
 	statusClient client.StatusClient
 
-	cs            *watch.ControllerSwitch
-	scheme        *runtime.Scheme
-	log           logr.Logger
-	assumeDeleted func(schema.GroupVersionKind) bool
+	cs         *watch.ControllerSwitch
+	scheme     *runtime.Scheme
+	log        logr.Logger
+	ifWatching func(schema.GroupVersionKind, func() error) (bool, error)
 }
 
 // +kubebuilder:rbac:groups=constraints.gatekeeper.sh,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -182,19 +183,25 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
-	if r.assumeDeleted(gvk) {
-		// constraint is deleted, nothing to reconcile
-		return reconcile.Result{}, nil
-	}
-
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
-	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
+
+	executed, err := r.ifWatching(gvk, func() error {
+		return r.reader.Get(ctx, unpackedRequest.NamespacedName, instance)
+	})
+	if err != nil {
 		// If the constraint does not exist, we are done
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
+	}
+
+	// If the function is not executed, we can assume the constraint
+	// template has been deleted
+	if !executed {
+		// constraint is deleted, nothing to reconcile
+		return reconcile.Result{}, nil
 	}
 
 	r.log.Info("handling constraint status update", "instance", instance)

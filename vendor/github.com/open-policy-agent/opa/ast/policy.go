@@ -144,27 +144,13 @@ type (
 		Annotations []*Annotations `json:"annotations,omitempty"`
 		Rules       []*Rule        `json:"rules,omitempty"`
 		Comments    []*Comment     `json:"comments,omitempty"`
+		stmts       []Statement
 	}
 
 	// Comment contains the raw text from the comment in the definition.
 	Comment struct {
 		Text     []byte
 		Location *Location
-	}
-
-	// Annotations represents metadata attached to other AST nodes such as rules.
-	Annotations struct {
-		Location *Location           `json:"-"`
-		Scope    string              `json:"scope"`
-		Schemas  []*SchemaAnnotation `json:"schemas,omitempty"`
-		node     Node
-	}
-
-	// SchemaAnnotation contains a schema declaration for the document identified by the path.
-	SchemaAnnotation struct {
-		Path       Ref          `json:"path"`
-		Schema     Ref          `json:"schema,omitempty"`
-		Definition *interface{} `json:"definition,omitempty"`
 	}
 
 	// Package represents the namespace of the documents produced
@@ -247,122 +233,6 @@ type (
 	}
 )
 
-func (s *Annotations) String() string {
-	bs, _ := json.Marshal(s)
-	return string(bs)
-}
-
-// Loc returns the location of this annotation.
-func (s *Annotations) Loc() *Location {
-	return s.Location
-}
-
-// SetLoc updates the location of this annotation.
-func (s *Annotations) SetLoc(l *Location) {
-	s.Location = l
-}
-
-// Compare returns an integer indicating if s is less than, equal to, or greater
-// than other.
-func (s *Annotations) Compare(other *Annotations) int {
-
-	if cmp := scopeCompare(s.Scope, other.Scope); cmp != 0 {
-		return cmp
-	}
-
-	max := len(s.Schemas)
-	if len(other.Schemas) < max {
-		max = len(other.Schemas)
-	}
-
-	for i := 0; i < max; i++ {
-		if cmp := s.Schemas[i].Compare(other.Schemas[i]); cmp != 0 {
-			return cmp
-		}
-	}
-
-	if len(s.Schemas) > len(other.Schemas) {
-		return 1
-	} else if len(s.Schemas) < len(other.Schemas) {
-		return -1
-	}
-
-	return 0
-}
-
-// Copy returns a deep copy of s.
-func (s *Annotations) Copy(node Node) *Annotations {
-	cpy := *s
-	cpy.Schemas = make([]*SchemaAnnotation, len(s.Schemas))
-	for i := range cpy.Schemas {
-		cpy.Schemas[i] = s.Schemas[i].Copy()
-	}
-	cpy.node = node
-	return &cpy
-}
-
-// Copy returns a deep copy of s.
-func (s *SchemaAnnotation) Copy() *SchemaAnnotation {
-	cpy := *s
-	return &cpy
-}
-
-// Compare returns an integer indicating if s is less than, equal to, or greater
-// than other.
-func (s *SchemaAnnotation) Compare(other *SchemaAnnotation) int {
-
-	if cmp := s.Path.Compare(other.Path); cmp != 0 {
-		return cmp
-	}
-
-	if cmp := s.Schema.Compare(other.Schema); cmp != 0 {
-		return cmp
-	}
-
-	if s.Definition != nil && other.Definition == nil {
-		return -1
-	} else if s.Definition == nil && other.Definition != nil {
-		return 1
-	} else if s.Definition != nil && other.Definition != nil {
-		return util.Compare(*s.Definition, *other.Definition)
-	}
-
-	return 0
-}
-
-func (s *SchemaAnnotation) String() string {
-	bs, _ := json.Marshal(s)
-	return string(bs)
-}
-
-func scopeCompare(s1, s2 string) int {
-
-	o1 := scopeOrder(s1)
-	o2 := scopeOrder(s2)
-
-	if o2 < o1 {
-		return 1
-	} else if o2 > o1 {
-		return -1
-	}
-
-	if s1 < s2 {
-		return -1
-	} else if s2 < s1 {
-		return 1
-	}
-
-	return 0
-}
-
-func scopeOrder(s string) int {
-	switch s {
-	case annotationScopeRule:
-		return 1
-	}
-	return 0
-}
-
 // Compare returns an integer indicating whether mod is less than, equal to,
 // or greater than other.
 func (mod *Module) Compare(other *Module) int {
@@ -391,11 +261,7 @@ func (mod *Module) Copy() *Module {
 	cpy := *mod
 	cpy.Rules = make([]*Rule, len(mod.Rules))
 
-	var nodes map[Node]Node
-
-	if len(mod.Annotations) > 0 {
-		nodes = make(map[Node]Node)
-	}
+	nodes := make(map[Node]Node)
 
 	for i := range mod.Rules {
 		cpy.Rules[i] = mod.Rules[i].Copy()
@@ -426,6 +292,11 @@ func (mod *Module) Copy() *Module {
 	cpy.Comments = make([]*Comment, len(mod.Comments))
 	for i := range mod.Comments {
 		cpy.Comments[i] = mod.Comments[i].Copy()
+	}
+
+	cpy.stmts = make([]Statement, len(mod.stmts))
+	for i := range mod.stmts {
+		cpy.stmts[i] = nodes[mod.stmts[i]]
 	}
 
 	return &cpy
@@ -1184,10 +1055,22 @@ func (expr *Expr) sortOrder() int {
 	return -1
 }
 
+// CopyWithoutTerms returns a deep copy of expr without its Terms
+func (expr *Expr) CopyWithoutTerms() *Expr {
+	cpy := *expr
+
+	cpy.With = make([]*With, len(expr.With))
+	for i := range expr.With {
+		cpy.With[i] = expr.With[i].Copy()
+	}
+
+	return &cpy
+}
+
 // Copy returns a deep copy of expr.
 func (expr *Expr) Copy() *Expr {
 
-	cpy := *expr
+	cpy := expr.CopyWithoutTerms()
 
 	switch ts := expr.Terms.(type) {
 	case *SomeDecl:
@@ -1200,14 +1083,11 @@ func (expr *Expr) Copy() *Expr {
 		cpy.Terms = cpyTs
 	case *Term:
 		cpy.Terms = ts.Copy()
+	case *Every:
+		cpy.Terms = ts.Copy()
 	}
 
-	cpy.With = make([]*With, len(expr.With))
-	for i := range expr.With {
-		cpy.With[i] = expr.With[i].Copy()
-	}
-
-	return &cpy
+	return cpy
 }
 
 // Hash returns the hash code of the Expr.

@@ -1,0 +1,33 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: assignmetadata-annotate-owner-invalid
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "metadata.annotations.external-data-username"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: ValueAtLocation
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: assignmetadata-location-invalid
+spec:
+  match:
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "metadata.annotations"
+  parameters:
+    assign:
+      externalData:
+        provider: dummy-provider
+        dataSource: ValueAtLocation

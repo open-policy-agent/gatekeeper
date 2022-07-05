@@ -52,7 +52,7 @@ spec:
                         end. Ex: "kube-*" will match "kube-system" or "kube-public",
                         "*-system" will match "kube-system" or "gatekeeper-system".  The
                         asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -131,7 +131,7 @@ spec:
                       a prefix or suffix glob.  For example, `name: pod-*` would match
                       both `pod-a` and `pod-b`, and `name: *-pod` would match both
                       `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an
@@ -190,7 +190,7 @@ spec:
                         end. Ex: "kube-*" will match "kube-system" or "kube-public",
                         "*-system" will match "kube-system" or "gatekeeper-system".  The
                         asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -204,6 +204,38 @@ spec:
                   assign:
                     description: Assign.value holds the value to be assigned
                     properties:
+                      externalData:
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: DataSource specifies where to extract the
+                              data that will be sent to the external data provider
+                              as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: Default specifies the default value to use
+                              when the external data provider returns an error and
+                              the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: FailurePolicy specifies the policy to apply
+                              when the external data provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data
+                              provider.
+                            type: string
+                        type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified
                           metadata field.
@@ -309,7 +341,7 @@ spec:
                         end. Ex: "kube-*" will match "kube-system" or "kube-public",
                         "*-system" will match "kube-system" or "gatekeeper-system".  The
                         asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   kinds:
@@ -388,7 +420,7 @@ spec:
                       a prefix or suffix glob.  For example, `name: pod-*` would match
                       both `pod-a` and `pod-b`, and `name: *-pod` would match both
                       `a-pod` and `b-pod`.'
-                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                    pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                     type: string
                   namespaceSelector:
                     description: NamespaceSelector is a label selector against an
@@ -447,7 +479,7 @@ spec:
                         end. Ex: "kube-*" will match "kube-system" or "kube-public",
                         "*-system" will match "kube-system" or "gatekeeper-system".  The
                         asterisk is required for wildcard matching.'
-                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                      pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                       type: string
                     type: array
                   scope:
@@ -461,6 +493,38 @@ spec:
                   assign:
                     description: Assign.value holds the value to be assigned
                     properties:
+                      externalData:
+                        description: ExternalData describes the external data provider
+                          to be used for mutation.
+                        properties:
+                          dataSource:
+                            default: ValueAtLocation
+                            description: DataSource specifies where to extract the
+                              data that will be sent to the external data provider
+                              as parameters.
+                            enum:
+                            - ValueAtLocation
+                            - Username
+                            type: string
+                          default:
+                            description: Default specifies the default value to use
+                              when the external data provider returns an error and
+                              the failure policy is set to "UseDefault".
+                            type: string
+                          failurePolicy:
+                            default: Fail
+                            description: FailurePolicy specifies the policy to apply
+                              when the external data provider returns an error.
+                            enum:
+                            - UseDefault
+                            - Ignore
+                            - Fail
+                            type: string
+                          provider:
+                            description: Provider is the name of the external data
+                              provider.
+                            type: string
+                        type: object
                       fromMetadata:
                         description: FromMetadata assigns a value from the specified
                           metadata field.

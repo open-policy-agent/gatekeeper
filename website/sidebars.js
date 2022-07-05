@@ -37,6 +37,14 @@ module.exports = {
     },
     {
       type: 'category',
+      label: 'Architecture',
+      collapsed: false,
+      items: [
+        'operations'
+      ],
+    },
+    {
+      type: 'category',
       label: 'Contributing',
       collapsed: false,
       items: [

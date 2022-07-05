@@ -1,5 +1,6 @@
 replicas: 3
 auditInterval: 60
+metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
@@ -8,6 +9,7 @@ disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookExemptNamespacesLabels: {}
+validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 enableDeleteOperations: false
@@ -16,6 +18,7 @@ enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookExemptNamespacesLabels: {}
+mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutationAnnotations: false
@@ -26,33 +29,80 @@ logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
+postUpgrade:
+  labelNamespace:
+    enabled: false
+    image:
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.9.0-beta.2
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    extraNamespaces: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 postInstall:
   labelNamespace:
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.7.0
+      tag: v3.9.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
+    extraNamespaces: []
+  probeWebhook:
+    enabled: true
+    image:
+      repository: curlimages/curl
+      tag: 7.83.1
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    waitTimeout: 60
+    httpTimeout: 2
+    insecureHTTPS: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.7.0
+      tag: v3.9.0-beta.2
       pullPolicy: IfNotPresent
       pullSecrets: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.7.0
+  release: v3.9.0-beta.2
   pullPolicy: IfNotPresent
   pullSecrets: []
-podAnnotations:
-  {container.seccomp.security.alpha.kubernetes.io/manager: runtime/default}
+podAnnotations: {}
 podLabels: {}
 podCountLimit: "100"
 secretAnnotations: {}
+enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   exemptNamespaces: []
   exemptNamespacePrefixes: []
@@ -62,6 +112,7 @@ controllerManager:
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: false
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -83,12 +134,23 @@ controllerManager:
     requests:
       cpu: 100m
       memory: 256Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
+  extraRules: []
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: true
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -100,8 +162,26 @@ audit:
     requests:
       cpu: 100m
       memory: 256Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 crds:
   resources: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
 pdb:
   controllerManager:
     minAvailable: 1
@@ -111,5 +191,6 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
+  tolerations: []
 rbac:
   create: true

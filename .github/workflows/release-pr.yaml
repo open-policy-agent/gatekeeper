@@ -1,0 +1,78 @@
+name: create_release_pull_request
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.0' # run this workflow when a new minor version is published
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Which version are we creating a release pull request for?'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Set release version and target branch for vNext
+        if: github.event_name == 'push'
+        run: |
+          TAG="$(echo "${{ github.ref }}" | tr -d 'refs/tags/v')"
+          MAJOR_VERSION="$(echo "${TAG}" | cut -d '.' -f1)"
+          MINOR_VERSION="$(echo "${TAG}" | cut -d '.' -f2)"
+
+          # increment the minor version by 1 for vNext
+          echo "NEWVERSION=v${MAJOR_VERSION}.$((MINOR_VERSION+1)).0-beta.0" >> ${GITHUB_ENV}
+          # pre-release is always being merged to the master branch
+          echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
+
+      - name: Set release version and target branch from input
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          NEWVERSION="${{ github.event.inputs.release_version }}"
+          echo "${NEWVERSION}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9](-(beta|rc)\.[0-9]+)?$' || (echo "release_version should be in the format vX.Y.Z, vX.Y.Z-beta.A, or vX.Y.Z-rc.B" && exit 1)
+
+          echo "NEWVERSION=${NEWVERSION}" >> ${GITHUB_ENV}
+          MAJOR_VERSION="$(echo "${NEWVERSION}" | cut -d '.' -f1 | tr -d 'v')"
+          MINOR_VERSION="$(echo "${NEWVERSION}" | cut -d '.' -f2)"
+
+          # non-beta releases should always be merged to release branches
+          echo "TARGET_BRANCH=release-${MAJOR_VERSION}.${MINOR_VERSION}" >> ${GITHUB_ENV}
+
+          # beta releases should always be merged to master
+          if [[ "${NEWVERSION}" =~ "beta" ]]; then
+            echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
+          fi
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Create release branch if needed
+        run: |
+          git checkout "${TARGET_BRANCH}" && exit 0
+
+          # Create and push release branch if it doesn't exist
+          git checkout -b "${TARGET_BRANCH}"
+          git push --set-upstream origin "${TARGET_BRANCH}"
+
+      - run: make release-manifest promote-staging-manifest
+
+      - if: github.event_name == 'push'
+        run: make version-docs
+
+      - name: Create release pull request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          commit-message: "chore: Prepare ${{ env.NEWVERSION }} release"
+          title: "chore: Prepare ${{ env.NEWVERSION }} release"
+          branch: "release-${{ env.NEWVERSION }}"
+          base: "${{ env.TARGET_BRANCH }}"

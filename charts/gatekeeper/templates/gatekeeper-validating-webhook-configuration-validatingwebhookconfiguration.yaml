@@ -25,19 +25,48 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    
+    {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      value: {{ $value }}
+    {{- end }}
+  objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
   rules:
+  {{- if .Values.validatingWebhookCustomRules }}
+  {{- toYaml .Values.validatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
   - apiGroups:
     - '*'
     apiVersions:
     - '*'
-    operations: 
+    operations:
     - CREATE
     - UPDATE
     {{- if .Values.enableDeleteOperations }}
     - DELETE
-    {{- end}}
+    {{- end }}
     resources:
     - '*'
+    # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
+    # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+    - 'pods/ephemeralcontainers'
+    - 'pods/exec'
+    - 'pods/log'
+    - 'pods/eviction'
+    - 'pods/portforward'
+    - 'pods/proxy'
+    - 'pods/attach'
+    - 'pods/binding'
+    - 'deployments/scale'
+    - 'replicasets/scale'
+    - 'statefulsets/scale'
+    - 'replicationcontrollers/scale'
+    - 'services/proxy'
+    - 'nodes/proxy'
+    # For constraints that mitigate CVE-2020-8554
+    - 'services/status'
+  {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
 - admissionReviewVersions:

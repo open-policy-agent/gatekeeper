@@ -46,7 +46,7 @@ const (
 
 var crLog = logf.Log.WithName("cert-rotation")
 
-//WebhookType it the type of webhook, either validating/mutating webhook or a CRD conversion webhook
+//WebhookType it the type of webhook, either validating/mutating webhook, a CRD conversion webhook, or an extension API server
 type WebhookType int
 
 const (
@@ -56,6 +56,8 @@ const (
 	Mutating
 	//CRDConversionWebhook indicates the webhook is a conversion webhook
 	CRDConversion
+	//APIServiceWebhook indicates the webhook is an extension API server
+	APIService
 )
 
 var _ manager.Runnable = &CertRotator{}
@@ -71,7 +73,8 @@ func (w WebhookInfo) gvk() schema.GroupVersionKind {
 	t2g := map[WebhookType]schema.GroupVersionKind{
 		Validating:    {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "ValidatingWebhookConfiguration"},
 		Mutating:      {Group: "admissionregistration.k8s.io", Version: "v1", Kind: "MutatingWebhookConfiguration"},
-		CRDConversion: {Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"},
+		CRDConversion: {Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition"},
+		APIService:    {Group: "apiregistration.k8s.io", Version: "v1", Kind: "APIService"},
 	}
 	return t2g[w.Type]
 }
@@ -154,6 +157,7 @@ type CertRotator struct {
 	IsReady                chan struct{}
 	Webhooks               []WebhookInfo
 	RestartOnSecretRefresh bool
+	ExtKeyUsages           *[]x509.ExtKeyUsage
 	certsMounted           chan struct{}
 	certsNotMounted        chan struct{}
 	wasCAInjected          *atomic.Bool
@@ -167,6 +171,10 @@ func (cr *CertRotator) Start(ctx context.Context) error {
 	}
 	if !cr.reader.WaitForCacheSync(ctx) {
 		return errors.New("failed waiting for reader to sync")
+	}
+
+	if cr.ExtKeyUsages == nil {
+		cr.ExtKeyUsages = &[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	}
 
 	// explicitly rotate on the first round so that the certificate
@@ -288,6 +296,8 @@ func injectCert(updatedResource *unstructured.Unstructured, certPem []byte, webh
 		return injectCertToWebhook(updatedResource, certPem)
 	case CRDConversion:
 		return injectCertToConversionWebhook(updatedResource, certPem)
+	case APIService:
+		return injectCertToApiService(updatedResource, certPem)
 	}
 	return fmt.Errorf("Incorrect webhook type")
 }
@@ -317,14 +327,29 @@ func injectCertToWebhook(wh *unstructured.Unstructured, certPem []byte) error {
 }
 
 func injectCertToConversionWebhook(crd *unstructured.Unstructured, certPem []byte) error {
-	_, found, err := unstructured.NestedMap(crd.Object, "spec", "conversion", "webhookClientConfig")
+	_, found, err := unstructured.NestedMap(crd.Object, "spec", "conversion", "webhook", "clientConfig")
 	if err != nil {
 		return err
 	}
 	if !found {
-		return errors.New("`webhookClientConfig` field not found in CustomResourceDefinition")
+		return errors.New("`conversion.webhook.clientConfig` field not found in CustomResourceDefinition")
 	}
-	if err := unstructured.SetNestedField(crd.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "conversion", "webhookClientConfig", "caBundle"); err != nil {
+	if err := unstructured.SetNestedField(crd.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "conversion", "webhook", "clientConfig", "caBundle"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func injectCertToApiService(apiService *unstructured.Unstructured, certPem []byte) error {
+	_, found, err := unstructured.NestedMap(apiService.Object, "spec")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("`spec` field not found in APIService")
+	}
+	if err := unstructured.SetNestedField(apiService.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "caBundle"); err != nil {
 		return err
 	}
 
@@ -439,7 +464,7 @@ func (cr *CertRotator) CreateCertPEM(ca *KeyPairArtifacts, begin, end time.Time)
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:           *cr.ExtKeyUsages,
 		BasicConstraintsValid: true,
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -475,7 +500,7 @@ func lookaheadTime() time.Time {
 }
 
 func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
-	valid, err := ValidCert(caCert, cert, key, cr.DNSName, lookaheadTime())
+	valid, err := ValidCert(caCert, cert, key, cr.DNSName, cr.ExtKeyUsages, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -483,14 +508,14 @@ func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
 }
 
 func (cr *CertRotator) validCACert(cert, key []byte) bool {
-	valid, err := ValidCert(cert, cert, key, cr.CAName, lookaheadTime())
+	valid, err := ValidCert(cert, cert, key, cr.CAName, nil, lookaheadTime())
 	if err != nil {
 		return false
 	}
 	return valid
 }
 
-func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, error) {
+func ValidCert(caCert, cert, key []byte, dnsName string, keyUsages *[]x509.ExtKeyUsage, at time.Time) (bool, error) {
 	if len(caCert) == 0 || len(cert) == 0 || len(key) == 0 {
 		return false, errors.New("empty cert")
 	}
@@ -520,11 +545,17 @@ func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 	if err != nil {
 		return false, errors.Wrap(err, "parsing cert")
 	}
-	_, err = crt.Verify(x509.VerifyOptions{
+
+	opt := x509.VerifyOptions{
 		DNSName:     dnsName,
 		Roots:       pool,
 		CurrentTime: at,
-	})
+	}
+	if keyUsages != nil {
+		opt.KeyUsages = *keyUsages
+	}
+
+	_, err = crt.Verify(opt)
 	if err != nil {
 		return false, errors.Wrap(err, "verifying cert")
 	}

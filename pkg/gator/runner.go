@@ -2,11 +2,13 @@ package gator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 	"time"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -44,6 +46,13 @@ func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, err
 func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 	start := time.Now()
 
+	if s.Skip {
+		return SuiteResult{
+			Path:    s.Path,
+			Skipped: true,
+		}
+	}
+
 	results, err := r.runTests(ctx, filter, s.Path, s.Tests)
 
 	return SuiteResult{
@@ -60,7 +69,7 @@ func (r *Runner) runTests(ctx context.Context, filter Filter, suitePath string, 
 
 	results := make([]TestResult, len(tests))
 	for i, t := range tests {
-		if !filter.MatchesTest(t) {
+		if t.Skip || !filter.MatchesTest(t) {
 			results[i] = r.skipTest(t)
 			continue
 		}
@@ -79,7 +88,17 @@ func (r *Runner) skipTest(t Test) TestResult {
 func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t Test) TestResult {
 	start := time.Now()
 
-	results, err := r.runCases(ctx, suiteDir, filter, t)
+	err := r.tryAddConstraint(ctx, suiteDir, t)
+	var results []CaseResult
+	if t.Invalid {
+		if errors.Is(err, constraints.ErrSchema) {
+			err = nil
+		} else {
+			err = fmt.Errorf("%w: got error %v but want %v", ErrValidConstraint, err, constraints.ErrSchema)
+		}
+	} else if err == nil {
+		results, err = r.runCases(ctx, suiteDir, filter, t)
+	}
 
 	return TestResult{
 		Name:        t.Name,
@@ -87,6 +106,31 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 		Runtime:     Duration(time.Since(start)),
 		CaseResults: results,
 	}
+}
+
+func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
+	client, err := r.newClient()
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrCreatingClient, err)
+	}
+
+	err = r.addTemplate(suiteDir, t.Template, client)
+	if err != nil {
+		return err
+	}
+
+	constraintPath := t.Constraint
+	if constraintPath == "" {
+		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
+	}
+
+	cObj, err := readConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
+	if err != nil {
+		return err
+	}
+
+	_, err = client.AddConstraint(ctx, cObj)
+	return err
 }
 
 // runCases executes every Case in the Test. Returns the results for every Case,
@@ -101,15 +145,10 @@ func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t
 		return c, nil
 	}
 
-	_, err := newClient()
-	if err != nil {
-		return nil, err
-	}
-
 	results := make([]CaseResult, len(t.Cases))
 
 	for i, c := range t.Cases {
-		if !filter.MatchesCase(t.Name, c.Name) {
+		if c.Skip || !filter.MatchesCase(t.Name, c.Name) {
 			results[i] = r.skipCase(c)
 			continue
 		}
@@ -170,7 +209,7 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client Client) error
 		return err
 	}
 
-	_, err = client.AddTemplate(template)
+	_, err = client.AddTemplate(context.Background(), template)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrAddingTemplate, err)
 	}

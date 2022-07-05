@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Leverage existing resource types to create custom mutators to validate
@@ -31,19 +30,23 @@ type fakeMutator struct {
 	MutationCount int
 	// UnstableFor makes the mutation unstable for the first n mutations.
 	UnstableFor int
+
+	// External data fields
+	FailurePolicy types.ExternalDataFailurePolicy
+	Default       *types.Anything
 }
 
-func (m *fakeMutator) Matches(client.Object, *corev1.Namespace) bool {
+func (m *fakeMutator) Matches(*types.Mutable) bool {
 	return true // always matches
 }
 
-func (m *fakeMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
+func (m *fakeMutator) Mutate(mutable *types.Mutable) (bool, error) {
 	if m.Labels == nil {
 		return false, nil
 	}
 	m.MutationCount++
 
-	current := obj.GetLabels()
+	current := mutable.Object.GetLabels()
 	if current == nil {
 		current = make(map[string]string)
 	}
@@ -57,9 +60,13 @@ func (m *fakeMutator) Mutate(obj *unstructured.Unstructured) (bool, error) {
 		current[k] = v
 	}
 
-	obj.SetLabels(current)
+	mutable.Object.SetLabels(current)
 
 	return true, nil
+}
+
+func (m *fakeMutator) UsesExternalData() bool {
+	return false
 }
 
 func (m *fakeMutator) TerminalType() parser.NodeType {
@@ -204,7 +211,7 @@ func TestMutation(t *testing.T) {
 				}
 			}
 
-			mutated, err := c.Mutate(toMutate, nil)
+			mutated, err := c.Mutate(&types.Mutable{Object: toMutate})
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("got Mutate() error = %v, want %v", err, tc.wantErr)
 			}
@@ -275,7 +282,10 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// We can mutate objects before System is put in an inconsistent state.
 	t.Run("mutate works on consistent state", func(t *testing.T) {
 		u := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(&types.Mutable{
+			Object:    u,
+			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+		})
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -293,7 +303,10 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// Since foo and foo-conflict define conflicting schemas, neither is executed.
 	t.Run("no mutation on inconsistent state", func(t *testing.T) {
 		u2 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(u2, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(&types.Mutable{
+			Object:    u2,
+			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+		})
 		if gotMutated {
 			t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
 		}
@@ -312,7 +325,10 @@ func TestSystem_DontApplyConflictingMutations(t *testing.T) {
 	// Mutations are performed again.
 	t.Run("mutations performed after conflict removed", func(t *testing.T) {
 		u3 := &unstructured.Unstructured{}
-		gotMutated, gotErr := s.Mutate(u3, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+		gotMutated, gotErr := s.Mutate(&types.Mutable{
+			Object:    u3,
+			Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+		})
 		if !gotMutated {
 			t.Errorf("got Mutate() = %t, want true", gotMutated)
 		}
@@ -354,7 +370,10 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+	gotMutated, gotErr := s.Mutate(&types.Mutable{
+		Object:    u,
+		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+	})
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
@@ -405,22 +424,34 @@ func TestSystem_EarliestConflictingMutatorWins(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(u, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}})
+	gotMutated, gotErr := s.Mutate(&types.Mutable{
+		Object:    u,
+		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+	})
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
 	if gotErr != nil {
 		t.Fatalf("got Mutate() error = %v, want <nil>", gotErr)
 	}
-	if s.Get(id("foo")).(*fakeMutator).MutationCount != 0 {
+
+	if getMutationCount(t, s.Get(id("foo"))) != 0 {
 		t.Errorf("got foo.MutationCount == %d, want %d", foo.MutationCount, 0)
 	}
-	if s.Get(id("foo-conflict")).(*fakeMutator).MutationCount != 0 {
+	if getMutationCount(t, s.Get(id("foo-conflict"))) != 0 {
 		t.Errorf("got fooConflict.MutationCount == %d, want %d", fooConflict.MutationCount, 0)
 	}
-	if s.Get(id("bar")).(*fakeMutator).MutationCount != 2 {
+	if getMutationCount(t, s.Get(id("bar"))) != 2 {
 		t.Errorf("got bar.MutationCount == %d, want %d", bar.MutationCount, 2)
 	}
+}
+
+func getMutationCount(t *testing.T, m types.Mutator) int {
+	f, ok := m.(*fakeMutator)
+	if !ok {
+		t.Fatalf("got mutator type %T, want %T", m, &fakeMutator{})
+	}
+	return f.MutationCount
 }
 
 type fakeReporter struct {
@@ -482,7 +513,7 @@ func TestSystem_ReportingInjection(t *testing.T) {
 	}
 
 	toMutate := &unstructured.Unstructured{Object: converted}
-	_, err = s.Mutate(toMutate, nil)
+	_, err = s.Mutate(&types.Mutable{Object: toMutate})
 	if err != nil {
 		t.Fatal("Mutate failed unexpectedly", err)
 	}
@@ -526,7 +557,7 @@ func TestSystem_Mutate_InverseMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mutated, err := s.Mutate(obj, nil)
+	mutated, err := s.Mutate(&types.Mutable{Object: obj})
 	if mutated {
 		t.Errorf("got Mutate() = %t, want %t", mutated, false)
 	}

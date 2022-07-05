@@ -46,7 +46,7 @@ There are three types of events that are emitted by Gatekeeper when the above fl
 
 The `--log-mutations` flag enables logging of mutation events and errors.
 
-The `--mutations-annotations` flag adds the following two annotations to mutated objects:
+The `--mutation-annotations` flag adds the following two annotations to mutated objects:
 
 | Annotation                  | Value                                                                                                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |

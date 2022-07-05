@@ -89,7 +89,11 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 func setupOpa(t *testing.T) *constraintclient.Client {
 	// initialize OPA
-	driver := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(false))
+	if err != nil {
+		t.Fatalf("setting up Driver: %v", err)
+	}
+
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("setting up OPA client: %v", err)
@@ -102,7 +106,8 @@ func setupController(
 	wm *watch.Manager,
 	opa *constraintclient.Client,
 	mutationSystem *mutation.System,
-	providerCache *frameworksexternaldata.ProviderCache) error {
+	providerCache *frameworksexternaldata.ProviderCache,
+) error {
 	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil, providerCache != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
@@ -129,9 +134,9 @@ func setupController(
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ProviderCache:    providerCache,
+		WatchSet:         watch.NewSet(),
 	}
-	ctx := context.Background()
-	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
 	return nil
@@ -182,7 +187,7 @@ func Test_ModifySet(t *testing.T) {
 
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
-	// Apply fixtures *before* the controllers are setup.
+	// Apply fixtures *before* the controllers are set up.
 	err := applyFixtures("testdata")
 	if err != nil {
 		t.Fatalf("applying fixtures: %v", err)
@@ -305,8 +310,9 @@ func Test_Provider(t *testing.T) {
 		}
 
 		want := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://demo",
-			Timeout: 1,
+			URL:                   "http://demo",
+			Timeout:               1,
+			InsecureTLSSkipVerify: true,
 		}
 		if diff := cmp.Diff(want, instance.Spec); diff != "" {
 			t.Fatal(diff)

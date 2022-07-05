@@ -28,7 +28,8 @@ spec:
           properties:
             labels:
               type: array
-              items: string
+              items:
+                type: string
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
@@ -128,7 +129,7 @@ The K8sRequiredLabels "ns-must-have-gk" is invalid: spec.parameters: Invalid val
 
 ### The enforcementAction field
 
-The `enforcementAction` field defines the action for handling Constraint violations. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation. Other supported enforcementActions include `dryrun` and `warn`. Refer to [Handling Constraint Violations](violations.md) for more details. 
+The `enforcementAction` field defines the action for handling Constraint violations. By default, `enforcementAction` is set to `deny` as the default behavior is to deny admission requests with any violation. Other supported enforcementActions include `dryrun` and `warn`. Refer to [Handling Constraint Violations](violations.md) for more details.
 
 ### Listing constraints
 You can list all constraints in a cluster with the following command:

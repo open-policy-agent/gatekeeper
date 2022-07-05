@@ -121,13 +121,17 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// Set up the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	mgr, wm := setupManager(t)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		t.Fatalf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		t.Fatalf("unable to set up OPA client: %s", err)
@@ -141,7 +145,8 @@ func TestReconcile(t *testing.T) {
 	processExcluder := process.Get()
 	processExcluder.Add(instance.Spec.Match)
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 
 	recFn, requests := SetupTestReconcile(rec)
 	err = add(mgr, recFn)
@@ -377,7 +382,11 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events <-chan event.GenericEvent) error {
 	// initialize OPA
-	driver := local.New(local.Tracing(true))
+	driver, err := local.New(local.Tracing(true))
+	if err != nil {
+		return fmt.Errorf("unable to set up Driver: %v", err)
+	}
+
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		return fmt.Errorf("unable to set up OPA backend client: %w", err)
@@ -389,7 +398,8 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 
 	processExcluder := process.Get()
 
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, nil)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, nil)
 	err = add(mgr, rec)
 	if err != nil {
 		return fmt.Errorf("adding reconciler to manager: %w", err)
@@ -429,7 +439,8 @@ func TestConfig_CacheContents(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -589,7 +600,8 @@ func TestConfig_Retries(t *testing.T) {
 	processExcluder.Add(instance.Spec.Match)
 
 	events := make(chan event.GenericEvent, 1024)
-	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, events)
+	watchSet := watch.NewSet()
+	rec, _ := newReconciler(mgr, opaClient, wm, cs, tracker, processExcluder, events, watchSet, events)
 	err = add(mgr, rec)
 	if err != nil {
 		t.Fatal(err)
@@ -661,7 +673,7 @@ func TestConfig_Retries(t *testing.T) {
 	}, 10*time.Second).Should(gomega.BeTrue(), "checking initial opa cache contents")
 
 	// Wipe the opa cache, we want to see it repopulate despite transient replay errors below.
-	_, err = opaClient.RemoveData(ctx, target.WipeData{})
+	_, err = opaClient.RemoveData(ctx, target.WipeData())
 	if err != nil {
 		t.Fatalf("wiping opa cache: %v", err)
 	}

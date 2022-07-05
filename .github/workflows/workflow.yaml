@@ -27,6 +27,7 @@ env:
   GITHUB_REPO: open-policy-agent/gatekeeper
   IMAGE_REPO: openpolicyagent/gatekeeper
   CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
+  GATOR_IMAGE_REPO: openpolicyagent/gator
 
 jobs:
   lint:
@@ -36,25 +37,32 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v3
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
       # source: https://github.com/golangci/golangci-lint-action
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v2
-      with:
-        # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-        version: v1.43.0
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+          version: v1.45.2
 
   test:
     name: "Unit test"
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.18
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
@@ -69,7 +77,7 @@ jobs:
           KUBEBUILDER_VERSION: 2.3.1
 
       - name: Codecov Upload
-        uses: codecov/codecov-action@v2.1.0
+        uses: codecov/codecov-action@v3
         with:
           flags: unittests
           file: ./cover.out
@@ -82,10 +90,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.18
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
@@ -107,15 +115,15 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.21.1", "1.22.0", "1.23.0"]
+        KUBERNETES_VERSION: ["1.22.9", "1.23.6", "1.24.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.18
 
       - name: Bootstrap e2e
         run: |
@@ -139,7 +147,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: logs
@@ -179,7 +187,7 @@ jobs:
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: helm-logs
@@ -192,23 +200,20 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    strategy:
-      matrix:
-        KUBERNETES_VERSION: ["1.23.0"]
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.18
 
       - name: Bootstrap e2e
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
+          make e2e-bootstrap
 
       - name: Run e2e
         run: |
@@ -227,7 +232,7 @@ jobs:
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-externaldata-audit.json
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: externaldata-logs
@@ -267,7 +272,7 @@ jobs:
   pre-release:
     name: "Pre Release"
     runs-on: "ubuntu-latest"
-    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-')) && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, test, build_test, helm_build_test, scan_vulnerabilities]
     timeout-minutes: 30
     permissions:
@@ -278,7 +283,7 @@ jobs:
 
       - name: make docker-push-dev
         run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull&scope=repository:${{ env.GATOR_IMAGE_REPO }}:pull"
           bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
@@ -298,6 +303,15 @@ jobs:
             make docker-login
             make docker-buildx-crds-dev DEV_TAG=${GITHUB_SHA::7}
           fi
+
+          listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-login
+            make docker-buildx-gator-dev DEV_TAG=${GITHUB_SHA::7}
+          fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
@@ -314,10 +328,10 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.18
 
       - name: Get tag
         id: get_version
@@ -326,7 +340,7 @@ jobs:
 
       - name: Publish release
         run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull"
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull&scope=repository:${{ env.GATOR_IMAGE_REPO }}:pull"
           bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
           listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
           authz="Authorization: Bearer $bearerToken"
@@ -345,6 +359,15 @@ jobs:
           then
             make docker-login
             make docker-buildx-crds-release VERSION=${TAG}
+          fi
+
+          listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-login
+            make docker-buildx-gator-release VERSION=${TAG}
           fi
         env:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}

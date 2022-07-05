@@ -25,7 +25,18 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    
+    {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
+    - key: {{ $key }}
+      operator: NotIn
+      value: {{ $value }}
+    {{- end }}
+  objectSelector: {{ toYaml .Values.mutatingWebhookObjectSelector }}
+  reinvocationPolicy: {{ .Values.mutatingWebhookReinvocationPolicy }}
   rules:
+  {{- if .Values.mutatingWebhookCustomRules }}
+  {{- toYaml .Values.mutatingWebhookCustomRules | nindent 2 }}
+  {{- else }}
   - apiGroups:
     - '*'
     apiVersions:
@@ -35,6 +46,7 @@ webhooks:
     - UPDATE
     resources:
     - '*'
+  {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.mutatingWebhookTimeoutSeconds }}
 {{- end }}

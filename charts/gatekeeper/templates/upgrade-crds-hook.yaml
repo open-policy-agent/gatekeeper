@@ -81,7 +81,11 @@ spec:
       {{- end }}
       containers:
       - name: crds-upgrade
+        {{- if not .Values.image.release }}
+        image: '{{ .Values.image.crdRepository }}'
+        {{- else }}
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
+        {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         args:
         - apply
@@ -90,15 +94,11 @@ spec:
         resources:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - all
-          readOnlyRootFilesystem: true
-          runAsGroup: 65532
-          runAsNonRoot: true
-          runAsUser: 65532
+          {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      affinity:
+        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
       nodeSelector:
         kubernetes.io/os: linux
-
+      tolerations:
+        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 {{- end }}

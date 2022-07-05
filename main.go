@@ -16,14 +16,18 @@ limitations under the License.
 package main
 
 import (
-	"context"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"time"
+
+	// set GOMAXPROCS to the number of container cores, if known.
+	_ "go.uber.org/automaxprocs"
 
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
@@ -33,6 +37,7 @@ import (
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -59,6 +64,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -69,6 +75,8 @@ const (
 	secretName     = "gatekeeper-webhook-server-cert"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
+	certName       = "tls.crt"
+	keyName        = "tls.key"
 )
 
 var (
@@ -106,6 +114,8 @@ func init() {
 	_ = configv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
 	_ = mutationsv1alpha1.AddToScheme(scheme)
+	_ = mutationsv1beta1.AddToScheme(scheme)
+
 	// +kubebuilder:scaffold:scheme
 	flag.Var(disabledBuiltins, "disable-opa-builtin", "disable opa built-in function, this flag can be declared more than once.")
 }
@@ -154,7 +164,7 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	config.UserAgent = version.GetUserAgent()
 
-	webhooks := []rotator.WebhookInfo{}
+	var webhooks []rotator.WebhookInfo
 	webhooks = webhook.AppendValidationWebhookIfEnabled(webhooks)
 	webhooks = webhook.AppendMutationWebhookIfEnabled(webhooks)
 
@@ -181,8 +191,14 @@ func main() {
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && (operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook)) {
+	if !*disableCertRotation {
 		setupLog.Info("setting up cert rotation")
+
+		keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		if *externaldata.ExternalDataEnabled {
+			keyUsages = append(keyUsages, x509.ExtKeyUsageClientAuth)
+		}
+
 		if err := rotator.AddRotator(mgr, &rotator.CertRotator{
 			SecretKey: types.NamespacedName{
 				Namespace: util.GetNamespace(),
@@ -194,6 +210,7 @@ func main() {
 			DNSName:        fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
 			IsReady:        setupFinished,
 			Webhooks:       webhooks,
+			ExtKeyUsages:   &keyUsages,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)
@@ -257,19 +274,48 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
+		mutationOpts.ProviderCache = providerCache
+
+		certFile := filepath.Join(*certDir, certName)
+		keyFile := filepath.Join(*certDir, keyName)
+
+		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
+		certWatcher, err := certwatcher.New(certFile, keyFile)
+		if err != nil {
+			setupLog.Error(err, "unable to create client cert watcher")
+			os.Exit(1)
+		}
+
+		setupLog.Info("setting up client cert watcher")
+		if err := mgr.Add(certWatcher); err != nil {
+			setupLog.Error(err, "unable to register client cert watcher")
+			os.Exit(1)
+		}
+
+		// register the client cert watcher to the driver
+		args = append(args, local.EnableExternalDataClientAuth(), local.AddExternalDataClientCertWatcher(certWatcher))
+
+		// register the client cert watcher to the mutation system
+		mutationOpts.ClientCertWatcher = certWatcher
 	}
 	// initialize OPA
-	driver := local.New(args...)
+	driver, err := local.New(args...)
+	if err != nil {
+		setupLog.Error(err, "unable to set up Driver")
+		os.Exit(1)
+	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
+		os.Exit(1)
 	}
 
-	mutationSystem := mutation.NewSystem(mutation.SystemOpts{Reporter: mutation.NewStatsReporter()})
+	mutationSystem := mutation.NewSystem(mutationOpts)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -294,6 +340,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	// Setup all Controllers
 	setupLog.Info("setting up controllers")
+	watchSet := watch.NewSet()
 	opts := controller.Dependencies{
 		Opa:              client,
 		WatchManger:      wm,
@@ -302,10 +349,10 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
 		ProviderCache:    providerCache,
+		WatchSet:         watchSet,
 	}
 
-	ctx := context.Background()
-	if err := controller.AddToManager(ctx, mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}
@@ -317,9 +364,11 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 			os.Exit(1)
 		}
 	}
+
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
-		if err := audit.AddToManager(mgr, client, processExcluder); err != nil {
+		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
+		if err := audit.AddToManager(mgr, client, processExcluder, auditCache); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

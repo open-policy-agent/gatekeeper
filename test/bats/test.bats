@@ -273,16 +273,33 @@ __namespace_exclusion_test() {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/providers.externaldata.gatekeeper.sh"
 }
 
-@test "gatekeeper external data validation test" {
+@test "gatekeeper external data validation and mutation test" {
   if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
-    skip "skipping external data validation tests"
+    skip "skipping external data tests"
   fi
 
-  # deployment, service and provider for dummy-provider
-  run kubectl apply -f test/externaldata/dummy-provider/manifest
-  assert_success
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n dummy-provider"
+  if [ ! -f test/externaldata/dummy-provider/certs/ca.crt ]; then
+    echo "Missing dummy-provider's CA cert. Please run test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh to generate it."
+    exit 1
+  fi
 
+  tmp=$(mktemp -d)
+
+  # inject caBundle into the provider YAML
+  cat <<EOF > ${tmp}/provider.yaml
+$(cat test/externaldata/dummy-provider/manifest/provider.yaml)
+  caBundle: $(cat test/externaldata/dummy-provider/certs/ca.crt | base64 | tr -d '\n')
+EOF
+
+  run kubectl apply -f ${tmp}/provider.yaml
+  assert_success
+  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml
+  assert_success
+  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml
+  assert_success
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n gatekeeper-system"
+
+  # validation test
   kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
@@ -300,7 +317,49 @@ __namespace_exclusion_test() {
   run kubectl apply -f test/externaldata/dummy-provider/policy/examples/valid.yaml
   assert_success
 
+  # mutation test
+  run kubectl apply -f test/externaldata/dummy-provider/mutation/valid.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata annotate-owner"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign a-sidecar-injection"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign b-assign-image"
+
+  run kubectl run nginx --image=nginx --dry-run=server --output json
+  assert_success
+  assert_match "kubernetes-admin_valid" "$(jq -r '.metadata.annotations["external-data-username"]' <<< ${output})"
+  assert_match "nginx_valid" "$(jq -r '.spec.containers[0].image' <<< ${output})"
+  assert_match "busybox_valid" "$(jq -r '.spec.containers[1].image' <<< ${output})"
+
+  run kubectl apply -f test/externaldata/dummy-provider/mutation/invalid_assignmetadata.yaml
+  assert_match 'only username data source is supported' "${output}"
+  assert_match 'invalid location' "${output}"
+  assert_failure
+
+  run kubectl apply -f test/externaldata/dummy-provider/mutation/invalid_assign.yaml
+  assert_match '`default` must not be empty when `failurePolicy` is set to `UseDefault`' "${output}"
+  assert_match 'cannot assign external data response to a list' "${output}"
+  assert_failure
+
+  # simulate key error
+  run kubectl run busybox --image=error_busybox --dry-run=server --output json
+  assert_match 'error_busybox_invalid' "${output}"
+  assert_failure
+
+  # simulate system error
+  run kubectl run busybox --image=busybox:latest_systemError --dry-run=server --output json
+  assert_match 'testing system error' "${output}"
+  assert_failure
+
+  # schema conflict test
+  run kubectl apply -f test/externaldata/dummy-provider/mutation/schema_conflict.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign schema-conflict"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get assign schema-conflict -ojson | jq -r -e '.status.byPod[0].errors[0]'"
+  run kubectl get assign schema-conflict -o jsonpath="{.status}"
+  assert_match 'Assign.mutations.gatekeeper.sh /b-assign-image,Assign.mutations.gatekeeper.sh /schema-conflict' "${output}"
+  assert_match 'ErrConflictingSchema' "${output}"
+
   kubectl delete --ignore-not-found -f test/externaldata/dummy-provider/manifest
+  kubectl delete --ignore-not-found -f test/externaldata/dummy-provider/mutation
   kubectl delete --ignore-not-found deploy error-deployment valid-deployment system-error-deployment
   kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }

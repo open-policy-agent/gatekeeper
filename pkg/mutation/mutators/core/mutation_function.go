@@ -11,52 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Setter tells the mutate function what to do once we have found the
-// node that needs mutating.
-type Setter interface {
-	// SetValue takes the object that needs mutating and the key of the
-	// field on that object that should be mutated. It is up to the
-	// implementor to actually mutate the object.
-	SetValue(obj map[string]interface{}, key string) error
-
-	// KeyedListOkay returns whether this setter can handle keyed lists.
-	// If it can't, an attempt to mutate a keyed-list-type field will
-	// result in an error.
-	KeyedListOkay() bool
-
-	// KeyedListValue is the value that will be assigned to the
-	// targeted keyed list entry. Unlike SetValue(), this does
-	// not do mutation directly.
-	KeyedListValue() (map[string]interface{}, error)
-}
-
-var _ Setter = &DefaultSetter{}
-
-func NewDefaultSetter(value interface{}) *DefaultSetter {
-	return &DefaultSetter{value: value}
-}
-
-// DefaultSetter is a setter that merely sets the value at the specified path
-// to the provided value. No special logic, like set merging.
-type DefaultSetter struct {
-	value interface{}
-}
-
-func (s *DefaultSetter) KeyedListOkay() bool { return true }
-
-func (s *DefaultSetter) KeyedListValue() (map[string]interface{}, error) {
-	valueAsObject, ok := s.value.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("assign.value for keyed list is not an object: %+v", s.value)
-	}
-	return valueAsObject, nil
-}
-
-func (s *DefaultSetter) SetValue(obj map[string]interface{}, key string) error {
-	obj[key] = s.value
-	return nil
-}
-
 var _ types.MetadataGetter = &metadata{}
 
 type metadata client.ObjectKey

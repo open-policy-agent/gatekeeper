@@ -25,6 +25,11 @@ type ProviderSpec struct {
 	URL string `json:"url,omitempty"`
 	// Timeout is the timeout when querying the provider.
 	Timeout int `json:"timeout,omitempty"`
+	// CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format.
+	// It is used to verify the signature of the provider's certificate.
+	CABundle string `json:"caBundle,omitempty"`
+	// InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
+	InsecureTLSSkipVerify bool `json:"insecureTLSSkipVerify,omitempty"`
 }
 
 // +genclient

@@ -32,6 +32,12 @@ spec:
           spec:
             description: Spec defines the Provider specifications.
             properties:
+              caBundle:
+                description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
+                type: string
+              insecureTLSSkipVerify:
+                description: InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
+                type: boolean
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer

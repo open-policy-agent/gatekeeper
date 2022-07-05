@@ -58,6 +58,10 @@ type GetProcessExcluderInjector interface {
 	InjectProcessExcluder(processExcluder *process.Excluder)
 }
 
+type WatchSetInjector interface {
+	InjectWatchSet(watchSet *watch.Set)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -75,6 +79,7 @@ type Dependencies struct {
 	ProcessExcluder  *process.Excluder
 	MutationSystem   *mutation.System
 	ProviderCache    *externaldata.ProviderCache
+	WatchSet         *watch.Set
 }
 
 type defaultPodGetter struct {
@@ -122,7 +127,7 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 }
 
 // AddToManager adds all Controllers to the Manager.
-func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) error {
+func AddToManager(m manager.Manager, deps Dependencies) error {
 	if deps.GetPod == nil {
 		podGetter := &defaultPodGetter{
 			scheme: m.GetScheme(),
@@ -158,6 +163,9 @@ func AddToManager(ctx context.Context, m manager.Manager, deps Dependencies) err
 		}
 		if a2, ok := a.(GetProcessExcluderInjector); ok {
 			a2.InjectProcessExcluder(deps.ProcessExcluder)
+		}
+		if a2, ok := a.(WatchSetInjector); ok {
+			a2.InjectWatchSet(deps.WatchSet)
 		}
 		if err := a.Add(m); err != nil {
 			return err

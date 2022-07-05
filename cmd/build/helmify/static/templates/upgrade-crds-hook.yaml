@@ -72,6 +72,8 @@ spec:
   template:
     metadata:
       name: gatekeeper-update-crds-hook
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
@@ -94,15 +96,11 @@ spec:
         resources:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - all
-          readOnlyRootFilesystem: true
-          runAsGroup: 65532
-          runAsNonRoot: true
-          runAsUser: 65532
+          {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      affinity:
+        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
       nodeSelector:
         kubernetes.io/os: linux
-
+      tolerations:
+        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
 {{- end }}

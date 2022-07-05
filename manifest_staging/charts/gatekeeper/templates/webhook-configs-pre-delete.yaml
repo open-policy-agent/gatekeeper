@@ -16,6 +16,8 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
         release: '{{ .Release.Name }}'
@@ -41,14 +43,7 @@ spec:
             - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
             {{- end }}
           securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - all
-            readOnlyRootFilesystem: true
-            runAsGroup: 999
-            runAsNonRoot: true
-            runAsUser: 1000
+            {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -82,6 +82,8 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
+            - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+            - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
@@ -107,6 +109,8 @@ spec:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+          securityContext:
+            HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
       nodeSelector:
@@ -148,6 +152,8 @@ spec:
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
+            - HELMSUBST_METRICS_BACKEND_ARG
+            - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -165,6 +171,8 @@ spec:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+          securityContext:
+            HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:
@@ -208,6 +216,7 @@ webhooks:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
     - HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
+  objectSelector: HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR
   sideEffects: None
   timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
 ---
@@ -229,6 +238,7 @@ webhooks:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
     - HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
+  objectSelector: HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
   rules:
