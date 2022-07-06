@@ -145,6 +145,10 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
   extraRules: []
 audit:
   hostNetwork: false
@@ -173,6 +177,10 @@ audit:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
   extraRules: []
 crds:
   resources: {}
