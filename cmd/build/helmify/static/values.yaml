@@ -49,6 +49,7 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
+    extraRules: []
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
@@ -77,6 +78,7 @@ postInstall:
     runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
+    extraRules: []
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
@@ -179,6 +181,7 @@ audit:
     fsGroup: 999
     supplementalGroups:
       - 999
+  extraRules: []
 crds:
   resources: {}
   securityContext:
@@ -200,5 +203,6 @@ psp:
 upgradeCRDs:
   enabled: true
   tolerations: []
+  extraRules: []
 rbac:
   create: true
