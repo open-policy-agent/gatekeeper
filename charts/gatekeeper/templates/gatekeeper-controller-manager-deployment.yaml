@@ -58,21 +58,21 @@ spec:
         - --enable-external-data={{ .Values.enableExternalData }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
-
+        
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
-
+        
         {{- range .Values.disabledBuiltins}}
         - --disable-opa-builtin={{ . }}
         {{- end }}
-
+        
         {{- range .Values.controllerManager.exemptNamespaces}}
         - --exempt-namespace={{ . }}
         {{- end }}
-
+        
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}
