@@ -1,0 +1,38 @@
+{{- if not .Values.disableValidatingWebhook }}
+{{- if and (not .Values.postInstall.labelNamespace.enabled) .Values.postInstall.probeWebhook.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gatekeeper-probe-webhook-post-install
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    gatekeeper.sh/system: "yes"
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+        app: '{{ template "gatekeeper.name" . }}'
+        release: '{{ .Release.Name }}'
+    spec:
+      restartPolicy: Never
+      {{- if .Values.postInstall.probeWebhook.image.pullSecrets }}
+      imagePullSecrets:
+      {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
+      {{- end }}
+      nodeSelector:
+        kubernetes.io/os: linux
+      volumes:
+      {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
+      containers:
+      {{- include "gatekeeper.postInstallWebhookProbeContainer" . | nindent 8 }}
+{{- end }}
+{{- end }}
