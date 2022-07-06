@@ -10,7 +10,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.9.0-beta.2
+VERSION := v3.9.0-rc.1
 
 KIND_VERSION ?= 0.13.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -387,13 +387,13 @@ docker-push:
 	docker push ${CRD_IMG}
 
 release-manifest:
-	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
-	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
-	@sed -i "s/version: .*/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
-	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
-	@sed -i "s/tag: .*/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
-	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
+	@sed -i'' -e 's@image: $(REPOSITORY):$(VERSION)@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
+	@sed -i "s/appVersion: $(VERSION)/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/version: $$(echo ${VERSION} | cut -c2-)/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/release: $(VERSION)/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
+	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
 	export
 	$(MAKE) manifests
 
