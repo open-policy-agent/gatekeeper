@@ -67,6 +67,7 @@ metadata:
 spec:
   url: http://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., http://my-provider.my-namespace:8090/validate)
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
+  insecureTLSSkipVerify: true # need to enable this if the provider uses HTTP so that Gatekeeper can skip TLS verification.
 ```
 
 #### `ProviderRequest`
@@ -306,3 +307,124 @@ There are several limitations when using external data with the mutating webhook
 - `AssignMetadata` only supports `dataSource: Username` because `AssignMetadata` only supports creation of `metadata.annotations` and `metadata.labels`. `dataSource: ValueAtLocation` will not return any data.
 - `ModifySet` does not support external data.
 - Multiple mutations to the same object are applied alphabetically based on the name of the mutation CRDs. If you have an external data mutation and a non-external data mutation with the same `spec.location`, the final result might not be what you expected. Currently, there is no way to enforce custom ordering of mutations but the issue is being tracked [here](https://github.com/open-policy-agent/gatekeeper/issues/1133).
+
+## TLS and mutual TLS support
+
+Since external data providers are in-cluster HTTP servers backed by Kubernetes services, communication is not encrypted by default. This can potentially lead to security issues such as request eavesdropping, tampering, and man-in-the-middle attack.
+
+To further harden the security posture of the external data feature, starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers. In this section, we will describe the steps required to configure them.
+
+### Prerequisites
+
+- A Gatekeeper deployment **v3.9.0+**.
+- The certificate of your certificate authority (CA) in PEM format.
+- The certificate of your external data provider in PEM format, signed by the CA above.
+- The private key of the external data provider in PEM format.
+
+### (Optional) How to generate a self-signed CA and a keypair for the external data provider
+
+In this section, we will describe how to generate a self-signed CA and a keypair using `openssl`.
+
+1. Generate a private key for your CA:
+
+```bash
+openssl genrsa -out ca.key 2048
+```
+
+2. Generate a self-signed certificate for your CA:
+
+```bash
+openssl req -new -x509 -days 365 -key ca.key -subj "/O=My Org/CN=External Data Provider CA" -out ca.crt
+```
+
+3. Generate a private key for your external data provider:
+
+```bash
+ openssl genrsa -out server.key 2048
+```
+
+4. Generate a certificate signing request (CSR) for your external data provider:
+
+> Replace `<service name>` and `<service namespace>` with the correct values.
+
+```bash
+openssl req -newkey rsa:2048 -nodes -keyout server.key -subj "/CN=<service name>.<service namespace>" -out server.csr
+```
+
+5. Generate a certificate for your external data provider:
+
+```bash
+openssl x509 -req -extfile <(printf "subjectAltName=DNS:<service name>.<service namespace>") -days 365 -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt
+```
+
+### How Gatekeeper trusts the external data provider (TLS)
+
+To enable one-way TLS, your external data provider should enable any TLS-related configurations for their HTTP server. For example, for Go's built-in [`HTTP server`](https://pkg.go.dev/net/http#Server) implementation, you can use [`ListenAndServeTLS`](https://pkg.go.dev/net/http#ListenAndServeTLS):
+
+```go
+server.ListenAndServeTLS("/etc/ssl/certs/server.crt", "/etc/ssl/certs/server.key")
+```
+
+In addition, the provider is also responsible for supplying the certificate authority (CA) certificate as part of the Provider spec so that Gatekeeper can verify the authenticity of the external data provider's certificate.
+
+The CA certificate must be encoded as a base64 string when defining the Provider spec. Run the following command to perform base64 encoding:
+
+```bash
+cat ca.crt | base64 | tr -d '\n'
+```
+
+With the encoded CA certificate, you can define the Provider spec as follows:
+
+```yaml
+apiVersion: externaldata.gatekeeper.sh/v1alpha1
+kind: Provider
+metadata:
+  name: my-provider
+spec:
+  url: https://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., https://my-provider.my-namespace:8090/validate)
+  timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
+  caBundle: <encoded-ca-certificate> # base64 encoded CA certificate.
+```
+
+### How the external data provider trusts Gatekeeper (mTLS)
+
+Gatekeeper attaches its certificate as part of the HTTPS request to the external data provider. To verify the authenticity of the Gatekeeper certificate, the external data provider must have access to Gatekeeper's CA certificate. There are several ways to do this:
+
+1. Deploy your external data provider to the same namespace as your Gatekeeper deployment. By default, [`cert-controller`](https://github.com/open-policy-agent/cert-controller) is used to generate and rotate Gatekeeper's webhook certificate. The content of the certificate is stored as a Kubernetes secret called `gatekeeper-webhook-server-cert` in the Gatekeeper namespace e.g. `gatekeeper-system`. In your external provider deployment, you can access Gatekeeper's certificate by adding the following `volume` and `volumeMount` to the provider deployment so that your server can trust Gatekeeper's CA certificate:
+
+```yaml
+volumeMounts:
+  - name: gatekeeper-ca-cert
+    mountPath: /tmp/gatekeeper
+    readOnly: true
+volumes:
+  - name: gatekeeper-ca-cert
+    secret:
+      secretName: gatekeeper-webhook-server-cert
+      items:
+        - key: ca.crt
+          path: ca.crt
+```
+
+After that, you can attach Gatekeeper's CA certificate in your TLS config and enable any client authentication-related settings. For example:
+
+```go
+caCert, err := ioutil.ReadFile("/tmp/gatekeeper/ca.crt")
+if err != nil {
+	panic(err)
+}
+
+clientCAs := x509.NewCertPool()
+clientCAs.AppendCertsFromPEM(caCert)
+
+server := &http.Server{
+	Addr:    ":8090",
+	TLSConfig: &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  clientCAs,
+		MinVersion: tls.VersionTLS13,
+	},
+}
+```
+
+2. If `cert-controller` is disabled via the `--disable-cert-rotation` flag, you can use a cluster-wide, well-known CA certificate for Gatekeeper so that your external data provider can trust it without being deployed to the `gatekeeper-system` namespace.
