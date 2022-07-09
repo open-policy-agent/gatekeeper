@@ -113,7 +113,11 @@ In addition to violations, these other audit events may be useful (all uniquely 
 * `constraint_audited` marks when a constraint is done being audited for a given run, along with the number of violations found
 * `audit_finished` marks the end of the current audit run
 
-All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
+All of these events (including `violation_audited`) are marked 
+with the same `audit_id` for a given audit run.
+
+## Running Audit
+By default, audit runs as its own deployment. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
 
 ## Configuring Audit
 
