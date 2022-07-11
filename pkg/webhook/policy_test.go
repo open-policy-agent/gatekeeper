@@ -14,6 +14,7 @@ import (
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
@@ -336,7 +337,15 @@ func TestReviewRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg, client: tt.CachedClient, reader: tt.APIReader}}
+			expSystem := expansion.NewSystem()
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expSystem,
+				webhookHandler: webhookHandler{
+					injectedConfig: tt.Cfg,
+					client:         tt.CachedClient,
+					reader:         tt.APIReader},
+			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
@@ -349,7 +358,7 @@ func TestReviewRequest(t *testing.T) {
 					},
 					Object: runtime.RawExtension{
 						Raw: []byte(
-							`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
+								`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
 					},
 					Namespace: "ns1",
 				},
@@ -398,8 +407,10 @@ func TestReviewDefaultNS(t *testing.T) {
 		}
 		pe := process.New()
 		pe.Add(cfg.Spec.Match)
+		expSystem := expansion.NewSystem()
 		handler := validationHandler{
-			opa: opa,
+			opa:             opa,
+			expansionSystem: expSystem,
 			webhookHandler: webhookHandler{
 				injectedConfig:  cfg,
 				client:          &nsGetter{},
@@ -419,7 +430,7 @@ func TestReviewDefaultNS(t *testing.T) {
 				},
 				Object: runtime.RawExtension{
 					Raw: []byte(
-						`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+							`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
 				},
 				Namespace: "default",
 			},
@@ -493,7 +504,11 @@ func TestConstraintValidation(t *testing.T) {
 			if _, err := opa.AddTemplate(ctx, tt.Template); err != nil {
 				t.Fatalf("Could not add template: %s", err)
 			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expansion.NewSystem(),
+				webhookHandler:  webhookHandler{},
+			}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
@@ -616,7 +631,11 @@ func TestTracing(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{injectedConfig: tt.Cfg}}
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expansion.NewSystem(),
+				webhookHandler:  webhookHandler{injectedConfig: tt.Cfg},
+			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
@@ -788,7 +807,11 @@ func TestGetValidationMessages(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			handler := validationHandler{opa: opa, webhookHandler: webhookHandler{}}
+			handler := validationHandler{
+				opa:             opa,
+				expansionSystem: expansion.NewSystem(),
+				webhookHandler:  webhookHandler{},
+			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}

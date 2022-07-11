@@ -507,6 +507,12 @@ func TestTemplatesForGVK(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ec := NewSystem()
 
+			for _, te := range tc.addTemplates {
+				if err := ec.UpsertTemplate(te); err != nil {
+					t.Fatalf("error upserting template: %s", err)
+				}
+			}
+
 			got := ec.TemplatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
 			wantSorted := make([]*mutationsunversioned.TemplateExpansion, len(tc.want))

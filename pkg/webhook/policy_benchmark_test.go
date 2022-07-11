@@ -29,6 +29,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -289,7 +290,11 @@ func BenchmarkValidationHandler(b *testing.B) {
 					},
 				},
 			}
-			h := validationHandler{opa: opaClient, webhookHandler: webhookHandler{client: c, injectedConfig: cfg}}
+			h := validationHandler{
+				opa:             opaClient,
+				expansionSystem: expansion.NewSystem(),
+				webhookHandler:  webhookHandler{client: c, injectedConfig: cfg},
+			}
 
 			// seed random generator
 			rand.Seed(time.Now().UnixNano())
