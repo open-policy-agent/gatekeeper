@@ -130,7 +130,7 @@ func (g *defaultPodGetter) GetPod(ctx context.Context) (*corev1.Pod, error) {
 }
 
 // AddToManager adds all Controllers to the Manager.
-func AddToManager(m manager.Manager, deps Dependencies) error {
+func AddToManager(m manager.Manager, deps *Dependencies) error {
 	if deps.GetPod == nil {
 		podGetter := &defaultPodGetter{
 			scheme: m.GetScheme(),

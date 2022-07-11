@@ -19,7 +19,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
@@ -44,13 +43,13 @@ var Cmd = &cobra.Command{
 	Args:    cobra.ExactArgs(0),
 }
 
-var allowedExtensions = []string{".yaml", ".yml", ".json"}
-var MutatorTypes = map[string]bool{"Assign": true, "AssignMetadata": true, "ModifySet": true}
-
 var (
 	flagFilenames []string
 	flagFormat    string
 	flagOutput    string
+
+	allowedExtensions = []string{".yaml", ".yml", ".json"}
+	MutatorTypes      = map[string]bool{"Assign": true, "AssignMetadata": true, "ModifySet": true}
 )
 
 const (
@@ -255,14 +254,6 @@ func sortResources(resources []*unstructured.Unstructured) ([]*unstructured.Unst
 	}
 
 	return generators, mutators, templates
-}
-
-func genGVKToSchemaGVK(gvk mutationsunversioned.GeneratedGVK) schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-		Kind:    gvk.Kind,
-	}
 }
 
 func printResources(resources []*unstructured.Unstructured) {

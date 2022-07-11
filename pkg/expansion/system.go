@@ -124,14 +124,6 @@ func expand(generator *unstructured.Unstructured, template *mutationsunversioned
 	return resource, nil
 }
 
-func createResultantKind(gvk schema.GroupVersionKind, source map[string]interface{}) (*unstructured.Unstructured, error) {
-	resource := unstructured.Unstructured{}
-	resource.SetUnstructuredContent(source)
-	resource.SetGroupVersionKind(gvk)
-
-	return &resource, nil
-}
-
 func NewSystem() *System {
 	return &System{
 		lock:      sync.Mutex{},

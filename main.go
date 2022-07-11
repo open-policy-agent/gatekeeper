@@ -355,7 +355,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		WatchSet:         watchSet,
 	}
 
-	if err := controller.AddToManager(mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, &opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}

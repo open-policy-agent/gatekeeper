@@ -53,8 +53,8 @@ func (d *DummyMutator) UsesExternalData() bool {
 	return false
 }
 
-func (d *DummyMutator) ExpandsGenerators() bool {
-	return false
+func (d *DummyMutator) Source() types.SourceType {
+	return types.SourceTypeAll
 }
 
 func (d *DummyMutator) String() string {

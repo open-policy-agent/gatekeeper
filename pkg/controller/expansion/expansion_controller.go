@@ -52,17 +52,9 @@ func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
 type Reconciler struct {
 	client.Client
 	system *expansion.System
-	// TODO metrics exporter
 }
 
 func newReconciler(mgr manager.Manager, system *expansion.System) *Reconciler {
-	// START DEBUG
-	// TODO figure out how to actually inject the correct expansion system
-	//system, err := expansion.NewSystem(nil, nil)
-	//if err != nil {
-	//	log.Error(err, "big issue creating expansion system")
-	//}
-	// END DEBUG
 	return &Reconciler{Client: mgr.GetClient(), system: system}
 }
 
@@ -91,7 +83,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	unversionedTe := expansion.V1Alpha1TemplateToUnversioned(te)
-
 	if deleted {
 		// unversionedTe will be an empty struct. We set the metadata name, which is
 		// used as a key to delete it from the expansion system

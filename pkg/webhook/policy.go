@@ -514,6 +514,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	trace, dump := h.tracingLevel(ctx, req)
 	review, err := h.createReview(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create augmentedReview: %s", err)
+	}
 
 	// Check if the requested resource is a generator resource that is configured
 	// to be expanded by TemplateExpansions

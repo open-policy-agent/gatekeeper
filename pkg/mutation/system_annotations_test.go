@@ -32,7 +32,7 @@ func TestSystem_Mutate_Annotations(t *testing.T) {
 
 	obj := &unstructured.Unstructured{}
 
-	mutated, err := s.Mutate(&types.Mutable{Object: obj})
+	mutated, err := s.Mutate(&types.Mutable{Object: obj}, types.SourceTypeAll)
 	if err != nil {
 		t.Fatalf("got Mutate() error = %v, want %v", err, nil)
 	}

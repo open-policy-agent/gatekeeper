@@ -21,7 +21,7 @@ func TestSystem_Mutate_Fail(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(&types.Mutable{Object: u})
+	gotMutated, gotErr := s.Mutate(&types.Mutable{Object: u}, types.SourceTypeAll)
 
 	if gotMutated != false {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, false)
@@ -50,8 +50,8 @@ func (e errorMutator) UsesExternalData() bool {
 	return false
 }
 
-func (e errorMutator) ExpandsGenerators() bool {
-	return false
+func (e errorMutator) Source() types.SourceType {
+	return types.SourceTypeAll
 }
 
 func (e errorMutator) ID() types.ID {

@@ -1,17 +1,12 @@
 package expansion
 
 import (
-	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -20,106 +15,6 @@ type templateData struct {
 	apply        []match.ApplyTo
 	source       string
 	generatedGVK mutationsunversioned.GeneratedGVK
-}
-
-type assignData struct {
-	name       string
-	apply      []match.ApplyTo
-	location   string
-	match      match.Match
-	parameters mutationsunversioned.Parameters
-}
-
-type assignMetadataData struct {
-	name       string
-	match      match.Match
-	location   string
-	parameters mutationsunversioned.MetadataParameters
-}
-
-type modifySetData struct {
-	name       string
-	match      match.Match
-	location   string
-	apply      []match.ApplyTo
-	parameters mutationsunversioned.ModifySetParameters
-}
-
-func assignFromData(data *assignData) mutationsunversioned.Assign {
-	return mutationsunversioned.Assign{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Assign",
-			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: data.name},
-		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo:    data.apply,
-			Location:   data.location,
-			Parameters: data.parameters,
-			Match:      data.match,
-		},
-	}
-}
-
-func newAssign(data *assignData, t *testing.T) types.Mutator {
-	a := assignFromData(data)
-	mut, err := assign.MutatorForAssign(&a)
-	if err != nil {
-		t.Fatalf("error creating assign: %s\ndata: \n%+v\n", err, data)
-		return nil
-	}
-	return mut
-}
-
-func assignMetadataFromData(data *assignMetadataData) mutationsunversioned.AssignMetadata {
-	return mutationsunversioned.AssignMetadata{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AssignMetadata",
-			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: data.name},
-		Spec: mutationsunversioned.AssignMetadataSpec{
-			Match:      data.match,
-			Location:   data.location,
-			Parameters: data.parameters,
-		},
-	}
-}
-
-func newAssignMetadata(data *assignMetadataData, t *testing.T) types.Mutator {
-	am := assignMetadataFromData(data)
-	mut, err := assignmeta.MutatorForAssignMetadata(&am)
-	if err != nil {
-		t.Fatalf("error creating assignmetadata: %s\ndata:\n%+v\n", err, data)
-		return nil
-	}
-	return mut
-}
-
-func modifySetFromData(data *modifySetData) mutationsunversioned.ModifySet {
-	return mutationsunversioned.ModifySet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ModifySet",
-			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: data.name},
-		Spec: mutationsunversioned.ModifySetSpec{
-			ApplyTo:    data.apply,
-			Match:      data.match,
-			Location:   data.location,
-			Parameters: data.parameters,
-		},
-	}
-}
-
-func newModifySet(data *modifySetData, t *testing.T) types.Mutator {
-	ms := modifySetFromData(data)
-	mut, err := modifyset.MutatorForModifySet(&ms)
-	if err != nil {
-		t.Fatalf("error creating modifyset: %s\ndata:\n%+v\n", err, data)
-		return nil
-	}
-	return mut
 }
 
 func newTemplate(data *templateData) *mutationsunversioned.TemplateExpansion {
@@ -406,10 +301,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewSystem(nil, nil)
-			if err != nil {
-				t.Fatalf("failed to create cache: %s", err)
-			}
+			ec := NewSystem()
 
 			for _, templ := range tc.add {
 				err := ec.UpsertTemplate(templ)
@@ -440,379 +332,6 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				}
 				if cmp.Diff(got, templ) != "" {
 					t.Errorf("got value:  \n%s\n, wanted: \n%s\n\n diff: \n%s", prettyResource(got), prettyResource(templ), cmp.Diff(got, templ))
-				}
-			}
-		})
-	}
-}
-
-func TestUpsertRemoveMutator(t *testing.T) {
-	assignImagePullForPods := newAssign(&assignData{
-		name: "always-pull-image-pods",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Pod"},
-			Versions: []string{"v1"},
-		}},
-		location: "spec.containers[name: *].imagePullPolicy",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-		},
-		parameters: mutationsunversioned.Parameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "Always"},
-			},
-		},
-	}, t)
-
-	assignImagePullUpdated := newAssign(&assignData{
-		name: "always-pull-image-pods",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Pod"},
-			Versions: []string{"v9000"},
-		}},
-		location: "spec.containers[name: *].imagePullPolicy",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Namespaced",
-		},
-		parameters: mutationsunversioned.Parameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "Never"},
-			},
-		},
-	}, t)
-
-	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
-		name: "add-annotation",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-			Kinds: []match.Kinds{{
-				APIGroups: []string{"*"},
-				Kinds:     []string{"Pod"},
-			}},
-		},
-		location: "metadata.annotations.owner",
-		parameters: mutationsunversioned.MetadataParameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "admin"},
-			},
-		},
-	}, t)
-
-	modifySetRemoveErrLog := newModifySet(&modifySetData{
-		name: "remove-err-logging",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-		},
-		location: "spec.containers[name: *].args",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Pod"},
-			Versions: []string{"v1"},
-		}},
-		parameters: mutationsunversioned.ModifySetParameters{
-			Operation: mutationsunversioned.PruneOp,
-			Values:    mutationsunversioned.Values{FromList: []interface{}{"--alsologtostderr"}},
-		},
-	}, t)
-
-	tests := []struct {
-		name          string
-		add           []types.Mutator
-		remove        []types.Mutator
-		check         []types.Mutator
-		wantAddErr    bool
-		wantRemoveErr bool
-	}{
-		{
-			name: "adding 3 valid mutators",
-			add: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-			check: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-		},
-		{
-			name: "adding mutator without 'origin: Generated' returns error",
-			add: []types.Mutator{newAssign(&assignData{
-				name: "always-pull-image-pods",
-				apply: []match.ApplyTo{{
-					Groups:   []string{""},
-					Kinds:    []string{"Pod"},
-					Versions: []string{"v1"},
-				}},
-				location: "spec.containers[name: *].imagePullPolicy",
-				match: match.Match{
-					Scope: "Cluster",
-				},
-				parameters: mutationsunversioned.Parameters{
-					Assign: mutationsunversioned.AssignField{
-						Value: &types.Anything{Value: "Always"},
-					},
-				},
-			}, t)},
-			check:      []types.Mutator{},
-			wantAddErr: true,
-		},
-		{
-			name: "adding 3 mutators, removing 2",
-			add: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-			remove: []types.Mutator{
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-			check: []types.Mutator{assignImagePullForPods.DeepCopy()},
-		},
-		{
-			name: "updating an existing template",
-			add: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignImagePullUpdated.DeepCopy(),
-			},
-			remove: []types.Mutator{
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-			check: []types.Mutator{assignImagePullUpdated.DeepCopy()},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewSystem(nil, nil)
-			if err != nil {
-				t.Fatalf("failed to create cache: %s", err)
-			}
-
-			for _, mut := range tc.add {
-				err := ec.UpsertMutator(mut)
-				if tc.wantAddErr && err == nil {
-					t.Errorf("expected error, got nil")
-				} else if !tc.wantAddErr && err != nil {
-					t.Errorf("failed to add mutator: %s", err)
-				}
-			}
-
-			for _, mut := range tc.remove {
-				err := ec.RemoveMutator(mut)
-				if tc.wantRemoveErr && err == nil {
-					t.Errorf("expected error, got nil")
-				} else if !tc.wantRemoveErr && err != nil {
-					t.Errorf("failed to remove mutator: %s", err)
-				}
-			}
-
-			if len(ec.mutators) != len(tc.check) {
-				t.Errorf("incorrect number of mutator in cache, got %d, want %d", len(ec.mutators), len(tc.check))
-			}
-
-			for _, mut := range tc.check {
-				k := mut.ID()
-				got, exists := ec.mutators[k]
-				if !exists {
-					t.Errorf("could not find mutator with key %q", k)
-				}
-				if !reflect.DeepEqual(got, mut) {
-					t.Errorf("got mutator:\n%s\nwant mutator:\n%s", prettyResource(got), prettyResource(mut))
-				}
-			}
-		})
-	}
-}
-
-func TestMutatorsForGVK(t *testing.T) {
-	assignImagePullForPods := newAssign(&assignData{
-		name: "always-pull-image-pods",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Pod"},
-			Versions: []string{"v1"},
-		}},
-		location: "spec.containers[name: *].imagePullPolicy",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-		},
-		parameters: mutationsunversioned.Parameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "Always"},
-			},
-		},
-	}, t)
-
-	assignDontMatchPod := newAssign(&assignData{
-		name: "assign-dont-match-pods",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Cat"},
-			Versions: []string{"v9000"},
-		}},
-		location: "spec.containers[name: *].imagePullPolicy",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-		},
-		parameters: mutationsunversioned.Parameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "Always"},
-			},
-		},
-	}, t)
-
-	assignMetadataAddAnnotation := newAssignMetadata(&assignMetadataData{
-		name: "add-annotation",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-			Kinds: []match.Kinds{{
-				APIGroups: []string{"*"},
-				Kinds:     []string{"Pod"},
-			}},
-		},
-		location: "metadata.annotations.owner",
-		parameters: mutationsunversioned.MetadataParameters{
-			Assign: mutationsunversioned.AssignField{
-				Value: &types.Anything{Value: "admin"},
-			},
-		},
-	}, t)
-
-	modifySetRemoveErrLog := newModifySet(&modifySetData{
-		name: "remove-err-logging",
-		match: match.Match{
-			Source: "Generated",
-			Scope:  "Cluster",
-		},
-		location: "spec.containers[name: *].args",
-		apply: []match.ApplyTo{{
-			Groups:   []string{""},
-			Kinds:    []string{"Pod"},
-			Versions: []string{"v1"},
-		}},
-		parameters: mutationsunversioned.ModifySetParameters{
-			Operation: mutationsunversioned.PruneOp,
-			Values:    mutationsunversioned.Values{FromList: []interface{}{"--alsologtostderr"}},
-		},
-	}, t)
-
-	tests := []struct {
-		name     string
-		gvk      mutationsunversioned.GeneratedGVK
-		mutators []types.Mutator
-		want     []types.Mutator
-	}{
-		{
-			name: "assign mutator matches v1 pod",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{assignImagePullForPods.DeepCopy()},
-			want:     []types.Mutator{assignImagePullForPods.DeepCopy()},
-		},
-		{
-			name: "assign metadata mutator matches v1 pod",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{assignMetadataAddAnnotation.DeepCopy()},
-			want:     []types.Mutator{assignMetadataAddAnnotation.DeepCopy()},
-		},
-		{
-			name: "modify set matches v1 pod",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{modifySetRemoveErrLog.DeepCopy()},
-			want:     []types.Mutator{modifySetRemoveErrLog.DeepCopy()},
-		},
-		{
-			name: "3 mutators match v1 pod",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-			want: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignMetadataAddAnnotation.DeepCopy(),
-				modifySetRemoveErrLog.DeepCopy(),
-			},
-		},
-		{
-			name: "no matching mutators",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{assignDontMatchPod.DeepCopy()},
-			want:     []types.Mutator{},
-		},
-		{
-			name: "no mutators, no matches",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{},
-			want:     []types.Mutator{},
-		},
-		{
-			name: "1 mutator matches, 1 mutator does not match",
-			gvk: mutationsunversioned.GeneratedGVK{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Pod",
-			},
-			mutators: []types.Mutator{
-				assignImagePullForPods.DeepCopy(),
-				assignDontMatchPod.DeepCopy(),
-			},
-			want: []types.Mutator{assignImagePullForPods.DeepCopy()},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewSystem(tc.mutators, nil)
-			if err != nil {
-				t.Errorf("error creating expansion cache: %s", err)
-			}
-
-			got := ec.MutatorsForGVK(genGVKToSchemaGVK(tc.gvk))
-			if len(got) != len(tc.want) {
-				t.Errorf("got %d mutators, want %d", len(got), len(tc.want))
-			}
-
-			sortMutators(got)
-			sortMutators(tc.want)
-			for i := 0; i < len(got); i++ {
-				if !reflect.DeepEqual(got[i], tc.want[i]) {
-					t.Errorf("got mutator:\n%s\nwant mutator:\n%s", prettyResource(got[i]), prettyResource(tc.want[i]))
 				}
 			}
 		})
@@ -986,16 +505,13 @@ func TestTemplatesForGVK(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec, err := NewSystem(nil, tc.addTemplates)
-			if err != nil {
-				t.Fatalf("failed to create cache: %s", err)
-			}
+			ec := NewSystem()
 
 			got := ec.TemplatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
-			wantSorted := make([]mutationsunversioned.TemplateExpansion, len(tc.want))
+			wantSorted := make([]*mutationsunversioned.TemplateExpansion, len(tc.want))
 			for i := 0; i < len(tc.want); i++ {
-				wantSorted[i] = *tc.want[i]
+				wantSorted[i] = tc.want[i]
 			}
 			sortTemplates(wantSorted)
 
@@ -1012,7 +528,7 @@ func TestTemplatesForGVK(t *testing.T) {
 	}
 }
 
-func sortTemplates(templates []mutationsunversioned.TemplateExpansion) {
+func sortTemplates(templates []*mutationsunversioned.TemplateExpansion) {
 	sort.SliceStable(templates, func(x, y int) bool {
 		return templates[x].Name < templates[y].Name
 	})
