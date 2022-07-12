@@ -113,7 +113,12 @@ In addition to violations, these other audit events may be useful (all uniquely 
 * `constraint_audited` marks when a constraint is done being audited for a given run, along with the number of violations found
 * `audit_finished` marks the end of the current audit run
 
-All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
+All of these events (including `violation_audited`) are marked 
+with the same `audit_id` for a given audit run.
+
+## Running Audit
+For more details on how to deploy audit and 
+number of instances to run, please refer to [operations audit](operations.md#audit). 
 
 ## Configuring Audit
 

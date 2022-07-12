@@ -107,6 +107,9 @@ In addition to violations, these other audit events may be useful (all uniquely 
 
 All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
 
+## Running Audit
+By default, audit runs as its own deployment. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
+
 ## Configuring Audit
 
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)

@@ -107,6 +107,10 @@ In addition to violations, these other audit events may be useful (all uniquely 
 
 All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
 
+## Running Audit
+For more details on how to deploy audit and 
+number of instances to run, please refer to [operations audit](operations.md#audit). 
+
 ## Configuring Audit
 
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
