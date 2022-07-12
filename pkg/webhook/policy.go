@@ -520,16 +520,16 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	// Check if the requested resource is a generator resource that is configured
 	// to be expanded by TemplateExpansions
-	gvk := schema.GroupVersionKind{
-		Group:   req.Kind.Group,
-		Version: req.Kind.Version,
-		Kind:    req.Kind.Kind,
-	}
-	expansionTemps := h.expansionSystem.TemplatesForGVK(gvk)
+	//gvk := schema.GroupVersionKind{
+	//	Group:   req.Kind.Group,
+	//	Version: req.Kind.Version,
+	//	Kind:    req.Kind.Kind,
+	//}
+	//expansionTemps := h.expansionSystem.templatesForGVK(gvk)
 	// If there are no matching ExpansionTemplates, review the resource normally
-	if len(expansionTemps) == 0 {
-		return h.review(ctx, review, trace, dump)
-	}
+	//if len(expansionTemps) == 0 {
+	//	return h.review(ctx, review, trace, dump)
+	//}
 
 	// Convert the request's generator resource to unstructured for expansion
 	obj := &unstructured.Unstructured{}
@@ -537,9 +537,15 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		return nil, fmt.Errorf("error decoding generator resource %s: %s", req.Name, err)
 	}
 	obj.SetNamespace(req.Namespace)
+	obj.SetGroupVersionKind(
+		schema.GroupVersionKind{
+			Group:   req.Kind.Group,
+			Version: req.Kind.Version,
+			Kind:    req.Kind.Kind,
+		})
 
 	// Expand the generator and apply mutators to the resultant resources
-	resultants, err := h.expansionSystem.ExpandGenerator(obj, expansionTemps)
+	resultants, err := h.expansionSystem.Expand(obj)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding generator: %s", err)
 	}
@@ -555,7 +561,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 	}
 
-	generatorResp, err := h.review(ctx, review, trace, dump)
+	resp, err := h.review(ctx, review, trace, dump)
 	if err != nil {
 		return nil, fmt.Errorf("failed to review generator resource %s: %s", req.Name, err)
 	}
@@ -568,9 +574,9 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 		resultantResps = append(resultantResps, resp)
 	}
+	aggregateResponses(req.Name, resp, resultantResps)
 
-	aggregateResponses(req.Name, generatorResp, resultantResps)
-	return generatorResp, nil
+	return resp, nil
 }
 
 func (h *validationHandler) review(ctx context.Context, review interface{}, trace bool, dump bool) (*rtypes.Responses, error) {

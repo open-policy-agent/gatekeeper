@@ -17,6 +17,7 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"os"
@@ -29,6 +30,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
@@ -203,6 +205,7 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 	res.SetResourceVersion("2")
 	oldRes.SetResourceVersion("1")
 	gvr, _ := meta.UnsafeGuessKindToResource(oldRes.GroupVersionKind())
+	rawObj, _ := json.Marshal(&resList[n%len(resList)])
 	return atypes.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			UID:                uuid.NewUUID(),
@@ -221,12 +224,16 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 				Groups:   []string{"res-creator-group"},
 				Extra:    map[string]authenticationv1.ExtraValue{"extraKey": {"value1", "value2"}},
 			},
-			Object:    runtime.RawExtension{Object: &resList[n%len(resList)]},
+			Object: runtime.RawExtension{
+				Object: &resList[n%len(resList)],
+				Raw:    rawObj,
+			},
 			OldObject: runtime.RawExtension{Object: oldRes},
 			DryRun:    &dryRun,
 			Options:   runtime.RawExtension{},
 		},
 	}
+}
 }
 
 func BenchmarkValidationHandler(b *testing.B) {
@@ -293,7 +300,11 @@ func BenchmarkValidationHandler(b *testing.B) {
 			h := validationHandler{
 				opa:             opaClient,
 				expansionSystem: expansion.NewSystem(),
-				webhookHandler:  webhookHandler{client: c, injectedConfig: cfg},
+				webhookHandler: webhookHandler{
+					processExcluder: process.Get(),
+					client:          c,
+					injectedConfig:  cfg,
+				},
 			}
 
 			// seed random generator

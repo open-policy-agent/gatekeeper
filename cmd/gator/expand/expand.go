@@ -126,8 +126,7 @@ func expandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 
 	var resultants []*unstructured.Unstructured
 	for _, gen := range generators {
-		temps := expSystem.TemplatesForGVK(gen.GroupVersionKind())
-		resultants, err = expSystem.ExpandGenerator(gen, temps)
+		resultants, err = expSystem.Expand(gen)
 		if err != nil {
 			return nil, fmt.Errorf("error expanding generator: %s", err)
 		}

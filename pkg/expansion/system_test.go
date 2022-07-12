@@ -513,7 +513,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				}
 			}
 
-			got := ec.TemplatesForGVK(genGVKToSchemaGVK(tc.gvk))
+			got := ec.templatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
 			wantSorted := make([]*expansionunversioned.TemplateExpansion, len(tc.want))
 			for i := 0; i < len(tc.want); i++ {

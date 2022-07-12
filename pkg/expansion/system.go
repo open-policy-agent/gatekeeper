@@ -67,8 +67,8 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 	}
 }
 
-// TemplatesForGVK returns a slice of TemplateExpansions that match a given gvk.
-func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.TemplateExpansion {
+// templatesForGVK returns a slice of TemplateExpansions that match a given gvk.
+func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.TemplateExpansion {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -84,11 +84,18 @@ func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 	return templates
 }
 
-func (s *System) ExpandGenerator(generator *unstructured.Unstructured, templates []*expansionunversioned.TemplateExpansion) ([]*unstructured.Unstructured, error) {
+// Expand expands `obj` with into resultant resources. If no TemplateExpansions
+// match the provided `gvk`, an empty slice will be returned.
+func (s *System) Expand(obj *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	gvk := obj.GroupVersionKind()
+	if gvk == (schema.GroupVersionKind{}) {
+		return nil, fmt.Errorf("cannot expand object with empty GVK")
+	}
+	templates := s.templatesForGVK(gvk)
 	var resultants []*unstructured.Unstructured
 
 	for _, te := range templates {
-		res, err := expand(generator, te)
+		res, err := expand(obj, te)
 		resultants = append(resultants, res)
 		if err != nil {
 			return nil, err
