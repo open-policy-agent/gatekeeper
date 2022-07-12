@@ -61,9 +61,8 @@ type TemplateExpansionStatus struct {
 // +kubebuilder:resource:path="templateexpansion"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
-// TemplateExpansion is the Schema for the assign API.
+// TemplateExpansion is the Schema for the TemplateExpansion API.
 type TemplateExpansion struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

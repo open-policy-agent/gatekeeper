@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
@@ -145,8 +146,8 @@ func expandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 	return resultants, nil
 }
 
-func convertTemplateExpansions(templates []*unstructured.Unstructured) ([]*mutationsunversioned.TemplateExpansion, error) {
-	convertedTemplates := make([]*mutationsunversioned.TemplateExpansion, len(templates))
+func convertTemplateExpansions(templates []*unstructured.Unstructured) ([]*unversioned.TemplateExpansion, error) {
+	convertedTemplates := make([]*unversioned.TemplateExpansion, len(templates))
 	for i, t := range templates {
 		te, err := convertTemplateExpansion(t)
 		if err != nil {
@@ -209,8 +210,8 @@ func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) e
 	return err
 }
 
-func convertTemplateExpansion(u *unstructured.Unstructured) (mutationsunversioned.TemplateExpansion, error) {
-	te := mutationsunversioned.TemplateExpansion{}
+func convertTemplateExpansion(u *unstructured.Unstructured) (unversioned.TemplateExpansion, error) {
+	te := unversioned.TemplateExpansion{}
 	err := convertUnstructuredToTyped(u, &te)
 	return te, err
 }

@@ -6,22 +6,22 @@ import (
 	"strings"
 	"sync"
 
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
+	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type System struct {
 	lock      sync.Mutex
-	templates map[string]*mutationsunversioned.TemplateExpansion
+	templates map[string]*expansionunversioned.TemplateExpansion
 }
 
-func keyForTemplate(template *mutationsunversioned.TemplateExpansion) string {
+func keyForTemplate(template *expansionunversioned.TemplateExpansion) string {
 	return template.ObjectMeta.Name
 }
 
-func (s *System) UpsertTemplate(template *mutationsunversioned.TemplateExpansion) error {
+func (s *System) UpsertTemplate(template *expansionunversioned.TemplateExpansion) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -34,7 +34,7 @@ func (s *System) UpsertTemplate(template *mutationsunversioned.TemplateExpansion
 	return nil
 }
 
-func (s *System) RemoveTemplate(template *mutationsunversioned.TemplateExpansion) error {
+func (s *System) RemoveTemplate(template *expansionunversioned.TemplateExpansion) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -59,7 +59,7 @@ func prettyResource(v interface{}) string {
 	return ""
 }
 
-func genGVKToSchemaGVK(gvk mutationsunversioned.GeneratedGVK) schema.GroupVersionKind {
+func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   gvk.Group,
 		Version: gvk.Version,
@@ -68,11 +68,11 @@ func genGVKToSchemaGVK(gvk mutationsunversioned.GeneratedGVK) schema.GroupVersio
 }
 
 // TemplatesForGVK returns a slice of TemplateExpansions that match a given gvk.
-func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []*mutationsunversioned.TemplateExpansion {
+func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.TemplateExpansion {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	var templates []*mutationsunversioned.TemplateExpansion
+	var templates []*expansionunversioned.TemplateExpansion
 	for _, t := range s.templates {
 		for _, apply := range t.Spec.ApplyTo {
 			if apply.Matches(gvk) {
@@ -84,7 +84,7 @@ func (s *System) TemplatesForGVK(gvk schema.GroupVersionKind) []*mutationsunvers
 	return templates
 }
 
-func (s *System) ExpandGenerator(generator *unstructured.Unstructured, templates []*mutationsunversioned.TemplateExpansion) ([]*unstructured.Unstructured, error) {
+func (s *System) ExpandGenerator(generator *unstructured.Unstructured, templates []*expansionunversioned.TemplateExpansion) ([]*unstructured.Unstructured, error) {
 	var resultants []*unstructured.Unstructured
 
 	for _, te := range templates {
@@ -98,7 +98,7 @@ func (s *System) ExpandGenerator(generator *unstructured.Unstructured, templates
 	return resultants, nil
 }
 
-func expand(generator *unstructured.Unstructured, template *mutationsunversioned.TemplateExpansion) (*unstructured.Unstructured, error) {
+func expand(generator *unstructured.Unstructured, template *expansionunversioned.TemplateExpansion) (*unstructured.Unstructured, error) {
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand generator for template with no source")
@@ -127,23 +127,23 @@ func expand(generator *unstructured.Unstructured, template *mutationsunversioned
 func NewSystem() *System {
 	return &System{
 		lock:      sync.Mutex{},
-		templates: map[string]*mutationsunversioned.TemplateExpansion{},
+		templates: map[string]*expansionunversioned.TemplateExpansion{},
 	}
 }
 
-func V1Alpha1TemplateToUnversioned(expansion *v1alpha1.TemplateExpansion) *mutationsunversioned.TemplateExpansion {
-	return &mutationsunversioned.TemplateExpansion{
+func V1Alpha1TemplateToUnversioned(expansion *v1alpha1.TemplateExpansion) *expansionunversioned.TemplateExpansion {
+	return &expansionunversioned.TemplateExpansion{
 		TypeMeta:   expansion.TypeMeta,
 		ObjectMeta: expansion.ObjectMeta,
-		Spec: mutationsunversioned.TemplateExpansionSpec{
+		Spec: expansionunversioned.TemplateExpansionSpec{
 			ApplyTo:        expansion.Spec.ApplyTo,
 			TemplateSource: expansion.Spec.TemplateSource,
-			GeneratedGVK: mutationsunversioned.GeneratedGVK{
+			GeneratedGVK: expansionunversioned.GeneratedGVK{
 				Group:   expansion.Spec.GeneratedGVK.Group,
 				Version: expansion.Spec.GeneratedGVK.Version,
 				Kind:    expansion.Spec.GeneratedGVK.Kind,
 			},
 		},
-		Status: mutationsunversioned.TemplateExpansionStatus{},
+		Status: expansionunversioned.TemplateExpansionStatus{},
 	}
 }

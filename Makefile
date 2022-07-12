@@ -263,7 +263,7 @@ generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1 \
+		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1 \
 		--go-header-file=./hack/boilerplate.go.txt \
 		--output-file-base=zz_generated.conversion
 

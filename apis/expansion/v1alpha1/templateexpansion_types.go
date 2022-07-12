@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,7 +63,7 @@ type TemplateExpansionStatus struct {
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
 
-// TemplateExpansion is the Schema for the assign API.
+// TemplateExpansion is the Schema for the TemplateExpansion API.
 type TemplateExpansion struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -81,5 +82,5 @@ type TemplateExpansionList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&TemplateExpansion{}, &TemplateExpansionList{})
+	v1alpha1.SchemeBuilder.Register(&TemplateExpansion{}, &TemplateExpansionList{})
 }
