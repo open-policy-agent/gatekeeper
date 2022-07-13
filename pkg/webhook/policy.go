@@ -43,7 +43,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
-	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -512,24 +511,10 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 	}
 
-	trace, dump := h.tracingLevel(ctx, req)
 	review, err := h.createReview(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create augmentedReview: %s", err)
 	}
-
-	// Check if the requested resource is a generator resource that is configured
-	// to be expanded by TemplateExpansions
-	//gvk := schema.GroupVersionKind{
-	//	Group:   req.Kind.Group,
-	//	Version: req.Kind.Version,
-	//	Kind:    req.Kind.Kind,
-	//}
-	//expansionTemps := h.expansionSystem.templatesForGVK(gvk)
-	// If there are no matching ExpansionTemplates, review the resource normally
-	//if len(expansionTemps) == 0 {
-	//	return h.review(ctx, review, trace, dump)
-	//}
 
 	// Convert the request's generator resource to unstructured for expansion
 	obj := &unstructured.Unstructured{}
@@ -545,22 +530,12 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		})
 
 	// Expand the generator and apply mutators to the resultant resources
-	resultants, err := h.expansionSystem.Expand(obj)
+	resultants, err := h.expansionSystem.Expand(obj, req.AdmissionRequest.UserInfo.Username, h.mutationSystem)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding generator: %s", err)
 	}
-	for _, res := range resultants {
-		mutable := &mutationtypes.Mutable{
-			Object:    res,
-			Namespace: review.Namespace,
-			Username:  req.AdmissionRequest.UserInfo.Username,
-		}
-		_, err := h.mutationSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
-		if err != nil {
-			return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
-		}
-	}
 
+	trace, dump := h.tracingLevel(ctx, req)
 	resp, err := h.review(ctx, review, trace, dump)
 	if err != nil {
 		return nil, fmt.Errorf("failed to review generator resource %s: %s", req.Name, err)
@@ -574,7 +549,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 		resultantResps = append(resultantResps, resp)
 	}
-	aggregateResponses(req.Name, resp, resultantResps)
+	expansion.AggregateResponses(req.Name, resp, resultantResps)
 
 	return resp, nil
 }

@@ -14,8 +14,11 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
@@ -76,6 +79,9 @@ type Manager struct {
 
 	// auditCache lists objects from the audit's cache if auditFromCache is enabled.
 	auditCache *CacheLister
+
+	mutationSystem  *mutation.System
+	expansionSystem *expansion.System
 }
 
 // StatusViolation represents each violation under status.
@@ -125,7 +131,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) (*Manager, error) {
+func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -139,15 +145,17 @@ func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *pro
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             opa,
+		opa:             deps.Client,
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 		mgr:             mgr,
 		reporter:        reporter,
-		processExcluder: processExcluder,
+		processExcluder: deps.ProcessExcluder,
 		eventRecorder:   recorder,
 		gkNamespace:     util.GetNamespace(),
-		auditCache:      cacheLister,
+		auditCache:      deps.CacheLister,
+		expansionSystem: deps.ExpansionSystem,
+		mutationSystem:  deps.MutationSystem,
 	}
 	return am, nil
 }
@@ -204,7 +212,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit opa.Audit() results", "violations", len(res))
+		am.log.Info("Audit Client.Audit() results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
@@ -523,12 +531,31 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			results := ToResults(&augmentedObj.Object, resp)
 
-			if len(resp.Results()) > 0 {
-				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+			// Expand object and review any resultant resources
+			allResps := []*rtypes.Responses{resp}
+			resultants, err := am.expansionSystem.Expand(objFile, "audit-system", am.mutationSystem)
+			if err != nil {
+				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
+				continue
+			}
+			for _, resultant := range resultants {
+				r, err := am.opa.Review(ctx, resultant)
 				if err != nil {
-					// updated to not return err immediately
 					errs = append(errs, err)
 					continue
+				}
+				allResps = append(allResps, r)
+			}
+			expansion.AggregateResponses(objFile.GetName(), resp, allResps)
+
+			for _, r := range allResps {
+				if len(r.Results()) > 0 {
+					err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+					if err != nil {
+						// updated to not return err immediately
+						errs = append(errs, err)
+						continue
+					}
 				}
 			}
 		}

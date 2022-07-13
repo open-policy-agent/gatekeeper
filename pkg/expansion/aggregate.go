@@ -1,4 +1,4 @@
-package webhook
+package expansion
 
 import (
 	"fmt"
@@ -6,12 +6,12 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
-const childMsgPrefix = "[mock resource created from expanding Generator %s]"
+const childMsgPrefix = "[mock resource created from expanding %s]"
 
-// aggregateResponses aggregates all responses from children into the parent.
+// AggregateResponses aggregates all responses from children into the parent.
 // Child result messages will be prefixed with a string to indicate the msg
 // is from a mock child resource.
-func aggregateResponses(parentName string, parent *types.Responses, children []*types.Responses) {
+func AggregateResponses(parentName string, parent *types.Responses, children []*types.Responses) {
 	for _, child := range children {
 		for target, childRes := range child.ByTarget {
 			addPrefixToChildMsgs(parentName, childRes)

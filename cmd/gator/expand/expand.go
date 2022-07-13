@@ -16,7 +16,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -126,19 +125,9 @@ func expandResources(resources []*unstructured.Unstructured) ([]*unstructured.Un
 
 	var resultants []*unstructured.Unstructured
 	for _, gen := range generators {
-		resultants, err = expSystem.Expand(gen)
+		resultants, err = expSystem.Expand(gen, "gatekeeper-admin", mutSystem)
 		if err != nil {
 			return nil, fmt.Errorf("error expanding generator: %s", err)
-		}
-		for _, res := range resultants {
-			mutable := &mutationtypes.Mutable{
-				Object:   res,
-				Username: "gatekeeper-admin",
-			}
-			_, err = mutSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
-			if err != nil {
-				return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
-			}
 		}
 	}
 

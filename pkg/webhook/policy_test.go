@@ -358,7 +358,7 @@ func TestReviewRequest(t *testing.T) {
 					},
 					Object: runtime.RawExtension{
 						Raw: []byte(
-								`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
+							`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": "ns1"}}`),
 					},
 					Namespace: "ns1",
 				},
@@ -430,7 +430,7 @@ func TestReviewDefaultNS(t *testing.T) {
 				},
 				Object: runtime.RawExtension{
 					Raw: []byte(
-							`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
+						`{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "acbd","namespace": ""}}`),
 				},
 				Namespace: "default",
 			},

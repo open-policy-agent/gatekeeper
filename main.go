@@ -377,7 +377,14 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
 		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
-		if err := audit.AddToManager(mgr, client, processExcluder, auditCache); err != nil {
+		auditDeps := audit.Dependencies{
+			Client:          client,
+			ProcessExcluder: processExcluder,
+			CacheLister:     auditCache,
+			MutationSystem:  mutationSystem,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

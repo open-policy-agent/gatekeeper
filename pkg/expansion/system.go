@@ -8,12 +8,15 @@ import (
 
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type System struct {
-	lock      sync.Mutex
+	lock      sync.RWMutex
 	templates map[string]*expansionunversioned.TemplateExpansion
 }
 
@@ -69,8 +72,8 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 
 // templatesForGVK returns a slice of TemplateExpansions that match a given gvk.
 func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.TemplateExpansion {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	var templates []*expansionunversioned.TemplateExpansion
 	for _, t := range s.templates {
@@ -84,44 +87,62 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 	return templates
 }
 
-// Expand expands `obj` with into resultant resources. If no TemplateExpansions
-// match the provided `gvk`, an empty slice will be returned.
-func (s *System) Expand(obj *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+// Expand expands `obj` with into resultant resources, and applies any applicable
+// mutators. If no TemplateExpansions match `obj`, an empty slice
+// will be returned. If `mutationSystem` is nil, no mutations will be applied.
+// `user` is the username that should be used for mutation.
+func (s *System) Expand(obj *unstructured.Unstructured, user string, mutationSystem *mutation.System) ([]*unstructured.Unstructured, error) {
 	gvk := obj.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
-		return nil, fmt.Errorf("cannot expand object with empty GVK")
+		return nil, fmt.Errorf("cannot expandResource object with empty GVK")
 	}
 	templates := s.templatesForGVK(gvk)
 	var resultants []*unstructured.Unstructured
 
 	for _, te := range templates {
-		res, err := expand(obj, te)
+		res, err := expandResource(obj, te)
 		resultants = append(resultants, res)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	if mutationSystem == nil {
+		return resultants, nil
+	}
+
+	for _, res := range resultants {
+		mutable := &mutationtypes.Mutable{
+			Object:    res,
+			Namespace: extractNs(res),
+			Username:  user,
+		}
+		_, err := mutationSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
+		if err != nil {
+			return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
+		}
+	}
+
 	return resultants, nil
 }
 
-func expand(generator *unstructured.Unstructured, template *expansionunversioned.TemplateExpansion) (*unstructured.Unstructured, error) {
+func expandResource(obj *unstructured.Unstructured, template *expansionunversioned.TemplateExpansion) (*unstructured.Unstructured, error) {
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
-		return nil, fmt.Errorf("cannot expand generator for template with no source")
+		return nil, fmt.Errorf("cannot expand resource using a template with no source")
 	}
 	resultantGVK := genGVKToSchemaGVK(template.Spec.GeneratedGVK)
 	emptyGVK := schema.GroupVersionKind{}
 	if resultantGVK == emptyGVK {
-		return nil, fmt.Errorf("cannot expand generator for template with empty generatedGVK")
+		return nil, fmt.Errorf("cannot expand resource using template with empty generatedGVK")
 	}
 
-	src, ok, err := unstructured.NestedMap(generator.Object, sourcePath(srcPath)...)
+	src, ok, err := unstructured.NestedMap(obj.Object, sourcePath(srcPath)...)
 	if err != nil {
 		return nil, fmt.Errorf("could not extract source field from unstructured: %s", err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("could not find source field %q in generator", srcPath)
+		return nil, fmt.Errorf("could not find source field %q in obj", srcPath)
 	}
 
 	resource := &unstructured.Unstructured{}
@@ -131,9 +152,15 @@ func expand(generator *unstructured.Unstructured, template *expansionunversioned
 	return resource, nil
 }
 
+func extractNs(obj *unstructured.Unstructured) *v1.Namespace {
+	ns := &v1.Namespace{}
+	ns.SetName(obj.GetNamespace())
+	return ns
+}
+
 func NewSystem() *System {
 	return &System{
-		lock:      sync.Mutex{},
+		lock:      sync.RWMutex{},
 		templates: map[string]*expansionunversioned.TemplateExpansion{},
 	}
 }
