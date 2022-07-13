@@ -9,7 +9,9 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +39,9 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
+
+	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
+	expSystem := expansion.NewSystem()
 
 	// search for templates, add them if they exist
 	ctx := context.Background()
@@ -88,26 +93,44 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 
-		for targetName, r := range review.ByTarget {
-			targetResponse := responses.ByTarget[targetName]
-			if targetResponse == nil {
-				targetResponse = &types.Response{}
-				targetResponse.Target = targetName
+		// Attempt to expand obj and review resultant resources (if any)
+		allReviews := []*types.Responses{review}
+		resultants, err := expSystem.Expand(obj, "gatekeeper-admin", mutSystem)
+		if err != nil {
+			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
+		}
+		for _, resultant := range resultants {
+			resultantReview, err := client.Review(ctx, resultant)
+			if err != nil {
+				return nil, fmt.Errorf("reviewing %v %s/%s: %v",
+					resultant.GroupVersionKind(), resultant.GetNamespace(), resultant.GetName(), err)
 			}
+			allReviews = append(allReviews, resultantReview)
+		}
+		expansion.AggregateResponses(obj.GetName(), review, allReviews[1:])
 
-			targetResponse.Results = append(targetResponse.Results, r.Results...)
-
-			if r.Trace != nil {
-				var trace string
-				if targetResponse.Trace != nil {
-					trace = *targetResponse.Trace
+		for _, rev := range allReviews {
+			for targetName, r := range rev.ByTarget {
+				targetResponse := responses.ByTarget[targetName]
+				if targetResponse == nil {
+					targetResponse = &types.Response{}
+					targetResponse.Target = targetName
 				}
 
-				trace = trace + "\n\n" + *r.Trace
-				targetResponse.Trace = &trace
-			}
+				targetResponse.Results = append(targetResponse.Results, r.Results...)
 
-			responses.ByTarget[targetName] = targetResponse
+				if r.Trace != nil {
+					var trace string
+					if targetResponse.Trace != nil {
+						trace = *targetResponse.Trace
+					}
+
+					trace = trace + "\n\n" + *r.Trace
+					targetResponse.Trace = &trace
+				}
+
+				responses.ByTarget[targetName] = targetResponse
+			}
 		}
 	}
 

@@ -234,7 +234,6 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 		},
 	}
 }
-}
 
 func BenchmarkValidationHandler(b *testing.B) {
 	benchmarks := map[string]struct {

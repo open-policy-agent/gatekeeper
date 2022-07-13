@@ -344,7 +344,8 @@ func TestReviewRequest(t *testing.T) {
 				webhookHandler: webhookHandler{
 					injectedConfig: tt.Cfg,
 					client:         tt.CachedClient,
-					reader:         tt.APIReader},
+					reader:         tt.APIReader,
+				},
 			}
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
