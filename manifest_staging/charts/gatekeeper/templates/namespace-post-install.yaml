@@ -50,6 +50,10 @@ spec:
             - admission.gatekeeper.sh/ignore=no-self-managing
             - --overwrite
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
 ---
 apiVersion: v1

@@ -99,6 +99,10 @@ spec:
         resources:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.crds.securityContext | nindent 10 }}
       affinity:
         {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}

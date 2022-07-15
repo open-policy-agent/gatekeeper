@@ -43,6 +43,10 @@ spec:
             - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
             {{- end }}
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
 ---
 apiVersion: v1

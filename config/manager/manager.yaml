@@ -22,8 +22,6 @@ spec:
   replicas: 3
   template:
     metadata:
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
       labels:
         control-plane: controller-manager
         gatekeeper.sh/operation: webhook
@@ -104,6 +102,8 @@ spec:
             runAsGroup: 999
             runAsNonRoot: true
             allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
                 - all
@@ -131,8 +131,6 @@ spec:
       labels:
         control-plane: audit-controller
         gatekeeper.sh/operation: audit
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/manager: runtime/default
     spec:
       automountServiceAccountToken: true
       containers:
@@ -203,6 +201,8 @@ spec:
             runAsGroup: 999
             runAsNonRoot: true
             runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       nodeSelector:
