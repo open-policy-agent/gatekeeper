@@ -175,7 +175,7 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-// ReadK8sResources reads JSON or YAML k8s resources from an io.Reader,
+// ReadK8sResources reads JSON or YAML k8s expansionResources from an io.Reader,
 // decoding them into Unstructured objects and returning those objects as a
 // slice.
 func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {

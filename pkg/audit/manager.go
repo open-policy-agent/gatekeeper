@@ -19,6 +19,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
@@ -533,7 +534,13 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 			// Expand object and review any resultant resources
 			allResps := []*rtypes.Responses{resp}
-			resultants, err := am.expansionSystem.Expand(objFile, "audit-system", am.mutationSystem)
+			base := &mutationtypes.Mutable{
+				Object:    objFile,
+				Namespace: &ns,
+				Username:  "",
+				Source:    mutationtypes.SourceTypeGenerated,
+			}
+			resultants, err := am.expansionSystem.Expand(base, am.mutationSystem)
 			if err != nil {
 				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
 				continue

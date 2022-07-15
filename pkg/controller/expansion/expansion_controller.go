@@ -5,6 +5,7 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -12,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -52,10 +54,11 @@ func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
 type Reconciler struct {
 	client.Client
 	system *expansion.System
+	scheme *runtime.Scheme
 }
 
 func newReconciler(mgr manager.Manager, system *expansion.System) *Reconciler {
-	return &Reconciler{Client: mgr.GetClient(), system: system}
+	return &Reconciler{Client: mgr.GetClient(), system: system, scheme: mgr.GetScheme()}
 }
 
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
@@ -82,20 +85,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		deleted = true
 	}
 
-	unversionedTe := expansion.V1Alpha1TemplateToUnversioned(te)
+	unversionedTE := &unversioned.TemplateExpansion{}
+	if err := r.scheme.Convert(te, unversionedTE, nil); err != nil {
+		return reconcile.Result{}, err
+	}
 	if deleted {
-		// unversionedTe will be an empty struct. We set the metadata name, which is
+		// unversionedTE will be an empty struct. We set the metadata name, which is
 		// used as a key to delete it from the expansion system
-		unversionedTe.ObjectMeta.Name = request.Name
-		if err := r.system.RemoveTemplate(unversionedTe); err != nil {
+		unversionedTE.ObjectMeta.Name = request.Name
+		if err := r.system.RemoveTemplate(unversionedTE); err != nil {
 			return reconcile.Result{}, err
 		}
-		log.Info("removed template expansion", "template name", unversionedTe.ObjectMeta.Name)
+		log.Info("removed template expansion", "template name", unversionedTE.ObjectMeta.Name)
 	} else {
-		if err := r.system.UpsertTemplate(unversionedTe); err != nil {
+		if err := r.system.UpsertTemplate(unversionedTE); err != nil {
 			return reconcile.Result{}, err
 		}
-		log.Info("upserted template expansion", "template name", unversionedTe.ObjectMeta.Name)
+		log.Info("upserted template expansion", "template name", unversionedTE.ObjectMeta.Name)
 	}
 
 	return reconcile.Result{}, nil

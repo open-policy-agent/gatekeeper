@@ -7,10 +7,8 @@ import (
 	"sync"
 
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
-	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -87,20 +85,19 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 	return templates
 }
 
-// Expand expands `obj` with into resultant resources, and applies any applicable
-// mutators. If no TemplateExpansions match `obj`, an empty slice
+// Expand expands `base` into resultant resources, and applies any applicable
+// mutators. If no TemplateExpansions match `base`, an empty slice
 // will be returned. If `mutationSystem` is nil, no mutations will be applied.
-// `user` is the username that should be used for mutation.
-func (s *System) Expand(obj *unstructured.Unstructured, user string, mutationSystem *mutation.System) ([]*unstructured.Unstructured, error) {
-	gvk := obj.GroupVersionKind()
+func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.System) ([]*unstructured.Unstructured, error) {
+	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
-		return nil, fmt.Errorf("cannot expandResource object with empty GVK")
+		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
 	}
-	templates := s.templatesForGVK(gvk)
 	var resultants []*unstructured.Unstructured
+	templates := s.templatesForGVK(gvk)
 
 	for _, te := range templates {
-		res, err := expandResource(obj, te)
+		res, err := expandResource(base.Object, te)
 		resultants = append(resultants, res)
 		if err != nil {
 			return nil, err
@@ -114,12 +111,13 @@ func (s *System) Expand(obj *unstructured.Unstructured, user string, mutationSys
 	for _, res := range resultants {
 		mutable := &mutationtypes.Mutable{
 			Object:    res,
-			Namespace: extractNs(res),
-			Username:  user,
+			Namespace: base.Namespace,
+			Username:  base.Username,
+			Source:    mutationtypes.SourceTypeGenerated,
 		}
-		_, err := mutationSystem.Mutate(mutable, mutationtypes.SourceTypeGenerated)
+		_, err := mutationSystem.Mutate(mutable)
 		if err != nil {
-			return nil, fmt.Errorf("failed to mutate resultant resource: %s", err)
+			return nil, fmt.Errorf("failed to mutate resultant resource %s: %s", res.GetName(), err)
 		}
 	}
 
@@ -132,8 +130,7 @@ func expandResource(obj *unstructured.Unstructured, template *expansionunversion
 		return nil, fmt.Errorf("cannot expand resource using a template with no source")
 	}
 	resultantGVK := genGVKToSchemaGVK(template.Spec.GeneratedGVK)
-	emptyGVK := schema.GroupVersionKind{}
-	if resultantGVK == emptyGVK {
+	if resultantGVK == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource using template with empty generatedGVK")
 	}
 
@@ -152,32 +149,9 @@ func expandResource(obj *unstructured.Unstructured, template *expansionunversion
 	return resource, nil
 }
 
-func extractNs(obj *unstructured.Unstructured) *v1.Namespace {
-	ns := &v1.Namespace{}
-	ns.SetName(obj.GetNamespace())
-	return ns
-}
-
 func NewSystem() *System {
 	return &System{
 		lock:      sync.RWMutex{},
 		templates: map[string]*expansionunversioned.TemplateExpansion{},
-	}
-}
-
-func V1Alpha1TemplateToUnversioned(expansion *v1alpha1.TemplateExpansion) *expansionunversioned.TemplateExpansion {
-	return &expansionunversioned.TemplateExpansion{
-		TypeMeta:   expansion.TypeMeta,
-		ObjectMeta: expansion.ObjectMeta,
-		Spec: expansionunversioned.TemplateExpansionSpec{
-			ApplyTo:        expansion.Spec.ApplyTo,
-			TemplateSource: expansion.Spec.TemplateSource,
-			GeneratedGVK: expansionunversioned.GeneratedGVK{
-				Group:   expansion.Spec.GeneratedGVK.Group,
-				Version: expansion.Spec.GeneratedGVK.Version,
-				Kind:    expansion.Spec.GeneratedGVK.Kind,
-			},
-		},
-		Status: expansionunversioned.TemplateExpansionStatus{},
 	}
 }

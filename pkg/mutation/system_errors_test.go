@@ -21,7 +21,7 @@ func TestSystem_Mutate_Fail(t *testing.T) {
 	}
 
 	u := &unstructured.Unstructured{}
-	gotMutated, gotErr := s.Mutate(&types.Mutable{Object: u}, types.SourceTypeAll)
+	gotMutated, gotErr := s.Mutate(&types.Mutable{Object: u})
 
 	if gotMutated != false {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, false)

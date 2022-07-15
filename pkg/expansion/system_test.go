@@ -6,8 +6,16 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
+	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion/fixtures"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type templateData struct {
@@ -32,6 +40,40 @@ func newTemplate(data *templateData) *expansionunversioned.TemplateExpansion {
 			GeneratedGVK:   data.generatedGVK,
 		},
 	}
+}
+
+type assignData struct {
+	name       string
+	apply      []match.ApplyTo
+	location   string
+	match      match.Match
+	parameters mutationsunversioned.Parameters
+}
+
+func assignFromData(data *assignData) mutationsunversioned.Assign {
+	return mutationsunversioned.Assign{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Assign",
+			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: data.name},
+		Spec: mutationsunversioned.AssignSpec{
+			ApplyTo:    data.apply,
+			Location:   data.location,
+			Parameters: data.parameters,
+			Match:      data.match,
+		},
+	}
+}
+
+func newAssign(data *assignData, t *testing.T) types.Mutator {
+	a := assignFromData(data)
+	mut, err := assign.MutatorForAssign(&a)
+	if err != nil {
+		t.Fatalf("error creating assign: %s\ndata: \n%+v\n", err, data)
+		return nil
+	}
+	return mut
 }
 
 func TestUpsertRemoveTemplate(t *testing.T) {
@@ -532,6 +574,160 @@ func TestTemplatesForGVK(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExpand(t *testing.T) {
+	tests := []struct {
+		name      string
+		generator *unstructured.Unstructured
+		ns        *corev1.Namespace
+		templates []*expansionunversioned.TemplateExpansion
+		mutators  []types.Mutator
+		want      []*unstructured.Unstructured
+		expectErr bool
+	}{
+		{
+			name:      "no mutators basic deployment expands pod",
+			generator: loadFixture(fixtures.NginxDeployment, t), // TODO this will be tricky to create...
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators:  []types.Mutator{},
+			templates: []*expansionunversioned.TemplateExpansion{
+				newTemplate(&templateData{
+					name: "expand-pods",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				}),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.NginxPodNoMutate, t)},
+		},
+		{
+			name:      "1 mutator basic deployment expands pod",
+			generator: loadFixture(fixtures.NginxDeployment, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				newAssign(&assignData{
+					name: "always-pull-image",
+					apply: []match.ApplyTo{{
+						Groups:   []string{""},
+						Kinds:    []string{"Pod"},
+						Versions: []string{"v1"},
+					}},
+					location: "spec.containers[name: *].imagePullPolicy",
+					match: match.Match{
+						Source: "Generated",
+						Scope:  "Namespaced",
+						Kinds: []match.Kinds{
+							{
+								APIGroups: []string{},
+								Kinds:     []string{},
+							},
+						},
+					},
+					parameters: mutationsunversioned.Parameters{
+						Assign: mutationsunversioned.AssignField{
+							Value: &types.Anything{Value: "Always"},
+						},
+					},
+				}, t),
+			},
+			templates: []*expansionunversioned.TemplateExpansion{
+				newTemplate(&templateData{
+					name: "expand-pods",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				}),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.NgxinxPodMutated, t)},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Load templates
+			expSystem := NewSystem()
+			for _, te := range tc.templates {
+				if err := expSystem.UpsertTemplate(te); err != nil {
+					t.Fatalf("error upserting template: %s", err)
+				}
+			}
+
+			// Load mutators
+			mutSystem := mutation.NewSystem(mutation.SystemOpts{})
+			for _, m := range tc.mutators {
+				if err := mutSystem.Upsert(m); err != nil {
+					t.Fatalf("error upserting mutator: %s", err)
+				}
+			}
+
+			base := &types.Mutable{
+				Object:    tc.generator,
+				Namespace: tc.ns,
+				Username:  "unit-test",
+				Source:    types.SourceTypeGenerated,
+			}
+			results, err := expSystem.Expand(base, mutSystem)
+			if tc.expectErr && err == nil {
+				t.Errorf("want error, got nil")
+			} else if !tc.expectErr && err != nil {
+				t.Errorf("unexpected err: %s", err)
+			}
+
+			compareResults(results, tc.want, t)
+		})
+	}
+}
+
+func compareResults(got []*unstructured.Unstructured, want []*unstructured.Unstructured, t *testing.T) {
+	if len(got) != len(want) {
+		t.Errorf("got %d results, expected %d", len(got), len(want))
+		return
+	}
+
+	sortUnstructs(got)
+	sortUnstructs(want)
+
+	for i := 0; i < len(got); i++ {
+		if diff := cmp.Diff(got[i], want[i]); diff != "" {
+			t.Errorf("got = \n%s\n, want = \n%s\n\n diff:\n%s", prettyResource(got[i]), prettyResource(want[i]), diff)
+		}
+	}
+}
+
+func sortUnstructs(objs []*unstructured.Unstructured) {
+	sortKey := func(o *unstructured.Unstructured) string {
+		return o.GetName() + o.GetAPIVersion()
+	}
+	sort.Slice(objs, func(i, j int) bool {
+		return sortKey(objs[i]) > sortKey(objs[j])
+	})
+}
+
+func loadFixture(f string, t *testing.T) *unstructured.Unstructured {
+	obj := make(map[string]interface{})
+	if err := yaml.Unmarshal([]byte(f), &obj); err != nil {
+		t.Fatalf("error loading fixture: %s", err)
+	}
+
+	u := unstructured.Unstructured{}
+	u.SetUnstructuredContent(obj)
+	return &u
 }
 
 func sortTemplates(templates []*expansionunversioned.TemplateExpansion) {

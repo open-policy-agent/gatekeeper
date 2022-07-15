@@ -16,4 +16,8 @@ type Mutable struct {
 	// Username is the name of the user who initiates
 	// admission request of the mutable object.
 	Username string
+
+	// Sourcespecifies which types of resources the mutator should be applied
+	// to
+	Source SourceType
 }

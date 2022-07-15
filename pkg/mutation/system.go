@@ -142,13 +142,13 @@ func (s *System) GetConflicts(id types.ID) map[types.ID]bool {
 
 // Mutate applies the mutation in place to the given object. Returns
 // true if applying Mutators caused any changes to the object.
-func (s *System) Mutate(mutable *types.Mutable, source types.SourceType) (bool, error) {
+func (s *System) Mutate(mutable *types.Mutable) (bool, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 
 	convergence := SystemConvergenceFalse
 
-	iterations, merr := s.mutate(mutable, source)
+	iterations, merr := s.mutate(mutable)
 	if merr == nil {
 		convergence = SystemConvergenceTrue
 	}
@@ -166,7 +166,7 @@ func (s *System) Mutate(mutable *types.Mutable, source types.SourceType) (bool, 
 
 // mutate runs all Mutators on obj. Returns the number of iterations required
 // to converge, and any error encountered attempting to run Mutators.
-func (s *System) mutate(mutable *types.Mutable, source types.SourceType) (int, error) {
+func (s *System) mutate(mutable *types.Mutable) (int, error) {
 	mutationUUID := s.newUUID()
 	original := unversioned.DeepCopyWithPlaceholders(mutable.Object)
 	var allAppliedMutations [][]types.Mutator
@@ -178,7 +178,7 @@ func (s *System) mutate(mutable *types.Mutable, source types.SourceType) (int, e
 
 		for _, id := range s.orderedMutators.ids {
 			mutator := s.mutatorsMap[id]
-			if !mutatorMatchesSource(mutator, source) || s.schemaDB.HasConflicts(id) {
+			if !mutatorMatchesSource(mutator, mutable.Source) || s.schemaDB.HasConflicts(id) {
 				// Don't try to apply Mutators which do not match the source type or
 				// have conflicts.
 				continue

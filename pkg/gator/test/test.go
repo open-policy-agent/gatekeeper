@@ -12,7 +12,9 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -95,7 +97,15 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 
 		// Attempt to expand obj and review resultant resources (if any)
 		allReviews := []*types.Responses{review}
-		resultants, err := expSystem.Expand(obj, "gatekeeper-admin", mutSystem)
+		baseNs := &corev1.Namespace{}
+		baseNs.SetName(obj.GetNamespace())
+		base := mutationtypes.Mutable{
+			Object:    obj,
+			Namespace: baseNs,
+			Username:  "",
+			Source:    mutationtypes.SourceTypeGenerated,
+		}
+		resultants, err := expSystem.Expand(&base, mutSystem)
 		if err != nil {
 			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
 		}

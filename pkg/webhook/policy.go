@@ -43,6 +43,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -530,7 +531,13 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		})
 
 	// Expand the generator and apply mutators to the resultant resources
-	resultants, err := h.expansionSystem.Expand(obj, req.AdmissionRequest.UserInfo.Username, h.mutationSystem)
+	base := &mutationtypes.Mutable{
+		Object:    obj,
+		Namespace: review.Namespace,
+		Username:  req.AdmissionRequest.UserInfo.Username,
+		Source:    mutationtypes.SourceTypeGenerated,
+	}
+	resultants, err := h.expansionSystem.Expand(base, h.mutationSystem)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding generator: %s", err)
 	}
