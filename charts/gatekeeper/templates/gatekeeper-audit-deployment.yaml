@@ -25,7 +25,9 @@ spec:
   template:
     metadata:
       annotations:
+        {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
@@ -64,6 +66,7 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
         command:
         - /manager
         env:
@@ -103,8 +106,15 @@ spec:
         resources:
           {{- toYaml .Values.audit.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}
         volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
         - mountPath: /tmp/audit
           name: tmp-volume
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
@@ -116,11 +126,17 @@ spec:
       {{- if .Values.audit.priorityClassName }}
       priorityClassName:  {{ .Values.audit.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.audit.podSecurityContext | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
       volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: gatekeeper-webhook-server-cert
       {{- if .Values.audit.writeToRAMDisk }}
       - emptyDir:
           medium: Memory

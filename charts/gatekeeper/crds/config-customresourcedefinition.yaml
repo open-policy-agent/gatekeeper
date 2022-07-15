@@ -39,7 +39,7 @@ spec:
                     excludedNamespaces:
                       items:
                         description: 'A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is required for wildcard matching.'
-                        pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
+                        pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                         type: string
                       type: array
                     processes:
