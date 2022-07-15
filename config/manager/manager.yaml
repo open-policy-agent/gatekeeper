@@ -4,6 +4,12 @@ metadata:
   labels:
     control-plane: controller-manager
     admission.gatekeeper.sh/ignore: no-self-managing
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.24
   name: system
 ---
 apiVersion: apps/v1
@@ -106,7 +112,7 @@ spec:
               type: RuntimeDefault
             capabilities:
               drop:
-                - all
+                - ALL
       terminationGracePeriodSeconds: 60
       nodeSelector:
         kubernetes.io/os: linux
@@ -197,7 +203,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
-                - all
+                - ALL
             runAsGroup: 999
             runAsNonRoot: true
             runAsUser: 1000
