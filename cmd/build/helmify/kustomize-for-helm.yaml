@@ -256,7 +256,7 @@ webhooks:
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: gatekeeper-controller-manager

@@ -2123,39 +2123,6 @@ metadata:
   name: gatekeeper-admin
   namespace: gatekeeper-system
 ---
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  annotations:
-    seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
-  labels:
-    gatekeeper.sh/system: "yes"
-  name: gatekeeper-admin
-spec:
-  allowPrivilegeEscalation: false
-  fsGroup:
-    ranges:
-    - max: 65535
-      min: 1
-    rule: MustRunAs
-  requiredDropCapabilities:
-  - ALL
-  runAsUser:
-    rule: MustRunAsNonRoot
-  seLinux:
-    rule: RunAsAny
-  supplementalGroups:
-    ranges:
-    - max: 65535
-      min: 1
-    rule: MustRunAs
-  volumes:
-  - configMap
-  - projected
-  - secret
-  - downwardAPI
-  - emptyDir
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -2624,7 +2591,7 @@ spec:
           defaultMode: 420
           secretName: gatekeeper-webhook-server-cert
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   labels:
