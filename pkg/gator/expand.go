@@ -27,6 +27,9 @@ var (
 		"mutations.gatekeeper.sh/v1alpha1": true,
 		"mutations.gatekeeper.sh/v1beta1":  true,
 	}
+	ExpansionAPIVersions = map[string]bool{
+		"expansion.gatekeeper.sh/v1alpha1": true,
+	}
 )
 
 type expansionResources struct {
@@ -139,7 +142,7 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 	switch {
 	case isMutator(u):
 		err = er.addMutator(u)
-	case u.GetKind() == "TemplateExpansion" && u.GetAPIVersion() == "expansion.gatekeeper.sh/v1alpha1":
+	case isExpansion(u):
 		err = er.addTemplateExpansion(u)
 	case u.GetKind() == "Namespace":
 		err = er.addNamespace(u)
@@ -166,6 +169,11 @@ func (er *expansionResources) addNamespace(u *unstructured.Unstructured) error {
 	}
 	er.namespaces[ns.GetName()] = ns
 	return nil
+}
+
+func isExpansion(u *unstructured.Unstructured) bool {
+	_, exists := ExpansionAPIVersions[u.GetAPIVersion()]
+	return exists && u.GetKind() == "TemplateExpansion"
 }
 
 func isMutator(obj *unstructured.Unstructured) bool {
