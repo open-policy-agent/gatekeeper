@@ -24,6 +24,17 @@ spec:
         - name: gatekeeper-ca-cert
           mountPath: /tmp/gatekeeper
           readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
       restartPolicy: Always
       nodeSelector:
         kubernetes.io/os: linux
