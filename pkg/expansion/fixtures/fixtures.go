@@ -176,7 +176,7 @@ spec:
       value:  "meow"
 `
 
-	TemplateCatKitten = `
+	TemplateCatExpandsKitten = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: TemplateExpansion
 metadata:
@@ -186,14 +186,14 @@ spec:
     - groups: ["cat.myapp.sh"]
       kinds: ["Cat"]
       versions: ["v1alpha1"]
-  templateSource: "spec.cat-stuff"
+  templateSource: "spec.catStuff"
   generatedGVK:
     kind: "Kitten"
     group: "kitten.myapp.sh"
     version: "v1alpha1"
 `
 
-	TemplateCatPurr = `
+	TemplateCatExpandsPurr = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: TemplateExpansion
 metadata:
@@ -203,7 +203,7 @@ spec:
     - groups: ["cat.myapp.sh"]
       kinds: ["Cat"]
       versions: ["v1alpha1"]
-  templateSource: "spec.purr-stuff"
+  templateSource: "spec.purrStuff"
   generatedGVK:
     kind: "Purr"
     group: "purr.myapp.sh"
@@ -216,14 +216,14 @@ kind: Cat
 metadata:
   name: big-chungus
 spec:
-  cat-stuff:
+  catStuff:
     metadata:
       labels:
         fluffy: extremely
     spec:
       breed: calico
       weight: 10
-  purr-stuff:
+  purrStuff:
     spec:
       loud: very
 `

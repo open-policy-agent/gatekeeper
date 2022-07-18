@@ -668,8 +668,8 @@ func TestExpand(t *testing.T) {
 				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
 			},
 			templates: []*expansionunversioned.TemplateExpansion{
-				loadTemplate(fixtures.TemplateCatKitten, t),
-				loadTemplate(fixtures.TemplateCatPurr, t),
+				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
+				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 			},
 			want: []*unstructured.Unstructured{
 				loadFixture(fixtures.ResultantKitten, t),
@@ -686,8 +686,8 @@ func TestExpand(t *testing.T) {
 				loadAssign(fixtures.AssignPullImage, t), // should not match
 			},
 			templates: []*expansionunversioned.TemplateExpansion{
-				loadTemplate(fixtures.TemplateCatKitten, t),
-				loadTemplate(fixtures.TemplateCatPurr, t),
+				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
+				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
 			},
 			want: []*unstructured.Unstructured{
