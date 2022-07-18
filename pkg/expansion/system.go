@@ -26,12 +26,11 @@ func (s *System) UpsertTemplate(template *expansionunversioned.TemplateExpansion
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	k := keyForTemplate(template)
-	if k == "" {
-		return fmt.Errorf("cannot upsert template with empty name")
+	if err := validateTemplate(template); err != nil {
+		return err
 	}
 
-	s.templates[k] = template.DeepCopy()
+	s.templates[keyForTemplate(template)] = template.DeepCopy()
 	return nil
 }
 
@@ -45,6 +44,20 @@ func (s *System) RemoveTemplate(template *expansionunversioned.TemplateExpansion
 	}
 
 	delete(s.templates, k)
+	return nil
+}
+
+func validateTemplate(template *expansionunversioned.TemplateExpansion) error {
+	k := keyForTemplate(template)
+	if k == "" {
+		return fmt.Errorf("ExpansionTemplate has empty name field")
+	}
+	if template.Spec.TemplateSource == "" {
+		return fmt.Errorf("ExpansionTemplate %s has empty source field", k)
+	}
+	if template.Spec.GeneratedGVK == (expansionunversioned.GeneratedGVK{}) {
+		return fmt.Errorf("ExpansionTemplate %s has empty generatedGVK field", k)
+	}
 	return nil
 }
 

@@ -1,6 +1,8 @@
 package expansion
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -11,11 +13,13 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type templateData struct {
@@ -40,40 +44,6 @@ func newTemplate(data *templateData) *expansionunversioned.TemplateExpansion {
 			GeneratedGVK:   data.generatedGVK,
 		},
 	}
-}
-
-type assignData struct {
-	name       string
-	apply      []match.ApplyTo
-	location   string
-	match      match.Match
-	parameters mutationsunversioned.Parameters
-}
-
-func assignFromData(data *assignData) mutationsunversioned.Assign {
-	return mutationsunversioned.Assign{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Assign",
-			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: data.name},
-		Spec: mutationsunversioned.AssignSpec{
-			ApplyTo:    data.apply,
-			Location:   data.location,
-			Parameters: data.parameters,
-			Match:      data.match,
-		},
-	}
-}
-
-func newAssign(data *assignData, t *testing.T) types.Mutator {
-	a := assignFromData(data)
-	mut, err := assign.MutatorForAssign(&a)
-	if err != nil {
-		t.Fatalf("error creating assign: %s\ndata: \n%+v\n", err, data)
-		return nil
-	}
-	return mut
 }
 
 func TestUpsertRemoveTemplate(t *testing.T) {
@@ -165,6 +135,44 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 						Version: "v1",
 						Kind:    "Pod",
 					},
+				}),
+			},
+			check:      []*expansionunversioned.TemplateExpansion{},
+			wantAddErr: true,
+		},
+		{
+			name: "adding template with empty source returns error",
+			add: []*expansionunversioned.TemplateExpansion{
+				newTemplate(&templateData{
+					name: "hello",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source: "",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				}),
+			},
+			check:      []*expansionunversioned.TemplateExpansion{},
+			wantAddErr: true,
+		},
+		{
+			name: "adding template with empty GVK returns error",
+			add: []*expansionunversioned.TemplateExpansion{
+				newTemplate(&templateData{
+					name: "hello",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source:       "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{},
 				}),
 			},
 			check:      []*expansionunversioned.TemplateExpansion{},
@@ -587,80 +595,109 @@ func TestExpand(t *testing.T) {
 		expectErr bool
 	}{
 		{
+			name:      "generator with no templates or mutators",
+			generator: loadFixture(fixtures.GeneratorCat, t),
+		},
+		{
+			name:      "generator with no gvk returns error",
+			generator: loadFixture(fixtures.DeploymentNoGVK, t),
+			expectErr: true,
+		},
+		{
+			name:      "generator with non-matching template",
+			generator: loadFixture(fixtures.GeneratorCat, t),
+			templates: []*expansionunversioned.TemplateExpansion{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{},
+		},
+		{
 			name:      "no mutators basic deployment expands pod",
-			generator: loadFixture(fixtures.NginxDeployment, t), // TODO this will be tricky to create...
+			generator: loadFixture(fixtures.DeploymentNginx, t), // TODO this will be tricky to create...
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators:  []types.Mutator{},
 			templates: []*expansionunversioned.TemplateExpansion{
-				newTemplate(&templateData{
-					name: "expand-pods",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.NginxPodNoMutate, t)},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodNoMutate, t)},
 		},
 		{
 			name:      "1 mutator basic deployment expands pod",
-			generator: loadFixture(fixtures.NginxDeployment, t),
+			generator: loadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators: []types.Mutator{
-				newAssign(&assignData{
-					name: "always-pull-image",
-					apply: []match.ApplyTo{{
-						Groups:   []string{""},
-						Kinds:    []string{"Pod"},
-						Versions: []string{"v1"},
-					}},
-					location: "spec.containers[name: *].imagePullPolicy",
-					match: match.Match{
-						Source: "Generated",
-						Scope:  "Namespaced",
-						Kinds: []match.Kinds{
-							{
-								APIGroups: []string{},
-								Kinds:     []string{},
-							},
-						},
-					},
-					parameters: mutationsunversioned.Parameters{
-						Assign: mutationsunversioned.AssignField{
-							Value: &types.Anything{Value: "Always"},
-						},
-					},
-				}, t),
+				loadAssign(fixtures.AssignPullImage, t),
 			},
 			templates: []*expansionunversioned.TemplateExpansion{
-				newTemplate(&templateData{
-					name: "expand-pods",
-					apply: []match.ApplyTo{{
-						Groups:   []string{"apps"},
-						Kinds:    []string{"Deployment"},
-						Versions: []string{"v1"},
-					}},
-					source: "spec.template",
-					generatedGVK: expansionunversioned.GeneratedGVK{
-						Group:   "",
-						Version: "v1",
-						Kind:    "Pod",
-					},
-				}),
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.NgxinxPodMutated, t)},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+		},
+		{
+			name:      "2 mutators, only 1 match, basic deployment expands pod",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignPullImage, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t), // should not match
+			},
+			templates: []*expansionunversioned.TemplateExpansion{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+		},
+		{
+			name:      "2 mutators, 2 matches, basic deployment expands pod",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignPullImage, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
+			},
+			templates: []*expansionunversioned.TemplateExpansion{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutateAnnotated, t)},
+		},
+		{
+			name:      "custom CR with 2 different resultant kinds, with mutators",
+			generator: loadFixture(fixtures.GeneratorCat, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignKittenAge, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+			},
+			templates: []*expansionunversioned.TemplateExpansion{
+				loadTemplate(fixtures.TemplateCatKitten, t),
+				loadTemplate(fixtures.TemplateCatPurr, t),
+			},
+			want: []*unstructured.Unstructured{
+				loadFixture(fixtures.ResultantKitten, t),
+				loadFixture(fixtures.ResultantPurr, t),
+			},
+		},
+		{
+			name:      "custom CR with 2 different resultant kinds, with mutators and non-matching configs",
+			generator: loadFixture(fixtures.GeneratorCat, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignKittenAge, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+				loadAssign(fixtures.AssignPullImage, t), // should not match
+			},
+			templates: []*expansionunversioned.TemplateExpansion{
+				loadTemplate(fixtures.TemplateCatKitten, t),
+				loadTemplate(fixtures.TemplateCatPurr, t),
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
+			},
+			want: []*unstructured.Unstructured{
+				loadFixture(fixtures.ResultantKitten, t),
+				loadFixture(fixtures.ResultantPurr, t),
+			},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Load templates
 			expSystem := NewSystem()
 			for _, te := range tc.templates {
 				if err := expSystem.UpsertTemplate(te); err != nil {
@@ -668,7 +705,6 @@ func TestExpand(t *testing.T) {
 				}
 			}
 
-			// Load mutators
 			mutSystem := mutation.NewSystem(mutation.SystemOpts{})
 			for _, m := range tc.mutators {
 				if err := mutSystem.Upsert(m); err != nil {
@@ -721,13 +757,68 @@ func sortUnstructs(objs []*unstructured.Unstructured) {
 
 func loadFixture(f string, t *testing.T) *unstructured.Unstructured {
 	obj := make(map[string]interface{})
-	if err := yaml.Unmarshal([]byte(f), &obj); err != nil {
-		t.Fatalf("error loading fixture: %s", err)
+	if err := yaml.Unmarshal([]byte(f), obj); err != nil {
+		t.Fatalf("error unmarshaling yaml for fixture: %s", err)
+	}
+
+	jsonBytes, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("error marshaling json for fixture: %s", err)
+	}
+
+	if err = json.Unmarshal(jsonBytes, &obj); err != nil {
+		t.Fatalf("error unmarshaling json for fixture: %s", err)
 	}
 
 	u := unstructured.Unstructured{}
 	u.SetUnstructuredContent(obj)
 	return &u
+}
+
+func loadTemplate(f string, t *testing.T) *expansionunversioned.TemplateExpansion {
+	u := loadFixture(f, t)
+	te := &expansionunversioned.TemplateExpansion{}
+	err := convertUnstructuredToTyped(u, te)
+	if err != nil {
+		t.Fatalf("error converting template expansion: %s", err)
+	}
+	return te
+}
+
+func loadAssign(f string, t *testing.T) types.Mutator {
+	u := loadFixture(f, t)
+	a := &mutationsunversioned.Assign{}
+	err := convertUnstructuredToTyped(u, a)
+	if err != nil {
+		t.Fatalf("error converting assign: %s", err)
+	}
+	mut, err := assign.MutatorForAssign(a)
+	if err != nil {
+		t.Fatalf("error creating assign: %s", err)
+	}
+	return mut
+}
+
+func loadAssignMeta(f string, t *testing.T) types.Mutator {
+	u := loadFixture(f, t)
+	a := &mutationsunversioned.AssignMetadata{}
+	err := convertUnstructuredToTyped(u, a)
+	if err != nil {
+		t.Fatalf("error converting assignmeta: %s", err)
+	}
+	mut, err := assignmeta.MutatorForAssignMetadata(a)
+	if err != nil {
+		t.Fatalf("error creating assignmeta: %s", err)
+	}
+	return mut
+}
+
+func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) error {
+	if u == nil {
+		return fmt.Errorf("cannot convert nil unstructured to type")
+	}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), obj)
+	return err
 }
 
 func sortTemplates(templates []*expansionunversioned.TemplateExpansion) {
