@@ -48,12 +48,7 @@ spec:
             - {{ . }}
             {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
-            - pod-security.kubernetes.io/audit=restricted
-            - pod-security.kubernetes.io/audit-version=latest
-            - pod-security.kubernetes.io/warn=restricted
-            - pod-security.kubernetes.io/warn-version=latest
-            - pod-security.kubernetes.io/enforce=restricted
-            - pod-security.kubernetes.io/enforce-version=v1.24
+            {{- .Values.postInstall.labelNamespace.podSecurity | toYaml | nindent 12 }}
             - --overwrite
           securityContext:
             {{- if .Values.enableRuntimeDefaultSeccompProfile }}
