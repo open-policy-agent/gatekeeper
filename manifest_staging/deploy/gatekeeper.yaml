@@ -2206,43 +2206,6 @@ spec:
                 description: TemplateSource specifies the source field on the generator resource to use as the base for expanded resource. For Pod-creating generators, this is usually spec.template
                 type: string
             type: object
-          status:
-            description: TemplateExpansionStatus defines the observed state of TemplateExpansion.
-            properties:
-              byPod:
-                items:
-                  description: MutatorPodStatusStatus defines the observed state of MutatorPodStatus.
-                  properties:
-                    enforced:
-                      type: boolean
-                    errors:
-                      items:
-                        description: MutatorError represents a single error caught while adding a mutator to a system.
-                        properties:
-                          message:
-                            type: string
-                          type:
-                            description: Type indicates a specific class of error for use by controller code. If not present, the error should be treated as not matching any known type.
-                            type: string
-                        required:
-                        - message
-                        type: object
-                      type: array
-                    id:
-                      type: string
-                    mutatorUID:
-                      description: Storing the mutator UID allows us to detect drift, such as when a mutator has been recreated after its CRD was deleted out from under it, interrupting the watch
-                      type: string
-                    observedGeneration:
-                      format: int64
-                      type: integer
-                    operations:
-                      items:
-                        type: string
-                      type: array
-                  type: object
-                type: array
-            type: object
         type: object
     served: true
     storage: true
