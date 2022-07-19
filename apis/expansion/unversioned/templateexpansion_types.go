@@ -16,7 +16,6 @@ limitations under the License.
 package unversioned
 
 import (
-	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -49,14 +48,6 @@ type GeneratedGVK struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
-// TemplateExpansionStatus defines the observed state of TemplateExpansion.
-type TemplateExpansionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	ByPod []v1beta1.MutatorPodStatusStatus `json:"byPod,omitempty"`
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path="templateexpansion"
 // +kubebuilder:resource:scope="Cluster"
@@ -67,8 +58,7 @@ type TemplateExpansion struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TemplateExpansionSpec   `json:"spec,omitempty"`
-	Status TemplateExpansionStatus `json:"status,omitempty"`
+	Spec TemplateExpansionSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true
