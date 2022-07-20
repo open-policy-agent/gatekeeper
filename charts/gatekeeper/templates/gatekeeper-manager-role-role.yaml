@@ -31,4 +31,7 @@ rules:
   - patch
   - update
   - watch
+{{- with .Values.controllerManager.extraRules }}
+  {{- toYaml . | nindent 0 }}
+{{- end }}
 {{- end }}

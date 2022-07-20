@@ -139,6 +139,8 @@ spec:
       {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:

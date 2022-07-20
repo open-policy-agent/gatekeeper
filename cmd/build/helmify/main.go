@@ -142,7 +142,7 @@ func (ks *kindSet) Write() error {
 			}
 
 			if name == "gatekeeper-controller-manager" && kind == "PodDisruptionBudget" {
-				obj = strings.Replace(obj, "apiVersion: policy/v1beta1", "{{- if .Capabilities.APIVersions.Has \"policy/v1/PodDisruptionBudget\" }}\napiVersion: policy/v1\n{{ else }}\napiVersion: policy/v1beta1\n{{ end -}}", 1)
+				obj = strings.Replace(obj, "apiVersion: policy/v1beta1", "{{- if .Capabilities.APIVersions.Has \"policy/v1\" }}\napiVersion: policy/v1\n{{ else }}\napiVersion: policy/v1beta1\n{{ end -}}", 1)
 			}
 
 			if name == "gatekeeper-admin" && kind == "PodSecurityPolicy" {

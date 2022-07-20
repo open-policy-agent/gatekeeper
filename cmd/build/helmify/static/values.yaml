@@ -34,7 +34,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.2
+      tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -49,10 +49,11 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
+    extraRules: []
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.2
+      tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -77,10 +78,11 @@ postInstall:
     runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
+    extraRules: []
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.2
+      tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
   securityContext:
@@ -95,7 +97,7 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.9.0-beta.2
+  release: v3.10.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations: {}
@@ -143,6 +145,10 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
   extraRules: []
 audit:
   hostNetwork: false
@@ -171,6 +177,11 @@ audit:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
+  extraRules: []
 crds:
   resources: {}
   securityContext:
@@ -192,5 +203,6 @@ psp:
 upgradeCRDs:
   enabled: true
   tolerations: []
+  extraRules: []
 rbac:
   create: true

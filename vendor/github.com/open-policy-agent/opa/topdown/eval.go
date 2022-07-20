@@ -2978,9 +2978,7 @@ func (e evalTerm) save(iter unifyIterator) error {
 		suffix := e.ref[e.pos:]
 		ref := make(ast.Ref, len(suffix)+1)
 		ref[0] = v
-		for i := 0; i < len(suffix); i++ {
-			ref[i+1] = suffix[i]
-		}
+		copy(ref[1:], suffix)
 
 		return e.e.biunify(ast.NewTerm(ref), e.rterm, e.bindings, e.rbindings, iter)
 	})
@@ -3041,24 +3039,30 @@ func (e evalEvery) eval(iter unifyIterator) error {
 }
 
 func (e *evalEvery) save(iter unifyIterator) error {
-	cpy := e.expr.Copy()
-	every := cpy.Terms.(*ast.Every)
+	return e.e.saveExpr(e.plug(e.expr), e.e.bindings, iter)
+}
 
-	for i := range every.Body { // TODO(sr): is there an easier way?
+func (e *evalEvery) plug(expr *ast.Expr) *ast.Expr {
+	cpy := expr.Copy()
+	every := cpy.Terms.(*ast.Every)
+	for i := range every.Body {
 		switch t := every.Body[i].Terms.(type) {
 		case *ast.Term:
-			every.Body[i].Terms = e.e.bindings.Plug(t)
+			every.Body[i].Terms = e.e.bindings.PlugNamespaced(t, e.e.caller.bindings)
 		case []*ast.Term:
-			for j := range t {
-				t[j] = e.e.bindings.Plug(t[j])
+			for j := 1; j < len(t); j++ { // don't plug operator, t[0]
+				t[j] = e.e.bindings.PlugNamespaced(t[j], e.e.caller.bindings)
 			}
+		case *ast.Every:
+			every.Body[i] = e.plug(every.Body[i])
 		}
 	}
 
-	every.Domain = e.e.bindings.plugNamespaced(every.Domain, e.e.caller.bindings)
+	every.Key = e.e.bindings.PlugNamespaced(every.Key, e.e.caller.bindings)
+	every.Value = e.e.bindings.PlugNamespaced(every.Value, e.e.caller.bindings)
+	every.Domain = e.e.bindings.PlugNamespaced(every.Domain, e.e.caller.bindings)
 	cpy.Terms = every
-
-	return e.e.saveExpr(cpy, e.e.bindings, iter)
+	return cpy
 }
 
 func (e *eval) comprehensionIndex(term *ast.Term) *ast.ComprehensionIndex {

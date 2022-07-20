@@ -90,6 +90,9 @@ rules:
     verbs:
       - delete
   {{- end }}
+{{- with .Values.preUninstall.deleteWebhookConfigurations.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
