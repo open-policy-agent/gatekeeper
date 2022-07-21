@@ -372,7 +372,8 @@ func TestSystem_DontApplyConflictingMutationsRemoveOriginal(t *testing.T) {
 	u := &unstructured.Unstructured{}
 	gotMutated, gotErr := s.Mutate(&types.Mutable{
 		Object:    u,
-		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}}})
+		Namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "billing"}},
+	})
 	if !gotMutated {
 		t.Errorf("got Mutate() = %t, want %t", gotMutated, true)
 	}
