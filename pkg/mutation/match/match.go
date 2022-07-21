@@ -75,7 +75,7 @@ type Kinds struct {
 	Kinds     []string `json:"kinds,omitempty"`
 }
 
-// Matchable represent an object to be matched along with its metadata
+// Matchable represent an object to be matched along with its metadata.
 type Matchable struct {
 	Object    client.Object
 	Namespace *corev1.Namespace

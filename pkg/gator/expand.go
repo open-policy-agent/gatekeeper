@@ -35,7 +35,7 @@ var (
 type expansionResources struct {
 	mutators           []types.Mutator
 	templateExpansions []*unversioned.ExpansionTemplate
-	generators         []*unstructured.Unstructured
+	objects            []*unstructured.Unstructured
 	namespaces         map[string]*corev1.Namespace
 }
 
@@ -53,7 +53,7 @@ func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructure
 	}
 
 	var resultants []*unstructured.Unstructured
-	for _, gen := range er.generators {
+	for _, gen := range er.objects {
 		ns, err := er.namespaceForGenerator(gen)
 		base := &types.Mutable{
 			Object:    gen,
@@ -146,7 +146,7 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 
 	if err != nil {
 		// Any resource can technically be a generator
-		er.generators = append(er.generators, u)
+		er.objects = append(er.objects, u)
 	}
 
 	return err

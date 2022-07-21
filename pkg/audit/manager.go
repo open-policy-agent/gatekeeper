@@ -18,7 +18,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -81,7 +80,6 @@ type Manager struct {
 	// auditCache lists objects from the audit's cache if auditFromCache is enabled.
 	auditCache *CacheLister
 
-	mutationSystem  *mutation.System
 	expansionSystem *expansion.System
 }
 
@@ -548,6 +546,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				au := target.AugmentedUnstructured{Object: *resultant, Namespace: &ns}
 				r, err := am.opa.Review(ctx, au)
 				if err != nil {
+					// updated to not return err immediately
 					errs = append(errs, err)
 					continue
 				}
