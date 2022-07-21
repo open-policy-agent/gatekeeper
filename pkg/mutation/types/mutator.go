@@ -42,8 +42,6 @@ type Mutator interface {
 	Mutate(mutable *Mutable) (bool, error)
 	// UsesExternalData returns true if the mutation uses external data.
 	UsesExternalData() bool
-	// Source returns which type of resources the mutation should apply to.
-	Source() SourceType
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences

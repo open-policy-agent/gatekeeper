@@ -564,7 +564,8 @@ func TestMatch(t *testing.T) {
 
 	for _, tc := range table {
 		t.Run(tc.name, func(t *testing.T) {
-			matches, err := Matches(&tc.matcher, tc.object, tc.namespace)
+			m := &Matchable{Object: tc.object, Namespace: tc.namespace}
+			matches, err := Matches(&tc.matcher, m)
 			if !errors.Is(err, tc.wantErr) {
 				t.Errorf("got Matches() err %v, want %v", err, tc.name)
 			}

@@ -48,7 +48,7 @@ func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructur
 			continue
 		}
 
-		matched, err := match.Matches(m.match, obj, ns)
+		matched, err := match.Matches(m.match, &match.Matchable{Object: obj, Namespace: ns})
 		if err != nil {
 			return false, fmt.Errorf("%w: %v", ErrMatching, err)
 		}

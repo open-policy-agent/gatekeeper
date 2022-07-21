@@ -130,9 +130,6 @@ func (er *expansionResources) addMutator(mut *unstructured.Unstructured) error {
 	if mutErr != nil {
 		return mutErr
 	}
-	if m.Source() != types.SourceTypeAll || m.Source() != types.SourceTypeGenerated {
-		return fmt.Errorf("mutator %s must have 'source: All|Generated'", m.ID().Name)
-	}
 	er.mutators = append(er.mutators, m)
 	return nil
 }

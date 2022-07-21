@@ -178,9 +178,8 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 
 		for _, id := range s.orderedMutators.ids {
 			mutator := s.mutatorsMap[id]
-			if !mutatorMatchesSource(mutator, mutable.Source) || s.schemaDB.HasConflicts(id) {
-				// Don't try to apply Mutators which do not match the source type or
-				// have conflicts.
+			if s.schemaDB.HasConflicts(id) {
+				// Don't try to apply Mutators which have conflicts.
 				continue
 			}
 
@@ -244,15 +243,4 @@ func mutateErr(err error, uid uuid.UUID, mID types.ID, obj *unstructured.Unstruc
 		obj.GroupVersionKind().Kind,
 		obj.GetNamespace(),
 		obj.GetName())
-}
-
-func mutatorMatchesSource(mut types.Mutator, source types.SourceType) bool {
-	if mut.Source() == types.SourceTypeAll {
-		return true
-	}
-	// If a Mutator has an empty source, we default it to "Original"
-	if mut.Source() == "" && source == types.SourceTypeOriginal {
-		return true
-	}
-	return mut.Source() == source
 }

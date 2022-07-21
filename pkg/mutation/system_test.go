@@ -69,10 +69,6 @@ func (m *fakeMutator) UsesExternalData() bool {
 	return false
 }
 
-func (m *fakeMutator) Source() types.SourceType {
-	return types.SourceTypeAll
-}
-
 func (m *fakeMutator) TerminalType() parser.NodeType {
 	return mutationschema.Unknown
 }

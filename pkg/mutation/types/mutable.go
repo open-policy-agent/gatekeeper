@@ -17,7 +17,6 @@ type Mutable struct {
 	// admission request of the mutable object.
 	Username string
 
-	// Sourcespecifies which types of resources the mutator should be applied
-	// to
+	// Source specifies which types of resources the mutator should be applied to
 	Source SourceType
 }
