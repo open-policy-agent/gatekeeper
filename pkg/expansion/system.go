@@ -14,8 +14,9 @@ import (
 )
 
 type System struct {
-	lock      sync.RWMutex
-	templates map[string]*expansionunversioned.ExpansionTemplate
+	lock           sync.RWMutex
+	templates      map[string]*expansionunversioned.ExpansionTemplate
+	mutationSystem *mutation.System
 }
 
 func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
@@ -101,7 +102,7 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `mutationSystem` is nil, no mutations will be applied.
-func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.System) ([]*unstructured.Unstructured, error) {
+func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructured, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
@@ -117,7 +118,7 @@ func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.Sy
 		}
 	}
 
-	if mutationSystem == nil {
+	if s.mutationSystem == nil {
 		return resultants, nil
 	}
 
@@ -128,7 +129,7 @@ func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.Sy
 			Username:  base.Username,
 			Source:    mutationtypes.SourceTypeGenerated,
 		}
-		_, err := mutationSystem.Mutate(mutable)
+		_, err := s.mutationSystem.Mutate(mutable)
 		if err != nil {
 			return nil, fmt.Errorf("failed to mutate resultant resource %s: %s", res.GetName(), err)
 		}
@@ -162,9 +163,10 @@ func expandResource(obj *unstructured.Unstructured, template *expansionunversion
 	return resource, nil
 }
 
-func NewSystem() *System {
+func NewSystem(mutationSystem *mutation.System) *System {
 	return &System{
-		lock:      sync.RWMutex{},
-		templates: map[string]*expansionunversioned.ExpansionTemplate{},
+		lock:           sync.RWMutex{},
+		templates:      map[string]*expansionunversioned.ExpansionTemplate{},
+		mutationSystem: mutationSystem,
 	}
 }

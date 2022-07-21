@@ -351,7 +351,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec := NewSystem()
+			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 
 			for _, templ := range tc.add {
 				err := ec.UpsertTemplate(templ)
@@ -555,8 +555,7 @@ func TestTemplatesForGVK(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec := NewSystem()
-
+			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 			for _, te := range tc.addTemplates {
 				if err := ec.UpsertTemplate(te); err != nil {
 					t.Fatalf("error upserting template: %s", err)
@@ -698,17 +697,17 @@ func TestExpand(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			expSystem := NewSystem()
-			for _, te := range tc.templates {
-				if err := expSystem.UpsertTemplate(te); err != nil {
-					t.Fatalf("error upserting template: %s", err)
-				}
-			}
-
 			mutSystem := mutation.NewSystem(mutation.SystemOpts{})
 			for _, m := range tc.mutators {
 				if err := mutSystem.Upsert(m); err != nil {
 					t.Fatalf("error upserting mutator: %s", err)
+				}
+			}
+
+			expSystem := NewSystem(mutSystem)
+			for _, te := range tc.templates {
+				if err := expSystem.UpsertTemplate(te); err != nil {
+					t.Fatalf("error upserting template: %s", err)
 				}
 			}
 
@@ -718,7 +717,7 @@ func TestExpand(t *testing.T) {
 				Username:  "unit-test",
 				Source:    types.SourceTypeGenerated,
 			}
-			results, err := expSystem.Expand(base, mutSystem)
+			results, err := expSystem.Expand(base)
 			if tc.expectErr && err == nil {
 				t.Errorf("want error, got nil")
 			} else if !tc.expectErr && err != nil {

@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -298,7 +299,7 @@ func BenchmarkValidationHandler(b *testing.B) {
 			}
 			h := validationHandler{
 				opa:             opaClient,
-				expansionSystem: expansion.NewSystem(),
+				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler: webhookHandler{
 					processExcluder: process.Get(),
 					client:          c,

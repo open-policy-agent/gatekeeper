@@ -42,8 +42,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
 
-	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
-	expSystem := expansion.NewSystem()
+	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 
 	// search for templates, add them if they exist
 	ctx := context.Background()
@@ -105,7 +104,7 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 			Username:  "",
 			Source:    mutationtypes.SourceTypeGenerated,
 		}
-		resultants, err := expSystem.Expand(&base, mutSystem)
+		resultants, err := expSystem.Expand(&base)
 		if err != nil {
 			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
 		}

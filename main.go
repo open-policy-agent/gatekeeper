@@ -317,7 +317,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
-	expansionSystem := expansion.NewSystem()
+	expansionSystem := expansion.NewSystem(mutationSystem)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -381,7 +381,6 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 			Client:          client,
 			ProcessExcluder: processExcluder,
 			CacheLister:     auditCache,
-			MutationSystem:  mutationSystem,
 			ExpansionSystem: expansionSystem,
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {

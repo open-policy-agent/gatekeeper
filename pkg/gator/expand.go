@@ -40,8 +40,7 @@ type expansionResources struct {
 }
 
 func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
-	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
-	expSystem := expansion.NewSystem()
+	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 	er := expansionResources{}
 	if err := er.addResources(resources); err != nil {
 		return nil, fmt.Errorf("error parsing resources: %s", err)
@@ -65,7 +64,7 @@ func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructure
 		if err != nil {
 			return nil, fmt.Errorf("error expanding generator: %s", err)
 		}
-		r, err := expSystem.Expand(base, mutSystem)
+		r, err := expSystem.Expand(base)
 		if err != nil {
 			return nil, fmt.Errorf("error expanding generator: %s", err)
 		}

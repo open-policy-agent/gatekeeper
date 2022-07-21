@@ -156,7 +156,6 @@ func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 		gkNamespace:     util.GetNamespace(),
 		auditCache:      deps.CacheLister,
 		expansionSystem: deps.ExpansionSystem,
-		mutationSystem:  deps.MutationSystem,
 	}
 	return am, nil
 }
@@ -213,7 +212,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit Client.Audit() results", "violations", len(res))
+		am.log.Info("Audit opa.Audit() results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
@@ -540,7 +539,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Username:  "",
 				Source:    mutationtypes.SourceTypeGenerated,
 			}
-			resultants, err := am.expansionSystem.Expand(base, am.mutationSystem)
+			resultants, err := am.expansionSystem.Expand(base)
 			if err != nil {
 				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
 				continue

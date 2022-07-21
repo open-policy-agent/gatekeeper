@@ -16,7 +16,6 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -24,7 +23,6 @@ type Dependencies struct {
 	Client          *constraintclient.Client
 	ProcessExcluder *process.Excluder
 	CacheLister     *CacheLister
-	MutationSystem  *mutation.System
 	ExpansionSystem *expansion.System
 }
 

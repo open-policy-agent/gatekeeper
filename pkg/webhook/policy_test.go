@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	testclients "github.com/open-policy-agent/gatekeeper/test/clients"
@@ -337,7 +338,7 @@ func TestReviewRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not initialize OPA: %s", err)
 			}
-			expSystem := expansion.NewSystem()
+			expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 			handler := validationHandler{
 				opa:             opa,
 				expansionSystem: expSystem,
@@ -408,7 +409,7 @@ func TestReviewDefaultNS(t *testing.T) {
 		}
 		pe := process.New()
 		pe.Add(cfg.Spec.Match)
-		expSystem := expansion.NewSystem()
+		expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 		handler := validationHandler{
 			opa:             opa,
 			expansionSystem: expSystem,
@@ -507,7 +508,7 @@ func TestConstraintValidation(t *testing.T) {
 			}
 			handler := validationHandler{
 				opa:             opa,
-				expansionSystem: expansion.NewSystem(),
+				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
 			}
 			b, err := yaml.YAMLToJSON([]byte(tt.Constraint))
@@ -634,7 +635,7 @@ func TestTracing(t *testing.T) {
 
 			handler := validationHandler{
 				opa:             opa,
-				expansionSystem: expansion.NewSystem(),
+				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{injectedConfig: tt.Cfg},
 			}
 			if maxThreads > 0 {
@@ -810,7 +811,7 @@ func TestGetValidationMessages(t *testing.T) {
 			}
 			handler := validationHandler{
 				opa:             opa,
-				expansionSystem: expansion.NewSystem(),
+				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
 				webhookHandler:  webhookHandler{},
 			}
 			if maxThreads > 0 {

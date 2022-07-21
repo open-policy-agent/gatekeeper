@@ -537,7 +537,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		Username:  req.AdmissionRequest.UserInfo.Username,
 		Source:    mutationtypes.SourceTypeGenerated,
 	}
-	resultants, err := h.expansionSystem.Expand(base, h.mutationSystem)
+	resultants, err := h.expansionSystem.Expand(base)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding generator: %s", err)
 	}
