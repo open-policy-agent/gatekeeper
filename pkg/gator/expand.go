@@ -34,7 +34,7 @@ var (
 
 type expansionResources struct {
 	mutators           []types.Mutator
-	templateExpansions []*unversioned.TemplateExpansion
+	templateExpansions []*unversioned.ExpansionTemplate
 	generators         []*unstructured.Unstructured
 	namespaces         map[string]*corev1.Namespace
 }
@@ -140,7 +140,7 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 	case isMutator(u):
 		err = er.addMutator(u)
 	case isExpansion(u):
-		err = er.addTemplateExpansion(u)
+		err = er.addExpansionTemplate(u)
 	case u.GetKind() == "Namespace":
 		err = er.addNamespace(u)
 	default:
@@ -150,8 +150,8 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 	return err
 }
 
-func (er *expansionResources) addTemplateExpansion(u *unstructured.Unstructured) error {
-	te, err := convertTemplateExpansion(u)
+func (er *expansionResources) addExpansionTemplate(u *unstructured.Unstructured) error {
+	te, err := convertExpansionTemplate(u)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (er *expansionResources) addNamespace(u *unstructured.Unstructured) error {
 
 func isExpansion(u *unstructured.Unstructured) bool {
 	_, exists := ExpansionAPIVersions[u.GetAPIVersion()]
-	return exists && u.GetKind() == "TemplateExpansion"
+	return exists && u.GetKind() == "ExpansionTemplate"
 }
 
 func isMutator(obj *unstructured.Unstructured) bool {
@@ -191,8 +191,8 @@ func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) e
 	return err
 }
 
-func convertTemplateExpansion(u *unstructured.Unstructured) (*unversioned.TemplateExpansion, error) {
-	te := &unversioned.TemplateExpansion{}
+func convertExpansionTemplate(u *unstructured.Unstructured) (*unversioned.ExpansionTemplate, error) {
+	te := &unversioned.ExpansionTemplate{}
 	err := convertUnstructuredToTyped(u, te)
 	return te, err
 }

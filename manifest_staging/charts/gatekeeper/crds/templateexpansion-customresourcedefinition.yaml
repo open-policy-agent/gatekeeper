@@ -9,21 +9,21 @@ metadata:
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
-  name: templateexpansion.expansion.gatekeeper.sh
+  name: expansiontemplate.expansion.gatekeeper.sh
 spec:
   group: expansion.gatekeeper.sh
   names:
-    kind: TemplateExpansion
-    listKind: TemplateExpansionList
-    plural: templateexpansion
-    singular: templateexpansion
+    kind: ExpansionTemplate
+    listKind: ExpansionTemplateList
+    plural: expansiontemplate
+    singular: expansiontemplate
   preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TemplateExpansion is the Schema for the TemplateExpansion API.
+        description: ExpansionTemplate is the Schema for the ExpansionTemplate API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -34,7 +34,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: TemplateExpansionSpec defines the desired state of TemplateExpansion.
+            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
             properties:
               applyTo:
                 description: ApplyTo lists the specific groups, versions and kinds of generator resources which will be expanded.
@@ -73,10 +73,10 @@ spec:
     served: true
     storage: true
     subresources:
-      status: {}
+      status: { }
 status:
   acceptedNames:
     kind: ""
     plural: ""
-  conditions: []
-  storedVersions: []
+  conditions: [ ]
+  storedVersions: [ ]

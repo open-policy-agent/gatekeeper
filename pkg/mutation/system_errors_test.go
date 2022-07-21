@@ -50,10 +50,6 @@ func (e errorMutator) UsesExternalData() bool {
 	return false
 }
 
-func (e errorMutator) Source() types.SourceType {
-	return types.SourceTypeAll
-}
-
 func (e errorMutator) ID() types.ID {
 	return types.ID{}
 }

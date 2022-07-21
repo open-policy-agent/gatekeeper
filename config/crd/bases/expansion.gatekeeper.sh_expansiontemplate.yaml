@@ -5,20 +5,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
-  name: templateexpansion.expansion.gatekeeper.sh
+  name: expansiontemplate.expansion.gatekeeper.sh
 spec:
   group: expansion.gatekeeper.sh
   names:
-    kind: TemplateExpansion
-    listKind: TemplateExpansionList
-    plural: templateexpansion
-    singular: templateexpansion
+    kind: ExpansionTemplate
+    listKind: ExpansionTemplateList
+    plural: expansiontemplate
+    singular: expansiontemplate
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TemplateExpansion is the Schema for the TemplateExpansion API.
+        description: ExpansionTemplate is the Schema for the ExpansionTemplate API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -33,7 +33,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: TemplateExpansionSpec defines the desired state of TemplateExpansion.
+            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
             properties:
               applyTo:
                 description: ApplyTo lists the specific groups, versions and kinds
@@ -77,10 +77,10 @@ spec:
     served: true
     storage: true
     subresources:
-      status: {}
+      status: { }
 status:
   acceptedNames:
     kind: ""
     plural: ""
-  conditions: []
-  storedVersions: []
+  conditions: [ ]
+  storedVersions: [ ]

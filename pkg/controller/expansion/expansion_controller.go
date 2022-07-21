@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller").WithValues("kind", "TemplateExpansion", logging.Process, "template_expansion_controller")
+var log = logf.Log.WithName("controller").WithValues("kind", "ExpansionTemplate", logging.Process, "template_expansion_controller")
 
 type Adder struct {
 	WatchManager    *watch.Manager
@@ -68,7 +68,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	return c.Watch(
-		&source.Kind{Type: &v1alpha1.TemplateExpansion{}},
+		&source.Kind{Type: &v1alpha1.ExpansionTemplate{}},
 		&handler.EnqueueRequestForObject{})
 }
 
@@ -76,7 +76,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	log.Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
-	te := &v1alpha1.TemplateExpansion{}
+	te := &v1alpha1.ExpansionTemplate{}
 	err := r.Get(ctx, request.NamespacedName, te)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -85,7 +85,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		deleted = true
 	}
 
-	unversionedTE := &unversioned.TemplateExpansion{}
+	unversionedTE := &unversioned.ExpansionTemplate{}
 	if err := r.scheme.Convert(te, unversionedTE, nil); err != nil {
 		return reconcile.Result{}, err
 	}

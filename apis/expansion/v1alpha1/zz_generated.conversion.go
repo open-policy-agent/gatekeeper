@@ -45,33 +45,33 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*TemplateExpansion)(nil), (*unversioned.TemplateExpansion)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha1_TemplateExpansion_To_unversioned_TemplateExpansion(a.(*TemplateExpansion), b.(*unversioned.TemplateExpansion), scope)
+	if err := s.AddGeneratedConversionFunc((*ExpansionTemplate)(nil), (*unversioned.ExpansionTemplate)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_ExpansionTemplate_To_unversioned_ExpansionTemplate(a.(*ExpansionTemplate), b.(*unversioned.ExpansionTemplate), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*unversioned.TemplateExpansion)(nil), (*TemplateExpansion)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_unversioned_TemplateExpansion_To_v1alpha1_TemplateExpansion(a.(*unversioned.TemplateExpansion), b.(*TemplateExpansion), scope)
+	if err := s.AddGeneratedConversionFunc((*unversioned.ExpansionTemplate)(nil), (*ExpansionTemplate)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_unversioned_ExpansionTemplate_To_v1alpha1_ExpansionTemplate(a.(*unversioned.ExpansionTemplate), b.(*ExpansionTemplate), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*TemplateExpansionList)(nil), (*unversioned.TemplateExpansionList)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha1_TemplateExpansionList_To_unversioned_TemplateExpansionList(a.(*TemplateExpansionList), b.(*unversioned.TemplateExpansionList), scope)
+	if err := s.AddGeneratedConversionFunc((*ExpansionTemplateList)(nil), (*unversioned.ExpansionTemplateList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_ExpansionTemplateList_To_unversioned_ExpansionTemplateList(a.(*ExpansionTemplateList), b.(*unversioned.ExpansionTemplateList), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*unversioned.TemplateExpansionList)(nil), (*TemplateExpansionList)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_unversioned_TemplateExpansionList_To_v1alpha1_TemplateExpansionList(a.(*unversioned.TemplateExpansionList), b.(*TemplateExpansionList), scope)
+	if err := s.AddGeneratedConversionFunc((*unversioned.ExpansionTemplateList)(nil), (*ExpansionTemplateList)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_unversioned_ExpansionTemplateList_To_v1alpha1_ExpansionTemplateList(a.(*unversioned.ExpansionTemplateList), b.(*ExpansionTemplateList), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*TemplateExpansionSpec)(nil), (*unversioned.TemplateExpansionSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec(a.(*TemplateExpansionSpec), b.(*unversioned.TemplateExpansionSpec), scope)
+	if err := s.AddGeneratedConversionFunc((*ExpansionTemplateSpec)(nil), (*unversioned.ExpansionTemplateSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec(a.(*ExpansionTemplateSpec), b.(*unversioned.ExpansionTemplateSpec), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*unversioned.TemplateExpansionSpec)(nil), (*TemplateExpansionSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec(a.(*unversioned.TemplateExpansionSpec), b.(*TemplateExpansionSpec), scope)
+	if err := s.AddGeneratedConversionFunc((*unversioned.ExpansionTemplateSpec)(nil), (*ExpansionTemplateSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec(a.(*unversioned.ExpansionTemplateSpec), b.(*ExpansionTemplateSpec), scope)
 	}); err != nil {
 		return err
 	}
@@ -102,55 +102,55 @@ func Convert_unversioned_GeneratedGVK_To_v1alpha1_GeneratedGVK(in *unversioned.G
 	return autoConvert_unversioned_GeneratedGVK_To_v1alpha1_GeneratedGVK(in, out, s)
 }
 
-func autoConvert_v1alpha1_TemplateExpansion_To_unversioned_TemplateExpansion(in *TemplateExpansion, out *unversioned.TemplateExpansion, s conversion.Scope) error {
+func autoConvert_v1alpha1_ExpansionTemplate_To_unversioned_ExpansionTemplate(in *ExpansionTemplate, out *unversioned.ExpansionTemplate, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
-	if err := Convert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec(&in.Spec, &out.Spec, s); err != nil {
+	if err := Convert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec(&in.Spec, &out.Spec, s); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Convert_v1alpha1_TemplateExpansion_To_unversioned_TemplateExpansion is an autogenerated conversion function.
-func Convert_v1alpha1_TemplateExpansion_To_unversioned_TemplateExpansion(in *TemplateExpansion, out *unversioned.TemplateExpansion, s conversion.Scope) error {
-	return autoConvert_v1alpha1_TemplateExpansion_To_unversioned_TemplateExpansion(in, out, s)
+// Convert_v1alpha1_ExpansionTemplate_To_unversioned_ExpansionTemplate is an autogenerated conversion function.
+func Convert_v1alpha1_ExpansionTemplate_To_unversioned_ExpansionTemplate(in *ExpansionTemplate, out *unversioned.ExpansionTemplate, s conversion.Scope) error {
+	return autoConvert_v1alpha1_ExpansionTemplate_To_unversioned_ExpansionTemplate(in, out, s)
 }
 
-func autoConvert_unversioned_TemplateExpansion_To_v1alpha1_TemplateExpansion(in *unversioned.TemplateExpansion, out *TemplateExpansion, s conversion.Scope) error {
+func autoConvert_unversioned_ExpansionTemplate_To_v1alpha1_ExpansionTemplate(in *unversioned.ExpansionTemplate, out *ExpansionTemplate, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
-	if err := Convert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec(&in.Spec, &out.Spec, s); err != nil {
+	if err := Convert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec(&in.Spec, &out.Spec, s); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Convert_unversioned_TemplateExpansion_To_v1alpha1_TemplateExpansion is an autogenerated conversion function.
-func Convert_unversioned_TemplateExpansion_To_v1alpha1_TemplateExpansion(in *unversioned.TemplateExpansion, out *TemplateExpansion, s conversion.Scope) error {
-	return autoConvert_unversioned_TemplateExpansion_To_v1alpha1_TemplateExpansion(in, out, s)
+// Convert_unversioned_ExpansionTemplate_To_v1alpha1_ExpansionTemplate is an autogenerated conversion function.
+func Convert_unversioned_ExpansionTemplate_To_v1alpha1_ExpansionTemplate(in *unversioned.ExpansionTemplate, out *ExpansionTemplate, s conversion.Scope) error {
+	return autoConvert_unversioned_ExpansionTemplate_To_v1alpha1_ExpansionTemplate(in, out, s)
 }
 
-func autoConvert_v1alpha1_TemplateExpansionList_To_unversioned_TemplateExpansionList(in *TemplateExpansionList, out *unversioned.TemplateExpansionList, s conversion.Scope) error {
+func autoConvert_v1alpha1_ExpansionTemplateList_To_unversioned_ExpansionTemplateList(in *ExpansionTemplateList, out *unversioned.ExpansionTemplateList, s conversion.Scope) error {
 	out.ListMeta = in.ListMeta
-	out.Items = *(*[]unversioned.TemplateExpansion)(unsafe.Pointer(&in.Items))
+	out.Items = *(*[]unversioned.ExpansionTemplate)(unsafe.Pointer(&in.Items))
 	return nil
 }
 
-// Convert_v1alpha1_TemplateExpansionList_To_unversioned_TemplateExpansionList is an autogenerated conversion function.
-func Convert_v1alpha1_TemplateExpansionList_To_unversioned_TemplateExpansionList(in *TemplateExpansionList, out *unversioned.TemplateExpansionList, s conversion.Scope) error {
-	return autoConvert_v1alpha1_TemplateExpansionList_To_unversioned_TemplateExpansionList(in, out, s)
+// Convert_v1alpha1_ExpansionTemplateList_To_unversioned_ExpansionTemplateList is an autogenerated conversion function.
+func Convert_v1alpha1_ExpansionTemplateList_To_unversioned_ExpansionTemplateList(in *ExpansionTemplateList, out *unversioned.ExpansionTemplateList, s conversion.Scope) error {
+	return autoConvert_v1alpha1_ExpansionTemplateList_To_unversioned_ExpansionTemplateList(in, out, s)
 }
 
-func autoConvert_unversioned_TemplateExpansionList_To_v1alpha1_TemplateExpansionList(in *unversioned.TemplateExpansionList, out *TemplateExpansionList, s conversion.Scope) error {
+func autoConvert_unversioned_ExpansionTemplateList_To_v1alpha1_ExpansionTemplateList(in *unversioned.ExpansionTemplateList, out *ExpansionTemplateList, s conversion.Scope) error {
 	out.ListMeta = in.ListMeta
-	out.Items = *(*[]TemplateExpansion)(unsafe.Pointer(&in.Items))
+	out.Items = *(*[]ExpansionTemplate)(unsafe.Pointer(&in.Items))
 	return nil
 }
 
-// Convert_unversioned_TemplateExpansionList_To_v1alpha1_TemplateExpansionList is an autogenerated conversion function.
-func Convert_unversioned_TemplateExpansionList_To_v1alpha1_TemplateExpansionList(in *unversioned.TemplateExpansionList, out *TemplateExpansionList, s conversion.Scope) error {
-	return autoConvert_unversioned_TemplateExpansionList_To_v1alpha1_TemplateExpansionList(in, out, s)
+// Convert_unversioned_ExpansionTemplateList_To_v1alpha1_ExpansionTemplateList is an autogenerated conversion function.
+func Convert_unversioned_ExpansionTemplateList_To_v1alpha1_ExpansionTemplateList(in *unversioned.ExpansionTemplateList, out *ExpansionTemplateList, s conversion.Scope) error {
+	return autoConvert_unversioned_ExpansionTemplateList_To_v1alpha1_ExpansionTemplateList(in, out, s)
 }
 
-func autoConvert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec(in *TemplateExpansionSpec, out *unversioned.TemplateExpansionSpec, s conversion.Scope) error {
+func autoConvert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec(in *ExpansionTemplateSpec, out *unversioned.ExpansionTemplateSpec, s conversion.Scope) error {
 	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.TemplateSource = in.TemplateSource
 	if err := Convert_v1alpha1_GeneratedGVK_To_unversioned_GeneratedGVK(&in.GeneratedGVK, &out.GeneratedGVK, s); err != nil {
@@ -159,12 +159,12 @@ func autoConvert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansion
 	return nil
 }
 
-// Convert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec is an autogenerated conversion function.
-func Convert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec(in *TemplateExpansionSpec, out *unversioned.TemplateExpansionSpec, s conversion.Scope) error {
-	return autoConvert_v1alpha1_TemplateExpansionSpec_To_unversioned_TemplateExpansionSpec(in, out, s)
+// Convert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec is an autogenerated conversion function.
+func Convert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec(in *ExpansionTemplateSpec, out *unversioned.ExpansionTemplateSpec, s conversion.Scope) error {
+	return autoConvert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplateSpec(in, out, s)
 }
 
-func autoConvert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec(in *unversioned.TemplateExpansionSpec, out *TemplateExpansionSpec, s conversion.Scope) error {
+func autoConvert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec(in *unversioned.ExpansionTemplateSpec, out *ExpansionTemplateSpec, s conversion.Scope) error {
 	out.ApplyTo = *(*[]match.ApplyTo)(unsafe.Pointer(&in.ApplyTo))
 	out.TemplateSource = in.TemplateSource
 	if err := Convert_unversioned_GeneratedGVK_To_v1alpha1_GeneratedGVK(&in.GeneratedGVK, &out.GeneratedGVK, s); err != nil {
@@ -173,7 +173,7 @@ func autoConvert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansion
 	return nil
 }
 
-// Convert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec is an autogenerated conversion function.
-func Convert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec(in *unversioned.TemplateExpansionSpec, out *TemplateExpansionSpec, s conversion.Scope) error {
-	return autoConvert_unversioned_TemplateExpansionSpec_To_v1alpha1_TemplateExpansionSpec(in, out, s)
+// Convert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec is an autogenerated conversion function.
+func Convert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec(in *unversioned.ExpansionTemplateSpec, out *ExpansionTemplateSpec, s conversion.Scope) error {
+	return autoConvert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec(in, out, s)
 }

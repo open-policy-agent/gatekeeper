@@ -15,14 +15,14 @@ import (
 
 type System struct {
 	lock      sync.RWMutex
-	templates map[string]*expansionunversioned.TemplateExpansion
+	templates map[string]*expansionunversioned.ExpansionTemplate
 }
 
-func keyForTemplate(template *expansionunversioned.TemplateExpansion) string {
+func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
 	return template.ObjectMeta.Name
 }
 
-func (s *System) UpsertTemplate(template *expansionunversioned.TemplateExpansion) error {
+func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -34,7 +34,7 @@ func (s *System) UpsertTemplate(template *expansionunversioned.TemplateExpansion
 	return nil
 }
 
-func (s *System) RemoveTemplate(template *expansionunversioned.TemplateExpansion) error {
+func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -47,7 +47,7 @@ func (s *System) RemoveTemplate(template *expansionunversioned.TemplateExpansion
 	return nil
 }
 
-func validateTemplate(template *expansionunversioned.TemplateExpansion) error {
+func validateTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	k := keyForTemplate(template)
 	if k == "" {
 		return fmt.Errorf("ExpansionTemplate has empty name field")
@@ -81,12 +81,12 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 	}
 }
 
-// templatesForGVK returns a slice of TemplateExpansions that match a given gvk.
-func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.TemplateExpansion {
+// templatesForGVK returns a slice of ExpansionTemplates that match a given gvk.
+func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var templates []*expansionunversioned.TemplateExpansion
+	var templates []*expansionunversioned.ExpansionTemplate
 	for _, t := range s.templates {
 		for _, apply := range t.Spec.ApplyTo {
 			if apply.Matches(gvk) {
@@ -99,7 +99,7 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 }
 
 // Expand expands `base` into resultant resources, and applies any applicable
-// mutators. If no TemplateExpansions match `base`, an empty slice
+// mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `mutationSystem` is nil, no mutations will be applied.
 func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.System) ([]*unstructured.Unstructured, error) {
 	gvk := base.Object.GroupVersionKind()
@@ -137,7 +137,7 @@ func (s *System) Expand(base *mutationtypes.Mutable, mutationSystem *mutation.Sy
 	return resultants, nil
 }
 
-func expandResource(obj *unstructured.Unstructured, template *expansionunversioned.TemplateExpansion) (*unstructured.Unstructured, error) {
+func expandResource(obj *unstructured.Unstructured, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand resource using a template with no source")
@@ -165,6 +165,6 @@ func expandResource(obj *unstructured.Unstructured, template *expansionunversion
 func NewSystem() *System {
 	return &System{
 		lock:      sync.RWMutex{},
-		templates: map[string]*expansionunversioned.TemplateExpansion{},
+		templates: map[string]*expansionunversioned.ExpansionTemplate{},
 	}
 }

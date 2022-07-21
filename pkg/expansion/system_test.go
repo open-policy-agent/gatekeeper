@@ -29,16 +29,16 @@ type templateData struct {
 	generatedGVK expansionunversioned.GeneratedGVK
 }
 
-func newTemplate(data *templateData) *expansionunversioned.TemplateExpansion {
-	return &expansionunversioned.TemplateExpansion{
+func newTemplate(data *templateData) *expansionunversioned.ExpansionTemplate {
+	return &expansionunversioned.ExpansionTemplate{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "TemplateExpansion",
-			APIVersion: "templateexpansions.gatekeeper.sh/v1beta1",
+			Kind:       "ExpansionTemplate",
+			APIVersion: "expansiontemplates.gatekeeper.sh/v1beta1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: data.name,
 		},
-		Spec: expansionunversioned.TemplateExpansionSpec{
+		Spec: expansionunversioned.ExpansionTemplateSpec{
 			ApplyTo:        data.apply,
 			TemplateSource: data.source,
 			GeneratedGVK:   data.generatedGVK,
@@ -49,15 +49,15 @@ func newTemplate(data *templateData) *expansionunversioned.TemplateExpansion {
 func TestUpsertRemoveTemplate(t *testing.T) {
 	tests := []struct {
 		name          string
-		add           []*expansionunversioned.TemplateExpansion
-		remove        []*expansionunversioned.TemplateExpansion
-		check         []*expansionunversioned.TemplateExpansion
+		add           []*expansionunversioned.ExpansionTemplate
+		remove        []*expansionunversioned.ExpansionTemplate
+		check         []*expansionunversioned.ExpansionTemplate
 		wantAddErr    bool
 		wantRemoveErr bool
 	}{
 		{
 			name: "adding 2 valid templates",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -87,7 +87,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check: []*expansionunversioned.TemplateExpansion{
+			check: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -121,7 +121,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		},
 		{
 			name: "adding template with empty name returns error",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "",
 					apply: []match.ApplyTo{{
@@ -137,12 +137,12 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check:      []*expansionunversioned.TemplateExpansion{},
+			check:      []*expansionunversioned.ExpansionTemplate{},
 			wantAddErr: true,
 		},
 		{
 			name: "adding template with empty source returns error",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "hello",
 					apply: []match.ApplyTo{{
@@ -158,12 +158,12 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check:      []*expansionunversioned.TemplateExpansion{},
+			check:      []*expansionunversioned.ExpansionTemplate{},
 			wantAddErr: true,
 		},
 		{
 			name: "adding template with empty GVK returns error",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "hello",
 					apply: []match.ApplyTo{{
@@ -175,12 +175,12 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					generatedGVK: expansionunversioned.GeneratedGVK{},
 				}),
 			},
-			check:      []*expansionunversioned.TemplateExpansion{},
+			check:      []*expansionunversioned.ExpansionTemplate{},
 			wantAddErr: true,
 		},
 		{
 			name: "removing a template with empty name returns error",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -196,7 +196,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			remove: []*expansionunversioned.TemplateExpansion{
+			remove: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "",
 					apply: []match.ApplyTo{{
@@ -212,7 +212,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check: []*expansionunversioned.TemplateExpansion{
+			check: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -233,7 +233,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		},
 		{
 			name: "adding 2 templates, removing 1",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -263,7 +263,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			remove: []*expansionunversioned.TemplateExpansion{
+			remove: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test2",
 					apply: []match.ApplyTo{{
@@ -279,7 +279,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check: []*expansionunversioned.TemplateExpansion{
+			check: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -300,7 +300,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		},
 		{
 			name: "updating an existing template",
-			add: []*expansionunversioned.TemplateExpansion{
+			add: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -330,7 +330,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 					},
 				}),
 			},
-			check: []*expansionunversioned.TemplateExpansion{
+			check: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -392,8 +392,8 @@ func TestTemplatesForGVK(t *testing.T) {
 	tests := []struct {
 		name         string
 		gvk          expansionunversioned.GeneratedGVK
-		addTemplates []*expansionunversioned.TemplateExpansion
-		want         []*expansionunversioned.TemplateExpansion
+		addTemplates []*expansionunversioned.ExpansionTemplate
+		want         []*expansionunversioned.ExpansionTemplate
 	}{
 		{
 			name: "adding 2 templates, 1 match",
@@ -402,7 +402,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				Version: "v1",
 				Kind:    "Deployment",
 			},
-			addTemplates: []*expansionunversioned.TemplateExpansion{
+			addTemplates: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -432,7 +432,7 @@ func TestTemplatesForGVK(t *testing.T) {
 					},
 				}),
 			},
-			want: []*expansionunversioned.TemplateExpansion{
+			want: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -456,7 +456,7 @@ func TestTemplatesForGVK(t *testing.T) {
 				Version: "v1",
 				Kind:    "Deployment",
 			},
-			addTemplates: []*expansionunversioned.TemplateExpansion{
+			addTemplates: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -486,7 +486,7 @@ func TestTemplatesForGVK(t *testing.T) {
 					},
 				}),
 			},
-			want: []*expansionunversioned.TemplateExpansion{
+			want: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -519,7 +519,7 @@ func TestTemplatesForGVK(t *testing.T) {
 		},
 		{
 			name: "adding 1 templates, 0 match",
-			addTemplates: []*expansionunversioned.TemplateExpansion{
+			addTemplates: []*expansionunversioned.ExpansionTemplate{
 				newTemplate(&templateData{
 					name: "test1",
 					apply: []match.ApplyTo{{
@@ -535,7 +535,7 @@ func TestTemplatesForGVK(t *testing.T) {
 					},
 				}),
 			},
-			want: []*expansionunversioned.TemplateExpansion{},
+			want: []*expansionunversioned.ExpansionTemplate{},
 			gvk: expansionunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v9000",
@@ -544,8 +544,8 @@ func TestTemplatesForGVK(t *testing.T) {
 		},
 		{
 			name:         "no templates, no matches",
-			addTemplates: []*expansionunversioned.TemplateExpansion{},
-			want:         []*expansionunversioned.TemplateExpansion{},
+			addTemplates: []*expansionunversioned.ExpansionTemplate{},
+			want:         []*expansionunversioned.ExpansionTemplate{},
 			gvk: expansionunversioned.GeneratedGVK{
 				Group:   "",
 				Version: "v1",
@@ -565,7 +565,7 @@ func TestTemplatesForGVK(t *testing.T) {
 
 			got := ec.templatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
-			wantSorted := make([]*expansionunversioned.TemplateExpansion, len(tc.want))
+			wantSorted := make([]*expansionunversioned.ExpansionTemplate, len(tc.want))
 			for i := 0; i < len(tc.want); i++ {
 				wantSorted[i] = tc.want[i]
 			}
@@ -589,7 +589,7 @@ func TestExpand(t *testing.T) {
 		name      string
 		generator *unstructured.Unstructured
 		ns        *corev1.Namespace
-		templates []*expansionunversioned.TemplateExpansion
+		templates []*expansionunversioned.ExpansionTemplate
 		mutators  []types.Mutator
 		want      []*unstructured.Unstructured
 		expectErr bool
@@ -606,17 +606,17 @@ func TestExpand(t *testing.T) {
 		{
 			name:      "generator with non-matching template",
 			generator: loadFixture(fixtures.GeneratorCat, t),
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*unstructured.Unstructured{},
 		},
 		{
 			name:      "no mutators basic deployment expands pod",
-			generator: loadFixture(fixtures.DeploymentNginx, t), // TODO this will be tricky to create...
+			generator: loadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
 			mutators:  []types.Mutator{},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodNoMutate, t)},
@@ -628,7 +628,7 @@ func TestExpand(t *testing.T) {
 			mutators: []types.Mutator{
 				loadAssign(fixtures.AssignPullImage, t),
 			},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
@@ -641,7 +641,7 @@ func TestExpand(t *testing.T) {
 				loadAssign(fixtures.AssignPullImage, t),
 				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t), // should not match
 			},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
@@ -654,7 +654,7 @@ func TestExpand(t *testing.T) {
 				loadAssign(fixtures.AssignPullImage, t),
 				loadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
 			},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutateAnnotated, t)},
@@ -667,7 +667,7 @@ func TestExpand(t *testing.T) {
 				loadAssign(fixtures.AssignKittenAge, t),
 				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
 			},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
 				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 			},
@@ -685,7 +685,7 @@ func TestExpand(t *testing.T) {
 				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
 				loadAssign(fixtures.AssignPullImage, t), // should not match
 			},
-			templates: []*expansionunversioned.TemplateExpansion{
+			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
 				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
@@ -775,9 +775,9 @@ func loadFixture(f string, t *testing.T) *unstructured.Unstructured {
 	return &u
 }
 
-func loadTemplate(f string, t *testing.T) *expansionunversioned.TemplateExpansion {
+func loadTemplate(f string, t *testing.T) *expansionunversioned.ExpansionTemplate {
 	u := loadFixture(f, t)
-	te := &expansionunversioned.TemplateExpansion{}
+	te := &expansionunversioned.ExpansionTemplate{}
 	err := convertUnstructuredToTyped(u, te)
 	if err != nil {
 		t.Fatalf("error converting template expansion: %s", err)
@@ -821,7 +821,7 @@ func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) e
 	return err
 }
 
-func sortTemplates(templates []*expansionunversioned.TemplateExpansion) {
+func sortTemplates(templates []*expansionunversioned.ExpansionTemplate) {
 	sort.SliceStable(templates, func(x, y int) bool {
 		return templates[x].Name < templates[y].Name
 	})

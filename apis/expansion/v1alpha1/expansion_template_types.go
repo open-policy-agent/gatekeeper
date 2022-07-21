@@ -24,8 +24,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// TemplateExpansionSpec defines the desired state of TemplateExpansion.
-type TemplateExpansionSpec struct {
+// ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
+type ExpansionTemplateSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -50,27 +50,27 @@ type GeneratedGVK struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path="templateexpansion"
+// +kubebuilder:resource:path="expansiontemplate"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
 
-// TemplateExpansion is the Schema for the TemplateExpansion API.
-type TemplateExpansion struct {
+// ExpansionTemplate is the Schema for the ExpansionTemplate API.
+type ExpansionTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec TemplateExpansionSpec `json:"spec,omitempty"`
+	Spec ExpansionTemplateSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// TemplateExpansionList contains a list of TemplateExpansion.
-type TemplateExpansionList struct {
+// ExpansionTemplateList contains a list of ExpansionTemplate.
+type ExpansionTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []TemplateExpansion `json:"items"`
+	Items           []ExpansionTemplate `json:"items"`
 }
 
 func init() {
-	v1alpha1.SchemeBuilder.Register(&TemplateExpansion{}, &TemplateExpansionList{})
+	v1alpha1.SchemeBuilder.Register(&ExpansionTemplate{}, &ExpansionTemplateList{})
 }

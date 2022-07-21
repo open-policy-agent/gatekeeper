@@ -3,7 +3,7 @@ package fixtures
 const (
 	TempExpDeploymentExpandsPods = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
-kind: TemplateExpansion
+kind: ExpansionTemplate
 metadata:
   name: expand-deployments
 spec:
@@ -178,7 +178,7 @@ spec:
 
 	TemplateCatExpandsKitten = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
-kind: TemplateExpansion
+kind: ExpansionTemplate
 metadata:
   name: expand-cats-kitten
 spec:
@@ -195,7 +195,7 @@ spec:
 
 	TemplateCatExpandsPurr = `
 apiVersion: expansion.gatekeeper.sh/v1alpha1
-kind: TemplateExpansion
+kind: ExpansionTemplate
 metadata:
   name: expand-cats-purr
 spec:

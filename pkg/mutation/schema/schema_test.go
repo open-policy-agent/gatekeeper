@@ -56,8 +56,6 @@ func (m *fakeMutator) TerminalType() parser.NodeType {
 
 func (m *fakeMutator) ID() types.ID { return m.id }
 
-func (m *fakeMutator) Source() types.SourceType { return types.SourceTypeAll }
-
 func (m *fakeMutator) HasDiff(other types.Mutator) bool {
 	if m == other {
 		return true
