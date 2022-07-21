@@ -47,7 +47,7 @@ type Injector interface {
 	InjectControllerSwitch(*watch.ControllerSwitch)
 	InjectTracker(tracker *readiness.Tracker)
 	InjectMutationSystem(mutationSystem *mutation.System)
-	InjectExpansionSystem(mutationSystem *expansion.System)
+	InjectExpansionSystem(expansionSystem *expansion.System)
 	InjectProviderCache(providerCache *externaldata.ProviderCache)
 	Add(mgr manager.Manager) error
 }

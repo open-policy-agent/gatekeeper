@@ -162,15 +162,15 @@ spec:
 apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata
 metadata:
-  name: demo-annotation-owner
+  name: demo-annotation-meow
 spec:
   match:
-    origin: Generated
+    source: Generated
     scope: Namespaced
     kinds:
     - apiGroups: ["*"]
-      kinds: ["Cat"]
-  location: "metadata.annotations.owner"
+      kinds: ["Kitten"]
+  location: "metadata.annotations.sound"
   parameters:
     assign:
       value:  "meow"
@@ -262,16 +262,18 @@ spec:
     kinds:
     - apiGroups: ["*"]
       kinds: ["Purr"]
-  location: "metadata.annotations.owner"
+  location: "metadata.annotations.shouldPet"
   parameters:
     assign:
-      value:  "admin"
+      value:  "manytimes"
 `
 
 	ResultantKitten = `
 apiVersion: kitten.myapp.sh/v1alpha1
 kind: Kitten
 metadata:
+  annotations:
+    sound: meow
   labels:
     fluffy: extremely
 spec:
@@ -285,7 +287,7 @@ apiVersion: purr.myapp.sh/v1alpha1
 kind: Purr
 metadata:
   annotations:
-    owner: admin
+    shouldPet: manytimes
 spec:
   loud: very
 `

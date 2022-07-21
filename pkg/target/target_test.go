@@ -3,7 +3,6 @@ package target
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 
@@ -897,9 +896,6 @@ func TestMatcher_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.name == "AugmentedReview is supported" {
-				fmt.Println("pause!")
-			}
 			target := &K8sValidationTarget{}
 			m := &Matcher{
 				match: tt.match,

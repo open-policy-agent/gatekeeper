@@ -24,7 +24,7 @@ const Wildcard = "*"
 // +kubebuilder:object:generate=true
 type Match struct {
 	// Source determines if the mutator should be used to expand generator
-	// resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A
+	// resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A
 	// value of `Generated` will cause the mutator only be applied when expanding
 	// generator resources, while `Original` will cause the mutator to be applied
 	// resources going through the mutation webhook.
@@ -282,14 +282,14 @@ func scopeMatch(match *Match, target *Matchable) (bool, error) {
 }
 
 func sourceMatch(match *Match, target *Matchable) (bool, error) {
-	// An empty 'source' field will default to 'Original'
+	// An empty 'source' field will default to 'All'
 	mSrc := match.Source
 	tSrc := target.Source
 	if mSrc == "" {
-		mSrc = types.SourceTypeOriginal
+		mSrc = types.SourceTypeDefault
 	}
 	if tSrc == "" {
-		tSrc = types.SourceTypeOriginal
+		tSrc = types.SourceTypeDefault
 	}
 
 	if mSrc == types.SourceTypeAll {
@@ -300,7 +300,7 @@ func sourceMatch(match *Match, target *Matchable) (bool, error) {
 
 func IsNamespace(obj client.Object) bool {
 	return obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" &&
-			obj.GetObjectKind().GroupVersionKind().Group == ""
+		obj.GetObjectKind().GroupVersionKind().Group == ""
 }
 
 // contains returns true is element is in set.

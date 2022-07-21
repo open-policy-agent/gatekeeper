@@ -190,7 +190,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:
@@ -431,7 +431,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:
@@ -681,7 +681,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:
@@ -888,7 +888,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:
@@ -1792,7 +1792,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:
@@ -2006,7 +2006,7 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
                   source:
-                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `Original`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
+                    description: Source determines if the mutator should be used to expand generator resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will cause the mutator only be applied when expanding generator resources, while `Original` will cause the mutator to be applied resources going through the mutation webhook.
                     type: string
                 type: object
               parameters:

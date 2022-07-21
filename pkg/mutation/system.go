@@ -177,12 +177,12 @@ func (s *System) mutate(mutable *types.Mutable) (int, error) {
 		old := unversioned.DeepCopyWithPlaceholders(mutable.Object)
 
 		for _, id := range s.orderedMutators.ids {
-			mutator := s.mutatorsMap[id]
 			if s.schemaDB.HasConflicts(id) {
 				// Don't try to apply Mutators which have conflicts.
 				continue
 			}
 
+			mutator := s.mutatorsMap[id]
 			if mutator.Matches(mutable) {
 				mutated, err := mutator.Mutate(mutable)
 				if mutated {

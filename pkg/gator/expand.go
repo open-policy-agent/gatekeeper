@@ -79,12 +79,12 @@ func (er *expansionResources) namespaceForGenerator(gen *unstructured.Unstructur
 	if genNs == "" {
 		return &corev1.Namespace{}, nil
 	}
-	if genNs == "default" {
-		return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}, nil
-	}
 
 	ns, exists := er.namespaces[genNs]
 	if !exists {
+		if genNs == "default" {
+			return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}, nil
+		}
 		return nil, fmt.Errorf("namespace resource %q not found in supplied configs", genNs)
 	}
 	return ns, nil
@@ -140,9 +140,12 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 		err = er.addMutator(u)
 	case isExpansion(u):
 		err = er.addExpansionTemplate(u)
-	case u.GetKind() == "Namespace":
+	case isNamespace(u):
 		err = er.addNamespace(u)
-	default:
+	}
+
+	if err != nil {
+		// Any resource can technically be a generator
 		er.generators = append(er.generators, u)
 	}
 
@@ -180,6 +183,10 @@ func isMutator(obj *unstructured.Unstructured) bool {
 		return false
 	}
 	return true
+}
+
+func isNamespace(obj *unstructured.Unstructured) bool {
+	return obj.GetKind() == "Namespace" && obj.GetAPIVersion() == "v1"
 }
 
 func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) error {

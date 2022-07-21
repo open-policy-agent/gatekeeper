@@ -665,6 +665,7 @@ func TestExpand(t *testing.T) {
 			mutators: []types.Mutator{
 				loadAssign(fixtures.AssignKittenAge, t),
 				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
@@ -682,6 +683,7 @@ func TestExpand(t *testing.T) {
 			mutators: []types.Mutator{
 				loadAssign(fixtures.AssignKittenAge, t),
 				loadAssignMeta(fixtures.AssignMetaAnnotatePurr, t),
+				loadAssignMeta(fixtures.AssignMetaAnnotateKitten, t),
 				loadAssign(fixtures.AssignPullImage, t), // should not match
 			},
 			templates: []*expansionunversioned.ExpansionTemplate{

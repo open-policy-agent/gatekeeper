@@ -545,7 +545,8 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 			for _, resultant := range resultants {
-				r, err := am.opa.Review(ctx, resultant)
+				au := target.AugmentedUnstructured{Object: *resultant, Namespace: &ns}
+				r, err := am.opa.Review(ctx, au)
 				if err != nil {
 					errs = append(errs, err)
 					continue

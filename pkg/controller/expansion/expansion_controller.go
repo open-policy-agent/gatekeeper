@@ -35,21 +35,21 @@ func (a *Adder) Add(mgr manager.Manager) error {
 	return add(mgr, r)
 }
 
-func (a *Adder) InjectOpa(o *constraintclient.Client) {}
+func (a *Adder) InjectOpa(_ *constraintclient.Client) {}
 
-func (a *Adder) InjectWatchManager(w *watch.Manager) {}
+func (a *Adder) InjectWatchManager(_ *watch.Manager) {}
 
-func (a *Adder) InjectControllerSwitch(cs *watch.ControllerSwitch) {}
+func (a *Adder) InjectControllerSwitch(_ *watch.ControllerSwitch) {}
 
-func (a *Adder) InjectTracker(t *readiness.Tracker) {}
+func (a *Adder) InjectTracker(_ *readiness.Tracker) {}
 
-func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
 
 func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {
 	a.ExpansionSystem = expansionSystem
 }
 
-func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
+func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 type Reconciler struct {
 	client.Client

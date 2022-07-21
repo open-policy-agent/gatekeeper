@@ -14,6 +14,7 @@ const (
 	SourceTypeOriginal  = "Original"
 	SourceTypeGenerated = "Generated"
 	SourceTypeAll       = "All"
+	SourceTypeDefault   = SourceTypeAll
 )
 
 // SourceType specifies which types of mutators should be applied. A mutator's

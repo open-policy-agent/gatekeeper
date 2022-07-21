@@ -9,6 +9,7 @@ import (
 	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -101,7 +102,7 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
-// will be returned. If `mutationSystem` is nil, no mutations will be applied.
+// will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
 func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructured, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
@@ -111,7 +112,7 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructur
 	templates := s.templatesForGVK(gvk)
 
 	for _, te := range templates {
-		res, err := expandResource(base.Object, te)
+		res, err := expandResource(base.Object, base.Namespace, te)
 		resultants = append(resultants, res)
 		if err != nil {
 			return nil, err
@@ -138,7 +139,7 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructur
 	return resultants, nil
 }
 
-func expandResource(obj *unstructured.Unstructured, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
+func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand resource using a template with no source")
@@ -159,6 +160,7 @@ func expandResource(obj *unstructured.Unstructured, template *expansionunversion
 	resource := &unstructured.Unstructured{}
 	resource.SetUnstructuredContent(src)
 	resource.SetGroupVersionKind(resultantGVK)
+	resource.SetNamespace(ns.Namespace)
 
 	return resource, nil
 }

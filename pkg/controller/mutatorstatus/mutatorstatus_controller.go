@@ -63,7 +63,7 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {}
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
 
-func (a *Adder) InjectExpansionSystem(mutationSystem *expansion.System) {}
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
