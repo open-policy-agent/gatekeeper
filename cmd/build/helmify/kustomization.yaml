@@ -5,10 +5,10 @@ commonLabels:
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
 bases:
-  - "../../../config/default"
+- "../../../config/default"
 patchesStrategicMerge:
-  - kustomize-for-helm.yaml
-  - delete-ports.yaml
+- kustomize-for-helm.yaml
+- delete-ports.yaml
 patchesJson6902:
   - target:
       group: apiextensions.k8s.io
@@ -57,6 +57,12 @@ patchesJson6902:
       version: v1
       kind: CustomResourceDefinition
       name: modifyset.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: expansiontemplate.expansion.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
