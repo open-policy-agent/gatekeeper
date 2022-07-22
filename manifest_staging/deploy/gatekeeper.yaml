@@ -16,7 +16,7 @@ metadata:
   namespace: gatekeeper-system
 spec:
   hard:
-    pods: 100
+    pods: "100"
   scopeSelector:
     matchExpressions:
     - operator: In
