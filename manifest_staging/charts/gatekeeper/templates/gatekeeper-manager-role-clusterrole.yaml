@@ -99,6 +99,7 @@ rules:
   - patch
   - update
   - watch
+{{- if .Values.psp.enabled }}
 - apiGroups:
   - policy
   resourceNames:
@@ -107,6 +108,7 @@ rules:
   - podsecuritypolicies
   verbs:
   - use
+{{- end }}
 - apiGroups:
   - status.gatekeeper.sh
   resources:
