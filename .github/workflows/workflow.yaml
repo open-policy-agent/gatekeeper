@@ -256,16 +256,20 @@ jobs:
           tar zxvf trivy_${{ env.TRIVY_VERSION }}_Linux-64bit.tar.gz
           echo "$(pwd)" >> $GITHUB_PATH
         env:
-          TRIVY_VERSION: "0.22.0"
+          TRIVY_VERSION: "0.29.2"
+      
+      - name: Run trivy on git repository
+        run: |
+          trivy fs --format table --ignore-unfixed --skip-dirs website --security-checks vuln .
 
       - name: Build docker images
         run: make docker-build
 
-      - name: Run trivy
+      - name: Run trivy on images
         run: |
           for img in "openpolicyagent/gatekeeper:latest" "openpolicyagent/gatekeeper-crds:latest"; do
             for vuln_type in "os" "library"; do
-              trivy image --ignore-unfixed --exit-code=1 --vuln-type="${vuln_type}" "${img}"
+              trivy image --ignore-unfixed --vuln-type="${vuln_type}" "${img}"
             done
           done
 
