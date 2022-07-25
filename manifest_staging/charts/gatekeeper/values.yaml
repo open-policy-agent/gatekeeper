@@ -114,7 +114,7 @@ image:
   pullSecrets: []
 podAnnotations: {}
 podLabels: {}
-podCountLimit: 100
+podCountLimit: "100"
 secretAnnotations: {}
 enableRuntimeDefaultSeccompProfile: true
 controllerManager:
