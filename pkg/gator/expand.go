@@ -36,7 +36,8 @@ type expansionResources struct {
 }
 
 func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
-	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
+	expSystem := expansion.NewSystem(mutSystem)
 	er := expansionResources{}
 	if err := er.addResources(resources); err != nil {
 		return nil, fmt.Errorf("error parsing resources: %s", err)
@@ -44,46 +45,62 @@ func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructure
 
 	for _, te := range er.templateExpansions {
 		if err := expSystem.UpsertTemplate(te); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error upserting template %s: %s", te.Name, err)
+		}
+	}
+
+	for _, m := range er.mutators {
+		if err := mutSystem.Upsert(m); err != nil {
+			return nil, fmt.Errorf("error upserting mutator: %s", err)
 		}
 	}
 
 	var resultants []*unstructured.Unstructured
-	for _, gen := range er.objects {
-		ns, err := er.namespaceForGenerator(gen)
+	for _, obj := range er.objects {
+		ns, nsFound := er.namespaceForResource(obj)
 		base := &types.Mutable{
-			Object:    gen,
+			Object:    obj,
 			Namespace: ns,
 			Username:  "",
-			Source:    types.SourceTypeGenerated,
+			Source:    types.SourceTypeOriginal,
 		}
-		if err != nil {
-			return nil, fmt.Errorf("error expanding generator: %s", err)
+
+		// Mutate the resource before expanding
+		if _, err := mutSystem.Mutate(base); err != nil {
+			return nil, fmt.Errorf("error mutating base resource %s: %s", obj.GetName(), err)
 		}
+
 		r, err := expSystem.Expand(base)
 		if err != nil {
-			return nil, fmt.Errorf("error expanding generator: %s", err)
+			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
 		}
+
+		// If any resultant resources were created, we must ensure the namespace
+		// for the base resource was supplied for Matching to work properly
+		if len(r) > 0 && !nsFound {
+			return nil, fmt.Errorf("no namespace config supplied for resource %s", obj.GetName())
+		}
+
 		resultants = append(resultants, r...)
 	}
 
 	return resultants, nil
 }
 
-func (er *expansionResources) namespaceForGenerator(gen *unstructured.Unstructured) (*corev1.Namespace, error) {
-	genNs := gen.GetNamespace()
-	if genNs == "" {
-		return &corev1.Namespace{}, nil
+func (er *expansionResources) namespaceForResource(r *unstructured.Unstructured) (*corev1.Namespace, bool) {
+	rNs := r.GetNamespace()
+	if rNs == "" {
+		return &corev1.Namespace{}, true
 	}
 
-	ns, exists := er.namespaces[genNs]
+	ns, exists := er.namespaces[rNs]
 	if !exists {
-		if genNs == "default" {
-			return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}, nil
+		if rNs == "default" {
+			return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}, true
 		}
-		return nil, fmt.Errorf("namespace resource %q not found in supplied configs", genNs)
+		return nil, false
 	}
-	return ns, nil
+	return ns, true
 }
 
 func (er *expansionResources) addResources(resources []*unstructured.Unstructured) error {
