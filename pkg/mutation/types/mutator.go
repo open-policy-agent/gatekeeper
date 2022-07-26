@@ -21,6 +21,12 @@ const (
 // type is determined by its Match.Source field.
 type SourceType string
 
+var validSourceTypes = map[SourceType]bool{
+	SourceTypeAll:       true,
+	SourceTypeGenerated: true,
+	SourceTypeOriginal:  true,
+}
+
 // ID represent the identifier of a mutation object.
 type ID struct {
 	Group     string
@@ -33,6 +39,11 @@ func (id ID) String() string {
 	return fmt.Sprintf("%v %v",
 		schema.GroupKind{Group: id.Group, Kind: id.Kind},
 		client.ObjectKey{Namespace: id.Namespace, Name: id.Name})
+}
+
+func IsValidSource(src SourceType) bool {
+	_, exists := validSourceTypes[src]
+	return exists
 }
 
 // Mutator represent a mutation object.

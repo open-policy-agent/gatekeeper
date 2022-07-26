@@ -23,11 +23,12 @@ const Wildcard = "*"
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
-	// Source determines if the mutator should be used to expand generator
+	// Source determines if the gatekeeper config should be used to expand generator
 	// resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A
 	// value of `Generated` will cause the mutator only be applied when expanding
 	// generator resources, while `Original` will cause the mutator to be applied
 	// resources going through the mutation webhook.
+	// +kubebuilder:validation:Enum=All,Generated,Original
 	Source string  `json:"source,omitempty"`
 	Kinds  []Kinds `json:"kinds,omitempty"`
 	// Scope determines if cluster-scoped and/or namespaced-scoped resources
@@ -287,9 +288,13 @@ func sourceMatch(match *Match, target *Matchable) (bool, error) {
 	tSrc := target.Source
 	if mSrc == "" {
 		mSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(types.SourceType(mSrc)) {
+		return false, fmt.Errorf("invalid source field %q", mSrc)
 	}
 	if tSrc == "" {
 		tSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(tSrc) {
+		return false, fmt.Errorf("invalid source field %q", tSrc)
 	}
 
 	if mSrc == types.SourceTypeAll {

@@ -73,6 +73,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
+  namespace: default
 spec:
   containers:
   - args:
@@ -89,6 +90,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
+  namespace: default
 spec:
   containers:
   - args:
@@ -108,6 +110,7 @@ metadata:
     app: nginx
   annotations:
     owner: admin
+  namespace: default
 spec:
   containers:
   - args:
@@ -276,6 +279,7 @@ metadata:
     sound: meow
   labels:
     fluffy: extremely
+  namespace: default
 spec:
   breed: calico
   weight: 10
@@ -288,6 +292,7 @@ kind: Purr
 metadata:
   annotations:
     shouldPet: manytimes
+  namespace: default
 spec:
   loud: very
 `

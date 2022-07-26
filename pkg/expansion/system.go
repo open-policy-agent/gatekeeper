@@ -160,7 +160,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	resource := &unstructured.Unstructured{}
 	resource.SetUnstructuredContent(src)
 	resource.SetGroupVersionKind(resultantGVK)
-	resource.SetNamespace(ns.Namespace)
+	resource.SetNamespace(ns.Name)
 
 	return resource, nil
 }

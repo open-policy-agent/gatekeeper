@@ -17,19 +17,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var (
-	MutatorKinds = map[string]bool{
-		"Assign":         true,
-		"AssignMetadata": true,
-		"ModifySet":      true,
-	}
-	MutatorAPIVersions = map[string]bool{
-		"mutations.gatekeeper.sh/v1alpha1": true,
-		"mutations.gatekeeper.sh/v1beta1":  true,
-	}
-	ExpansionAPIVersions = map[string]bool{
-		"expansion.gatekeeper.sh/v1alpha1": true,
-	}
+var mutatorKinds = map[string]bool{
+	"Assign":         true,
+	"AssignMetadata": true,
+	"ModifySet":      true,
+}
+
+const (
+	mutatorGroup   = "mutations.gatekeeper.sh"
+	expansionGroup = "expansion.gatekeeper.sh"
 )
 
 type expansionResources struct {
@@ -171,18 +167,14 @@ func (er *expansionResources) addNamespace(u *unstructured.Unstructured) error {
 }
 
 func isExpansion(u *unstructured.Unstructured) bool {
-	_, exists := ExpansionAPIVersions[u.GetAPIVersion()]
-	return exists && u.GetKind() == "ExpansionTemplate"
+	return u.GroupVersionKind().Group == expansionGroup && u.GetKind() == "ExpansionTemplate"
 }
 
 func isMutator(obj *unstructured.Unstructured) bool {
-	if _, exists := MutatorKinds[obj.GetKind()]; !exists {
+	if _, exists := mutatorKinds[obj.GetKind()]; !exists {
 		return false
 	}
-	if _, exists := MutatorAPIVersions[obj.GetAPIVersion()]; !exists {
-		return false
-	}
-	return true
+	return obj.GroupVersionKind().Group == mutatorGroup
 }
 
 func isNamespace(obj *unstructured.Unstructured) bool {
