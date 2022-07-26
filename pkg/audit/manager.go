@@ -520,6 +520,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			augmentedObj := target.AugmentedUnstructured{
 				Object:    *objFile,
 				Namespace: &ns,
+				Source:    mutationtypes.SourceTypeOriginal,
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
 			if err != nil {
@@ -543,7 +544,11 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 			for _, resultant := range resultants {
-				au := target.AugmentedUnstructured{Object: *resultant, Namespace: &ns}
+				au := target.AugmentedUnstructured{
+					Object:    *resultant,
+					Namespace: &ns,
+					Source:    mutationtypes.SourceTypeGenerated,
+				}
 				r, err := am.opa.Review(ctx, au)
 				if err != nil {
 					// updated to not return err immediately

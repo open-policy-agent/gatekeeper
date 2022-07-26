@@ -512,7 +512,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 	}
 
-	review, err := h.createReview(ctx, req)
+	review, err := h.createReviewForRequest(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create augmentedReview: %s", err)
 	}
@@ -545,12 +545,12 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	trace, dump := h.tracingLevel(ctx, req)
 	resp, err := h.review(ctx, review, trace, dump)
 	if err != nil {
-		return nil, fmt.Errorf("failed to review generator resource %s: %s", req.Name, err)
+		return nil, fmt.Errorf("error reviewing resource %s: %s", req.Name, err)
 	}
 
 	var resultantResps []*rtypes.Responses
 	for _, res := range resultants {
-		resp, err := h.review(ctx, res, trace, dump)
+		resp, err := h.review(ctx, createReviewForResultant(res, review.Namespace), trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %s", err)
 		}
@@ -578,14 +578,17 @@ func (h *validationHandler) review(ctx context.Context, review interface{}, trac
 	return resp, err
 }
 
-func (h *validationHandler) createReview(ctx context.Context, req *admission.Request) (*target.AugmentedReview, error) {
+func (h *validationHandler) createReviewForRequest(ctx context.Context, req *admission.Request) (*target.AugmentedReview, error) {
 	// Coerce server-side apply admission requests into treating namespaces
 	// the same way as older admission requests. See
 	// https://github.com/open-policy-agent/gatekeeper/issues/792
 	if req.Kind.Kind == namespaceKind && req.Kind.Group == "" {
 		req.Namespace = ""
 	}
-	review := &target.AugmentedReview{AdmissionRequest: &req.AdmissionRequest}
+	review := &target.AugmentedReview{
+		AdmissionRequest: &req.AdmissionRequest,
+		Source:           mutationtypes.SourceTypeOriginal,
+	}
 	if req.AdmissionRequest.Namespace != "" {
 		ns := &corev1.Namespace{}
 		if err := h.client.Get(ctx, types.NamespacedName{Name: req.AdmissionRequest.Namespace}, ns); err != nil {
@@ -602,6 +605,14 @@ func (h *validationHandler) createReview(ctx context.Context, req *admission.Req
 	}
 
 	return review, nil
+}
+
+func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespace) *target.AugmentedUnstructured {
+	return &target.AugmentedUnstructured{
+		Object:    *obj,
+		Namespace: ns,
+		Source:    mutationtypes.SourceTypeGenerated,
+	}
 }
 
 func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {

@@ -1,6 +1,7 @@
 package target
 
 import (
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -18,8 +19,10 @@ func IsWipeData(o interface{}) bool {
 	return ok
 }
 
-// AugmentedUnstructured is an Object to review, and its Namespace (if known).
+// AugmentedUnstructured is an Object to review, and its Namespace (if known),
+// and its source type.
 type AugmentedUnstructured struct {
 	Object    unstructured.Unstructured
 	Namespace *corev1.Namespace
+	Source    types.SourceType
 }
