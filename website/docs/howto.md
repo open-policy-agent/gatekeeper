@@ -144,7 +144,7 @@ The `input.review` object stores the [admission request](https://pkg.go.dev/k8s.
 - `kind`: The resource `kind`, `group`, `version` of the request object under evaluation.
 - `name`: The name of the request object under evaluation. It may be empty if the deployment expects the API server to generate a name for the requested resource.
 - `namespace`: The namespace of the request object under evaluation. Empty for cluster scoped objects.
-- `object`: The request object under evaulation to be created or modified.
+- `object`: The request object under evaluation to be created or modified.
 - `oldObject`: The original state of the request object under evaluation. This is only available for UPDATE operations.
 - `operation`: The operation for the request (e.g. CREATE, UPDATE). This is not available during audit.
 - `uid`: The request's unique identifier. This is not available during audit.
