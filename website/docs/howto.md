@@ -139,15 +139,15 @@ kubectl get constraints
 
 ### Input Review
 
-The `input.review` object stores the admission request under evaulation. It has the following fields:
+The `input.review` object stores the [admission request](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionRequest) under evaluation. It has the following fields:
 - `dryRun`: Describes if the request was invoked by `kubectl --dry-run`. This is not available during audit.
-- `kind`: The resource `kind`, `group`, `version` of the request object under evaulation.
-- `name`: The name of the request object under evaulation. It may be empty if the deployment expects the API server to generate a name for the requsted resource.
-- `namespace`: The namespace of the request object under evaulation. Empty for cluster scoped objects.
+- `kind`: The resource `kind`, `group`, `version` of the request object under evaluation.
+- `name`: The name of the request object under evaluation. It may be empty if the deployment expects the API server to generate a name for the requested resource.
+- `namespace`: The namespace of the request object under evaluation. Empty for cluster scoped objects.
 - `object`: The request object under evaulation to be created or modified.
-- `oldObject`: The original state of the request object under evaulation. This is only available for UPDATE operations.
+- `oldObject`: The original state of the request object under evaluation. This is only available for UPDATE operations.
 - `operation`: The operation for the request (e.g. CREATE, UPDATE). This is not available during audit.
 - `uid`: The request's unique identifier. This is not available during audit.
 - `userInfo`: The request's user's information such as `username`, `uid`, `groups`, `extra`. This is not available during audit.
 
-> **_NOTE_** For `input.review` fields above that are not populated for audit reviews, the contraint templates that rely on them are not auditable. It is up to the rego author to handle the case where these fields are unset and empty in order to avoid every matching resource being reported as violating resources. 
+> **_NOTE_** For `input.review` fields above that are not populated for audit reviews, the constraint templates that rely on them are not auditable. It is up to the rego author to handle the case where these fields are unset and empty in order to avoid every matching resource being reported as violating resources. 

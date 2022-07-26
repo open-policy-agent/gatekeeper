@@ -160,4 +160,4 @@ If any of the [constraints](howto.md#constraints) do not specify `kinds`, it wil
 
 # Audit UserInfo
 
-When using `input.review.userInfo`, *NOTE* the request's user's information, such as `username`, `uid`, `groups`, `extra`, is not populated for audit reviews and therefore contraint templates that rely on `userInfo` are not auditable. It is up to the rego author to handle the case where `userInfo` is unset and empty in order to avoid every matching resource being reported as violating resources. 
+When using `input.review.userInfo`, *NOTE* the request's user's information, such as `username`, `uid`, `groups`, `extra`, is not populated for audit reviews and therefore constraint templates that rely on `userInfo` are not auditable. It is up to the rego author to handle the case where `userInfo` is unset and empty in order to avoid every matching resource being reported as violating resources. 
