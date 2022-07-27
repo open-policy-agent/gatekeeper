@@ -55,8 +55,9 @@ func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructure
 func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
 	er := &Expander{
-		mutSystem: mutSystem,
-		expSystem: expansion.NewSystem(mutSystem),
+		mutSystem:  mutSystem,
+		expSystem:  expansion.NewSystem(mutSystem),
+		namespaces: make(map[string]*corev1.Namespace),
 	}
 
 	if err := er.addResources(resources); err != nil {
