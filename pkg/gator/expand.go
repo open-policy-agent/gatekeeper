@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
+	expansionv1 "github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
+	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
@@ -23,71 +25,88 @@ var mutatorKinds = map[string]bool{
 	"ModifySet":      true,
 }
 
-const (
-	mutatorGroup   = "mutations.gatekeeper.sh"
-	expansionGroup = "expansion.gatekeeper.sh"
-)
-
-type expansionResources struct {
+type Expander struct {
 	mutators           []types.Mutator
 	templateExpansions []*unversioned.ExpansionTemplate
 	objects            []*unstructured.Unstructured
 	namespaces         map[string]*corev1.Namespace
+	expSystem          *expansion.System
+	mutSystem          *mutation.System
 }
 
 func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
-	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
-	expSystem := expansion.NewSystem(mutSystem)
-	er := expansionResources{}
-	if err := er.addResources(resources); err != nil {
-		return nil, fmt.Errorf("error parsing resources: %s", err)
-	}
-
-	for _, te := range er.templateExpansions {
-		if err := expSystem.UpsertTemplate(te); err != nil {
-			return nil, fmt.Errorf("error upserting template %s: %s", te.Name, err)
-		}
-	}
-
-	for _, m := range er.mutators {
-		if err := mutSystem.Upsert(m); err != nil {
-			return nil, fmt.Errorf("error upserting mutator: %s", err)
-		}
+	er, err := NewExpander(resources)
+	if err != nil {
+		return nil, err
 	}
 
 	var resultants []*unstructured.Unstructured
 	for _, obj := range er.objects {
-		ns, nsFound := er.namespaceForResource(obj)
-		base := &types.Mutable{
-			Object:    obj,
-			Namespace: ns,
-			Username:  "",
-			Source:    types.SourceTypeOriginal,
-		}
-
-		// Mutate the resource before expanding
-		if _, err := mutSystem.Mutate(base); err != nil {
-			return nil, fmt.Errorf("error mutating base resource %s: %s", obj.GetName(), err)
-		}
-
-		r, err := expSystem.Expand(base)
+		r, err := er.Expand(obj)
 		if err != nil {
-			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
+			return nil, err
 		}
-
-		// If any resultant resources were created, we must ensure the namespace
-		// for the base resource was supplied for Matching to work properly
-		if len(r) > 0 && !nsFound {
-			return nil, fmt.Errorf("no namespace config supplied for resource %s", obj.GetName())
-		}
-
 		resultants = append(resultants, r...)
 	}
 
 	return resultants, nil
 }
 
-func (er *expansionResources) namespaceForResource(r *unstructured.Unstructured) (*corev1.Namespace, bool) {
+func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
+	mutSystem := mutation.NewSystem(mutation.SystemOpts{})
+	er := &Expander{
+		mutSystem: mutSystem,
+		expSystem: expansion.NewSystem(mutSystem),
+	}
+
+	if err := er.addResources(resources); err != nil {
+		return nil, fmt.Errorf("error parsing resources: %s", err)
+	}
+
+	for _, te := range er.templateExpansions {
+		if err := er.expSystem.UpsertTemplate(te); err != nil {
+			return nil, fmt.Errorf("error upserting template %s: %s", te.Name, err)
+		}
+	}
+
+	for _, m := range er.mutators {
+		if err := er.mutSystem.Upsert(m); err != nil {
+			return nil, fmt.Errorf("error upserting mutator: %s", err)
+		}
+	}
+
+	return er, nil
+}
+
+func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	ns, nsFound := er.NamespaceForResource(resource)
+
+	// Mutate the base resource before expanding it
+	base := &types.Mutable{
+		Object:    resource,
+		Namespace: ns,
+		Username:  "",
+		Source:    types.SourceTypeOriginal,
+	}
+	if _, err := er.mutSystem.Mutate(base); err != nil {
+		return nil, fmt.Errorf("error mutating base resource %s: %s", resource.GetName(), err)
+	}
+
+	resultants, err := er.expSystem.Expand(base)
+	if err != nil {
+		return nil, fmt.Errorf("error expanding resource %s: %s", resource.GetName(), err)
+	}
+
+	// If any resultant resources were created, we must ensure the namespace
+	// for the base resource was supplied for Matching to work properly
+	if len(resultants) > 0 && !nsFound {
+		return nil, fmt.Errorf("no namespace config supplied for resource %s", resource.GetName())
+	}
+
+	return resultants, nil
+}
+
+func (er *Expander) NamespaceForResource(r *unstructured.Unstructured) (*corev1.Namespace, bool) {
 	rNs := r.GetNamespace()
 	if rNs == "" {
 		return &corev1.Namespace{}, true
@@ -103,7 +122,7 @@ func (er *expansionResources) namespaceForResource(r *unstructured.Unstructured)
 	return ns, true
 }
 
-func (er *expansionResources) addResources(resources []*unstructured.Unstructured) error {
+func (er *Expander) addResources(resources []*unstructured.Unstructured) error {
 	for _, r := range resources {
 		if err := er.add(r); err != nil {
 			return err
@@ -112,7 +131,7 @@ func (er *expansionResources) addResources(resources []*unstructured.Unstructure
 	return nil
 }
 
-func (er *expansionResources) addMutator(mut *unstructured.Unstructured) error {
+func (er *Expander) addMutator(mut *unstructured.Unstructured) error {
 	var mutErr error
 	var m types.Mutator
 
@@ -146,7 +165,7 @@ func (er *expansionResources) addMutator(mut *unstructured.Unstructured) error {
 	return nil
 }
 
-func (er *expansionResources) add(u *unstructured.Unstructured) error {
+func (er *Expander) add(u *unstructured.Unstructured) error {
 	var err error
 	switch {
 	case isMutator(u):
@@ -165,7 +184,7 @@ func (er *expansionResources) add(u *unstructured.Unstructured) error {
 	return err
 }
 
-func (er *expansionResources) addExpansionTemplate(u *unstructured.Unstructured) error {
+func (er *Expander) addExpansionTemplate(u *unstructured.Unstructured) error {
 	te, err := convertExpansionTemplate(u)
 	if err != nil {
 		return err
@@ -174,7 +193,7 @@ func (er *expansionResources) addExpansionTemplate(u *unstructured.Unstructured)
 	return nil
 }
 
-func (er *expansionResources) addNamespace(u *unstructured.Unstructured) error {
+func (er *Expander) addNamespace(u *unstructured.Unstructured) error {
 	ns, err := convertNamespace(u)
 	if err != nil {
 		return err
@@ -184,18 +203,18 @@ func (er *expansionResources) addNamespace(u *unstructured.Unstructured) error {
 }
 
 func isExpansion(u *unstructured.Unstructured) bool {
-	return u.GroupVersionKind().Group == expansionGroup && u.GetKind() == "ExpansionTemplate"
+	return u.GroupVersionKind().Group == expansionv1.GroupVersion.Group && u.GetKind() == "ExpansionTemplate"
 }
 
 func isMutator(obj *unstructured.Unstructured) bool {
 	if _, exists := mutatorKinds[obj.GetKind()]; !exists {
 		return false
 	}
-	return obj.GroupVersionKind().Group == mutatorGroup
+	return obj.GroupVersionKind().Group == mutationsv1.GroupVersion.Group
 }
 
 func isNamespace(obj *unstructured.Unstructured) bool {
-	return obj.GetKind() == "Namespace" && obj.GetAPIVersion() == "v1"
+	return obj.GetKind() == "Namespace" && obj.GroupVersionKind().Group == corev1.SchemeGroupVersion.Group
 }
 
 func convertUnstructuredToTyped(u *unstructured.Unstructured, obj interface{}) error {

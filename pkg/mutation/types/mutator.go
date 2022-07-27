@@ -11,14 +11,13 @@ import (
 )
 
 const (
-	SourceTypeOriginal  = "Original"
-	SourceTypeGenerated = "Generated"
-	SourceTypeAll       = "All"
+	SourceTypeOriginal  = SourceType("Original")
+	SourceTypeGenerated = SourceType("Generated")
+	SourceTypeAll       = SourceType("All")
 	SourceTypeDefault   = SourceTypeAll
 )
 
-// SourceType specifies which types of mutators should be applied. A mutator's
-// type is determined by its Match.Source field.
+// SourceType specifies which types resource a matcher should be applied to.
 type SourceType string
 
 var validSourceTypes = map[SourceType]bool{

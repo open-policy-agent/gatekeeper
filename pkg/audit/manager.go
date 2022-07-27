@@ -536,7 +536,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				Object:    objFile,
 				Namespace: &ns,
 				Username:  "",
-				Source:    mutationtypes.SourceTypeGenerated,
+				Source:    mutationtypes.SourceTypeOriginal,
 			}
 			resultants, err := am.expansionSystem.Expand(base)
 			if err != nil {

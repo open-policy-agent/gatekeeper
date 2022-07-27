@@ -196,6 +196,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Object:    &obj,
 		Namespace: ns,
 		Username:  req.AdmissionRequest.UserInfo.Username,
+		Source:    mutationtypes.SourceTypeOriginal,
 	}
 	mutated, err := h.mutationSystem.Mutate(mutable)
 	if err != nil {

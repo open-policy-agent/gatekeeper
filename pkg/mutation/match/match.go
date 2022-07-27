@@ -23,11 +23,10 @@ const Wildcard = "*"
 // Match selects objects to apply mutations to.
 // +kubebuilder:object:generate=true
 type Match struct {
-	// Source determines if the gatekeeper config should be used to expand generator
-	// resources. Accepts `Generated`|`Original`|`All` (defaults to `All`). A
-	// value of `Generated` will cause the mutator only be applied when expanding
-	// generator resources, while `Original` will cause the mutator to be applied
-	// resources going through the mutation webhook.
+	// Source determines whether generated or original resources are matched.
+	// Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of
+	// `Generated` will only match generated resources, while `Original` will only
+	// match regular resources.
 	// +kubebuilder:validation:Enum=All,Generated,Original
 	Source string  `json:"source,omitempty"`
 	Kinds  []Kinds `json:"kinds,omitempty"`
@@ -283,24 +282,30 @@ func scopeMatch(match *Match, target *Matchable) (bool, error) {
 }
 
 func sourceMatch(match *Match, target *Matchable) (bool, error) {
-	// An empty 'source' field will default to 'All'
-	mSrc := match.Source
+	mSrc := types.SourceType(match.Source)
 	tSrc := target.Source
-	if mSrc == "" {
-		mSrc = types.SourceTypeDefault
-	} else if !types.IsValidSource(types.SourceType(mSrc)) {
-		return false, fmt.Errorf("invalid source field %q", mSrc)
-	}
+
+	// An empty 'source' field will default to 'All'
 	if tSrc == "" {
 		tSrc = types.SourceTypeDefault
 	} else if !types.IsValidSource(tSrc) {
 		return false, fmt.Errorf("invalid source field %q", tSrc)
 	}
 
+	if tSrc == "" && mSrc != types.SourceTypeAll {
+		return false, fmt.Errorf("source field not specified for resource %s", target.Object.GetName())
+	}
+
+	if mSrc == "" {
+		mSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(mSrc) {
+		return false, fmt.Errorf("invalid source field %q", mSrc)
+	}
+
 	if mSrc == types.SourceTypeAll {
 		return true, nil
 	}
-	return types.SourceType(mSrc) == tSrc, nil
+	return mSrc == tSrc, nil
 }
 
 func IsNamespace(obj client.Object) bool {

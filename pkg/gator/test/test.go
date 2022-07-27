@@ -11,10 +11,8 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -41,8 +39,6 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
-
-	expSystem := expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 
 	// search for templates, add them if they exist
 	ctx := context.Background()
@@ -83,63 +79,72 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		}
 	}
 
+	// create the expander
+	er, err := gator.NewExpander(objs)
+	if err != nil {
+		return nil, fmt.Errorf("error creating expander: %s", err)
+	}
+
 	// now audit all objects
 	responses := &types.Responses{
 		ByTarget: make(map[string]*types.Response),
 	}
 	for _, obj := range objs {
-		review, err := client.Review(ctx, obj)
+		// Try to attach the namespace if it was supplied (ns will be nil otherwise)
+		ns, _ := er.NamespaceForResource(obj)
+		au := target.AugmentedUnstructured{
+			Object:    *obj,
+			Namespace: ns,
+			Source:    mutationtypes.SourceTypeOriginal,
+		}
+
+		review, err := client.Review(ctx, au)
 		if err != nil {
 			return nil, fmt.Errorf("reviewing %v %s/%s: %v",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 
-		// Attempt to expand obj and review resultant resources (if any)
+		// Attempt to expand the obj and review resultant resources (if any)
 		allReviews := []*types.Responses{review}
-		baseNs := &corev1.Namespace{}
-		baseNs.SetName(obj.GetNamespace())
-		base := mutationtypes.Mutable{
-			Object:    obj,
-			Namespace: baseNs,
-			Username:  "",
-			Source:    mutationtypes.SourceTypeGenerated,
-		}
-		resultants, err := expSystem.Expand(&base)
+		resultants, err := er.Expand(obj)
 		if err != nil {
-			return nil, fmt.Errorf("error expanding resource %s: %s", obj.GetName(), err)
+			return nil, fmt.Errorf("expanding resource %s: %s", obj.GetName(), err)
 		}
 		for _, resultant := range resultants {
-			resultantReview, err := client.Review(ctx, resultant)
+			au := target.AugmentedUnstructured{
+				Object:    *resultant,
+				Namespace: ns,
+				Source:    mutationtypes.SourceTypeGenerated,
+			}
+			resultantReview, err := client.Review(ctx, au)
 			if err != nil {
-				return nil, fmt.Errorf("reviewing %v %s/%s: %v",
+				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %v",
 					resultant.GroupVersionKind(), resultant.GetNamespace(), resultant.GetName(), err)
 			}
 			allReviews = append(allReviews, resultantReview)
 		}
 		expansion.AggregateResponses(obj.GetName(), review, allReviews[1:])
 
-		for _, rev := range allReviews {
-			for targetName, r := range rev.ByTarget {
-				targetResponse := responses.ByTarget[targetName]
-				if targetResponse == nil {
-					targetResponse = &types.Response{}
-					targetResponse.Target = targetName
-				}
-
-				targetResponse.Results = append(targetResponse.Results, r.Results...)
-
-				if r.Trace != nil {
-					var trace string
-					if targetResponse.Trace != nil {
-						trace = *targetResponse.Trace
-					}
-
-					trace = trace + "\n\n" + *r.Trace
-					targetResponse.Trace = &trace
-				}
-
-				responses.ByTarget[targetName] = targetResponse
+		for targetName, r := range review.ByTarget {
+			targetResponse := responses.ByTarget[targetName]
+			if targetResponse == nil {
+				targetResponse = &types.Response{}
+				targetResponse.Target = targetName
 			}
+
+			targetResponse.Results = append(targetResponse.Results, r.Results...)
+
+			if r.Trace != nil {
+				var trace string
+				if targetResponse.Trace != nil {
+					trace = *targetResponse.Trace
+				}
+
+				trace = trace + "\n\n" + *r.Trace
+				targetResponse.Trace = &trace
+			}
+
+			responses.ByTarget[targetName] = targetResponse
 		}
 	}
 

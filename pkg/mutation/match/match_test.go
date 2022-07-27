@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -564,7 +565,7 @@ func TestMatch(t *testing.T) {
 
 	for _, tc := range table {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &Matchable{Object: tc.object, Namespace: tc.namespace}
+			m := &Matchable{Object: tc.object, Namespace: tc.namespace, Source: types.SourceTypeOriginal}
 			matches, err := Matches(&tc.matcher, m)
 			if !errors.Is(err, tc.wantErr) {
 				t.Errorf("got Matches() err %v, want %v", err, tc.name)
