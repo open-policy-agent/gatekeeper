@@ -51,7 +51,7 @@ For dev/test deployments, use `make deploy ENABLE_EXTERNAL_DATA=true`
 
 Providers are designed to be in-cluster components that can communicate with external data sources (such as image registries, Active Directory/LDAP directories, etc) and return data in a format that can be processed by Gatekeeper.
 
-Example provider can be found at: https://github.com/open-policy-agent/gatekeeper/tree/master/test/externaldata/dummy-provider
+Example provider template can be found at: https://github.com/open-policy-agent/gatekeeper-external-data-provider
 
 ### API (v1alpha1)
 
