@@ -101,7 +101,7 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 }
 
 // ShouldExpand returns true if there is at least one template expansion
-// configured to match `obj`
+// configured to match `obj`.
 func (s *System) ShouldExpand(obj *unstructured.Unstructured) bool {
 	t := s.templatesForGVK(obj.GroupVersionKind())
 	return len(t) > 0

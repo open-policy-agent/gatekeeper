@@ -9,6 +9,7 @@ import (
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/spf13/cobra"
+
 	// yaml.v3 inserts a space before '-', which is inconsistent with standard
 	// kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
 	"gopkg.in/yaml.v2"
@@ -87,7 +88,7 @@ func run(cmd *cobra.Command, args []string) {
 	os.Exit(0)
 }
 
-func resourceToYamlString(resource *unstructured.Unstructured) string {
+func resourcetoYAMLString(resource *unstructured.Unstructured) string {
 	jsonb, err := json.Marshal(resource)
 	if err != nil {
 		errFatalf("pre-marshaling results to json: %v", err)
@@ -104,10 +105,10 @@ func resourceToYamlString(resource *unstructured.Unstructured) string {
 	if err := yamlEncoder.Encode(unmarshalled); err != nil {
 		errFatalf("marshaling validation yaml results: %v", err)
 	}
-	return string(b.Bytes())
+	return b.String()
 }
 
-func resourceToJsonString(resource *unstructured.Unstructured) string {
+func resourceToJSONString(resource *unstructured.Unstructured) string {
 	b, err := json.MarshalIndent(resource, "", "    ")
 	if err != nil {
 		errFatalf("marshaling validation json results: %s", err)
@@ -119,9 +120,9 @@ func resourcesToString(resources []*unstructured.Unstructured, format string) st
 	var conversionFunc func(unstructured2 *unstructured.Unstructured) string
 	switch format {
 	case "", stringYAML:
-		conversionFunc = resourceToYamlString
+		conversionFunc = resourcetoYAMLString
 	case stringJSON:
-		conversionFunc = resourceToJsonString
+		conversionFunc = resourceToJSONString
 	default:
 		errFatalf("unrecognized value for %s flag: %s", flagNameFormat, format)
 	}
@@ -142,7 +143,7 @@ func stringToFile(s string, path string) {
 		errFatalf("error creating file at path %s: %s", path, err)
 	}
 
-	if _, err = fmt.Fprintf(file, s); err != nil {
+	if _, err = fmt.Fprint(file, s); err != nil {
 		errFatalf("error writing to file at path %s: %s", path, err)
 	}
 }
