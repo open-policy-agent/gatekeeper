@@ -13,8 +13,6 @@ match_yaml_in_dir () {
   want=$(cat "${BATS_TEST_DIRNAME}"/fixtures/"${match_dir}"/output/output.yaml)
     if [[ ${yaml_output} != *"$want"* ]]; then
       printf "ERROR: resource not found in output\n"
-      echo "match dir: " # todo delete
-      echo $match_dir  # todo delete
       printf "WANT:\n%s\n\n" "$want"
       printf "GOT:\n%s\n" "$yaml_output"
       echo "DIFF: "
@@ -28,7 +26,7 @@ match_yaml_in_dir () {
 test_dir () {
   dir_name="${1}"
  run bin/gator expand --filename="$BATS_TEST_DIRNAME/fixtures/${dir_name}/input" --format=yaml
-  # we need $(expr "#{2}" + 0} to be an int, so we can't quote it
+  # we need `$(expr "#{2}" + 0}` to be an int, so we can't quote it
   # shellcheck disable=SC2046
   [ "$status" -eq $(expr "${2}" + 0) ]
   match_yaml_in_dir "${output}" "${dir_name}"
@@ -56,4 +54,14 @@ test_dir () {
 
 @test "generator with a custom namespace but namespace config missing" {
  test_dir "expand-with-missing-ns" 1
+}
+
+@test "expand into 2 resultants and write to file" {
+  dir_name="expand-cr"
+  out_file="tmp.yaml"
+ run bin/gator expand --filename="$BATS_TEST_DIRNAME/fixtures/${dir_name}/input" --format=yaml --outputfile="${out_file}"
+  [ "$status" -eq 0 ]
+  got=$(cat "${out_file}")
+  match_yaml_in_dir "${got}" "${dir_name}"
+  rm "${out_file}"
 }
