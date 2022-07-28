@@ -37,6 +37,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.24.3
 	k8s.io/apiextensions-apiserver v0.24.2
@@ -127,7 +128,6 @@ require (
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/apiserver v0.24.2 // indirect
 	k8s.io/component-base v0.24.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20220413171646-5e7f5fdc6da6 // indirect
