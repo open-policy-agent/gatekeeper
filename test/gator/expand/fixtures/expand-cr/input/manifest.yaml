@@ -1,0 +1,98 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: demo-annotation-meow
+spec:
+  match:
+    source: Generated
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Kitten"]
+  location: "metadata.annotations.sound"
+  parameters:
+    assign:
+      value:  "meow"
+---
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-cats-kitten
+spec:
+  applyTo:
+    - groups: ["cat.myapp.sh"]
+      kinds: ["Cat"]
+      versions: ["v1alpha1"]
+  templateSource: "spec.catStuff"
+  generatedGVK:
+    kind: "Kitten"
+    group: "kitten.myapp.sh"
+    version: "v1alpha1"
+---
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-cats-purr
+spec:
+  applyTo:
+    - groups: ["cat.myapp.sh"]
+      kinds: ["Cat"]
+      versions: ["v1alpha1"]
+  templateSource: "spec.purrStuff"
+  generatedGVK:
+    kind: "Purr"
+    group: "purr.myapp.sh"
+    version: "v1alpha1"
+---
+apiVersion: cat.myapp.sh/v1alpha1
+kind: Cat
+metadata:
+  name: big-chungus
+spec:
+  catStuff:
+    metadata:
+      labels:
+        fluffy: extremely
+    spec:
+      breed: calico
+      weight: 10
+  purrStuff:
+    spec:
+      loud: very
+---
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: assign-kitten-age
+spec:
+  applyTo:
+  - groups: ["kitten.myapp.sh"]
+    kinds: ["Kitten"]
+    versions: ["v1alpha1"]
+  location: "spec.age"
+  parameters:
+    assign:
+      value: 10
+  match:
+    source: "Generated"
+    scope: Namespaced
+    kinds:
+      - apiGroups: []
+        kinds: []
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: annotate-purr
+spec:
+  match:
+    source: Generated
+    scope: Namespaced
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Purr"]
+  location: "metadata.annotations.shouldPet"
+  parameters:
+    assign:
+      value:  "manytimes"
+

@@ -1,12 +1,17 @@
 package expand
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/spf13/cobra"
+	// yaml.v3 inserts a space before '-', which is inconsistent with standard
+	// kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
+	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -65,61 +70,93 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	resultants, err := gator.Expand(unstrucs)
-	if err == nil {
-		if flagOutput == "" {
-			printResources(resultants)
-		} else {
-			fmt.Printf("Writing output to file: %s\n", flagOutput)
-			err = resourcesToFile(resultants, flagOutput)
-		}
-	}
-
 	if err != nil {
-		errFatalf(err.Error())
-	} else {
-		os.Exit(0)
+		errFatalf("error expanding resources: %s", err)
 	}
+	// Sort resultants for deterministic output
+	sortUnstructs(resultants)
+
+	output := resourcesToString(resultants, flagFormat)
+	if flagOutput == "" {
+		fmt.Println(output)
+	} else {
+		fmt.Printf("Writing output to file: %s\n", flagOutput)
+		stringToFile(output, flagOutput)
+	}
+
+	os.Exit(0)
 }
 
-func printResources(resources []*unstructured.Unstructured) {
-	fmt.Println()
-	for i, res := range resources {
-		fmt.Print(prettyPrint(res))
+func resourceToYamlString(resource *unstructured.Unstructured) string {
+	jsonb, err := json.Marshal(resource)
+	if err != nil {
+		errFatalf("pre-marshaling results to json: %v", err)
+	}
+
+	unmarshalled := map[string]interface{}{}
+	err = json.Unmarshal(jsonb, &unmarshalled)
+	if err != nil {
+		errFatalf("pre-unmarshaling results from json: %v", err)
+	}
+
+	var b bytes.Buffer
+	yamlEncoder := yaml.NewEncoder(&b)
+	if err := yamlEncoder.Encode(unmarshalled); err != nil {
+		errFatalf("marshaling validation yaml results: %v", err)
+	}
+	return string(b.Bytes())
+}
+
+func resourceToJsonString(resource *unstructured.Unstructured) string {
+	b, err := json.MarshalIndent(resource, "", "    ")
+	if err != nil {
+		errFatalf("marshaling validation json results: %s", err)
+	}
+	return string(b)
+}
+
+func resourcesToString(resources []*unstructured.Unstructured, format string) string {
+	var conversionFunc func(unstructured2 *unstructured.Unstructured) string
+	switch format {
+	case "", stringYAML:
+		conversionFunc = resourceToYamlString
+	case stringJSON:
+		conversionFunc = resourceToJsonString
+	default:
+		errFatalf("unrecognized value for %s flag: %s", flagNameFormat, format)
+	}
+
+	output := ""
+	for i, r := range resources {
+		output += conversionFunc(r)
 		if i != len(resources)-1 {
-			fmt.Println(delimeter)
+			output += fmt.Sprintf("%s\n", delimeter)
 		}
 	}
+	return output
 }
 
-func resourcesToFile(resources []*unstructured.Unstructured, path string) error {
+func stringToFile(s string, path string) {
 	file, err := os.Create(path)
 	if err != nil {
-		return err
+		errFatalf("error creating file at path %s: %s", path, err)
 	}
 
-	for i, res := range resources {
-		if _, err = fmt.Fprint(file, prettyPrint(res)); err != nil {
-			return err
-		}
-		if i != len(resources)-1 {
-			if _, err = fmt.Fprintln(file, delimeter); err != nil {
-				return err
-			}
-		}
+	if _, err = fmt.Fprintf(file, s); err != nil {
+		errFatalf("error writing to file at path %s: %s", path, err)
 	}
-
-	return nil
 }
 
-func prettyPrint(v interface{}) string {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err == nil {
-		return string(b) + "\n"
+func sortUnstructs(objs []*unstructured.Unstructured) {
+	sortKey := func(o *unstructured.Unstructured) string {
+		return o.GetName() + o.GetAPIVersion() + o.GetKind()
 	}
-	return ""
+	sort.Slice(objs, func(i, j int) bool {
+		return sortKey(objs[i]) > sortKey(objs[j])
+	})
 }
 
 func errFatalf(format string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, a...)
+	fmt.Fprintf(os.Stderr, format+"\n", a...)
 	os.Exit(1)
 }

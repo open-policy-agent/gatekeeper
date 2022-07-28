@@ -81,6 +81,9 @@ func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 
 func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
 	ns, nsFound := er.NamespaceForResource(resource)
+	if er.expSystem.ShouldExpand(resource) && !nsFound {
+		return nil, fmt.Errorf("no namespace config supplied for resource %s", resource.GetName())
+	}
 
 	// Mutate the base resource before expanding it
 	base := &types.Mutable{
@@ -96,12 +99,6 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*unstructured
 	resultants, err := er.expSystem.Expand(base)
 	if err != nil {
 		return nil, fmt.Errorf("error expanding resource %s: %s", resource.GetName(), err)
-	}
-
-	// If any resultant resources were created, we must ensure the namespace
-	// for the base resource was supplied for Matching to work properly
-	if len(resultants) > 0 && !nsFound {
-		return nil, fmt.Errorf("no namespace config supplied for resource %s", resource.GetName())
 	}
 
 	return resultants, nil
@@ -177,7 +174,7 @@ func (er *Expander) add(u *unstructured.Unstructured) error {
 		err = er.addNamespace(u)
 	}
 
-	if err != nil {
+	if err == nil {
 		// Any resource can technically be a generator
 		er.objects = append(er.objects, u)
 	}

@@ -109,7 +109,7 @@ test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test
+test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
 .PHONY: test-gator-verify
 test-gator-verify: gator
@@ -118,6 +118,10 @@ test-gator-verify: gator
 .PHONY: test-gator-test
 test-gator-test: gator
 	bats test/gator/test
+
+.PHONY: test-gator-expand
+test-gator-expand: gator
+	bats test/gator/expand
 
 e2e-dependencies:
 	# Download and install kind

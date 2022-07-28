@@ -1,0 +1,19 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: always-pull-image
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name: *].imagePullPolicy"
+  parameters:
+    assign:
+      value: "Always"
+  match:
+    source: "Generated"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ ]
+      kinds: [ ]
