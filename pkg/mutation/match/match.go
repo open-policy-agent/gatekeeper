@@ -27,7 +27,7 @@ type Match struct {
 	// Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of
 	// `Generated` will only match generated resources, while `Original` will only
 	// match regular resources.
-	// +kubebuilder:validation:Enum=All,Generated,Original
+	// +kubebuilder:validation:Enum=All;Generated;Original
 	Source string  `json:"source,omitempty"`
 	Kinds  []Kinds `json:"kinds,omitempty"`
 	// Scope determines if cluster-scoped and/or namespaced-scoped resources
