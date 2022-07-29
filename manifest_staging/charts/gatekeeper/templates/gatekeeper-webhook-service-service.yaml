@@ -3,7 +3,7 @@ kind: Service
 metadata:
   labels:
     app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.chart" . }}'
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
@@ -30,7 +30,7 @@ spec:
   {{- end }}
   selector:
     app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.chart" . }}'
     control-plane: controller-manager
     gatekeeper.sh/operation: webhook
     gatekeeper.sh/system: "yes"

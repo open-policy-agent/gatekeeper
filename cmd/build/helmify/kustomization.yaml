@@ -1,7 +1,7 @@
 namespace: "{{ .Release.Namespace }}"
 commonLabels:
   app: '{{ template "gatekeeper.name" . }}'
-  chart: '{{ template "gatekeeper.name" . }}'
+  chart: '{{ template "gatekeeper.chart" . }}'
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
 bases:

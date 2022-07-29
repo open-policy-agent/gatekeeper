@@ -61,11 +61,11 @@ metadata:
   name: gatekeeper-update-crds-hook
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ template "gatekeeper.name" . }}
-    chart: {{ template "gatekeeper.name" . }}
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.chart" . }}'
     gatekeeper.sh/system: "yes"
-    heritage: {{ .Release.Service }}
-    release: {{ .Release.Name }}
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
   annotations:
     helm.sh/hook: pre-install,pre-upgrade
     helm.sh/hook-weight: "1"

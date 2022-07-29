@@ -5,7 +5,7 @@ metadata:
   name: gatekeeper-delete-webhook-configs
   labels:
     app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.chart" . }}'
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
