@@ -111,10 +111,12 @@ spec:
             type: RuntimeDefault
           {{- end }}
           {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      {{- with .Values.crds }}
       affinity:
-        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
-      nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml .affinity | nindent 8 }}
       tolerations:
-        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
+        {{- toYaml .tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      {{- end }}
 {{- end }}

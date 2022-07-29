@@ -44,6 +44,10 @@ postUpgrade:
       "pod-security.kubernetes.io/warn-version=latest",
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
+  resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -55,8 +59,8 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
-    extraRules: []
     enabled: true
+    extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.10.0-beta.0
@@ -79,6 +83,9 @@ postInstall:
     waitTimeout: 60
     httpTimeout: 2
     insecureHTTPS: false
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -97,6 +104,10 @@ preUninstall:
       tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
+  resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -173,7 +184,6 @@ audit:
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
-  writeToRAMDisk: false
   resources:
     limits:
       cpu: 1000m
@@ -194,8 +204,12 @@ audit:
     fsGroup: 999
     supplementalGroups:
       - 999
+  writeToRAMDisk: false
   extraRules: []
 crds:
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
@@ -215,7 +229,6 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
-  tolerations: []
   extraRules: []
 rbac:
   create: true
