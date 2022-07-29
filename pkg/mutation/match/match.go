@@ -286,20 +286,20 @@ func sourceMatch(match *Match, target *Matchable) (bool, error) {
 	tSrc := target.Source
 
 	// An empty 'source' field will default to 'All'
-	if tSrc == "" {
-		tSrc = types.SourceTypeDefault
-	} else if !types.IsValidSource(tSrc) {
-		return false, fmt.Errorf("invalid source field %q", tSrc)
+	if mSrc == "" {
+		mSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(mSrc) {
+		return false, fmt.Errorf("invalid source field %q", mSrc)
 	}
 
 	if tSrc == "" && mSrc != types.SourceTypeAll {
 		return false, fmt.Errorf("source field not specified for resource %s", target.Object.GetName())
 	}
 
-	if mSrc == "" {
-		mSrc = types.SourceTypeDefault
-	} else if !types.IsValidSource(mSrc) {
-		return false, fmt.Errorf("invalid source field %q", mSrc)
+	if tSrc == "" {
+		tSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(tSrc) {
+		return false, fmt.Errorf("invalid source field %q", tSrc)
 	}
 
 	if mSrc == types.SourceTypeAll {
