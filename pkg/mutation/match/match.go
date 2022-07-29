@@ -296,15 +296,14 @@ func sourceMatch(match *Match, target *Matchable) (bool, error) {
 		return false, fmt.Errorf("source field not specified for resource %s", target.Object.GetName())
 	}
 
-	if tSrc == "" {
-		tSrc = types.SourceTypeDefault
-	} else if !types.IsValidSource(tSrc) {
-		return false, fmt.Errorf("invalid source field %q", tSrc)
-	}
-
 	if mSrc == types.SourceTypeAll {
 		return true, nil
 	}
+
+	if !types.IsValidSource(tSrc) {
+		return false, fmt.Errorf("invalid source field %q", tSrc)
+	}
+
 	return mSrc == tSrc, nil
 }
 
