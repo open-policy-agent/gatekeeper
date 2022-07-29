@@ -17,7 +17,11 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: OnFailure
