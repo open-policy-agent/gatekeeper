@@ -99,6 +99,7 @@ rules:
   - patch
   - update
   - watch
+{{- if and .Values.psp.enabled (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy") }}
 - apiGroups:
   - policy
   resourceNames:
@@ -107,6 +108,7 @@ rules:
   - podsecuritypolicies
   verbs:
   - use
+{{- end }}
 - apiGroups:
   - status.gatekeeper.sh
   resources:
