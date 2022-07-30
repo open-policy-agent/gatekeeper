@@ -157,3 +157,7 @@ spec:
 ```
 
 If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
+
+# Audit UserInfo
+
+When using `input.review.userInfo`, *NOTE* the request's user's information, such as `username`, `uid`, `groups`, `extra`, cannot be populated by Kubernetes for audit reviews and therefore constraint templates that rely on `userInfo` are not auditable. It is up to the rego author to handle the case where `userInfo` is unset and empty in order to avoid every matching resource being reported as violating resources. 
