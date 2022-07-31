@@ -177,12 +177,18 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 	sort.Sort(statusObjs)
 
 	var s []interface{}
+	// created is true if at least one Pod hasn't reported any errors
+	var created bool
+
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
 		// if a watch gets interrupted, causing the constraint status to be deleted
 		// out from underneath it
 		if statusObjs[i].Status.TemplateUID != template.GetUID() {
 			continue
+		}
+		if len(statusObjs[i].Status.Errors) == 0 {
+			created = true
 		}
 		j, err := json.Marshal(statusObjs[i].Status)
 		if err != nil {
@@ -198,7 +204,7 @@ func (r *ReconcileConstraintStatus) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	if err := unstructured.SetNestedField(template.Object, len(s) > 0, "status", "created"); err != nil {
+	if err := unstructured.SetNestedField(template.Object, created, "status", "created"); err != nil {
 		return reconcile.Result{}, err
 	}
 
