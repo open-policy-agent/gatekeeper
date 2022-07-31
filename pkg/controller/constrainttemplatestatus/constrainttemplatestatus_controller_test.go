@@ -157,6 +157,7 @@ violation[{"msg": "denied!"}] {
 			t.Fatal(err)
 		}
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
 
@@ -188,6 +189,35 @@ violation[{"msg": "denied!"}] {
 		if err != nil {
 			t.Fatal(err)
 		}
+		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
+		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
+		err = c.Delete(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+	})
+
+	t.Run("Constraint template status.created is true even if some pod has errors", func(t *testing.T) {
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		if err != nil {
+			t.Fatal(err)
+		}
+		fakeTStatus.Status.TemplateUID = templateCpy.UID
+		fakeTStatus.Status.Errors = []*v1beta1.CreateCRDError{{
+			Code:    constrainttemplate.ErrCreateCode,
+			Message: "Could not create CRD: error",
+		}}
+
+		// TODO: Test if this removal is necessary.
+		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
+		t.Cleanup(testutils.DeleteObject(t, c, fakeTStatus))
+
+		err = c.Create(ctx, fakeTStatus)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 2), timeout).Should(gomega.BeNil())
 		err = c.Delete(ctx, fakeTStatus)
 		if err != nil {
@@ -260,6 +290,7 @@ violation[{"msg": "denied!"}] {
 			t.Fatal(err)
 		}
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		g.Eventually(verifyTStatusCreated(ctx, c, true), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
 		err = c.Create(ctx, constraint)
@@ -306,6 +337,29 @@ violation[{"msg": "denied!"}] {
 		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 	})
+
+	templateCpy = template.DeepCopy()
+	templateCpy.Spec.Targets[0].Rego = `
+	package foo
+
+	violation[invalid syntax error`
+
+	t.Run("Invalid ContraintTemplate has .status.created set to false", func(t *testing.T) {
+		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+		err := c.Create(ctx, templateCpy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.Eventually(verifyTStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		g.Eventually(verifyTByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
+		g.Eventually(verifyTStatusCreated(ctx, c, false), timeout).Should(gomega.BeNil())
+
+		err = c.Delete(ctx, templateCpy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.Eventually(verifyTStatusCount(ctx, c, 0), timeout).Should(gomega.BeNil())
+	})
 }
 
 func verifyTStatusCount(ctx context.Context, c client.Client, expected int) func() error {
@@ -316,6 +370,19 @@ func verifyTStatusCount(ctx context.Context, c client.Client, expected int) func
 		}
 		if len(statuses.Items) != expected {
 			return fmt.Errorf("status count = %d, wanted %d, statuses: %+v", len(statuses.Items), expected, statuses.Items)
+		}
+		return nil
+	}
+}
+
+func verifyTStatusCreated(ctx context.Context, c client.Client, expected bool) func() error {
+	return func() error {
+		ct := &v1beta1.ConstraintTemplate{}
+		if err := c.Get(ctx, types.NamespacedName{Name: "denyall"}, ct); err != nil {
+			return err
+		}
+		if ct.Status.Created != expected {
+			return fmt.Errorf("status.created = %t, wanted %t", ct.Status.Created, expected)
 		}
 		return nil
 	}
