@@ -40,6 +40,9 @@ spec:
             - {{ . }}
             {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
+            {{- range .Values.postInstall.labelNamespace.podSecurity }}
+            - {{ . }}
+            {{- end }}
             - --overwrite
           securityContext:
             {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
