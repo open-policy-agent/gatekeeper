@@ -46,7 +46,6 @@ spec:
             {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
     tolerations:
       {{- toYaml .Values.preUninstall.deleteWebhookConfigurations.tolerations | nindent 8 }}
-
 ---
 apiVersion: v1
 kind: ServiceAccount
