@@ -145,6 +145,8 @@ spec:
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
       - name: cert
         secret:

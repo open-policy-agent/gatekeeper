@@ -139,6 +139,7 @@ controllerManager:
                     - webhook
             topologyKey: kubernetes.io/hostname
           weight: 100
+  topologySpreadConstraints: []
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
   resources:
