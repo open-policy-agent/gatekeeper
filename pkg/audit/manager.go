@@ -80,6 +80,8 @@ type Manager struct {
 
 // StatusViolation represents each violation under status.
 type StatusViolation struct {
+	Group             string `json:"group"`
+	Version           string `json:"version"`
 	Kind              string `json:"kind"`
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
@@ -486,18 +488,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
 		if err != nil {
-			errs = append(errs, err)
+			am.log.Error(err, "Unable to get files from directory")
 			continue
 		}
 		for _, fileName := range files {
 			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to get content from file", "fileName", fileName)
 				continue
 			}
 			objFile, err := am.readUnstructured(contents)
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
 				continue
 			}
 			objNs := objFile.GetNamespace()
@@ -505,7 +507,6 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			if objNs != "" {
 				ns, err = nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
-					errs = append(errs, err)
 					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
@@ -516,7 +517,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
 			}
 
@@ -736,6 +737,8 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
 		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			statusViolations = append(statusViolations, StatusViolation{
+				Group:             ar.group,
+				Version:           ar.version,
 				Kind:              ar.kind,
 				Name:              ar.name,
 				Namespace:         ar.namespace,

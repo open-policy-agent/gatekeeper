@@ -1,5 +1,6 @@
 replicas: 3
 auditInterval: 60
+metricsBackends: ["prometheus"]
 auditMatchKindOnly: false
 constraintViolationsLimit: 20
 auditFromCache: false
@@ -8,6 +9,7 @@ disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookExemptNamespacesLabels: {}
+validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 enableDeleteOperations: false
@@ -16,6 +18,7 @@ enableTLSHealthcheck: false
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookExemptNamespacesLabels: {}
+mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
 mutatingWebhookCustomRules: {}
 mutationAnnotations: false
@@ -26,14 +29,44 @@ logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
+postUpgrade:
+  labelNamespace:
+    enabled: false
+    image:
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.10.0-beta.0
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    extraNamespaces: []
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - all
+    readOnlyRootFilesystem: true
+    runAsGroup: 999
+    runAsNonRoot: true
+    runAsUser: 1000
 postInstall:
   labelNamespace:
+    extraRules: []
     enabled: true
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.0
+      tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
+    extraNamespaces: []
+  probeWebhook:
+    enabled: true
+    image:
+      repository: curlimages/curl
+      tag: 7.83.1
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    waitTimeout: 60
+    httpTimeout: 2
+    insecureHTTPS: false
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -45,10 +78,11 @@ postInstall:
     runAsUser: 1000
 preUninstall:
   deleteWebhookConfigurations:
+    extraRules: []
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.9.0-beta.0
+      tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
   securityContext:
@@ -63,14 +97,14 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.9.0-beta.0
+  release: v3.10.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
-podAnnotations:
-  {container.seccomp.security.alpha.kubernetes.io/manager: runtime/default}
+podAnnotations: {}
 podLabels: {}
 podCountLimit: 100
 secretAnnotations: {}
+enableRuntimeDefaultSeccompProfile: true
 controllerManager:
   exemptNamespaces: []
   exemptNamespacePrefixes: []
@@ -80,6 +114,7 @@ controllerManager:
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: false
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -110,12 +145,18 @@ controllerManager:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
+  extraRules: []
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
   metricsPort: 8888
   healthPort: 9090
   priorityClassName: system-cluster-critical
+  disableCertRotation: true
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -136,6 +177,11 @@ audit:
     runAsGroup: 999
     runAsNonRoot: true
     runAsUser: 1000
+  podSecurityContext:
+    fsGroup: 999
+    supplementalGroups:
+      - 999
+  extraRules: []
 crds:
   resources: {}
   securityContext:
@@ -156,5 +202,7 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
+  tolerations: []
+  extraRules: []
 rbac:
   create: true

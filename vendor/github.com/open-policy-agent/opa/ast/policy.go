@@ -144,6 +144,7 @@ type (
 		Annotations []*Annotations `json:"annotations,omitempty"`
 		Rules       []*Rule        `json:"rules,omitempty"`
 		Comments    []*Comment     `json:"comments,omitempty"`
+		stmts       []Statement
 	}
 
 	// Comment contains the raw text from the comment in the definition.
@@ -260,32 +261,22 @@ func (mod *Module) Copy() *Module {
 	cpy := *mod
 	cpy.Rules = make([]*Rule, len(mod.Rules))
 
-	var nodes map[Node]Node
-
-	if len(mod.Annotations) > 0 {
-		nodes = make(map[Node]Node)
-	}
+	nodes := make(map[Node]Node, len(mod.Rules)+len(mod.Imports)+1 /* package */)
 
 	for i := range mod.Rules {
 		cpy.Rules[i] = mod.Rules[i].Copy()
 		cpy.Rules[i].Module = &cpy
-		if nodes != nil {
-			nodes[mod.Rules[i]] = cpy.Rules[i]
-		}
+		nodes[mod.Rules[i]] = cpy.Rules[i]
 	}
 
 	cpy.Imports = make([]*Import, len(mod.Imports))
 	for i := range mod.Imports {
 		cpy.Imports[i] = mod.Imports[i].Copy()
-		if nodes != nil {
-			nodes[mod.Imports[i]] = cpy.Imports[i]
-		}
+		nodes[mod.Imports[i]] = cpy.Imports[i]
 	}
 
 	cpy.Package = mod.Package.Copy()
-	if nodes != nil {
-		nodes[mod.Package] = cpy.Package
-	}
+	nodes[mod.Package] = cpy.Package
 
 	cpy.Annotations = make([]*Annotations, len(mod.Annotations))
 	for i := range mod.Annotations {
@@ -295,6 +286,11 @@ func (mod *Module) Copy() *Module {
 	cpy.Comments = make([]*Comment, len(mod.Comments))
 	for i := range mod.Comments {
 		cpy.Comments[i] = mod.Comments[i].Copy()
+	}
+
+	cpy.stmts = make([]Statement, len(mod.stmts))
+	for i := range mod.stmts {
+		cpy.stmts[i] = nodes[mod.stmts[i]]
 	}
 
 	return &cpy

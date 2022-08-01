@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
@@ -159,6 +160,50 @@ func TestRunner_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "want invalid Constraint",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Invalid:    true,
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateRequiredLabel),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintRequireLabelInvalid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{}},
+			},
+		},
+		{
+			name: "want invalid Constraint but Constraint valid",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Invalid:    true,
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateRequiredLabel),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintRequireLabelValid),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Error: ErrValidConstraint,
+				}},
+			},
+		},
+		{
 			name: "valid Suite",
 			suite: Suite{
 				Tests: []Test{{
@@ -200,6 +245,139 @@ func TestRunner_Run(t *testing.T) {
 				}, {
 					CaseResults: []CaseResult{{}},
 				}},
+			},
+		},
+		{
+			name: "skip Case",
+			suite: Suite{
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Skip:       true,
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					CaseResults: []CaseResult{{
+						Skipped: true,
+					}},
+				}, {
+					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "skip Test",
+			suite: Suite{
+				Tests: []Test{{
+					Skip:       true,
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{{
+					Skipped: true,
+				}, {
+					CaseResults: []CaseResult{{}},
+				}},
+			},
+		},
+		{
+			name: "skip Suite",
+			suite: Suite{
+				Skip: true,
+				Tests: []Test{{
+					Template:   "allow-template.yaml",
+					Constraint: "allow-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+					}},
+				}, {
+					Template:   "deny-template.yaml",
+					Constraint: "deny-constraint.yaml",
+					Cases: []*Case{{
+						Object:     "object.yaml",
+						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+					}},
+				}},
+			},
+			f: fstest.MapFS{
+				"allow-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateAlwaysValidate),
+				},
+				"allow-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidate),
+				},
+				"deny-template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateNeverValidate),
+				},
+				"deny-constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintNeverValidate),
+				},
+				"object.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.Object),
+				},
+			},
+			want: SuiteResult{
+				Skipped: true,
 			},
 		},
 		{
@@ -466,7 +644,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingConstraint,
+					Error: constraintclient.ErrMissingConstraintTemplate,
 				}},
 			},
 		},

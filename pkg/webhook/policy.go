@@ -25,10 +25,12 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
@@ -70,11 +72,13 @@ func init() {
 	}
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
+// Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper). But include "services/status" for constraints that mitigate CVE-2020-8554.
+// You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+// +kubebuilder:webhook:verbs=create;update,path=/v1/admit,mutating=false,failurePolicy=ignore,groups=*,resources=*;pods/ephemeralcontainers;pods/exec;pods/log;pods/eviction;pods/portforward;pods/proxy;pods/attach;pods/binding;deployments/scale;replicasets/scale;statefulsets/scale;replicationcontrollers/scale;services/proxy;nodes/proxy;services/status,versions=*,name=validation.gatekeeper.sh,sideEffects=None,admissionReviewVersions=v1;v1beta1,matchPolicy=Exact
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
 
 // AddPolicyWebhook registers the policy webhook server with the manager.
-func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, _ *mutation.System) error {
 	if !operations.IsAssigned(operations.Webhook) {
 		return nil
 	}
@@ -335,6 +339,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateAssign(req)
 	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
 		return h.validateModifySet(req)
+	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
+		return h.validateProvider(req)
 	}
 
 	return false, nil
@@ -357,7 +363,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	}
 
 	// Ensure that it is possible to generate a CRD for this ConstraintTemplate.
-	_, err = h.opa.CreateCRD(unversioned)
+	_, err = h.opa.CreateCRD(ctx, unversioned)
 	if err != nil {
 		return true, err
 	}
@@ -459,6 +465,24 @@ func (h *validationHandler) validateModifySet(req *admission.Request) (bool, err
 		return true, err
 	}
 
+	return false, nil
+}
+
+func (h *validationHandler) validateProvider(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	provider := &v1alpha1.Provider{}
+	if err := runtimeScheme.Convert(obj, provider, nil); err != nil {
+		return false, err
+	}
+
+	// Ensure that it is possible to insert the Provider into the cache.
+	cache := externaldata.NewCache()
+	if err := cache.Upsert(provider); err != nil {
+		return true, err
+	}
 	return false, nil
 }
 
