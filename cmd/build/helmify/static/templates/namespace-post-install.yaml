@@ -48,8 +48,15 @@ spec:
             - {{ . }}
             {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
+            {{- range .Values.postInstall.labelNamespace.podSecurity }}
+            - {{ . }}
+            {{- end }}
             - --overwrite
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
       tolerations:
         {{- toYaml .Values.postInstall.labelNamespace.tolerations | nindent 8 }}
