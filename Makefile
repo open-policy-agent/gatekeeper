@@ -420,15 +420,14 @@ uninstall:
 		/config/overlays/dev | kubectl delete -f -
 
 __controller-gen: __tooling-image
-CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
+CONTROLLER_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
 
 __conversion-gen: __tooling-image
-CONVERSION_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
+CONVERSION_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
 
 __tooling-image:
-	docker build . \
-		-t gatekeeper-tooling \
-		-f build/tooling/Dockerfile
+	docker build build/tooling \
+		-t gatekeeper-tooling
 
 .PHONY: vendor
 vendor:
