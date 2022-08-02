@@ -22,8 +22,4 @@ RUN curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/k
     chmod +x kustomize &&\
     mv kustomize /usr/local/bin
 
-# Copy in the go src
-WORKDIR /go/src/github.com/open-policy-agent/gatekeeper
-COPY .    .
-
-ENTRYPOINT ["make", "native-test"]
+WORKDIR /app
