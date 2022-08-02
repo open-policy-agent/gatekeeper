@@ -198,6 +198,10 @@ kind: ModifySet
 metadata:
   name: remove-err-logging
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   location: "spec.containers[name: *].args"
   parameters:
     operation: prune
