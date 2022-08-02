@@ -191,6 +191,14 @@ the below is valid:
 This Case specifies that there is at least one violation, and no violations
 contain the string "foobar".
 
+A Case may specify `inventory`, which is a list of paths to files containing
+Kubernetes objects to put in `data.inventory` for testing referential constraints.
+
+```yaml
+inventory:
+- samples/data_objects.yaml
+```
+
 More examples of working `gator verify` suites are available in the
 [gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library/tree/master/library)
 repository.

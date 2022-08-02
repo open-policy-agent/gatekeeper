@@ -16,6 +16,8 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
         app: '{{ template "gatekeeper.name" . }}'
         release: '{{ .Release.Name }}'
@@ -28,6 +30,12 @@ spec:
       serviceAccount: gatekeeper-update-namespace-label
       nodeSelector:
         kubernetes.io/os: linux
+      {{- if .Values.postInstall.probeWebhook.enabled }}
+      volumes:
+      {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
+      initContainers:
+      {{- include "gatekeeper.postInstallWebhookProbeContainer" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: kubectl-label
           image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
@@ -82,6 +90,9 @@ rules:
       {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
       - {{ . }}
       {{- end }}
+{{- with .Values.postInstall.labelNamespace.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}

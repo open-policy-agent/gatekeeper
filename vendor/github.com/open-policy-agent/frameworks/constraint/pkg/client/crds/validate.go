@@ -1,6 +1,7 @@
 package crds
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -43,8 +44,8 @@ func ValidateTargets(templ *templates.ConstraintTemplate) error {
 }
 
 // ValidateCRD calls the CRD package's validation on an internal representation of the CRD.
-func ValidateCRD(crd *apiextensions.CustomResourceDefinition) error {
-	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(crd)
+func ValidateCRD(ctx context.Context, crd *apiextensions.CustomResourceDefinition) error {
+	errs := apiextensionsvalidation.ValidateCustomResourceDefinition(ctx, crd)
 	if len(errs) > 0 {
 		return errs.ToAggregate()
 	}
@@ -53,11 +54,6 @@ func ValidateCRD(crd *apiextensions.CustomResourceDefinition) error {
 
 // ValidateCR validates the provided custom resource against its CustomResourceDefinition.
 func ValidateCR(cr *unstructured.Unstructured, crd *apiextensions.CustomResourceDefinition) error {
-	validator, _, err := validation.NewSchemaValidator(crd.Spec.Validation)
-	if err != nil {
-		return err
-	}
-
 	if errs := apivalidation.IsDNS1123Subdomain(cr.GetName()); len(errs) != 0 {
 		return fmt.Errorf("%w: invalid name: %q",
 			constraints.ErrInvalidConstraint, strings.Join(errs, "\n"))
@@ -78,9 +74,14 @@ func ValidateCR(cr *unstructured.Unstructured, crd *apiextensions.CustomResource
 			constraints.ErrInvalidConstraint, cr.GroupVersionKind().Version, cr.GetName(), supportedVersions)
 	}
 
+	validator, _, err := validation.NewSchemaValidator(crd.Spec.Validation)
+	if err != nil {
+		return err
+	}
+
 	// Validate the schema last as this is the most expensive operation.
 	if err := validation.ValidateCustomResource(field.NewPath(""), cr, validator); err != nil {
-		return fmt.Errorf("%w: %v", constraints.ErrInvalidConstraint, err.ToAggregate())
+		return fmt.Errorf("%w: %v", constraints.ErrSchema, err.ToAggregate())
 	}
 
 	return nil

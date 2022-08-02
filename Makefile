@@ -1,14 +1,16 @@
 # Image URL to use all building/pushing image targets
 REPOSITORY ?= openpolicyagent/gatekeeper
 CRD_REPOSITORY ?= openpolicyagent/gatekeeper-crds
+GATOR_REPOSITORY ?= openpolicyagent/gator
 IMG := $(REPOSITORY):latest
 CRD_IMG := $(CRD_REPOSITORY):latest
+GATOR_IMG := $(GATOR_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 
-VERSION := v3.9.0-beta.1
+VERSION := v3.10.0-beta.0
 
 KIND_VERSION ?= 0.13.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -144,6 +146,7 @@ e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-build-load-externaldata-image: docker-buildx-builder
+	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
@@ -167,6 +170,7 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
@@ -181,6 +185,7 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set disabledBuiltins={http.send};\
 
 e2e-helm-upgrade:
@@ -194,6 +199,7 @@ e2e-helm-upgrade:
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
@@ -287,11 +293,14 @@ docker-tag-dev:
 	@docker tag $(IMG) $(REPOSITORY):dev
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):dev
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):dev
 
 # Tag for Dev
 docker-tag-release:
 	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
 	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(VERSION)
+	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(VERSION)
 
 # Push for Dev
 docker-push-dev: docker-tag-dev
@@ -299,11 +308,14 @@ docker-push-dev: docker-tag-dev
 	@docker push $(REPOSITORY):dev
 	@docker push $(CRD_REPOSITORY):$(DEV_TAG)
 	@docker push $(CRD_REPOSITORY):dev
+	@docker push $(GATOR_REPOSITORY):$(DEV_TAG)
+	@docker push $(GATOR_REPOSITORY):dev
 
 # Push for Release
 docker-push-release: docker-tag-release
 	@docker push $(REPOSITORY):$(VERSION)
 	@docker push $(CRD_REPOSITORY):$(VERSION)
+	@docker push $(GATOR_REPOSITORY):$(VERSION)
 
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
@@ -348,6 +360,18 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push
 
+# Build gator image
+docker-buildx-gator-dev: docker-buildx-builder
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
+		-t ${GATOR_REPOSITORY}:dev \
+		-f gator.Dockerfile . --push
+
+docker-buildx-gator-release: docker-buildx-builder
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+		-t ${GATOR_REPOSITORY}:${VERSION} \
+		-f gator.Dockerfile . --push
+
 # Update manager_image_patch.yaml with image tag
 patch-image:
 	@echo "updating kustomize image patch file for manager resource"
@@ -363,13 +387,13 @@ docker-push:
 	docker push ${CRD_IMG}
 
 release-manifest:
-	@sed -i -e 's/^VERSION := .*/VERSION := ${NEWVERSION}/' ./Makefile
-	@sed -i'' -e 's@image: $(REPOSITORY):.*@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
-	@sed -i "s/appVersion: .*/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
-	@sed -i "s/version: .*/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
-	@sed -i "s/release: .*/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
-	@sed -i "s/tag: .*/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
-	@sed -i 's/Current release version: `.*`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
+	@sed -i'' -e 's@image: $(REPOSITORY):$(VERSION)@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
+	@sed -i "s/appVersion: $(VERSION)/appVersion: ${NEWVERSION}/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/version: $$(echo ${VERSION} | cut -c2-)/version: $$(echo ${NEWVERSION} | cut -c2-)/" ./cmd/build/helmify/static/Chart.yaml
+	@sed -i "s/release: $(VERSION)/release: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i "s/tag: $(VERSION)/tag: ${NEWVERSION}/" ./cmd/build/helmify/static/values.yaml
+	@sed -i 's/Current release version: `$(VERSION)`/Current release version: `'"${NEWVERSION}"'`/' ./cmd/build/helmify/static/README.md
+	@sed -i -e 's/^VERSION := $(VERSION)/VERSION := ${NEWVERSION}/' ./Makefile
 	export
 	$(MAKE) manifests
 
@@ -396,15 +420,14 @@ uninstall:
 		/config/overlays/dev | kubectl delete -f -
 
 __controller-gen: __tooling-image
-CONTROLLER_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
+CONTROLLER_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling controller-gen
 
 __conversion-gen: __tooling-image
-CONVERSION_GEN=docker run -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
+CONVERSION_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
 
 __tooling-image:
-	docker build . \
-		-t gatekeeper-tooling \
-		-f build/tooling/Dockerfile
+	docker build build/tooling \
+		-t gatekeeper-tooling
 
 .PHONY: vendor
 vendor:
@@ -423,8 +446,8 @@ tilt-prepare:
 	rm -rf .tiltbuild/charts/gatekeeper
 	cp -R manifest_staging/charts/gatekeeper .tiltbuild/charts
 	# disable some configs from the security context so we can perform live update
-	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
-	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/templates/*.yaml
+	sed -i -e "/readOnlyRootFilesystem: true/d" .tiltbuild/charts/gatekeeper/values.yaml
+	sed -i -e "/run.*: .*/d" .tiltbuild/charts/gatekeeper/values.yaml
 
 tilt: generate manifests tilt-prepare
 	tilt up

@@ -74,8 +74,6 @@ patchesJson6902:
       - op: remove
         path: /spec/template/spec/containers/0/resources/requests
       - op: remove
-        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
-      - op: remove
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
         path: /spec/template/spec/containers/0/image
@@ -91,6 +89,8 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
   - target:
       kind: Deployment
       name: gatekeeper-controller-manager
@@ -99,8 +99,6 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/resources/limits
       - op: remove
         path: /spec/template/spec/containers/0/resources/requests
-      - op: remove
-        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
       - op: remove
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
@@ -119,6 +117,8 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
   - target:
       kind: Service
       name: webhook-service

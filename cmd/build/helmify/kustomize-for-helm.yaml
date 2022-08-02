@@ -82,6 +82,8 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
+            - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+            - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
@@ -113,8 +115,12 @@ spec:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
       nodeSelector:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""
+      securityContext:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SECURITY_CONTEXT: ""
       affinity:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""
+      topologySpreadConstraints:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""
       tolerations:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""
       imagePullSecrets:
@@ -150,6 +156,8 @@ spec:
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
+            - HELMSUBST_METRICS_BACKEND_ARG
+            - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -173,6 +181,8 @@ spec:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:
         HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""
+      securityContext:
+        HELMSUBST_DEPLOYMENT_AUDIT_POD_SECURITY_CONTEXT: ""
       affinity:
         HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""
       tolerations:
@@ -248,7 +258,7 @@ webhooks:
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: gatekeeper-controller-manager

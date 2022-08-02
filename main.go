@@ -16,13 +16,18 @@ limitations under the License.
 package main
 
 import (
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"time"
+
+	// set GOMAXPROCS to the number of container cores, if known.
+	_ "go.uber.org/automaxprocs"
 
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
@@ -59,6 +64,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -69,6 +75,8 @@ const (
 	secretName     = "gatekeeper-webhook-server-cert"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
+	certName       = "tls.crt"
+	keyName        = "tls.key"
 )
 
 var (
@@ -183,8 +191,14 @@ func main() {
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && (operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook)) {
+	if !*disableCertRotation {
 		setupLog.Info("setting up cert rotation")
+
+		keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		if *externaldata.ExternalDataEnabled {
+			keyUsages = append(keyUsages, x509.ExtKeyUsageClientAuth)
+		}
+
 		if err := rotator.AddRotator(mgr, &rotator.CertRotator{
 			SecretKey: types.NamespacedName{
 				Namespace: util.GetNamespace(),
@@ -196,6 +210,7 @@ func main() {
 			DNSName:        fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
 			IsReady:        setupFinished,
 			Webhooks:       webhooks,
+			ExtKeyUsages:   &keyUsages,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
 			os.Exit(1)
@@ -264,6 +279,28 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		providerCache = frameworksexternaldata.NewCache()
 		args = append(args, local.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
+
+		certFile := filepath.Join(*certDir, certName)
+		keyFile := filepath.Join(*certDir, keyName)
+
+		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
+		certWatcher, err := certwatcher.New(certFile, keyFile)
+		if err != nil {
+			setupLog.Error(err, "unable to create client cert watcher")
+			os.Exit(1)
+		}
+
+		setupLog.Info("setting up client cert watcher")
+		if err := mgr.Add(certWatcher); err != nil {
+			setupLog.Error(err, "unable to register client cert watcher")
+			os.Exit(1)
+		}
+
+		// register the client cert watcher to the driver
+		args = append(args, local.EnableExternalDataClientAuth(), local.AddExternalDataClientCertWatcher(certWatcher))
+
+		// register the client cert watcher to the mutation system
+		mutationOpts.ClientCertWatcher = certWatcher
 	}
 	// initialize OPA
 	driver, err := local.New(args...)

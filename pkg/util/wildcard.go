@@ -2,7 +2,7 @@ package util
 
 import "strings"
 
-// +kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
+// +kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
 //nolint:revive
 // A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
@@ -16,6 +16,8 @@ type Wildcard string
 func (w Wildcard) Matches(candidate string) bool {
 	wStr := string(w)
 	switch {
+	case strings.HasPrefix(wStr, "*") && strings.HasSuffix(wStr, "*"):
+		return strings.Contains(candidate, strings.TrimSuffix(strings.TrimPrefix(wStr, "*"), "*"))
 	case strings.HasPrefix(wStr, "*"):
 		return strings.HasSuffix(candidate, strings.TrimPrefix(wStr, "*"))
 	case strings.HasSuffix(wStr, "*"):

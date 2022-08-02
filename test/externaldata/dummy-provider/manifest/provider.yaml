@@ -3,5 +3,5 @@ kind: Provider
 metadata:
   name: dummy-provider
 spec:
-  url: http://dummy-provider.dummy-provider:8090/validate
-  timeout: 2
+  url: https://dummy-provider.gatekeeper-system:8090/validate
+  timeout: 1

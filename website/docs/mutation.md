@@ -25,6 +25,7 @@ metadata:
 spec:
   match:
     scope: Namespaced
+    name: nginx-*
     kinds:
     - apiGroups: ["*"]
       kinds: ["Pod"]
@@ -73,6 +74,7 @@ The `match` section is common to all mutators. It supports the following match c
 - namespaces - list of allowed namespaces, only resources in listed namespaces will be mutated
 - namespaceSelector - filters resources by namespace selector
 - excludedNamespaces - list of excluded namespaces, resources in listed namespaces will not be mutated
+- name - the name of an object.  If defined, it matches against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` matches both `pod-a` and `pod-b`.
 
 Note that any empty/undefined match criteria are inclusive: they match any object.
 
