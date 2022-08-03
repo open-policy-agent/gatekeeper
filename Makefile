@@ -100,13 +100,9 @@ native-test:
 
 # Hook to run docker tests
 .PHONY: test
-test:
-	rm -rf .staging/test
-	mkdir -p .staging/test
-	cp -r * .staging/test
-	-rm .staging/test/Dockerfile
-	cp test/Dockerfile .staging/test/Dockerfile
-	docker build --pull .staging/test -t gatekeeper-test && docker run -t gatekeeper-test
+test: __test-image
+	docker run --rm -t -v $(shell pwd):/app \
+		gatekeeper-test make native-test
 
 .PHONY: test-e2e
 test-e2e:
@@ -428,6 +424,10 @@ CONVERSION_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling co
 __tooling-image:
 	docker build build/tooling \
 		-t gatekeeper-tooling
+
+__test-image:
+	docker build test/image \
+		-t gatekeeper-test
 
 .PHONY: vendor
 vendor:
