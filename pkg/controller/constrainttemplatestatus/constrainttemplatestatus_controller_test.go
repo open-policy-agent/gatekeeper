@@ -31,7 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-const timeout = time.Second * 15
+const (
+	timeout = 15 * time.Second
+
+	contraintTemplateName = "denyall"
+	constraintCRDName     = "DenyAll"
+)
 
 // setupManager sets up a controller-runtime manager with registered watch manager.
 func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
@@ -66,12 +71,12 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	template := &v1beta1.ConstraintTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "denyall"},
+		ObjectMeta: metav1.ObjectMeta{Name: contraintTemplateName},
 		Spec: v1beta1.ConstraintTemplateSpec{
 			CRD: v1beta1.CRD{
 				Spec: v1beta1.CRDSpec{
 					Names: v1beta1.Names{
-						Kind: "DenyAll",
+						Kind: constraintCRDName,
 					},
 				},
 			},
@@ -175,7 +180,7 @@ violation[{"msg": "denied!"}] {
 	fakePod := pod.DeepCopy()
 	fakePod.SetName("fake-pod")
 	t.Run("Multiple constraint template statuses are reported", func(t *testing.T) {
-		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, contraintTemplateName, mgr.GetScheme())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -199,7 +204,7 @@ violation[{"msg": "denied!"}] {
 	})
 
 	t.Run("Constraint template status.created is true even if some pod has errors", func(t *testing.T) {
-		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, contraintTemplateName, mgr.GetScheme())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -300,7 +305,7 @@ violation[{"msg": "denied!"}] {
 		g.Eventually(verifyCStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 		g.Eventually(verifyCByPodStatusCount(ctx, c, 1), timeout).Should(gomega.BeNil())
 
-		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, "denyall", mgr.GetScheme())
+		fakeTStatus, err := podstatus.NewConstraintTemplateStatusForPod(fakePod, contraintTemplateName, mgr.GetScheme())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -378,7 +383,7 @@ func verifyTStatusCount(ctx context.Context, c client.Client, expected int) func
 func verifyTStatusCreated(ctx context.Context, c client.Client, expected bool) func() error {
 	return func() error {
 		ct := &v1beta1.ConstraintTemplate{}
-		if err := c.Get(ctx, types.NamespacedName{Name: "denyall"}, ct); err != nil {
+		if err := c.Get(ctx, types.NamespacedName{Name: contraintTemplateName}, ct); err != nil {
 			return err
 		}
 		if ct.Status.Created != expected {
@@ -391,7 +396,7 @@ func verifyTStatusCreated(ctx context.Context, c client.Client, expected bool) f
 func verifyTByPodStatusCount(ctx context.Context, c client.Client, expected int) func() error {
 	return func() error {
 		ct := &v1beta1.ConstraintTemplate{}
-		if err := c.Get(ctx, types.NamespacedName{Name: "denyall"}, ct); err != nil {
+		if err := c.Get(ctx, types.NamespacedName{Name: contraintTemplateName}, ct); err != nil {
 			return err
 		}
 		if len(ct.Status.ByPod) != expected {
@@ -436,8 +441,8 @@ func newDenyAllConstraint() *unstructured.Unstructured {
 	constraint.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "constraints.gatekeeper.sh",
 		Version: "v1beta1",
-		Kind:    "DenyAll",
+		Kind:    constraintCRDName,
 	})
-	constraint.SetName("denyallconstraint")
+	constraint.SetName(contraintTemplateName + "constraint")
 	return constraint
 }
