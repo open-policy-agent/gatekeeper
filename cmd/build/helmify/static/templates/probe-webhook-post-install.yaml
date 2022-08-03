@@ -20,7 +20,11 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+        {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: Never
