@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -62,7 +63,7 @@ import (
 // https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#response
 const httpStatusWarning = 299
 
-var maxServingThreads = flag.Int("max-serving-threads", -1, "(alpha) cap the number of threads handling non-trivial requests, -1 means an infinite number of threads")
+var maxServingThreads = flag.Int("max-serving-threads", -1, "cap the number of threads handling non-trivial requests, -1 caps the number of threads to GOMAXPROCS. Defaults to -1.")
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddPolicyWebhook)
@@ -103,9 +104,11 @@ func AddPolicyWebhook(mgr manager.Manager, opa *constraintclient.Client, process
 			gkNamespace:     util.GetNamespace(),
 		},
 	}
-	if *maxServingThreads > 0 {
-		handler.semaphore = make(chan struct{}, *maxServingThreads)
+	threadCount := *maxServingThreads
+	if threadCount < 1 {
+		threadCount = runtime.GOMAXPROCS(-1)
 	}
+	handler.semaphore = make(chan struct{}, threadCount)
 	wh := &admission.Webhook{Handler: handler}
 	// TODO(https://github.com/open-policy-agent/gatekeeper/issues/661): remove log injection if the race condition in the cited bug is eliminated.
 	// Otherwise we risk having unstable logger names for the webhook.
