@@ -8,7 +8,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
-// addFn is used to easily build types.Responses within the tests
+// addFn is used to easily build types.Responses within the tests.
 type addFn func(base *types.Responses)
 
 func TestAggregateResponses(t *testing.T) {
