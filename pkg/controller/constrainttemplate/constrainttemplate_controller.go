@@ -356,7 +356,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		logError(request.NamespacedName.Name)
-		err := r.reportErrorOnCTStatus(ctx, "conversion_error", "Could not convert from unversioned resource", status, err)
+		err := r.reportErrorOnCTStatus(ctx, ErrConversionCode, "Could not convert from unversioned resource", status, err)
 		return reconcile.Result{}, err
 	}
 
@@ -426,7 +426,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
-		err := r.reportErrorOnCTStatus(ctx, "ingest_error", "Could not ingest Rego", status, err)
+		err := r.reportErrorOnCTStatus(ctx, ErrIngestCode, "Could not ingest Rego", status, err)
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
@@ -461,7 +461,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	} else if !reflect.DeepEqual(newCRD, currentCRD) {
 		logger.Info("updating crd")
 		if err := r.Update(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, "update_error", "Could not update CRD", status, err)
+			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
 			return reconcile.Result{}, err
 		}
 	}
