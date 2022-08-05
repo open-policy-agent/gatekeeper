@@ -65,6 +65,8 @@ Output post install webhook probe container entry
     {{- end }}
     - "-v"
     - "https://gatekeeper-webhook-service.{{ .Release.Namespace }}.svc/v1/admitlabel?timeout=2s"
+  resources:
+  {{- toYaml .Values.postInstall.resources | nindent 4 }}
   securityContext:
   {{- toYaml .Values.postInstall.securityContext | nindent 4 }}
   volumeMounts:

@@ -30,8 +30,6 @@ spec:
       {{- .Values.postUpgrade.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-update-namespace-label-post-upgrade
-      nodeSelector:
-        kubernetes.io/os: linux
       containers:
         - name: kubectl-label
           image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
@@ -48,8 +46,18 @@ spec:
             - {{ . }}
             {{- end }}
             - --overwrite
+          resources:
+            {{- toYaml .Values.postUpgrade.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
+      {{- with .Values.postUpgrade }}
+      affinity:
+        {{- toYaml .affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
