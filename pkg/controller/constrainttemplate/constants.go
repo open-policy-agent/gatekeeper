@@ -1,7 +1,12 @@
 package constrainttemplate
 
-// ErrCreateCode indicates a problem creating a ConstraintTemplate.
-const ErrCreateCode = "create_error"
-
-// ErrIngestCode indicates a problem creating a ConstraintTemplate.
-const ErrIngestCode = "ingest_error"
+const (
+	// ErrCreateCode indicates a problem creating a ConstraintTemplate CRD.
+	ErrCreateCode = "create_error"
+	// ErrUpdateCode indicates a problem updating a ConstraintTemplate CRD.
+	ErrUpdateCode = "update_error"
+	// ErrConversionCode indicates a problem converting a ConstraintTemplate CRD.
+	ErrConversionCode = "conversion_error"
+	// ErrIngestCode indicates a problem ingesting a ConstraintTemplate Rego code.
+	ErrIngestCode = "ingest_error"
+)
