@@ -140,7 +140,7 @@ func resourcesToString(resources []*unstructured.Unstructured, format string) st
 func stringToFile(s string, path string) {
 	file, err := os.Create(path)
 	if err != nil {
-		errFatalf("error creating file at path %s: %s", path, err)
+		errFatalf("error creating file at path %s: %v", path, err)
 	}
 
 	if _, err = fmt.Fprint(file, s); err != nil {
