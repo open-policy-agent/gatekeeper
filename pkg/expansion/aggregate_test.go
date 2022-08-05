@@ -99,7 +99,7 @@ func TestAggregateResponses(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			parent := buildResponses(tc.parent)
 			children := make([]*types.Responses, len(tc.children))
-			for i, _ := range tc.children {
+			for i := range tc.children {
 				children[i] = buildResponses(tc.children[i])
 			}
 
