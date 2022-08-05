@@ -72,7 +72,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	resultants, err := gator.Expand(unstrucs)
 	if err != nil {
-		errFatalf("error expanding resources: %s", err)
+		errFatalf("error expanding resources: %v", err)
 	}
 	// Sort resultants for deterministic output
 	sortUnstructs(resultants)
