@@ -111,7 +111,7 @@ func resourcetoYAMLString(resource *unstructured.Unstructured) string {
 func resourceToJSONString(resource *unstructured.Unstructured) string {
 	b, err := json.MarshalIndent(resource, "", "    ")
 	if err != nil {
-		errFatalf("marshaling validation json results: %s", err)
+		errFatalf("marshaling validation json results: %v", err)
 	}
 	return string(b)
 }
