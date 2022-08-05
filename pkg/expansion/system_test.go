@@ -633,6 +633,18 @@ func TestExpand(t *testing.T) {
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
 		},
 		{
+			name:      "expand with nil namespace returns error",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        nil,
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignPullImage, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			expectErr: true,
+		},
+		{
 			name:      "1 mutator source All deployment expands pod and mutates",
 			generator: loadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
