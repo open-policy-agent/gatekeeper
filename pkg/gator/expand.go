@@ -80,10 +80,7 @@ func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 }
 
 func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
-	ns, nsFound := er.NamespaceForResource(resource)
-	if er.expSystem.ShouldExpand(resource) && !nsFound {
-		return nil, fmt.Errorf("no namespace config supplied for resource %s", resource.GetName())
-	}
+	ns, _ := er.NamespaceForResource(resource)
 
 	// Mutate the base resource before expanding it
 	base := &types.Mutable{

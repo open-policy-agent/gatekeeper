@@ -100,13 +100,6 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 	return templates
 }
 
-// ShouldExpand returns true if there is at least one template expansion
-// configured to match `obj`.
-func (s *System) ShouldExpand(obj *unstructured.Unstructured) bool {
-	t := s.templatesForGVK(obj.GroupVersionKind())
-	return len(t) > 0
-}
-
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
@@ -147,6 +140,10 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructur
 }
 
 func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, template *expansionunversioned.ExpansionTemplate) (*unstructured.Unstructured, error) {
+	if ns == nil {
+		return nil, fmt.Errorf("cannot expand resource with nil namespace")
+	}
+
 	srcPath := template.Spec.TemplateSource
 	if srcPath == "" {
 		return nil, fmt.Errorf("cannot expand resource using a template with no source")
