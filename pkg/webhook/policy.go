@@ -520,7 +520,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	// Convert the request's generator resource to unstructured for expansion
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
-		return nil, fmt.Errorf("error decoding generator resource %s: %s", req.Name, err)
+		return nil, fmt.Errorf("error decoding generator resource %s: %v", req.Name, err)
 	}
 	obj.SetNamespace(req.Namespace)
 	obj.SetGroupVersionKind(
