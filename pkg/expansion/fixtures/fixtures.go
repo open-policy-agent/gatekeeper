@@ -144,6 +144,71 @@ spec:
         kinds: []
 `
 
+	AssignPullImageSourceAll = `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: always-pull-image
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name: *].imagePullPolicy"
+  parameters:
+    assign:
+      value: "Always"
+  match:
+    source: "Generated"
+    scope: Namespaced
+    kinds:
+      - apiGroups: []
+        kinds: []
+`
+
+	AssignPullImageSourceEmpty = `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: always-pull-image
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name: *].imagePullPolicy"
+  parameters:
+    assign:
+      value: "Always"
+  match:
+    scope: Namespaced
+    kinds:
+      - apiGroups: []
+        kinds: []
+`
+
+	AssignHostnameSourceOriginal = `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: assign-hostname
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name: *].hostname"
+  parameters:
+    assign:
+      value: "ThisShouldNotBeSet"
+  match:
+    source: "Original"
+    scope: Namespaced
+    kinds:
+      - apiGroups: []
+        kinds: []
+`
+
 	AssignMetaAnnotatePod = `
 apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: AssignMetadata

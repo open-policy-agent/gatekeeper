@@ -633,6 +633,42 @@ func TestExpand(t *testing.T) {
 			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
 		},
 		{
+			name:      "1 mutator source All deployment expands pod and mutates",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignPullImageSourceAll, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+		},
+		{
+			name:      "1 mutator source empty deployment expands pod and mutates",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignPullImageSourceEmpty, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+		},
+		{
+			name:      "1 mutator source Original deployment expands pod but does not mutate",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssign(fixtures.AssignHostnameSourceOriginal, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*unstructured.Unstructured{loadFixture(fixtures.PodNoMutate, t)},
+		},
+		{
 			name:      "2 mutators, only 1 match, basic deployment expands pod",
 			generator: loadFixture(fixtures.DeploymentNginx, t),
 			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},

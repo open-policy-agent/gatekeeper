@@ -531,11 +531,11 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		})
 
 	// Expand the generator and apply mutators to the resultant resources
+	// The base object is not mutated, so we do not need to specify its source
 	base := &mutationtypes.Mutable{
 		Object:    obj,
 		Namespace: review.Namespace,
 		Username:  req.AdmissionRequest.UserInfo.Username,
-		Source:    mutationtypes.SourceTypeGenerated,
 	}
 	resultants, err := h.expansionSystem.Expand(base)
 	if err != nil {
