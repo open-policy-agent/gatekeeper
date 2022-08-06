@@ -40,7 +40,8 @@ module.exports = {
       label: 'Architecture',
       collapsed: false,
       items: [
-        'operations'
+        'operations',
+        'performance-tuning'
       ],
     },
     {
