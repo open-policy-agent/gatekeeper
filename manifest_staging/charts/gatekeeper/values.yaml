@@ -15,6 +15,7 @@ validatingWebhookCustomRules: {}
 enableDeleteOperations: false
 enableExternalData: false
 enableTLSHealthcheck: false
+maxServingThreads: -1
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookExemptNamespacesLabels: {}

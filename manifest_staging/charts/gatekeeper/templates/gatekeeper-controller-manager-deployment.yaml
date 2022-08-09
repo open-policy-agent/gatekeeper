@@ -61,6 +61,7 @@ spec:
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+        - --max-serving-threads={{ .Values.maxServingThreads }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
