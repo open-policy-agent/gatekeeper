@@ -1,5 +1,5 @@
 ARG BUILDPLATFORM="linux/amd64"
-ARG BUILDERIMAGE="golang:1.18-bullseye"
+ARG BUILDERIMAGE="golang:1.19-bullseye"
 ARG BASEIMAGE="gcr.io/distroless/static:nonroot"
 
 FROM --platform=$BUILDPLATFORM $BUILDERIMAGE as builder

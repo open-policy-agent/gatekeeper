@@ -19,7 +19,7 @@ if settings.get("trigger_mode", "auto").lower() == "manual":
 LDFLAGS = "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=latest"
 
 TILT_DOCKERFILE = """
-FROM golang:1.18-bullseye as tilt-helper
+FROM golang:1.19-bullseye as tilt-helper
 # Support live reloading with Tilt
 RUN wget --output-document /restart.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/restart.sh && \
     wget --output-document /start.sh --quiet https://raw.githubusercontent.com/tilt-dev/rerun-process-wrapper/60eaa572cdf825c646008e1ea28b635f83cefb38/start.sh && \
