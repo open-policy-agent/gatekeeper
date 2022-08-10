@@ -139,10 +139,10 @@ func (l List) String() string {
 
 // quote optionally adds double quotes around the passed string if needed.
 // Quotes are needed for:
-//  * Strings containing whitespace, quotes, or other "ambiguous" characters that will
-//    be tokenized as non-strings and need escaping.
-//  * Strings starting digits, that would otherwise be tokenized as an integer
-//  * Empty strings
+//   - Strings containing whitespace, quotes, or other "ambiguous" characters that will
+//     be tokenized as non-strings and need escaping.
+//   - Strings starting digits, that would otherwise be tokenized as an integer
+//   - Empty strings
 func quote(s string) string {
 	if len(s) == 0 {
 		return `""`

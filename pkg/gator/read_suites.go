@@ -39,11 +39,11 @@ const (
 
 // ReadSuites returns the set of test Suites selected by path.
 //
-// 1) If path is a path to a Suite, parses and returns the Suite.
-// 2) If the path is a directory and recursive is false, returns only the Suites
-//    defined in that directory.
-// 3) If the path is a directory and recursive is true returns all Suites in that
-//      directory and its subdirectories.
+//  1. If path is a path to a Suite, parses and returns the Suite.
+//  2. If the path is a directory and recursive is false, returns only the Suites
+//     defined in that directory.
+//  3. If the path is a directory and recursive is true returns all Suites in that
+//     directory and its subdirectories.
 //
 // Returns an error if:
 // - path is a file that does not define a Suite

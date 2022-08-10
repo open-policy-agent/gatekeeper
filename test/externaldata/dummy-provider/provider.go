@@ -6,8 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func main() {
 	fmt.Println("starting server...")
 
 	// load Gatekeeper's CA certificate
-	caCert, err := ioutil.ReadFile("/tmp/gatekeeper/ca.crt")
+	caCert, err := os.ReadFile("/tmp/gatekeeper/ca.crt")
 	if err != nil {
 		panic(err)
 	}
@@ -35,8 +36,9 @@ func main() {
 	mux.HandleFunc("/validate", processTimeout(validate, timeout))
 
 	server := &http.Server{
-		Addr:    ":8090",
-		Handler: mux,
+		Addr:              ":8090",
+		Handler:           mux,
+		ReadHeaderTimeout: timeout,
 		TLSConfig: &tls.Config{
 			ClientAuth: tls.RequireAndVerifyClientCert,
 			ClientCAs:  clientCAs,
@@ -57,7 +59,7 @@ func validate(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// read request body
-	requestBody, err := ioutil.ReadAll(req.Body)
+	requestBody, err := io.ReadAll(req.Body)
 	if err != nil {
 		sendResponse(nil, fmt.Sprintf("unable to read request body: %v", err), w)
 		return
