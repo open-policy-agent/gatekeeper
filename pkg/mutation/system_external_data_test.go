@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -337,7 +336,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 		},
 	}
 	var clientCertWatcher *certwatcher.CertWatcher
-	clientCertFile, err := ioutil.TempFile("", "client-cert")
+	clientCertFile, err := os.CreateTemp("", "client-cert")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +348,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 	}
 	clientCertFile.Close()
 
-	clientKeyFile, err := ioutil.TempFile("", "client-key")
+	clientKeyFile, err := os.CreateTemp("", "client-key")
 	if err != nil {
 		t.Fatal(err)
 	}

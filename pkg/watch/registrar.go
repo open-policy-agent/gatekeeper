@@ -222,9 +222,10 @@ type Registrar struct {
 // AddWatch registers a watch for the given kind.
 //
 // AddWatch will only block if all of the following are true:
-//   * The registrar is joining an existing watch
-//   * The registrar's event channel does not have sufficient capacity to receive existing resources
-//   * The consumer of the channel does not receive any unbuffered events.
+//   - The registrar is joining an existing watch
+//   - The registrar's event channel does not have sufficient capacity to receive existing resources
+//   - The consumer of the channel does not receive any unbuffered events.
+//
 // XXXX also may block if the watch manager has not been started.
 func (r *Registrar) AddWatch(gvk schema.GroupVersionKind) error {
 	r.mux.Lock()

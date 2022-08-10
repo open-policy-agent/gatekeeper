@@ -4,10 +4,11 @@ import "strings"
 
 // +kubebuilder:validation:Pattern=`^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$`
 
-//nolint:revive
 // A string that supports globbing at its front or end. Ex: "kube-*" will match "kube-system" or
 // "kube-public", "*-system" will match "kube-system" or "gatekeeper-system".  The asterisk is
 // required for wildcard matching.
+//
+//nolint:revive
 type Wildcard string
 
 // Matches returns true if the candidate parameter is either an exact match of the Wildcard,

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats/view"
@@ -13,8 +14,9 @@ import (
 )
 
 const (
-	Name      = "prometheus"
-	namespace = "gatekeeper"
+	Name              = "prometheus"
+	namespace         = "gatekeeper"
+	readHeaderTimeout = 60 * time.Second
 )
 
 var (
@@ -67,8 +69,9 @@ func newPromSrv(e http.Handler, port int) *http.Server {
 	sm := http.NewServeMux()
 	sm.Handle("/metrics", e)
 	curPromSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%v", port),
-		Handler: sm,
+		ReadHeaderTimeout: readHeaderTimeout,
+		Addr:              fmt.Sprintf(":%v", port),
+		Handler:           sm,
 	}
 	return curPromSrv
 }
