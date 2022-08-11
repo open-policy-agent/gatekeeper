@@ -42,10 +42,14 @@ spec:
         {{- toYaml .Values.audit.affinity | nindent 8 }}
       automountServiceAccountToken: true
       containers:
-      - {{- if .Values.image.release }}
+      - {{- if .Values.image.digest }}
+        image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+        {{- else }}
+        {{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
         {{- else }}
         image: {{ .Values.image.repository }}
+        {{- end }}
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}

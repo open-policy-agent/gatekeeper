@@ -163,10 +163,14 @@ var replacements = map[string]string{
 
 	"HELMSUBST_PDB_CONTROLLER_MANAGER_MINAVAILABLE": `{{ .Values.pdb.controllerManager.minAvailable }}`,
 
-	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.release }}
+	`HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""`: `{{- if .Values.image.digest }}
+        image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+        {{- else }}
+        {{- if .Values.image.release }}
         image: {{ .Values.image.repository }}:{{ .Values.image.release }}
         {{- else }}
         image: {{ .Values.image.repository }}
+        {{- end }}
         {{- end }}`,
 
 	`HELMSUBST_SERVICE_TYPE: ""`: `{{- if .Values.service }}
