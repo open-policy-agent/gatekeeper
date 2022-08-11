@@ -20,7 +20,7 @@ linters-settings:
     locale: US
   staticcheck:
     # Select the Go version to target. The default is '1.13'.
-    go: "1.18"
+    go: "1.19"
 
 linters:
   disable-all: true
