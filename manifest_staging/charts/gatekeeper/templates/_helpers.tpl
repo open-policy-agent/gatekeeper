@@ -45,7 +45,7 @@ Output post install webhook probe container entry
 */}}
 {{- define "gatekeeper.postInstallWebhookProbeContainer" -}}
 - name: webhook-probe-post
-  image: "{{ .Values.postInstall.probeWebhook.image.repository }}:{{ .Values.postInstall.probeWebhook.image.tag }}"
+  image: "{{ include "image-path" (dict "repository" .Values.postInstall.probeWebhook.image.repository "tag" .Values.postInstall.probeWebhook.image.tag "digest" .Values.postInstall.probeWebhook.image.digest) }}"
   imagePullPolicy: {{ .Values.postInstall.probeWebhook.image.pullPolicy }}
   args:
     - "curl"
@@ -82,4 +82,19 @@ Output post install webhook probe volume entry
 - name: cert
   secret:
     secretName: gatekeeper-webhook-server-cert
+{{- end -}}
+
+{{/*
+Return image path
+*/}}
+{{- define "image-path" -}}
+{{- if .digest -}}
+{{ .repository }}@{{ .digest }}
+{{- else -}}
+{{- if not .tag -}}
+{{ .repository }}
+{{- else -}}
+{{ .repository }}:{{ .tag }}
+{{- end -}}
+{{- end -}}
 {{- end -}}

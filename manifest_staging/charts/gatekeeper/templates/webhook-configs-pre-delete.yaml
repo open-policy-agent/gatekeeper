@@ -34,7 +34,7 @@ spec:
       serviceAccount: gatekeeper-delete-webhook-configs
       containers:
         - name: kubectl-delete
-          image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
+          image: '{{ include "image-path" (dict "repository" .Values.preUninstall.deleteWebhookConfigurations.image.repository "tag" .Values.preUninstall.deleteWebhookConfigurations.image.tag "digest" .Values.preUninstall.deleteWebhookConfigurations.image.digest) }}'
           imagePullPolicy: {{ .Values.preUninstall.deleteWebhookConfigurations.image.pullPolicy }}
           args:
             - delete

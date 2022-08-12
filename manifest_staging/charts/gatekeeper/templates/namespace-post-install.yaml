@@ -40,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: kubectl-label
-          image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
+          image: '{{ include "image-path" (dict "repository" .Values.postInstall.labelNamespace.image.repository "tag" .Values.postInstall.labelNamespace.image.tag "digest" .Values.postInstall.labelNamespace.image.digest) }}'
           imagePullPolicy: {{ .Values.postInstall.labelNamespace.image.pullPolicy }}
           args:
             - label

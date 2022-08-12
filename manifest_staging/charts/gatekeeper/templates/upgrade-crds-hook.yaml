@@ -93,11 +93,7 @@ spec:
       {{- end }}
       containers:
       - name: crds-upgrade
-        {{- if not .Values.image.release }}
-        image: '{{ .Values.image.crdRepository }}'
-        {{- else }}
-        image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
-        {{- end }}
+        image: '{{ include "image-path" (dict "repository" .Values.image.crdRepository "tag" .Values.image.release "digest" .Values.image.digest) }}'
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         args:
         - apply
