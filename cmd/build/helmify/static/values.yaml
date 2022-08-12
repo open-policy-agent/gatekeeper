@@ -137,6 +137,8 @@ controllerManager:
   port: 8443
   metricsPort: 8888
   healthPort: 9090
+  readinessTimeout: 1
+  livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
   affinity:
@@ -180,6 +182,8 @@ audit:
   dnsPolicy: ClusterFirst
   metricsPort: 8888
   healthPort: 9090
+  readinessTimeout: 1
+  livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: true
   affinity: {}
