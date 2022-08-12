@@ -106,10 +106,12 @@ spec:
             httpGet:
               path: /readyz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_READINESS_TIMEOUT
           livenessProbe:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""
           resources:
@@ -172,10 +174,12 @@ spec:
             httpGet:
               path: /readyz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_AUDIT_READINESS_TIMEOUT
           livenessProbe:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_AUDIT_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""
           resources:
