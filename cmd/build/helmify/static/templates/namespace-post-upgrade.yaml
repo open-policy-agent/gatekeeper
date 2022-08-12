@@ -32,7 +32,7 @@ spec:
       serviceAccount: gatekeeper-update-namespace-label-post-upgrade
       containers:
         - name: kubectl-label
-          image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
+          image: '{{ include "image-path" (dict "repository" .Values.postUpgrade.labelNamespace.image.repository "tag" .Values.postUpgrade.labelNamespace.image.tag "digest" .Values.postUpgrade.labelNamespace.image.digest) }}'
           imagePullPolicy: {{ .Values.postUpgrade.labelNamespace.image.pullPolicy }}
           args:
             - label

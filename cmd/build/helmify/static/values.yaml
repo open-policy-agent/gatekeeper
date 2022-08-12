@@ -34,6 +34,7 @@ postUpgrade:
   labelNamespace:
     enabled: false
     image:
+      digest: ""
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
@@ -63,6 +64,7 @@ postInstall:
     enabled: true
     extraRules: []
     image:
+      digest: ""
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
@@ -77,6 +79,7 @@ postInstall:
   probeWebhook:
     enabled: true
     image:
+      digest: ""
       repository: curlimages/curl
       tag: 7.83.1
       pullPolicy: IfNotPresent
@@ -101,6 +104,7 @@ preUninstall:
     extraRules: []
     enabled: false
     image:
+      digest: ""
       repository: openpolicyagent/gatekeeper-crds
       tag: v3.10.0-beta.0
       pullPolicy: IfNotPresent
@@ -119,6 +123,7 @@ preUninstall:
     runAsNonRoot: true
     runAsUser: 1000
 image:
+  digest: ""
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
   release: v3.10.0-beta.0
