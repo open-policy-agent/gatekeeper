@@ -108,6 +108,7 @@ spec:
           httpGet:
             path: /healthz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.livenessTimeout }}
         name: manager
         ports:
         - containerPort: {{ .Values.controllerManager.port }}
@@ -123,6 +124,7 @@ spec:
           httpGet:
             path: /readyz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.readinessTimeout }}
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
