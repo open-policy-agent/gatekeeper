@@ -89,7 +89,7 @@ Return image path
 */}}
 {{- define "image-path" -}}
 {{- if .digest -}}
-{{ .repository }}@{{ .digest }}
+{{ .repository }}:{{ .tag }}@{{ .digest }}
 {{- else -}}
 {{- if not .tag -}}
 {{ .repository }}
