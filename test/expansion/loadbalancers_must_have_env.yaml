@@ -1,0 +1,13 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: loadbalancers-must-have-env
+spec:
+  match:
+    scope: "Namespaced"
+    namespaces: [ "loadbalancers" ]
+    kinds:
+    - apiGroups: [ "" ]
+      kinds: [ "Pod" ]
+  parameters:
+    labels: [ "env" ]
