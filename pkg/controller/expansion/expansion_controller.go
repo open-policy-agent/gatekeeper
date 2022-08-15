@@ -62,7 +62,7 @@ func newReconciler(mgr manager.Manager, system *expansion.System) *Reconciler {
 }
 
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("template-expansion-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("expansion-template-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

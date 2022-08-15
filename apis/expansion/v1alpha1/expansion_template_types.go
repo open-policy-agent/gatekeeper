@@ -16,7 +16,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -52,7 +51,6 @@ type GeneratedGVK struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path="expansiontemplate"
 // +kubebuilder:resource:scope="Cluster"
-// +kubebuilder:subresource:status
 
 // ExpansionTemplate is the Schema for the ExpansionTemplate API.
 type ExpansionTemplate struct {
@@ -72,5 +70,5 @@ type ExpansionTemplateList struct {
 }
 
 func init() {
-	v1alpha1.SchemeBuilder.Register(&ExpansionTemplate{}, &ExpansionTemplateList{})
+	SchemeBuilder.Register(&ExpansionTemplate{}, &ExpansionTemplateList{})
 }
