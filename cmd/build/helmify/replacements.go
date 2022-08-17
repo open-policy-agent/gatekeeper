@@ -87,7 +87,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,
 
-	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{ .Values.mutatingWebhookAnnotations }}`,
+	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
@@ -120,7 +120,7 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
 
-	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{ .Values.validatingWebhookAnnotations }}`,
+	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
