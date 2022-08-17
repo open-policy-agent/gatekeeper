@@ -2,6 +2,7 @@ package expansion
 
 import (
 	"context"
+	"flag"
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -23,7 +24,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller").WithValues("kind", "ExpansionTemplate", logging.Process, "template_expansion_controller")
+var (
+	expansionEnabled = flag.Bool("enable-generator-resource-expansion", false, "(alpha) Enable the expansion of generator resources")
+
+	log = logf.Log.WithName("controller").WithValues("kind", "ExpansionTemplate", logging.Process, "template_expansion_controller")
+)
 
 type Adder struct {
 	WatchManager    *watch.Manager
@@ -31,6 +36,9 @@ type Adder struct {
 }
 
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !*expansionEnabled {
+		return nil
+	}
 	r := newReconciler(mgr, a.ExpansionSystem)
 	return add(mgr, r)
 }
