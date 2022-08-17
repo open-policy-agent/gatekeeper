@@ -240,7 +240,7 @@ jobs:
         path: |
           logs-*.json
   
-    build_test_generator_expansion:
+  build_test_generator_expansion:
     name: "[Generator Resource Expansion] Build and Test"
     runs-on: ubuntu-latest
     timeout-minutes: 15
