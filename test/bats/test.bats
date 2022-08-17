@@ -365,6 +365,10 @@ EOF
 }
 
 @test "gatekeeper expansion test" {
+  if [ -z $ENABLE_GENERATOR_EXPANSION_TESTS ]; then
+    skip "skipping generator expansion tests"
+  fi
+
   # setup ns, TemplateExpansion and Constraints
   run kubectl create namespace loadbalancers
   run kubectl apply -f test/expansion/expand_deployments.yaml
