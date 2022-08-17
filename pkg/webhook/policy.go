@@ -351,7 +351,6 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateModifySet(req)
 	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
 		return h.validateProvider(req)
-		// TODO add case here to validate ExpansionTemplate
 	}
 
 	return false, nil
