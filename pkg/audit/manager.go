@@ -161,9 +161,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	// record audit latency
 	defer func() {
 		logFinish(am.log)
-		latency := time.Since(startTime)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
+		}
+		if err := am.reporter.reportRunEnd(endTime); err != nil {
+			am.log.Error(err, "failed to report run end time")
 		}
 	}()
 
