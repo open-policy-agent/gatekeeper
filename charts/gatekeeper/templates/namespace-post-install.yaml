@@ -19,7 +19,11 @@ spec:
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+        {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: OnFailure
@@ -28,8 +32,6 @@ spec:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-update-namespace-label
-      nodeSelector:
-        kubernetes.io/os: linux
       {{- if .Values.postInstall.probeWebhook.enabled }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
@@ -48,9 +50,26 @@ spec:
             - {{ . }}
             {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
+            {{- range .Values.postInstall.labelNamespace.podSecurity }}
+            - {{ . }}
+            {{- end }}
             - --overwrite
+          resources:
+            {{- toYaml .Values.postInstall.resources | nindent 12 }}
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
+      {{- with .Values.postInstall }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      affinity:
+        {{- toYaml .affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
