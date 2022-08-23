@@ -52,3 +52,11 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gatekeeper.sh/mutation-id` | The UUID of the mutation.                                                                                                                                     |
 | `gatekeeper.sh/mutations`   | A list of comma-separated mutations in the format of `<MutationType>/<MutationNamespace>/<MutationName>:<MutationGeneration>` that are applied to the object. |
+
+## Other Configuration Options
+
+For the complete list of configuration flags for your specific version of Gatekeeper, run the Gatekeeper binary with the `--help` flag. For example:
+
+`docker run openpolicyagent/gatekeeper:v3.10.0-beta.0 --help`
+
+To ensure you are seeing all relevant flags, be sure the image tag (`:3.10.0-beta.0` above) corresponds with the version of Gatekeeper you are running.
