@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	violationsMetricName    = "violations"
-	auditDurationMetricName = "audit_duration_seconds"
-	lastRunTimeMetricName   = "audit_last_run_time"
+	violationsMetricName       = "violations"
+	auditDurationMetricName    = "audit_duration_seconds"
+	lastRunStartTimeMetricName = "audit_last_run_time"
+	lastRunEndTimeMetricName   = "audit_last_run_end_time"
 )
 
 var (
-	violationsM    = stats.Int64(violationsMetricName, "Total number of audited violations", stats.UnitDimensionless)
-	auditDurationM = stats.Float64(auditDurationMetricName, "Latency of audit operation in seconds", stats.UnitSeconds)
-	lastRunTimeM   = stats.Float64(lastRunTimeMetricName, "Timestamp of last audit run time", stats.UnitSeconds)
+	violationsM       = stats.Int64(violationsMetricName, "Total number of audited violations", stats.UnitDimensionless)
+	auditDurationM    = stats.Float64(auditDurationMetricName, "Latency of audit operation in seconds", stats.UnitSeconds)
+	lastRunStartTimeM = stats.Float64(lastRunStartTimeMetricName, "Timestamp of last audit run starting time", stats.UnitSeconds)
+	lastRunEndTimeM   = stats.Float64(lastRunEndTimeMetricName, "Timestamp of last audit run ending time", stats.UnitSeconds)
 
 	enforcementActionKey = tag.MustNewKey("enforcement_action")
 )
@@ -45,9 +47,13 @@ func register() error {
 			Aggregation: view.Distribution(1*60, 3*60, 5*60, 10*60, 15*60, 20*60, 40*60, 80*60, 160*60, 320*60),
 		},
 		{
-			Name:        lastRunTimeMetricName,
-			Measure:     lastRunTimeM,
-			Description: "Timestamp of last audit run time",
+			Name:        lastRunStartTimeMetricName,
+			Measure:     lastRunStartTimeM,
+			Aggregation: view.LastValue(),
+		},
+		{
+			Name:        lastRunEndTimeMetricName,
+			Measure:     lastRunEndTimeM,
 			Aggregation: view.LastValue(),
 		},
 	}
@@ -80,8 +86,18 @@ func (r *reporter) reportRunStart(t time.Time) error {
 		return err
 	}
 
-	val := float64(t.UnixNano()) / 1e9
-	return metrics.Record(ctx, lastRunTimeM.M(val))
+	val := float64(t.Unix())
+	return metrics.Record(ctx, lastRunStartTimeM.M(val))
+}
+
+func (r *reporter) reportRunEnd(t time.Time) error {
+	ctx, err := tag.New(context.Background())
+	if err != nil {
+		return err
+	}
+
+	val := float64(t.Unix())
+	return metrics.Record(ctx, lastRunEndTimeM.M(val))
 }
 
 // newStatsReporter creates a reporter for audit metrics.

@@ -13,7 +13,7 @@ There are three ways to gather audit results, depending on the level of detail n
 
 Prometheus metrics provide an aggregated look at the number of audit violations:
 
-* `gatekeeper_audit_last_run_time` provides the timestamp of the most recently completed audit run
+* `gatekeeper_audit_last_run_time` provides the start time timestamp of the most recent audit run
 * `gatekeeper_violations` provides the total number of audited violations for the last audit run, broken down by violation severity
 
 ### Constraint Status
