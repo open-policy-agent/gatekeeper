@@ -42,7 +42,7 @@ func register() error {
 		{
 			Name:        auditDurationMetricName,
 			Measure:     auditDurationM,
-			Aggregation: view.Distribution(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5),
+			Aggregation: view.Distribution(1*60, 3*60, 5*60, 10*60, 15*60, 20*60, 40*60, 80*60, 160*60, 320*60),
 		},
 		{
 			Name:        lastRunTimeMetricName,
