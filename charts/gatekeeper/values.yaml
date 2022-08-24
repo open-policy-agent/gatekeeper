@@ -8,6 +8,7 @@ disableMutation: false
 disableValidatingWebhook: false
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
+validatingWebhookAnnotations: {}
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
@@ -15,8 +16,10 @@ validatingWebhookCustomRules: {}
 enableDeleteOperations: false
 enableExternalData: false
 enableTLSHealthcheck: false
+maxServingThreads: -1
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
+mutatingWebhookAnnotations: {}
 mutatingWebhookExemptNamespacesLabels: {}
 mutatingWebhookObjectSelector: {}
 mutatingWebhookTimeoutSeconds: 1
@@ -34,10 +37,20 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.0
+      tag: v3.10.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
+    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
+      "pod-security.kubernetes.io/audit-version=latest",
+      "pod-security.kubernetes.io/warn=restricted",
+      "pod-security.kubernetes.io/warn-version=latest",
+      "pod-security.kubernetes.io/enforce=restricted",
+      "pod-security.kubernetes.io/enforce-version=v1.24"]
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
+  resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -49,14 +62,20 @@ postUpgrade:
     runAsUser: 1000
 postInstall:
   labelNamespace:
-    extraRules: []
     enabled: true
+    extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.0
+      tag: v3.10.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
+    podSecurity: ["pod-security.kubernetes.io/audit=restricted",
+      "pod-security.kubernetes.io/audit-version=latest",
+      "pod-security.kubernetes.io/warn=restricted",
+      "pod-security.kubernetes.io/warn-version=latest",
+      "pod-security.kubernetes.io/enforce=restricted",
+      "pod-security.kubernetes.io/enforce-version=v1.24"]
   probeWebhook:
     enabled: true
     image:
@@ -67,6 +86,9 @@ postInstall:
     waitTimeout: 60
     httpTimeout: 2
     insecureHTTPS: false
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -82,9 +104,13 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.0
+      tag: v3.10.0-beta.1
       pullPolicy: IfNotPresent
       pullSecrets: []
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
+  resources: {}
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
@@ -97,12 +123,12 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.10.0-beta.0
+  release: v3.10.0-beta.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations: {}
 podLabels: {}
-podCountLimit: 100
+podCountLimit: "100"
 secretAnnotations: {}
 enableRuntimeDefaultSeccompProfile: true
 controllerManager:
@@ -113,6 +139,8 @@ controllerManager:
   port: 8443
   metricsPort: 8888
   healthPort: 9090
+  readinessTimeout: 1
+  livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
   affinity:
@@ -127,6 +155,7 @@ controllerManager:
                     - webhook
             topologyKey: kubernetes.io/hostname
           weight: 100
+  topologySpreadConstraints: []
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
   resources:
@@ -155,12 +184,13 @@ audit:
   dnsPolicy: ClusterFirst
   metricsPort: 8888
   healthPort: 9090
+  readinessTimeout: 1
+  livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: true
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
-  writeToRAMDisk: false
   resources:
     limits:
       cpu: 1000m
@@ -181,8 +211,12 @@ audit:
     fsGroup: 999
     supplementalGroups:
       - 999
+  writeToRAMDisk: false
   extraRules: []
 crds:
+  affinity: {}
+  tolerations: []
+  nodeSelector: {kubernetes.io/os: linux}
   resources: {}
   securityContext:
     allowPrivilegeEscalation: false
@@ -202,7 +236,6 @@ psp:
   enabled: true
 upgradeCRDs:
   enabled: true
-  tolerations: []
   extraRules: []
 rbac:
   create: true
