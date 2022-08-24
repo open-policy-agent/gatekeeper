@@ -507,17 +507,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 			objNs := objFile.GetNamespace()
-			ns := corev1.Namespace{}
+			var ns *corev1.Namespace
 			if objNs != "" {
-				ns, err = nsCache.Get(ctx, am.client, objNs)
+				nsRef, err := nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
 					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
+				ns = &nsRef
 			}
 			augmentedObj := target.AugmentedUnstructured{
 				Object:    *objFile,
-				Namespace: &ns,
+				Namespace: ns,
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
 			if err != nil {
