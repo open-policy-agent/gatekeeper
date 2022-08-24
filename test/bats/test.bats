@@ -388,7 +388,9 @@ EOF
   # create deployment without 'env' label and assignmetadata to add 'env'
   run kubectl apply -f test/expansion/assignmeta_env.yaml
   # wait for mutation to be registered by controllers
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "sleep 5"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata add-env-label"
+  # now that mutation would add the 'env' label, the deployment describes a compliant pod
+  # and the request should succeed
   run kubectl apply -f test/expansion/deployment_no_label.yaml
   assert_success
 
