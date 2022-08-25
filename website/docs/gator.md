@@ -10,11 +10,16 @@ Constraints in a local environment.
 
 To install `gator`, you may either
 [download the binary](https://github.com/open-policy-agent/gatekeeper/releases)
-relevant to your system or build it directly from source.
+relevant to your system or build it directly from source. On macOS and Linux, you can also install `gator` using [Homebrew](https://brew.sh).
 
 To build from source:
 ```
 go get github.com/open-policy-agent/gatekeeper/cmd/gator
+```
+
+Install with Homebrew:
+```
+brew install gator
 ```
 
 ## The `gator test` subcommand
