@@ -22,12 +22,9 @@ go get github.com/open-policy-agent/gatekeeper/cmd/gator
 
 `gator test` allows users to test a set of Kubernetes objects against a set of
 Templates and Constraints. The command returns violations when found and
-communicates success or failure via its exit status.
-
-The `gator test` command will also attempt to expand any resources passed in, if
-a supplied `ExpansionTemplate` matches these resources. If a resource supplied
-to `gator test` has a custom namespace, and the config for that namespace is
-supplied, `gator test` can match any relevant namespace data.
+communicates success or failure via its exit status. This command will also
+attempt to expand any resources passed in if a supplied `ExpansionTemplate`
+matches these resources.
 
 Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
