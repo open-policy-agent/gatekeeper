@@ -167,9 +167,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	// record audit latency
 	defer func() {
 		logFinish(am.log)
-		latency := time.Since(startTime)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
+		}
+		if err := am.reporter.reportRunEnd(endTime); err != nil {
+			am.log.Error(err, "failed to report run end time")
 		}
 	}()
 
@@ -509,17 +513,18 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 			objNs := objFile.GetNamespace()
-			ns := corev1.Namespace{}
+			var ns *corev1.Namespace
 			if objNs != "" {
-				ns, err = nsCache.Get(ctx, am.client, objNs)
+				nsRef, err := nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
 					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
+				ns = &nsRef
 			}
 			augmentedObj := target.AugmentedUnstructured{
 				Object:    *objFile,
-				Namespace: &ns,
+				Namespace: ns,
 				Source:    mutationtypes.SourceTypeOriginal,
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
@@ -534,7 +539,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			allResps := []*rtypes.Responses{resp}
 			base := &mutationtypes.Mutable{
 				Object:    objFile,
-				Namespace: &ns,
+				Namespace: ns,
 				Username:  "",
 				Source:    mutationtypes.SourceTypeOriginal,
 			}

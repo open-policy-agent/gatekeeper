@@ -211,6 +211,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-mutating-webhook-configuration
+  annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:
@@ -238,6 +239,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
+  annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:

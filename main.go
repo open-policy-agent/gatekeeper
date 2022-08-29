@@ -98,6 +98,7 @@ var (
 	healthAddr           = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
 	metricsAddr          = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
 	port                 = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	host                 = flag.String("host", "", "the host address the webhook server listens on. defaults to all addresses.")
 	certDir              = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 	disableCertRotation  = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	enableProfile        = flag.Bool("enable-pprof", false, "enable pprof profiling")
@@ -179,6 +180,7 @@ func main() {
 		MetricsBindAddress:     *metricsAddr,
 		LeaderElection:         false,
 		Port:                   *port,
+		Host:                   *host,
 		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
