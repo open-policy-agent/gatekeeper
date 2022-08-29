@@ -1,5 +1,6 @@
 ---
-id: gator title: The gator CLI
+id: gator 
+title: The gator CLI
 ---
 
 The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
@@ -22,11 +23,6 @@ go get github.com/open-policy-agent/gatekeeper/cmd/gator
 `gator test` allows users to test a set of Kubernetes objects against a set of
 Templates and Constraints. The command returns violations when found and
 communicates success or failure via its exit status.
-
-The `gator test` command will also attempt to expand any resources passed in, if
-a supplied `ExpansionTemplate` matches these resources. If a resource supplied
-to `gator test` has a custom namespace, and the config for that namespace is
-supplied, `gator test` can match any relevant namespace data.
 
 Note: The `gator verify` command was first called `gator test`. These names were
 changed to better align `gator` with other projects in the open-policy-agent
@@ -236,45 +232,6 @@ gator verify path/to/suites/... --run "disallowed"
 ```
 
 Run `gator verify --help` for more information.
-
-## The `gator expand` subcommand
-
-`gator expand` allows users to test the behavior of their Expansion configs. The
-command accepts a file or directory containing the expansion configs, which
-should include the resource(s) under test, the `ExpansionTemplate`(s), and
-optionally any Mutation CRs. The command will output a manifest containing the
-expanded resources.
-
-If the mutators use spec.match.namespaceSelector, the namespace the resource
-belongs to must be supplied in order to correctly evaluate the match criteria.
-If a resource is specified for expansion but its non-default namespace is not
-supplied, the command will exit 1.
-
-### Usage
-
-Similar to `gator test`, `gator expand` expects a `--filename` flag, which can
-be a file or directory containing the resources under test. This flag can be
-repeated.
-
-```
-gator expand --filename="manifest.yaml" –filename="expansion-manifests/"
-```
-
-By default, `gator expand` will output to `stdout`, but a `–outputfile` can be
-specified to write the results to a file.
-
-```
-gator expand --filename="manifest.yaml" –outputfile="results.yaml"
-```
-
-`gator expand` can output in `yaml` or `json` (default is `yaml`).
-
-```
-gator expand --filename="manifest.yaml" –format="json"
-```
-
-See `gator expand –help` for more details. `gator expand` will exit 1 if there
-is a problem parsing the configs or expanding the resources.
 
 ## Gotchas
 

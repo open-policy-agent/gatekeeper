@@ -1,15 +1,17 @@
 ---
-id: expansion title: Expansion
+id: expansion 
+title: Early Rejection of Generator Resources
 ---
 
 > 🚧 This feature is in _alpha_ stage and it is not enabled by default.
 
-Expansion allows Gatekeeper to run policy on resources created by other
-resources. For example, users could configure Gatekeeper to immediately reject
-deployments that would create a `Pod` that violates a constraint instead of
-merely rejecting the Pods. To achieve this, Gatekeeper creates a "mock resource"
-for the `Pod`, runs validation on it, and aggregates the mock resource's
-violations onto the parent resource (the `Deployment` in this example).
+Gatekeeper can be configured to reject generator resources that might create a
+ resource that violates a policy. For example, users could 
+configure Gatekeeper to immediately reject deployments that would create a `Pod` 
+that violates a constraint instead of merely rejecting the Pods. To achieve this,
+Gatekeeper creates a "mock resource" for the `Pod`, runs validation on it, and 
+aggregates the mock resource's violations onto the parent resource (the
+ `Deployment` in this example).
 
 To use this functionality, users must first specify which resources should be "
 expanded" by creating 1 or more `TemplateExpansion` custom resources. Then, in
@@ -43,8 +45,8 @@ constraint, look at the [Match Source](#match-source) section below.
 Expansion behavior is configured through an `ExpansionTemplate` CR. Optionally,
 users can create `Mutation` CRs to customize how resources are expanded.
 
-Users can test their expansion configuration using the `gator expand` CLI (TODO
-link).
+Users can test their expansion configuration using the 
+[`gator expand` CLI](https://open-policy-agent.github.io/gatekeeper/website/docs/gator).
 
 #### ExpansionTemplate
 
@@ -57,8 +59,9 @@ The `ExpansionTemplate` CR specifies:
   before any mutators are applied. For example, in a case where a `Deployment`
   expands into a `Pods`, `spec.template` would typically be the source.
 
-Here is an example of a `ExpansionTemplate` that specifies that `Deployment`
-and `ReplicaSet` should be expanded into a `Pod`.
+Here is an example of a `ExpansionTemplate` that specifies that `DeamonSet`,
+ `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet` 
+ should be expanded into a `Pod`.
 
 ```
 apiVersion: expansion.gatekeeper.sh/v1alpha1
@@ -68,7 +71,7 @@ metadata:
 spec:
   applyTo:
     - groups: ["apps"]
-      kinds: ["Deployment", "ReplicaSet"]
+      kinds: ["DeamonSet", "Deployment", "Job", "ReplicaSet", "ReplicationController", "StatefulSet"]
       versions: ["v1"]
   templateSource: "spec.template"
   generatedGVK:
