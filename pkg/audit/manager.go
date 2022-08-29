@@ -551,7 +551,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			for _, resultant := range resultants {
 				au := target.AugmentedUnstructured{
 					Object:    *resultant,
-					Namespace: &ns,
+					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
 				r, err := am.opa.Review(ctx, au)
