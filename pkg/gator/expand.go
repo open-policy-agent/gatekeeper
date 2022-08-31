@@ -100,7 +100,11 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Re
 		return nil, fmt.Errorf("error expanding resource %s: %s", resource.GetName(), err)
 	}
 
-	return resultants, nil
+	var objs = make([]*unstructured.Unstructured, len(resultants))
+	for i := 0; i < len(resultants); i++ {
+		objs[i] = resultants[i].Obj
+	}
+	return objs, nil
 }
 
 func (er *Expander) NamespaceForResource(r *unstructured.Unstructured) (*corev1.Namespace, bool) {

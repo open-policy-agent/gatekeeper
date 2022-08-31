@@ -23,10 +23,11 @@ import (
 )
 
 type templateData struct {
-	name         string
-	apply        []match.ApplyTo
-	source       string
-	generatedGVK expansionunversioned.GeneratedGVK
+	name              string
+	apply             []match.ApplyTo
+	source            string
+	generatedGVK      expansionunversioned.GeneratedGVK
+	enforcementAction string
 }
 
 func newTemplate(data *templateData) *expansionunversioned.ExpansionTemplate {
@@ -39,9 +40,10 @@ func newTemplate(data *templateData) *expansionunversioned.ExpansionTemplate {
 			Name: data.name,
 		},
 		Spec: expansionunversioned.ExpansionTemplateSpec{
-			ApplyTo:        data.apply,
-			TemplateSource: data.source,
-			GeneratedGVK:   data.generatedGVK,
+			ApplyTo:           data.apply,
+			TemplateSource:    data.source,
+			GeneratedGVK:      data.generatedGVK,
+			EnforcementAction: data.enforcementAction,
 		},
 	}
 }
@@ -588,7 +590,7 @@ func TestExpand(t *testing.T) {
 		ns        *corev1.Namespace
 		templates []*expansionunversioned.ExpansionTemplate
 		mutators  []types.Mutator
-		want      []*unstructured.Unstructured
+		want      []*Resultant
 		expectErr bool
 	}{
 		{
@@ -606,7 +608,7 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{},
+			want: []*Resultant{},
 		},
 		{
 			name:      "no mutators basic deployment expands pod",
@@ -616,7 +618,21 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodNoMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: ""},
+			},
+		},
+		{
+			name:      "deployment expands pod with enforcement action override",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators:  []types.Mutator{},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPodsEnforceDryrun, t),
+			},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "dryrun"},
+			},
 		},
 		{
 			name:      "1 mutator basic deployment expands pod",
@@ -628,7 +644,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "expand with nil namespace returns error",
@@ -652,7 +670,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "1 mutator source empty deployment expands pod and mutates",
@@ -664,7 +684,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "1 mutator source Original deployment expands pod but does not mutate",
@@ -676,7 +698,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodNoMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "2 mutators, only 1 match, basic deployment expands pod",
@@ -689,7 +713,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutate, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "2 mutators, 2 matches, basic deployment expands pod",
@@ -702,7 +728,9 @@ func TestExpand(t *testing.T) {
 			templates: []*expansionunversioned.ExpansionTemplate{
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
-			want: []*unstructured.Unstructured{loadFixture(fixtures.PodImagePullMutateAnnotated, t)},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodImagePullMutateAnnotated, t), EnforcementAction: ""},
+			},
 		},
 		{
 			name:      "custom CR with 2 different resultant kinds, with mutators",
@@ -717,9 +745,9 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TemplateCatExpandsKitten, t),
 				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 			},
-			want: []*unstructured.Unstructured{
-				loadFixture(fixtures.ResultantKitten, t),
-				loadFixture(fixtures.ResultantPurr, t),
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun"},
+				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn"},
 			},
 		},
 		{
@@ -737,9 +765,9 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
 			},
-			want: []*unstructured.Unstructured{
-				loadFixture(fixtures.ResultantKitten, t),
-				loadFixture(fixtures.ResultantPurr, t),
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun"},
+				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn"},
 			},
 		},
 	}
@@ -781,14 +809,14 @@ func TestExpand(t *testing.T) {
 	}
 }
 
-func compareResults(got []*unstructured.Unstructured, want []*unstructured.Unstructured, t *testing.T) {
+func compareResults(got []*Resultant, want []*Resultant, t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("got %d results, expected %d", len(got), len(want))
 		return
 	}
 
-	sortUnstructs(got)
-	sortUnstructs(want)
+	sortReusultants(got)
+	sortReusultants(want)
 
 	for i := 0; i < len(got); i++ {
 		if diff := cmp.Diff(got[i], want[i]); diff != "" {
@@ -797,9 +825,9 @@ func compareResults(got []*unstructured.Unstructured, want []*unstructured.Unstr
 	}
 }
 
-func sortUnstructs(objs []*unstructured.Unstructured) {
-	sortKey := func(o *unstructured.Unstructured) string {
-		return o.GetName() + o.GetAPIVersion()
+func sortReusultants(objs []*Resultant) {
+	sortKey := func(r *Resultant) string {
+		return r.Obj.GetName() + r.Obj.GetAPIVersion()
 	}
 	sort.Slice(objs, func(i, j int) bool {
 		return sortKey(objs[i]) > sortKey(objs[j])
