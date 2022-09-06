@@ -26,10 +26,20 @@ func init() {
 	}
 }
 
-func Test(objs []*unstructured.Unstructured) (*GatorResponses, error) {
-	// create the client
+func Test(objs []*unstructured.Unstructured, mutators ...TestOptionMutator) (*GatorResponses, error) {
+	args := []local.Arg{local.Tracing(false)}
 
-	driver, err := local.New(local.Tracing(false))
+	// Generate test options, manipulate per option mutators
+	ops := defaultTestOptions()
+	mutateTestOptions(ops, mutators...)
+
+	// create the client
+	externs := local.Externs()
+	if ops.referentialData {
+		externs = local.Externs("inventory")
+	}
+	args = append(args, externs)
+	driver, err := local.New(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +61,37 @@ func Test(objs []*unstructured.Unstructured) (*GatorResponses, error) {
 			return nil, fmt.Errorf("converting unstructured %q to template: %w", obj.GetName(), err)
 		}
 
+		/** QUESTION FOR MAX:
+		 *
+		 *  If referential data is disabled and a referential template is passed
+		 *  in, an error like the following one is produced:
+		 *
+		 *  ```
+		 *  adding template "k8suniqueserviceselector": invalid
+		 *  ConstraintTemplate: invalid data references: check refs failed on
+		 *  module {template}: errors (1): disallowed ref
+		 *  data.inventory.namespace[namespace][_].Service[name]
+		 *  ```
+		 *
+		 *  I have the option to check for a specific error type in my conditional logic:
+		 *  `frameworks/constraint/pkg/regorewriter.ErrDataReferences`
+		 *
+		 *  I could use that ability to produce a friendlier error message here
+		 *  or in the gator test CLI.  Particularly in gator test CLI, it could
+		 *  be helpful to give a more informative piece of advice to the user.
+		 *  I'm imagining something like:
+		 *
+		 *  "invalid data reference... set --referential-data=true: [rest of error here]"
+		 *
+		 *  Perhaps there's a more typical way to do that.  LMK what you think.
+		 *  Also, note that --referential-data=true will be the default in
+		 *  gator test CLI.  The message would be for someone who might have
+		 *  just added a referential template and needs guidance to remove the
+		 *  flag.
+		 *
+		 *  We could also just surface the fairly obtuse error I included above
+		 *  and improve the output if users complain.
+		 */
 		_, err = client.AddTemplate(ctx, templ)
 		if err != nil {
 			return nil, fmt.Errorf("adding template %q: %w", templ.GetName(), err)
@@ -71,10 +112,12 @@ func Test(objs []*unstructured.Unstructured) (*GatorResponses, error) {
 	}
 
 	// finally, add all the data.
-	for _, obj := range objs {
-		_, err := client.AddData(ctx, obj)
-		if err != nil {
-			return nil, fmt.Errorf("adding data of GVK %q: %w", obj.GroupVersionKind().String(), err)
+	if ops.referentialData {
+		for _, obj := range objs {
+			_, err := client.AddData(ctx, obj)
+			if err != nil {
+				return nil, fmt.Errorf("adding data of GVK %q: %w", obj.GroupVersionKind().String(), err)
+			}
 		}
 	}
 

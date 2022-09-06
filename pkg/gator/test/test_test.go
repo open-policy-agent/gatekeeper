@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
@@ -58,10 +59,11 @@ func init() {
 
 func TestTest(t *testing.T) {
 	tcs := []struct {
-		name   string
-		inputs []string
-		want   []*GatorResult
-		err    error
+		name           string
+		inputs         []string
+		want           []*GatorResult
+		err            error
+		optionMutators []TestOptionMutator
 	}{
 		{
 			name: "basic no violation",
@@ -103,7 +105,7 @@ func TestTest(t *testing.T) {
 			},
 		},
 		{
-			name: "referential constraint with violation",
+			name: "referential constraint with violation, referential data enabled",
 			inputs: []string{
 				fixtures.TemplateReferential,
 				fixtures.ConstraintReferential,
@@ -126,6 +128,24 @@ func TestTest(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			name: "referential constraint with violation, referential data disabled",
+			inputs: []string{
+				fixtures.TemplateReferential,
+				fixtures.ConstraintReferential,
+				fixtures.ObjectReferentialInventory,
+				fixtures.ObjectReferentialDeny,
+			},
+			optionMutators: []TestOptionMutator{DisableReferentialData},
+			err:            constraintclienterrors.ErrInvalidConstraintTemplate,
+			// QUESTION FOR MAX: This really should be the below error.
+			// However, the errors.Is() check isn't working for the commented error.  I traced the
+			// error through the constraint framework and back to here and it
+			// appears to be using the %w directive at each level, which is
+			// what makes the wrapping work (AFAICT).  Perhaps you can see what
+			// I'm doing wrong
+			// err:            regorewriter.ErrDataReferences,
 		},
 		{
 			name: "referential constraint without violation",
@@ -174,7 +194,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs)
+			resps, err := Test(objs, tc.optionMutators...)
 			if tc.err != nil {
 				if err == nil {
 					t.Errorf("got nil err, want %v", tc.err)

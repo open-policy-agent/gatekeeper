@@ -64,3 +64,25 @@ func (r *GatorResponses) Results() []*GatorResult {
 
 	return res
 }
+
+type testOptions struct {
+	referentialData bool
+}
+
+func defaultTestOptions() *testOptions {
+	return &testOptions{
+		referentialData: true,
+	}
+}
+
+func mutateTestOptions(ops *testOptions, mutators ...TestOptionMutator) {
+	for _, m := range mutators {
+		m(ops)
+	}
+}
+
+type TestOptionMutator func(*testOptions)
+
+var DisableReferentialData TestOptionMutator = func(ops *testOptions) {
+	ops.referentialData = false
+}
