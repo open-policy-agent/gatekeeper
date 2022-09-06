@@ -240,3 +240,6 @@ upgradeCRDs:
   extraRules: []
 rbac:
   create: true
+externalCertInjection:
+  enabled: false
+  secretName: gatekeeper-webhook-server-cert
