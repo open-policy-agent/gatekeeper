@@ -113,6 +113,10 @@ func (ks *kindSet) Write() error {
 				obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
 			}
 
+			if name == "gatekeeper-webhook-server-cert" && kind == "Secret" {
+				obj = "{{- if not .Values.externalCertInjection.enabled }}\n" + obj + "{{- end }}\n"
+			}
+
 			if name == "gatekeeper-critical-pods" && kind == "ResourceQuota" {
 				obj = "{{- if .Values.resourceQuota }}\n" + obj + "{{- end }}\n"
 			}
