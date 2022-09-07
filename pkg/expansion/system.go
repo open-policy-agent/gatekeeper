@@ -20,6 +20,11 @@ type System struct {
 	mutationSystem *mutation.System
 }
 
+type Resultant struct {
+	Obj          *unstructured.Unstructured
+	TemplateName string
+}
+
 func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
 	return template.ObjectMeta.Name
 }
@@ -103,17 +108,21 @@ func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunvers
 // Expand expands `base` into resultant resources, and applies any applicable
 // mutators. If no ExpansionTemplates match `base`, an empty slice
 // will be returned. If `s.mutationSystem` is nil, no mutations will be applied.
-func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructured, error) {
+func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	gvk := base.Object.GroupVersionKind()
 	if gvk == (schema.GroupVersionKind{}) {
 		return nil, fmt.Errorf("cannot expand resource %s with empty GVK", base.Object.GetName())
 	}
-	var resultants []*unstructured.Unstructured
+
+	var resultants []*Resultant
 	templates := s.templatesForGVK(gvk)
 
 	for _, te := range templates {
 		res, err := expandResource(base.Object, base.Namespace, te)
-		resultants = append(resultants, res)
+		resultants = append(resultants, &Resultant{
+			Obj:          res,
+			TemplateName: te.ObjectMeta.Name,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -125,14 +134,14 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*unstructured.Unstructur
 
 	for _, res := range resultants {
 		mutable := &mutationtypes.Mutable{
-			Object:    res,
+			Object:    res.Obj,
 			Namespace: base.Namespace,
 			Username:  base.Username,
 			Source:    mutationtypes.SourceTypeGenerated,
 		}
 		_, err := s.mutationSystem.Mutate(mutable)
 		if err != nil {
-			return nil, fmt.Errorf("failed to mutate resultant resource %s: %s", res.GetName(), err)
+			return nil, fmt.Errorf("failed to mutate resultant resource %s: %s", res.Obj.GetName(), err)
 		}
 	}
 
@@ -158,7 +167,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 		return nil, fmt.Errorf("could not extract source field from unstructured: %s", err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("could not find source field %q in obj", srcPath)
+		return nil, fmt.Errorf("could not find source field %q in Obj", srcPath)
 	}
 
 	resource := &unstructured.Unstructured{}

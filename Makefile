@@ -232,8 +232,8 @@ ifeq ($(ENABLE_EXTERNAL_DATA),true)
 	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
 ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
+	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
+	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \

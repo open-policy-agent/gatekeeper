@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -533,10 +532,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 
-			results := ToResults(&augmentedObj.Object, resp)
-
 			// Expand object and review any resultant resources
-			allResps := []*rtypes.Responses{resp}
 			base := &mutationtypes.Mutable{
 				Object:    objFile,
 				Namespace: ns,
@@ -550,28 +546,26 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			for _, resultant := range resultants {
 				au := target.AugmentedUnstructured{
-					Object:    *resultant,
+					Object:    *resultant.Obj,
 					Namespace: ns,
 					Source:    mutationtypes.SourceTypeGenerated,
 				}
-				r, err := am.opa.Review(ctx, au)
+				resultantResp, err := am.opa.Review(ctx, au)
 				if err != nil {
 					// updated to not return err immediately
 					errs = append(errs, err)
 					continue
 				}
-				allResps = append(allResps, r)
+				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
 			}
-			expansion.AggregateResponses(objFile.GetName(), resp, allResps)
 
-			for _, r := range allResps {
-				if len(r.Results()) > 0 {
-					err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
-					if err != nil {
-						// updated to not return err immediately
-						errs = append(errs, err)
-						continue
-					}
+			if len(resp.Results()) > 0 {
+				results := ToResults(&augmentedObj.Object, resp)
+				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
+				if err != nil {
+					// updated to not return err immediately
+					errs = append(errs, err)
+					continue
 				}
 			}
 		}

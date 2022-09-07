@@ -13,83 +13,63 @@ type addFn func(base *types.Responses)
 
 func TestAggregateResponses(t *testing.T) {
 	tests := []struct {
-		name       string
-		parentName string
-		parent     []addFn
-		children   [][]addFn
-		want       []addFn
+		name         string
+		templateName string
+		parent       []addFn
+		child        []addFn
+		want         []addFn
 	}{
 		{
-			name:       "parent with 1 child with 1 violation",
-			parentName: "foo",
+			name:         "parent with 1 violation",
+			templateName: "foo",
 			parent: []addFn{
 				addViolation("targetA", "parent violation"),
 			},
-			children: [][]addFn{
-				{
-					addViolation("targetA", "child violation"),
-				},
-			},
+			child: []addFn{addViolation("targetA", "child violation")},
 			want: []addFn{
 				addViolation("targetA", "parent violation"),
 				addViolation("targetA", prefixMsg("foo", "child violation")),
 			},
 		},
 		{
-			name:       "parent with 2 children each with 2 violations",
-			parentName: "foo",
+			name:         "parent with 2 violations",
+			templateName: "foo",
 			parent: []addFn{
 				addViolation("targetA", "parent violation"),
 			},
-			children: [][]addFn{
-				{
-					addViolation("targetA", "child violation A"),
-					addViolation("targetA", "child violation B"),
-				},
-				{
-					addViolation("targetA", "child violation C"),
-					addViolation("targetA", "child violation D"),
-				},
+			child: []addFn{
+				addViolation("targetA", "child violation A"),
+				addViolation("targetA", "child violation B"),
 			},
 			want: []addFn{
 				addViolation("targetA", "parent violation"),
 				addViolation("targetA", prefixMsg("foo", "child violation A")),
 				addViolation("targetA", prefixMsg("foo", "child violation B")),
-				addViolation("targetA", prefixMsg("foo", "child violation C")),
-				addViolation("targetA", prefixMsg("foo", "child violation D")),
 			},
 		},
 		{
-			name:       "parent with 2 children each with 2 violations different targets",
-			parentName: "foo",
+			name:         "parent with child with 2 violations, different targets",
+			templateName: "foo",
 			parent: []addFn{
 				addViolation("targetA", "parent violation"),
 			},
-			children: [][]addFn{
-				{
-					addViolation("targetA", "child violation 1"),
-					addViolation("targetB", "child violation 2"),
-				},
-				{
-					addViolation("targetA", "child violation 3"),
-					addViolation("targetB", "child violation 4"),
-				},
+			child: []addFn{
+				addViolation("targetA", "child violation 1"),
+				addViolation("targetB", "child violation 2"),
 			},
 			want: []addFn{
 				addViolation("targetA", "parent violation"),
 				addViolation("targetA", prefixMsg("foo", "child violation 1")),
 				addViolation("targetB", prefixMsg("foo", "child violation 2")),
-				addViolation("targetA", prefixMsg("foo", "child violation 3")),
-				addViolation("targetB", prefixMsg("foo", "child violation 4")),
 			},
 		},
 		{
-			name:       "parent with no children",
-			parentName: "foo",
+			name:         "parent with no children",
+			templateName: "foo",
 			parent: []addFn{
 				addViolation("targetA", "parent violation"),
 			},
-			children: [][]addFn{},
+			child: []addFn{},
 			want: []addFn{
 				addViolation("targetA", "parent violation"),
 			},
@@ -98,13 +78,10 @@ func TestAggregateResponses(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			parent := buildResponses(tc.parent)
-			children := make([]*types.Responses, len(tc.children))
-			for i := range tc.children {
-				children[i] = buildResponses(tc.children[i])
-			}
+			child := buildResponses(tc.child)
 
 			// AggregateResponses will change parent in-place
-			AggregateResponses(tc.parentName, parent, children)
+			AggregateResponses(tc.templateName, parent, child)
 			want := buildResponses(tc.want)
 
 			if diff := cmp.Diff(parent, want); diff != "" {

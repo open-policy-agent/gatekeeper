@@ -547,15 +547,13 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		return nil, fmt.Errorf("error reviewing resource %s: %s", req.Name, err)
 	}
 
-	var resultantResps []*rtypes.Responses
 	for _, res := range resultants {
-		resp, err := h.review(ctx, createReviewForResultant(res, review.Namespace), trace, dump)
+		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %s", err)
 		}
-		resultantResps = append(resultantResps, resp)
+		expansion.AggregateResponses(res.TemplateName, resp, resultantResp)
 	}
-	expansion.AggregateResponses(req.Name, resp, resultantResps)
 
 	return resp, nil
 }

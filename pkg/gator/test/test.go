@@ -105,25 +105,23 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		}
 
 		// Attempt to expand the obj and review resultant resources (if any)
-		allReviews := []*types.Responses{review}
 		resultants, err := er.Expand(obj)
 		if err != nil {
 			return nil, fmt.Errorf("expanding resource %s: %s", obj.GetName(), err)
 		}
 		for _, resultant := range resultants {
 			au := target.AugmentedUnstructured{
-				Object:    *resultant,
+				Object:    *resultant.Obj,
 				Namespace: ns,
 				Source:    mutationtypes.SourceTypeGenerated,
 			}
 			resultantReview, err := client.Review(ctx, au)
 			if err != nil {
 				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %v",
-					resultant.GroupVersionKind(), resultant.GetNamespace(), resultant.GetName(), err)
+					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)
 			}
-			allReviews = append(allReviews, resultantReview)
+			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
 		}
-		expansion.AggregateResponses(obj.GetName(), review, allReviews[1:])
 
 		for targetName, r := range review.ByTarget {
 			targetResponse := responses.ByTarget[targetName]

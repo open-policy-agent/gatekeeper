@@ -40,16 +40,18 @@ func Expand(resources []*unstructured.Unstructured) ([]*unstructured.Unstructure
 		return nil, err
 	}
 
-	var resultants []*unstructured.Unstructured
+	var resultantObjs []*unstructured.Unstructured
 	for _, obj := range er.objects {
-		r, err := er.Expand(obj)
+		resultants, err := er.Expand(obj)
 		if err != nil {
 			return nil, err
 		}
-		resultants = append(resultants, r...)
+		for _, r := range resultants {
+			resultantObjs = append(resultantObjs, r.Obj)
+		}
 	}
 
-	return resultants, nil
+	return resultantObjs, nil
 }
 
 func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
@@ -79,7 +81,7 @@ func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 	return er, nil
 }
 
-func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Resultant, error) {
 	ns, _ := er.NamespaceForResource(resource)
 
 	// Mutate the base resource before expanding it

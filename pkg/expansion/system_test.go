@@ -772,7 +772,11 @@ func TestExpand(t *testing.T) {
 				t.Errorf("unexpected err: %s", err)
 			}
 
-			compareResults(results, tc.want, t)
+			resultants := make([]*unstructured.Unstructured, len(results))
+			for i := 0; i < len(results); i++ {
+				resultants[i] = results[i].Obj
+			}
+			compareResults(resultants, tc.want, t)
 		})
 	}
 }
