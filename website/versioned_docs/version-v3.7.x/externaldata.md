@@ -3,6 +3,8 @@ id: externaldata
 title: External Data
 ---
 
+`Feature State`: Gatekeeper version v3.7+ (alpha)
+
 > ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
 
 > 🚧  Mutation is not yet supported with external data.
