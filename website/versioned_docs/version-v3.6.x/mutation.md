@@ -2,11 +2,11 @@
 id: mutation
 title: Mutation
 ---
+`Feature State`: Gatekeeper version v3.4+ (alpha)
 
-The mutation feature allows Gatekeeper to not only validate created Kubernetes resources but also modify them based on defined mutation policies.
-The feature is still in an alpha stage, so the final form can still change.
+> ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
 
-Status: alpha
+The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
 ## Mutation CRDs
 

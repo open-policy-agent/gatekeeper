@@ -85,7 +85,7 @@ metadata:
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
@@ -116,7 +116,7 @@ rules:
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
@@ -128,7 +128,7 @@ metadata:
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: gatekeeper-update-namespace-label
 subjects:
   - kind: ServiceAccount
