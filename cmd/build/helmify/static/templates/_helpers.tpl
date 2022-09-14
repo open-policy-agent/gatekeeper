@@ -83,5 +83,3 @@ Output post install webhook probe volume entry
   secret:
     secretName: {{ .Values.externalCertInjection.secretName }}
 {{- end -}}
-
-# testing - will be removed
