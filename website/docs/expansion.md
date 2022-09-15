@@ -1,30 +1,47 @@
 ---
 id: expansion
-title: Early Rejection of Generator Resources
+title: Validation of Workload Resources
 ---
 
+`Feature State:` Gatekeeper version v3.7+ (alpha)
+
 > 🚧 This feature is in _alpha_ stage, and is not enabled by default. To
-> enable, set the "enable-generator-resource-expansion" flag.
+> enable, set the `enable-generator-resource-expansion` flag.
 
-Gatekeeper can be configured to reject generator resources that might create a
-resource that violates a policy. For example, one could configure Gatekeeper to
-immediately reject deployments that would create a `Pod` that violates a
-constraint instead of merely rejecting the Pods. To achieve this, Gatekeeper
-creates a "mock resource" for the `Pod`, runs validation on it, and aggregates
-the mock resource's violations onto the parent resource (the `Deployment` in
-this example).
+A workload resource is a resource that creates other resources, such as a
+Deployment or Job. Gatekeeper can be configured to reject
+workload resources that might create a resource that violates a policy. For
+example, one could configure Gatekeeper to immediately reject deployments that
+would create a Pod that violates a constraint instead of merely rejecting the
+Pods. To achieve this, Gatekeeper creates a "mock resource" for the Pod, runs
+validation on it, and aggregates the mock resource's violations onto the parent
+resource (the Deployment in this example).
 
-To use this functionality, first specify which resources should be "expanded" by
-creating 1 or more `TemplateExpansion` custom resources. Then, in order for
-Gatekeeper to accurately create these "mock resources" in a way that mirrors the
-real Kubernetes controllers, users can define any number of
+To use this functionality, first specify which resources should be "expanded"
+into mock resource(s) by creating a `ExpansionTemplate` custom resource. This
+specifies the GVKs of the workload resources, the GVK of
+the resultant mock resource, as well as which subfield of the workload resource
+should be used to generate the mock resource (i.e. `spec.template` for most
+Pod-generating resources).
+
+In some cases, it may not be possible to build an accurate representation of a
+mock resource by looking at the workload resource alone. For example, suppose a
+cluster is using Istio, which will inject a sidecar container on specific
+resources. Typically, this sidecar configuration not is specified in the config
+of the workload resource (i.e. Deployment), but rather injected by Istio's
+webhook. In order to accurately represent mock resources such as Pods with Istio
+sidecars, Gatekeeper leverages its
 [Mutations](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation)
-on the expanded resource to manipulate them into the desired form.
+feature to allow mock resources to be manipulated into their desired form. In
+the Istio example, `Assign` and `ModifySet` mutators could be configured to
+mimic Istio sidecar injection. For further details on mutating mock resources 
+see the [Math Source](#match-source) section below.
 
-Any resources configured for expansion will be expanded for both validation and
+Any resources configured for expansion will be expanded by both the validating
+webhook and
 [Audit](https://open-policy-agent.github.io/gatekeeper/website/docs/audit). This
-feature will only be enabled if a user creates a `TemplateExpansion`
-that targets some resource that exists on the cluster.
+feature will only be enabled if a user creates a `ExpansionTemplate` that
+targets some resource that exists on the cluster.
 
 Note that the accuracy of enforcement depends on how well the mock resource
 resembles the real thing. Mutations can help with this, but 100% accuracy is
@@ -93,9 +110,10 @@ and `ConstraintTemplate` kinds, specifies if the config should match Generated (
 i.e. expanded) resources, Original resources, or both. The `source` field is
 an `enum` which accepts the following values:
 
-- `Generated` – the config will only apply to expanded resources
+- `Generated` – the config will only apply to expanded resources, and **will not
+  apply to any real resources on the cluster**
 - `Original` – the config will only apply to Original resources, and will not
-  effect expanded resources
+  affect expanded resources
 - `All` – the config will apply to both `Generated` and `Original` resources.
   This is the default value.
 
