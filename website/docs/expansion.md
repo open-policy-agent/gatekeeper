@@ -10,7 +10,7 @@ title: Validation of Workload Resources
 
 A workload resource is a resource that creates other resources, such as a
 Deployment or Job. Gatekeeper can be configured to reject
-workload resources that might create a resource that violates a policy. For
+workload resources that might create a resource that violates a constraint. For
 example, one could configure Gatekeeper to immediately reject deployments that
 would create a Pod that violates a constraint instead of merely rejecting the
 Pods. To achieve this, Gatekeeper creates a "mock resource" for the Pod, runs
@@ -18,24 +18,25 @@ validation on it, and aggregates the mock resource's violations onto the parent
 resource (the Deployment in this example).
 
 To use this functionality, first specify which resources should be "expanded"
-into mock resource(s) by creating a `ExpansionTemplate` custom resource. This
+into mock resource(s) by creating an `ExpansionTemplate` custom resource. This
 specifies the GVKs of the workload resources, the GVK of
 the resultant mock resource, as well as which subfield of the workload resource
-should be used to generate the mock resource (i.e. `spec.template` for most
+should be used to expand the mock resource (i.e. `spec.template` for most
 Pod-generating resources).
 
 In some cases, it may not be possible to build an accurate representation of a
 mock resource by looking at the workload resource alone. For example, suppose a
 cluster is using Istio, which will inject a sidecar container on specific
-resources. Typically, this sidecar configuration not is specified in the config
-of the workload resource (i.e. Deployment), but rather injected by Istio's
-webhook. In order to accurately represent mock resources such as Pods with Istio
-sidecars, Gatekeeper leverages its
+resources. This sidecar configuration is not specified in the config of the
+workload resource (i.e. Deployment), but rather injected by Istio's webhook. In
+order to accurately represent mock resources modified by controllers or
+webhooks, Gatekeeper leverages its
 [Mutations](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation)
 feature to allow mock resources to be manipulated into their desired form. In
 the Istio example, `Assign` and `ModifySet` mutators could be configured to
-mimic Istio sidecar injection. For further details on mutating mock resources 
-see the [Math Source](#match-source) section below.
+mimic Istio sidecar injection. For further details on mutating mock resources
+see the [Math Source](#match-source) section below, or to see a working example,
+see the [Example](#example) section.
 
 Any resources configured for expansion will be expanded by both the validating
 webhook and
@@ -60,8 +61,10 @@ constraint, look at the [Match Source](#match-source) section below.
 
 ## Configuring Expansion
 
-Expansion behavior is configured through an `ExpansionTemplate` CR. Optionally,
+Expansion behavior is configured through the `ExpansionTemplate` CR. Optionally,
 users can create `Mutation` CRs to customize how resources are expanded.
+Mutators with the `source: Generated` field will only be applied when expanding
+workload resources, and will not mutate real resources on the cluster.
 
 Users can test their expansion configuration using the
 [`gator expand` CLI](https://open-policy-agent.github.io/gatekeeper/website/docs/gator)
@@ -110,7 +113,7 @@ and `ConstraintTemplate` kinds, specifies if the config should match Generated (
 i.e. expanded) resources, Original resources, or both. The `source` field is
 an `enum` which accepts the following values:
 
-- `Generated` – the config will only apply to expanded resources, and **will not
+- `Generated` – the config will only apply to expanded resources, **and will not
   apply to any real resources on the cluster**
 - `Original` – the config will only apply to Original resources, and will not
   affect expanded resources
@@ -152,11 +155,20 @@ original resources.
 
 ## Example
 
-What follows is an example of:
+Suppose a cluster is using Istio, and has some policy configured to ensure
+specified Pods have an Istio sidecar. To validate Deployments that would
+create Pods which Istio will inject a sidecar into, we need to use mutators
+to mimic the sidecar injection.
 
+What follows is an example of:
 - an  `ExpansionTemplate` configured to expand `Deployments` into `Pods`
-- an `Assign` mutator to set the `imagePullPolicy` on expanded `Pods`
-- an inbound `Deployment`, and the resulting `Pod`
+- an `Assign` mutator to add the Istio sidecar container to `Pods`
+- a `ModifySet` mutator to add the `proxy` and `sidecar` args
+- an inbound `Deployment`, and the resulting `Pod` 
+
+**Note that the Mutators set the `source: Generated` field, which will cause
+them to only be applied when expanding resources specified by `ExpansionTemplates`.
+These Mutators will not affect any real resources on the cluster.**
 
 ```
 apiVersion: expansion.gatekeeper.sh/v1alpha1
@@ -173,27 +185,58 @@ spec:
     kind: "Pod"
     group: ""
     version: "v1"
-—--
-apiVersion: mutations.gatekeeper.sh/v1alpha1
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: Assign
 metadata:
-  name: always-pull-image
+  name: add-sidecar
 spec:
+  source: Generated
   applyTo:
-  - groups: [ "" ]
-    kinds: [ "Pod" ]
-    versions: [ "v1" ]
-  location: "spec.containers[name: *].imagePullPolicy"
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  match:
+    scope: Namespaced
+    origin: "Generated"
+    kinds:
+    - apiGroups: ["*"]
+      kinds: ["Pod"]
+  location: "spec.containers[name:istio-proxy]"
   parameters:
     assign:
-      value: "Always"
-  match:
-    source: "Generated"
-    scope: Namespaced
-    kinds:
-    - apiGroups: [ ]
-      kinds: [ ]
-—--
+      value:
+        name: "istio-proxy"
+        imagePullPolicy: IfNotPresent
+        image: docker.io/istio/proxyv2:1.15.0
+        ports:
+        - containerPort: 15090
+          name: http-envoy-prom
+          protocol: TCP
+        securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+---
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: ModifySet
+metadata:
+  name: add-istio-args
+spec:
+  source: Generated
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name:istio-proxy].args"
+  parameters:
+    operation: merge
+    values:
+      fromList:
+        - proxy
+        - sidecar
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -232,10 +275,24 @@ spec:
   - args:
     - /bin/sh
     image: nginx:1.14.2
-    imagePullPolicy: Always
     name: nginx
     ports:
     - containerPort: 80
+  - args:
+    - proxy
+    - sidecar
+    image: docker.io/istio/proxyv2:1.15.0
+    imagePullPolicy: IfNotPresent
+    name: istio-proxy
+    ports:
+    - containerPort: 15090
+      name: http-envoy-prom
+      protocol: TCP
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
 ```
 
 
