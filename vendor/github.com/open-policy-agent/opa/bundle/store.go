@@ -390,10 +390,6 @@ func activateBundles(opts *ActivateOpts) error {
 
 		if b.lazyLoadingMode {
 
-			if len(b.Raw) == 0 {
-				return fmt.Errorf("raw bundle bytes not set on bundle object")
-			}
-
 			for _, item := range b.Raw {
 				path := filepath.ToSlash(item.Path)
 
@@ -727,6 +723,8 @@ func writeDataAndModules(ctx context.Context, store storage.Store, txn storage.T
 				}
 			}
 		} else {
+			params.BasePaths = *b.Manifest.Roots
+
 			err := store.Truncate(ctx, txn, params, NewIterator(b.Raw))
 			if err != nil {
 				return fmt.Errorf("store truncate failed for bundle '%s': %v", name, err)
