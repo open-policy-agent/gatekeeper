@@ -52,6 +52,12 @@ type MakeDirer interface {
 // TransactionParams describes a new transaction.
 type TransactionParams struct {
 
+	// BasePaths indicates the top-level paths where write operations will be performed in this transaction.
+	BasePaths []string
+
+	// RootOverwrite is deprecated. Use BasePaths instead.
+	RootOverwrite bool
+
 	// Write indicates if this transaction will perform any write operations.
 	Write bool
 
