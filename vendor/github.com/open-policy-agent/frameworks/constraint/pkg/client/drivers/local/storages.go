@@ -75,7 +75,7 @@ func (d *storages) getStorage(ctx context.Context, target string) (storage.Store
 
 	// We know that storage doesn't exist yet, and have a lock so we know no other
 	// threads will attempt to create it.
-	store = inmem.New()
+	store = inmem.NewWithOpts(inmem.OptRoundTripOnWrite(false))
 	d.storage[target] = store
 
 	txn, err := store.NewTransaction(ctx, storage.WriteParams)

@@ -37,6 +37,7 @@ const (
 	patchFile             = "patch.json"
 	dataFile              = "data.json"
 	yamlDataFile          = "data.yaml"
+	ymlDataFile           = "data.yml"
 	defaultHashingAlg     = "SHA-256"
 	DefaultSizeLimitBytes = (1024 * 1024 * 1024) // limit bundle reads to 1GB to protect against gzip bombs
 	DeltaBundleType       = "delta"
@@ -505,7 +506,11 @@ func (r *Reader) Read() (Bundle, error) {
 				return bundle, err
 			}
 
-		} else if filepath.Base(path) == yamlDataFile {
+		} else if filepath.Base(path) == yamlDataFile || filepath.Base(path) == ymlDataFile {
+			if r.lazyLoadingMode {
+				raw = append(raw, Raw{Path: path, Value: buf.Bytes()})
+				continue
+			}
 
 			var value interface{}
 

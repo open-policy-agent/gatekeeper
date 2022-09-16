@@ -113,6 +113,8 @@ type Compiler struct {
 	inputType             types.Type                    // global input type retrieved from schema set
 	annotationSet         *AnnotationSet                // hierarchical set of annotations
 	strict                bool                          // enforce strict compilation checks
+	keepModules           bool                          // whether to keep the unprocessed, parse modules (below)
+	parsedModules         map[string]*Module            // parsed, but otherwise unprocessed modules, kept track of when keepModules is true
 }
 
 // CompilerStage defines the interface for stages in the compiler.
@@ -385,6 +387,22 @@ func (c *Compiler) WithStrict(strict bool) *Compiler {
 	return c
 }
 
+// WithKeepModules enables retaining unprocessed modules in the compiler.
+// Note that the modules aren't copied on the way in or out -- so when
+// accessing them via ParsedModules(), mutations will occur in the module
+// map that was passed into Compile().`
+func (c *Compiler) WithKeepModules(y bool) *Compiler {
+	c.keepModules = y
+	return c
+}
+
+// ParsedModules returns the parsed, unprocessed modules from the compiler.
+// It is `nil` if keeping modules wasn't enabled via `WithKeepModules(true)`.
+// The map includes all modules loaded via the ModuleLoader, if one was used.
+func (c *Compiler) ParsedModules() map[string]*Module {
+	return c.parsedModules
+}
+
 // QueryCompiler returns a new QueryCompiler object.
 func (c *Compiler) QueryCompiler() QueryCompiler {
 	c.init()
@@ -400,10 +418,20 @@ func (c *Compiler) Compile(modules map[string]*Module) {
 	c.init()
 
 	c.Modules = make(map[string]*Module, len(modules))
+	c.sorted = make([]string, 0, len(modules))
+
+	if c.keepModules {
+		c.parsedModules = make(map[string]*Module, len(modules))
+	} else {
+		c.parsedModules = nil
+	}
 
 	for k, v := range modules {
 		c.Modules[k] = v.Copy()
 		c.sorted = append(c.sorted, k)
+		if c.parsedModules != nil {
+			c.parsedModules[k] = v
+		}
 	}
 
 	sort.Strings(c.sorted)
@@ -1231,10 +1259,10 @@ func (c *Compiler) compile() {
 		if c.Failed() {
 			return
 		}
-		for _, s := range c.after[s.name] {
-			err := c.runStageAfter(s.MetricName, s.Stage)
-			if err != nil {
+		for _, a := range c.after[s.name] {
+			if err := c.runStageAfter(a.MetricName, a.Stage); err != nil {
 				c.err(err)
+				return
 			}
 		}
 	}
@@ -1443,6 +1471,9 @@ func (c *Compiler) resolveAllRefs() {
 		for id, module := range parsed {
 			c.Modules[id] = module.Copy()
 			c.sorted = append(c.sorted, id)
+			if c.parsedModules != nil {
+				c.parsedModules[id] = module
+			}
 		}
 
 		sort.Strings(c.sorted)
@@ -2167,7 +2198,7 @@ func (c *Compiler) rewriteWithModifiers() {
 			if !ok {
 				return x, nil
 			}
-			body, err := rewriteWithModifiersInBody(c, f, body)
+			body, err := rewriteWithModifiersInBody(c, c.unsafeBuiltinsMap, f, body)
 			if err != nil {
 				c.err(err)
 			}
@@ -2446,17 +2477,18 @@ func (qc *queryCompiler) checkTypes(_ *QueryContext, body Body) (Body, error) {
 }
 
 func (qc *queryCompiler) checkUnsafeBuiltins(_ *QueryContext, body Body) (Body, error) {
-	var unsafe map[string]struct{}
-	if qc.unsafeBuiltins != nil {
-		unsafe = qc.unsafeBuiltins
-	} else {
-		unsafe = qc.compiler.unsafeBuiltinsMap
-	}
-	errs := checkUnsafeBuiltins(unsafe, body)
+	errs := checkUnsafeBuiltins(qc.unsafeBuiltinsMap(), body)
 	if len(errs) > 0 {
 		return nil, errs
 	}
 	return body, nil
+}
+
+func (qc *queryCompiler) unsafeBuiltinsMap() map[string]struct{} {
+	if qc.unsafeBuiltins != nil {
+		return qc.unsafeBuiltins
+	}
+	return qc.compiler.unsafeBuiltinsMap
 }
 
 func (qc *queryCompiler) checkDeprecatedBuiltins(_ *QueryContext, body Body) (Body, error) {
@@ -2469,7 +2501,7 @@ func (qc *queryCompiler) checkDeprecatedBuiltins(_ *QueryContext, body Body) (Bo
 
 func (qc *queryCompiler) rewriteWithModifiers(_ *QueryContext, body Body) (Body, error) {
 	f := newEqualityFactory(newLocalVarGenerator("q", body))
-	body, err := rewriteWithModifiersInBody(qc.compiler, f, body)
+	body, err := rewriteWithModifiersInBody(qc.compiler, qc.unsafeBuiltinsMap(), f, body)
 	if err != nil {
 		return nil, Errors{err}
 	}
@@ -2734,7 +2766,13 @@ func NewModuleTree(mods map[string]*Module) *ModuleTreeNode {
 	root := &ModuleTreeNode{
 		Children: map[Value]*ModuleTreeNode{},
 	}
-	for _, m := range mods {
+	names := make([]string, 0, len(mods))
+	for name := range mods {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		m := mods[name]
 		node := root
 		for i, x := range m.Package.Path {
 			c, ok := node.Children[x.Value]
@@ -4759,10 +4797,10 @@ func rewriteDeclaredVar(g *localVarGenerator, stack *localDeclaredVars, v Var, o
 // rewriteWithModifiersInBody will rewrite the body so that with modifiers do
 // not contain terms that require evaluation as values. If this function
 // encounters an invalid with modifier target then it will raise an error.
-func rewriteWithModifiersInBody(c *Compiler, f *equalityFactory, body Body) (Body, *Error) {
+func rewriteWithModifiersInBody(c *Compiler, unsafeBuiltinsMap map[string]struct{}, f *equalityFactory, body Body) (Body, *Error) {
 	var result Body
 	for i := range body {
-		exprs, err := rewriteWithModifier(c, f, body[i])
+		exprs, err := rewriteWithModifier(c, unsafeBuiltinsMap, f, body[i])
 		if err != nil {
 			return nil, err
 		}
@@ -4777,11 +4815,11 @@ func rewriteWithModifiersInBody(c *Compiler, f *equalityFactory, body Body) (Bod
 	return result, nil
 }
 
-func rewriteWithModifier(c *Compiler, f *equalityFactory, expr *Expr) ([]*Expr, *Error) {
+func rewriteWithModifier(c *Compiler, unsafeBuiltinsMap map[string]struct{}, f *equalityFactory, expr *Expr) ([]*Expr, *Error) {
 
 	var result []*Expr
 	for i := range expr.With {
-		eval, err := validateWith(c, expr, i)
+		eval, err := validateWith(c, unsafeBuiltinsMap, expr, i)
 		if err != nil {
 			return nil, err
 		}
@@ -4796,7 +4834,7 @@ func rewriteWithModifier(c *Compiler, f *equalityFactory, expr *Expr) ([]*Expr, 
 	return append(result, expr), nil
 }
 
-func validateWith(c *Compiler, expr *Expr, i int) (bool, *Error) {
+func validateWith(c *Compiler, unsafeBuiltinsMap map[string]struct{}, expr *Expr, i int) (bool, *Error) {
 	target, value := expr.With[i].Target, expr.With[i].Value
 
 	// Ensure that values that are built-ins are rewritten to Ref (not Var)
@@ -4804,6 +4842,10 @@ func validateWith(c *Compiler, expr *Expr, i int) (bool, *Error) {
 		if _, ok := c.builtins[v.String()]; ok {
 			value.Value = Ref([]*Term{NewTerm(v)})
 		}
+	}
+	isBuiltinRefOrVar, err := isBuiltinRefOrVar(c.builtins, unsafeBuiltinsMap, target)
+	if err != nil {
+		return false, err
 	}
 
 	switch {
@@ -4828,15 +4870,15 @@ func validateWith(c *Compiler, expr *Expr, i int) (bool, *Error) {
 			if child := node.Child(ref[len(ref)-1].Value); child != nil {
 				for _, v := range child.Values {
 					if len(v.(*Rule).Head.Args) > 0 {
-						if validateWithFunctionValue(c.builtins, c.RuleTree, value) {
-							return false, nil
+						if ok, err := validateWithFunctionValue(c.builtins, unsafeBuiltinsMap, c.RuleTree, value); err != nil || ok {
+							return false, err // may be nil
 						}
 					}
 				}
 			}
 		}
 	case isInputRef(target): // ok, valid
-	case isBuiltinRefOrVar(c.builtins, target):
+	case isBuiltinRefOrVar:
 
 		// NOTE(sr): first we ensure that parsed Var builtins (`count`, `concat`, etc)
 		// are rewritten to their proper Ref convention
@@ -4850,8 +4892,8 @@ func validateWith(c *Compiler, expr *Expr, i int) (bool, *Error) {
 			return false, err
 		}
 
-		if validateWithFunctionValue(c.builtins, c.RuleTree, value) {
-			return false, nil
+		if ok, err := validateWithFunctionValue(c.builtins, unsafeBuiltinsMap, c.RuleTree, value); err != nil || ok {
+			return false, err // may be nil
 		}
 	default:
 		return false, NewError(TypeErr, target.Location, "with keyword target must reference existing %v, %v, or a function", InputRootDocument, DefaultRootDocument)
@@ -4880,13 +4922,13 @@ func validateWithBuiltinTarget(bi *Builtin, target Ref, loc *location.Location) 
 	return nil
 }
 
-func validateWithFunctionValue(bs map[string]*Builtin, ruleTree *TreeNode, value *Term) bool {
+func validateWithFunctionValue(bs map[string]*Builtin, unsafeMap map[string]struct{}, ruleTree *TreeNode, value *Term) (bool, *Error) {
 	if v, ok := value.Value.(Ref); ok {
 		if ruleTree.Find(v) != nil { // ref exists in rule tree
-			return true
+			return true, nil
 		}
 	}
-	return isBuiltinRefOrVar(bs, value)
+	return isBuiltinRefOrVar(bs, unsafeMap, value)
 }
 
 func isInputRef(term *Term) bool {
@@ -4907,13 +4949,16 @@ func isDataRef(term *Term) bool {
 	return false
 }
 
-func isBuiltinRefOrVar(bs map[string]*Builtin, term *Term) bool {
+func isBuiltinRefOrVar(bs map[string]*Builtin, unsafeBuiltinsMap map[string]struct{}, term *Term) (bool, *Error) {
 	switch v := term.Value.(type) {
 	case Ref, Var:
+		if _, ok := unsafeBuiltinsMap[v.String()]; ok {
+			return false, NewError(CompileErr, term.Location, "with keyword replacing built-in function: target must not be unsafe: %q", v)
+		}
 		_, ok := bs[v.String()]
-		return ok
+		return ok, nil
 	}
-	return false
+	return false, nil
 }
 
 func isVirtual(node *TreeNode, ref Ref) bool {
