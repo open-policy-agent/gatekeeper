@@ -16,7 +16,7 @@ require (
 	cloud.google.com/go/trace v1.2.0
 	contrib.go.opencensus.io/exporter/ocagent v0.7.0
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
-	contrib.go.opencensus.io/exporter/stackdriver v0.13.13
+	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.3
