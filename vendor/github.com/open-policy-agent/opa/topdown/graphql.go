@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"strings"
 
-	gqltop "github.com/vektah/gqlparser/v2"
-	gqlast "github.com/vektah/gqlparser/v2/ast"
-	gqlparser "github.com/vektah/gqlparser/v2/parser"
-	gqlvalidator "github.com/vektah/gqlparser/v2/validator"
+	gqltop "github.com/open-policy-agent/opa/internal/gqlparser"
+
+	gqlast "github.com/open-policy-agent/opa/internal/gqlparser/ast"
+	gqlparser "github.com/open-policy-agent/opa/internal/gqlparser/parser"
+	gqlvalidator "github.com/open-policy-agent/opa/internal/gqlparser/validator"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/topdown/builtins"
@@ -343,11 +344,11 @@ func builtinGraphQLIsValid(_ BuiltinContext, operands []*ast.Term, iter func(*as
 	// feed them to the GraphQL parser functions.
 	rawQuery, err := builtins.StringOperand(operands[0].Value, 1)
 	if err != nil {
-		return err
+		return iter(ast.BooleanTerm(false))
 	}
 	rawSchema, err := builtins.StringOperand(operands[1].Value, 1)
 	if err != nil {
-		return err
+		return iter(ast.BooleanTerm(false))
 	}
 
 	// Generate ASTs/errors for the GraphQL schema and query.
