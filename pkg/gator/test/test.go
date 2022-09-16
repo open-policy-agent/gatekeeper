@@ -9,7 +9,9 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -77,15 +79,48 @@ func Test(objs []*unstructured.Unstructured) (*types.Responses, error) {
 		}
 	}
 
+	// create the expander
+	er, err := gator.NewExpander(objs)
+	if err != nil {
+		return nil, fmt.Errorf("error creating expander: %s", err)
+	}
+
 	// now audit all objects
 	responses := &types.Responses{
 		ByTarget: make(map[string]*types.Response),
 	}
 	for _, obj := range objs {
-		review, err := client.Review(ctx, obj)
+		// Try to attach the namespace if it was supplied (ns will be nil otherwise)
+		ns, _ := er.NamespaceForResource(obj)
+		au := target.AugmentedUnstructured{
+			Object:    *obj,
+			Namespace: ns,
+			Source:    mutationtypes.SourceTypeOriginal,
+		}
+
+		review, err := client.Review(ctx, au)
 		if err != nil {
 			return nil, fmt.Errorf("reviewing %v %s/%s: %v",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
+		}
+
+		// Attempt to expand the obj and review resultant resources (if any)
+		resultants, err := er.Expand(obj)
+		if err != nil {
+			return nil, fmt.Errorf("expanding resource %s: %s", obj.GetName(), err)
+		}
+		for _, resultant := range resultants {
+			au := target.AugmentedUnstructured{
+				Object:    *resultant.Obj,
+				Namespace: ns,
+				Source:    mutationtypes.SourceTypeGenerated,
+			}
+			resultantReview, err := client.Review(ctx, au)
+			if err != nil {
+				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %v",
+					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)
+			}
+			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
 		}
 
 		for targetName, r := range review.ByTarget {

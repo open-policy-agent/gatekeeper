@@ -187,9 +187,6 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 }
 
 func parseYAML(yamlBytes []byte, v interface{}) error {
-	// Pass through JSON since k8s parsing logic doesn't fully handle objects
-	// parsed directly from YAML. Without passing through JSON, the OPA client
-	// panics when handed scalar types it doesn't recognize.
 	obj := make(map[string]interface{})
 
 	err := yaml.Unmarshal(yamlBytes, obj)
@@ -197,6 +194,13 @@ func parseYAML(yamlBytes []byte, v interface{}) error {
 		return err
 	}
 
+	return fixYAML(obj, v)
+}
+
+// Pass through JSON since k8s parsing logic doesn't fully handle objects
+// parsed directly from YAML. Without passing through JSON, the OPA client
+// panics when handed scalar types it doesn't recognize.
+func fixYAML(obj map[string]interface{}, v interface{}) error {
 	jsonBytes, err := json.Marshal(obj)
 	if err != nil {
 		return err

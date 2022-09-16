@@ -193,6 +193,10 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading yaml source: %w", err)
 		}
+		if err = fixYAML(u.Object, &u.Object); err != nil {
+			return nil, fmt.Errorf("passing yaml through json: %w", err)
+		}
+
 		// skip empty resources
 		if len(u.Object) > 0 {
 			objs = append(objs, u)

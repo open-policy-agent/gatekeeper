@@ -44,7 +44,12 @@ func (m *Mutator) Matches(mutable *types.Mutable) bool {
 	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, gvk) {
 		return false
 	}
-	matches, err := match.Matches(&m.modifySet.Spec.Match, mutable.Object, mutable.Namespace)
+	target := &match.Matchable{
+		Object:    mutable.Object,
+		Namespace: mutable.Namespace,
+		Source:    mutable.Source,
+	}
+	matches, err := match.Matches(&m.modifySet.Spec.Match, target)
 	if err != nil {
 		log.Error(err, "Matches failed for modify set", "modifyset", m.modifySet.Name)
 		return false

@@ -24,6 +24,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -95,6 +96,8 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 }
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 

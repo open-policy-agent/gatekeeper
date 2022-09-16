@@ -80,6 +80,7 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
@@ -159,6 +160,7 @@ spec:
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"

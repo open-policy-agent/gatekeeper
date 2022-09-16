@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	// set GOMAXPROCS to the number of container cores, if known.
 	_ "go.uber.org/automaxprocs"
 
@@ -318,6 +319,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
+	expansionSystem := expansion.NewSystem(mutationSystem)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
@@ -350,18 +352,25 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
+		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
 		WatchSet:         watchSet,
 	}
 
-	if err := controller.AddToManager(mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, &opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
 		os.Exit(1)
 	}
 
 	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
+		webhookDeps := webhook.Dependencies{
+			OpaClient:       client,
+			ProcessExcluder: processExcluder,
+			MutationSystem:  mutationSystem,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
 			os.Exit(1)
 		}
@@ -370,7 +379,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
 		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
-		if err := audit.AddToManager(mgr, client, processExcluder, auditCache); err != nil {
+		auditDeps := audit.Dependencies{
+			Client:          client,
+			ProcessExcluder: processExcluder,
+			CacheLister:     auditCache,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
 			os.Exit(1)
 		}

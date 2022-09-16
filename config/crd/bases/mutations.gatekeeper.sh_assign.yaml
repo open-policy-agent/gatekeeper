@@ -225,6 +225,16 @@ spec:
                       resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`.
                       (defaults to `*`)
                     type: string
+                  source:
+                    description: Source determines whether generated or original resources
+                      are matched. Accepts `Generated`|`Original`|`All` (defaults
+                      to `All`). A value of `Generated` will only match generated
+                      resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
+                    type: string
                 type: object
               parameters:
                 description: Parameters define the behavior of the mutator.
@@ -561,6 +571,16 @@ spec:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped
                       resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`.
                       (defaults to `*`)
+                    type: string
+                  source:
+                    description: Source determines whether generated or original resources
+                      are matched. Accepts `Generated`|`Original`|`All` (defaults
+                      to `All`). A value of `Generated` will only match generated
+                      resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
                     type: string
                 type: object
               parameters:

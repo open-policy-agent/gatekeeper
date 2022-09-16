@@ -11,6 +11,8 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -280,7 +282,11 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 		}
 	}
 
-	return c.Review(ctx, toReview)
+	au := target.AugmentedUnstructured{
+		Object: *toReview,
+		Source: mutationtypes.SourceTypeOriginal,
+	}
+	return c.Review(ctx, au)
 }
 
 func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {

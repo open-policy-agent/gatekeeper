@@ -136,7 +136,7 @@ func setupController(
 		ProviderCache:    providerCache,
 		WatchSet:         watch.NewSet(),
 	}
-	if err := controller.AddToManager(mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, &opts); err != nil {
 		return fmt.Errorf("registering controllers: %w", err)
 	}
 	return nil

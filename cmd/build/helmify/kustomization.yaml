@@ -62,6 +62,12 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
+      name: expansiontemplate.expansion.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
       name: providers.externaldata.gatekeeper.sh
     path: labels_patch.yaml
   # these are defined in the chart values rather than hard-coded

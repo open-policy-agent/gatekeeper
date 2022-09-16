@@ -15,6 +15,7 @@ validatingWebhookCheckIgnoreFailurePolicy: Fail
 validatingWebhookCustomRules: {}
 enableDeleteOperations: false
 enableExternalData: false
+enableGeneratorResourceExpansion: false
 enableTLSHealthcheck: false
 maxServingThreads: -1
 mutatingWebhookFailurePolicy: Ignore

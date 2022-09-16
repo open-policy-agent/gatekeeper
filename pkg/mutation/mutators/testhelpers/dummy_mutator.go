@@ -37,7 +37,8 @@ func (d *DummyMutator) Path() parser.Path {
 }
 
 func (d *DummyMutator) Matches(mutable *types.Mutable) bool {
-	matches, err := match.Matches(&d.match, mutable.Object, mutable.Namespace)
+	m := &match.Matchable{Object: mutable.Object, Namespace: mutable.Namespace}
+	matches, err := match.Matches(&d.match, m)
 	if err != nil {
 		return false
 	}

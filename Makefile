@@ -9,6 +9,7 @@ GATOR_IMG := $(GATOR_REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
+ENABLE_GENERATOR_EXPANSION ?= false
 
 VERSION := v3.10.0-beta.1
 
@@ -109,7 +110,7 @@ test-e2e:
 	bats -t ${BATS_TESTS_FILE}
 
 .PHONY: test-gator
-test-gator: gator test-gator-verify test-gator-test
+test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
 .PHONY: test-gator-verify
 test-gator-verify: gator
@@ -118,6 +119,10 @@ test-gator-verify: gator
 .PHONY: test-gator-test
 test-gator-test: gator
 	bats test/gator/test
+
+.PHONY: test-gator-expand
+test-gator-expand: gator
+	bats test/gator/expand
 
 e2e-dependencies:
 	# Download and install kind
@@ -226,6 +231,10 @@ ifeq ($(ENABLE_EXTERNAL_DATA),true)
 	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
 	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
+ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
+	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
+	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
+endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
 		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl apply -f -
@@ -263,7 +272,7 @@ generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1 \
+		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1 \
 		--go-header-file=./hack/boilerplate.go.txt \
 		--output-file-base=zz_generated.conversion
 
