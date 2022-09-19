@@ -56,7 +56,7 @@ postUpgrade:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -94,7 +94,7 @@ postInstall:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -116,7 +116,7 @@ preUninstall:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -170,7 +170,7 @@ controllerManager:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -203,7 +203,7 @@ audit:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -223,7 +223,7 @@ crds:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 65532
     runAsNonRoot: true
