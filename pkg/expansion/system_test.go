@@ -619,7 +619,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -631,7 +631,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPodsEnforceDryrun, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "dryrun"},
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "dryrun", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -645,7 +645,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -671,7 +671,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -685,7 +685,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -699,7 +699,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodNoMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -714,7 +714,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodImagePullMutate, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -729,7 +729,7 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.PodImagePullMutateAnnotated, t), EnforcementAction: ""},
+				{Obj: loadFixture(fixtures.PodImagePullMutateAnnotated, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
 		{
@@ -746,8 +746,8 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TemplateCatExpandsPurr, t),
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun"},
-				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn"},
+				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
+				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
 			},
 		},
 		{
@@ -766,8 +766,8 @@ func TestExpand(t *testing.T) {
 				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t), // should not match
 			},
 			want: []*Resultant{
-				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun"},
-				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn"},
+				{Obj: loadFixture(fixtures.ResultantKitten, t), EnforcementAction: "dryrun", TemplateName: "expand-cats-kitten"},
+				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
 			},
 		},
 	}
@@ -800,11 +800,7 @@ func TestExpand(t *testing.T) {
 				t.Errorf("unexpected err: %s", err)
 			}
 
-			resultants := make([]*unstructured.Unstructured, len(results))
-			for i := 0; i < len(results); i++ {
-				resultants[i] = results[i].Obj
-			}
-			compareResults(resultants, tc.want, t)
+			compareResults(results, tc.want, t)
 		})
 	}
 }
