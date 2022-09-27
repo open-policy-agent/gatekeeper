@@ -81,6 +81,10 @@ spec:
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}
+        
+        {{- if .Values.controllerManager.extraArgs }}
+        {{ toYaml .Values.controllerManager.extraArgs | nindent 8 }}
+        {{- end }}
         command:
         - /manager
         env:
