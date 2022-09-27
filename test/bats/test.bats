@@ -383,8 +383,8 @@ __expansion_audit_test() {
   fi
 
   local audit_matches=$(echo "${cstr}" | jq '.status.violations[].message' | grep -i '[Implied by expand-deployments]' | wc -l)
-  if [[ "${audit_entries}" -ne "${expected}" ]]; then
-    echo "Audit entry count is ${audit_entries}, wanted ${expected}"
+  if [[ "${audit_matches}" -ne "${expected}" ]]; then
+    echo "violations from expand-deployments count is ${audit_matches}, wanted ${expected}"
     return 3
   fi
 }
@@ -419,6 +419,7 @@ __expansion_audit_test() {
   run kubectl apply -f test/expansion/deployment_no_label.yaml
   assert_success
   run kubectl delete -f test/expansion/deployment_no_label.yaml
+  run kubectl delete -f test/expansion/assignmeta_env.yaml
 
   # test enforcement action override with 'warn'
   run kubectl delete -f test/expansion/expand_deployments.yaml
