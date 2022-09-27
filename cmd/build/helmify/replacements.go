@@ -219,9 +219,4 @@ var replacements = map[string]string{
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}`,
-
-	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXTRA_ARGS": `
-        {{- if .Values.controllerManager.extraArgs }}
-        {{ toYaml .Values.controllerManager.extraArgs | nindent 8 }}
-        {{- end }}`,
 }

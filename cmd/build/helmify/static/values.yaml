@@ -180,7 +180,6 @@ controllerManager:
     supplementalGroups:
       - 999
   extraRules: []
-  extraArgs: []
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
