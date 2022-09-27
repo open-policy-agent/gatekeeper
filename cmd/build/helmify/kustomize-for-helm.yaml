@@ -85,6 +85,7 @@ spec:
             - --mutation-annotations={{ .Values.mutationAnnotations }}
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
+            - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG

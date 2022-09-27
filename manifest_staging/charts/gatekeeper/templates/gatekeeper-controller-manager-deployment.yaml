@@ -63,6 +63,7 @@ spec:
         - --mutation-annotations={{ .Values.mutationAnnotations }}
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
+        - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
