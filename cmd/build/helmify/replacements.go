@@ -122,6 +122,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
 
+	"HELMSUBST_VALIDATING_WEBHOOK_CUSTOM_NAMESPACE_SELECTORS": `{{- if .Values.validatingWebhookCustomRules }}
+  {{- toYaml .Values.validatingWebhookCustomRules | nindent 4 }}
+  {{- end }}`,
+
 	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}

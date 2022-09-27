@@ -35,6 +35,9 @@ webhooks:
       - {{ . }}
       {{- end }}
     {{- end }}
+    - {{- if .Values.validatingWebhookCustomRules }}
+  {{- toYaml .Values.validatingWebhookCustomRules | nindent 4 }}
+  {{- end }}
   objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
   rules:
   {{- if .Values.validatingWebhookCustomRules }}

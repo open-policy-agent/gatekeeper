@@ -12,7 +12,7 @@ validatingWebhookAnnotations: {}
 validatingWebhookExemptNamespacesLabels: {}
 validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
-validatingWebhookCustomRules: {}
+validatingWebhookCustomRules: []
 enableDeleteOperations: false
 enableExternalData: false
 enableGeneratorResourceExpansion: false
