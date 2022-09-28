@@ -1,28 +1,27 @@
 ---
-id: expansion
-title: Validation of Workload Resources
+id: expansion title: Validation of Workload Resources
 ---
 
 `Feature State:` Gatekeeper version v3.7+ (alpha)
 
-> 🚧 This feature is in _alpha_ stage, and is not enabled by default. To
+> ❗This feature is in _alpha_ stage, and is not enabled by default. To
 > enable, set the `enable-generator-resource-expansion` flag.
 
 A workload resource is a resource that creates other resources, such as a
-Deployment or Job. Gatekeeper can be configured to reject
-workload resources that might create a resource that violates a constraint. For
-example, one could configure Gatekeeper to immediately reject deployments that
-would create a Pod that violates a constraint instead of merely rejecting the
-Pods. To achieve this, Gatekeeper creates a "mock resource" for the Pod, runs
-validation on it, and aggregates the mock resource's violations onto the parent
-resource (the Deployment in this example).
+Deployment or Job. Gatekeeper can be configured to reject workload resources
+that might create a resource that violates a constraint. For example, one could
+configure Gatekeeper to immediately reject deployments that would create a Pod
+that violates a constraint instead of merely rejecting the Pods. To achieve
+this, Gatekeeper creates a "mock resource" for the Pod, runs validation on it,
+and aggregates the mock resource's violations onto the parent resource (the
+Deployment in this example).
 
 To use this functionality, first specify which resources should be "expanded"
 into mock resource(s) by creating an `ExpansionTemplate` custom resource. This
-specifies the GVKs of the workload resources, the GVK of
-the resultant mock resource, as well as which subfield of the workload resource
-should be used to expand the mock resource (i.e. `spec.template` for most
-Pod-generating resources).
+specifies the GVKs of the workload resources, the GVK of the resultant mock
+resource, as well as which subfield of the workload resource should be used to
+expand the mock resource (i.e. `spec.template` for most Pod-generating
+resources).
 
 In some cases, it may not be possible to build an accurate representation of a
 mock resource by looking at the workload resource alone. For example, suppose a
@@ -61,10 +60,12 @@ constraint, look at the [Match Source](#match-source) section below.
 
 ## Configuring Expansion
 
-Expansion behavior is configured through the `ExpansionTemplate` CR. Optionally,
-users can create `Mutation` CRs to customize how resources are expanded.
-Mutators with the `source: Generated` field will only be applied when expanding
-workload resources, and will not mutate real resources on the cluster.
+Expansion behavior is configured through the `ExpansionTemplate` custom
+resource. Optionally, users can create `Mutation` custom resources to customize
+how resources are expanded. Mutators with the `source: Generated` field will
+only be applied when expanding workload resources, and will not mutate real
+resources on the cluster. If the `source` field is not set, the `Mutation` will
+apply to both expanded resources and real resources on the cluster.
 
 Users can test their expansion configuration using the
 [`gator expand` CLI](https://open-policy-agent.github.io/gatekeeper/website/docs/gator)
@@ -72,7 +73,7 @@ Users can test their expansion configuration using the
 
 #### ExpansionTemplate
 
-The `ExpansionTemplate` CR specifies:
+The `ExpansionTemplate` custom resource specifies:
 
 - Which resource(s) should be expanded, specified by their GVK
 - The GVK of the resultant resources
@@ -121,10 +122,10 @@ an `enum` which accepts the following values:
   This is the default value.
 
 For example, suppose a cluster's `ReplicaSet` controller adds a default value
-for `fooField` when creating Pods that cannot reasonably be added to
-the `ReplicaSet`'s `spec.template`. If a constraint relies on these default
-values, a user could create a Mutation CR that modifies expanded resources, like
-so:
+for `fooField` when creating Pods that cannot reasonably be added to the
+`ReplicaSet`'s `spec.template`. If a constraint relies on these default values,
+a user could create a Mutation custom resource that modifies expanded resources,
+like so:
 
 ```
 apiVersion: mutations.gatekeeper.sh/v1alpha1
@@ -156,19 +157,21 @@ original resources.
 ## Example
 
 Suppose a cluster is using Istio, and has some policy configured to ensure
-specified Pods have an Istio sidecar. To validate Deployments that would
-create Pods which Istio will inject a sidecar into, we need to use mutators
-to mimic the sidecar injection.
+specified Pods have an Istio sidecar. To validate Deployments that would create
+Pods which Istio will inject a sidecar into, we need to use mutators to mimic
+the sidecar injection.
 
 What follows is an example of:
+
 - an  `ExpansionTemplate` configured to expand `Deployments` into `Pods`
 - an `Assign` mutator to add the Istio sidecar container to `Pods`
 - a `ModifySet` mutator to add the `proxy` and `sidecar` args
-- an inbound `Deployment`, and the resulting `Pod` 
+- an inbound `Deployment`, and the resulting `Pod`
 
 **Note that the Mutators set the `source: Generated` field, which will cause
-them to only be applied when expanding resources specified by `ExpansionTemplates`.
-These Mutators will not affect any real resources on the cluster.**
+them to only be applied when expanding resources specified
+by `ExpansionTemplates`. These Mutators will not affect any real resources on
+the cluster.**
 
 ```
 apiVersion: expansion.gatekeeper.sh/v1alpha1
