@@ -1,5 +1,6 @@
 ---
 id: expansion title: Validation of Workload Resources
+title: Validation of Workload Resources
 ---
 
 `Feature State:` Gatekeeper version v3.7+ (alpha)
