@@ -61,6 +61,7 @@ spec:
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+        - --max-serving-threads={{ .Values.maxServingThreads }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
@@ -103,6 +104,7 @@ spec:
           httpGet:
             path: /healthz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.livenessTimeout }}
         name: manager
         ports:
         - containerPort: {{ .Values.controllerManager.port }}
@@ -118,6 +120,7 @@ spec:
           httpGet:
             path: /readyz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.readinessTimeout }}
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
@@ -145,6 +148,8 @@ spec:
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
       - name: cert
         secret:

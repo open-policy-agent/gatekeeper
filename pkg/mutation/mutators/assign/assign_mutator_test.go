@@ -774,7 +774,7 @@ func TestApplyTo(t *testing.T) {
 				Version: test.version,
 				Kind:    test.kind,
 			})
-			matches := mutator.Matches(&types.Mutable{Object: obj})
+			matches := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault})
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
 			}

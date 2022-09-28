@@ -1,0 +1,19 @@
+apiVersion: purr.myapp.sh/v1alpha1
+kind: Purr
+metadata:
+  annotations:
+    shouldPet: manytimes
+spec:
+  loud: very
+---
+apiVersion: kitten.myapp.sh/v1alpha1
+kind: Kitten
+metadata:
+  annotations:
+    sound: meow
+  labels:
+    fluffy: extremely
+spec:
+  age: 10
+  breed: calico
+  weight: 10

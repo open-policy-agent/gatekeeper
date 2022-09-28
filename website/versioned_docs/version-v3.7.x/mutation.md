@@ -3,9 +3,11 @@ id: mutation
 title: Mutation
 ---
 
-The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
+`Feature State`: Gatekeeper version v3.7+ (beta)
 
 > 🚧 This feature is in _beta_ stage and it is enabled by default.
+
+The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
 ## Mutation CRDs
 

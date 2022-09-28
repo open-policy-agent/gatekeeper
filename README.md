@@ -19,7 +19,7 @@ Please see the [Gatekeeper website](https://open-policy-agent.github.io/gatekeep
 
 ## Policy Library
 
-See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
+See the [Gatekeeper policy library](https://open-policy-agent.github.io/gatekeeper-library/website/) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
 
 ## Community & Contributing
 

@@ -363,3 +363,43 @@ EOF
   kubectl delete --ignore-not-found deploy error-deployment valid-deployment system-error-deployment
   kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }
+
+@test "gatekeeper expansion test" {
+  if [ -z $ENABLE_GENERATOR_EXPANSION_TESTS ]; then
+    skip "skipping generator expansion tests"
+  fi
+
+  # setup ns, TemplateExpansion and Constraints
+  run kubectl create namespace loadbalancers
+  run kubectl apply -f test/expansion/expand_deployments.yaml
+  assert_success
+  run kubectl apply -f test/expansion/k8srequiredlabels_ct.yaml
+  run kubectl apply -f test/expansion/loadbalancers_must_have_env.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels loadbalancers-must-have-env"
+
+  # assert that creating deployment without 'env' label is rejected
+  run kubectl apply -f test/expansion/deployment_no_label.yaml
+  assert_failure
+  # a deployment with the required label should succeed
+  run kubectl apply -f test/expansion/deployment_with_label.yaml
+  assert_success
+  run kubectl delete -f test/expansion/deployment_with_label.yaml
+
+  # create deployment without 'env' label and assignmetadata to add 'env'
+  run kubectl apply -f test/expansion/assignmeta_env.yaml
+  # wait for mutation to be registered by controllers
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata add-env-label"
+  # now that mutation would add the 'env' label, the deployment describes a compliant pod
+  # and the request should succeed
+  run kubectl apply -f test/expansion/deployment_no_label.yaml
+  assert_success
+
+  # cleanup
+  run kubectl delete --ignore-not-found namespace loadbalancers
+  run kubectl delete --ignore-not-found -f test/expansion/expand_deployments.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/k8srequiredlabels_ct.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/loadbalancers_must_have_env.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/assignmeta_env.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/deployment_no_label.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/deployment_with_label.yaml
+}

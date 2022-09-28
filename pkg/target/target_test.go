@@ -14,6 +14,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -500,6 +501,7 @@ func namespaceSelectorMatch() *match.Match {
 
 func fooMatch() *match.Match {
 	return &match.Match{
+		Source: string(types.SourceTypeAll),
 		Kinds: []match.Kinds{
 			{
 				Kinds:     []string{"Thing"},
@@ -530,6 +532,7 @@ func fooConstraint() *unstructured.Unstructured {
 		setNamespaceName("my-ns"),
 		setLabelSelector("obj", "label"),
 		setNamespaceSelector("ns", "label"),
+		setSource(string(types.SourceTypeDefault)),
 	)
 }
 
@@ -691,6 +694,7 @@ func TestMatcher_Match(t *testing.T) {
 				Object: unstructured.Unstructured{Object: map[string]interface{}{
 					"key": "Some invalid json",
 				}},
+				Source: types.SourceTypeDefault,
 			},
 			match:       fooMatch(),
 			wantHandled: true,

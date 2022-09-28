@@ -31,7 +31,9 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
+          make e2e-bootstrap KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }}
+        env:
+          KUBERNETES_VERSION: 1.24.4
 
       - name: Deploy Helm release
         run: |

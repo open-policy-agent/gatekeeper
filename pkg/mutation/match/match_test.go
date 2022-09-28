@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -19,6 +20,7 @@ func TestMatch(t *testing.T) {
 		object    *unstructured.Unstructured
 		matcher   Match
 		namespace *corev1.Namespace
+		source    types.SourceType
 		wantMatch bool
 		wantErr   error
 	}{
@@ -45,6 +47,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -59,6 +62,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -73,6 +77,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -87,6 +92,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -104,6 +110,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -117,6 +124,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -135,6 +143,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -153,6 +162,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -171,6 +181,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -180,6 +191,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -189,6 +201,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"matching"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -198,6 +211,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"matching"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -208,6 +222,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"nonmatching", "namespace"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -217,6 +232,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"nonmatching", "kube-*"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -226,6 +242,7 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"nonmatching", "notmatchingeither"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -235,6 +252,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.ClusterScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -244,6 +262,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.NamespaceScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -253,6 +272,7 @@ func TestMatch(t *testing.T) {
 				Scope: "cluster",
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -262,6 +282,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.ClusterScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -271,6 +292,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.NamespaceScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -280,6 +302,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.ClusterScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -289,6 +312,7 @@ func TestMatch(t *testing.T) {
 				Scope: apiextensionsv1.NamespaceScoped,
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -298,6 +322,7 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []util.Wildcard{"namespace"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -307,6 +332,7 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []util.Wildcard{"excluded"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -316,6 +342,7 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []util.Wildcard{"excluded"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -326,6 +353,7 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []util.Wildcard{"namespace"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -335,6 +363,7 @@ func TestMatch(t *testing.T) {
 				ExcludedNamespaces: []util.Wildcard{"kube-*"},
 			},
 			namespace: &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -352,6 +381,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -369,6 +399,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 			wantErr:   ErrMatch,
 		},
@@ -388,6 +419,7 @@ func TestMatch(t *testing.T) {
 				},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -408,6 +440,7 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -428,6 +461,7 @@ func TestMatch(t *testing.T) {
 					}},
 				},
 			},
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 			wantErr:   ErrMatch,
 		},
@@ -450,12 +484,14 @@ func TestMatch(t *testing.T) {
 					},
 				},
 			},
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
 			name:      "namespace selector not matching, but cluster scoped",
 			object:    makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "", "name"),
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -474,6 +510,7 @@ func TestMatch(t *testing.T) {
 				})
 			}),
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -491,6 +528,7 @@ func TestMatch(t *testing.T) {
 				})
 			}),
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -504,6 +542,7 @@ func TestMatch(t *testing.T) {
 			name:      "namespace selector error on missing Namespace",
 			object:    makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "foo", "name"),
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			matcher: Match{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -521,6 +560,7 @@ func TestMatch(t *testing.T) {
 				Name: "name-foo",
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -530,6 +570,7 @@ func TestMatch(t *testing.T) {
 				Name: "name-*",
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: true,
 		},
 		{
@@ -539,6 +580,7 @@ func TestMatch(t *testing.T) {
 				Name: "name-",
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -548,6 +590,7 @@ func TestMatch(t *testing.T) {
 				Name: "name-bar",
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
 		},
 		{
@@ -558,13 +601,78 @@ func TestMatch(t *testing.T) {
 				Namespaces: []util.Wildcard{"other-namespace"},
 			},
 			namespace: nil,
+			source:    types.SourceTypeOriginal,
 			wantMatch: false,
+		},
+		{
+			name:   "match with same sources",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
+			matcher: Match{
+				Name:       "name-foo",
+				Namespaces: []util.Wildcard{"my-ns"},
+				Source:     string(types.SourceTypeGenerated),
+			},
+			source: types.SourceTypeGenerated,
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-ns",
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name:   "match with empty source field on match obj",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
+			matcher: Match{
+				Name:       "name-foo",
+				Namespaces: []util.Wildcard{"my-ns"},
+			},
+			source: types.SourceTypeGenerated,
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-ns",
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name:   "different source fields do not match",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
+			matcher: Match{
+				Name:       "name-foo",
+				Namespaces: []util.Wildcard{"my-ns"},
+				Source:     string(types.SourceTypeOriginal),
+			},
+			source: types.SourceTypeGenerated,
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-ns",
+				},
+			},
+			wantMatch: false,
+		},
+		{
+			name:   "empty source field on Matchable produces error",
+			object: makeObject(schema.GroupVersionKind{Kind: "kind", Group: "group"}, "namespace", "name-foo"),
+			matcher: Match{
+				Name:       "name-foo",
+				Namespaces: []util.Wildcard{"my-ns"},
+				Source:     string(types.SourceTypeOriginal),
+			},
+			namespace: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-ns",
+				},
+			},
+			wantMatch: false,
+			wantErr:   ErrMatch,
 		},
 	}
 
 	for _, tc := range table {
 		t.Run(tc.name, func(t *testing.T) {
-			matches, err := Matches(&tc.matcher, tc.object, tc.namespace)
+			m := &Matchable{Object: tc.object, Namespace: tc.namespace, Source: tc.source}
+			matches, err := Matches(&tc.matcher, m)
 			if !errors.Is(err, tc.wantErr) {
 				t.Errorf("got Matches() err %v, want %v", err, tc.name)
 			}

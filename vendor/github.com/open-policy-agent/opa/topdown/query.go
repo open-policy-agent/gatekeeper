@@ -52,6 +52,7 @@ type Query struct {
 	indexing               bool
 	earlyExit              bool
 	interQueryBuiltinCache cache.InterQueryCache
+	ndBuiltinCache         builtins.NDBCache
 	strictBuiltinErrors    bool
 	printHook              print.Hook
 	tracingOpts            tracing.Options
@@ -242,6 +243,12 @@ func (q *Query) WithInterQueryBuiltinCache(c cache.InterQueryCache) *Query {
 	return q
 }
 
+// WithNDBuiltinCache sets the non-deterministic builtin cache.
+func (q *Query) WithNDBuiltinCache(c builtins.NDBCache) *Query {
+	q.ndBuiltinCache = c
+	return q
+}
+
 // WithStrictBuiltinErrors tells the evaluator to treat all built-in function errors as fatal errors.
 func (q *Query) WithStrictBuiltinErrors(yes bool) *Query {
 	q.strictBuiltinErrors = yes
@@ -313,6 +320,7 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		builtinCache:           builtins.Cache{},
 		functionMocks:          newFunctionMocksStack(),
 		interQueryBuiltinCache: q.interQueryBuiltinCache,
+		ndBuiltinCache:         q.ndBuiltinCache,
 		virtualCache:           newVirtualCache(),
 		comprehensionCache:     newComprehensionCache(),
 		saveSet:                newSaveSet(q.unknowns, b, q.instr),
@@ -340,6 +348,14 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 	defer q.metrics.Timer(metrics.RegoPartialEval).Stop()
 
 	livevars := ast.NewVarSet()
+	for _, t := range q.unknowns {
+		switch v := t.Value.(type) {
+		case ast.Var:
+			livevars.Add(v)
+		case ast.Ref:
+			livevars.Add(v[0].Value.(ast.Var))
+		}
+	}
 
 	ast.WalkVars(q.query, func(x ast.Var) bool {
 		if !x.IsGenerated() {
@@ -454,6 +470,7 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 		builtinCache:           builtins.Cache{},
 		functionMocks:          newFunctionMocksStack(),
 		interQueryBuiltinCache: q.interQueryBuiltinCache,
+		ndBuiltinCache:         q.ndBuiltinCache,
 		virtualCache:           newVirtualCache(),
 		comprehensionCache:     newComprehensionCache(),
 		genvarprefix:           q.genvarprefix,

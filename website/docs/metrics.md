@@ -113,7 +113,13 @@ Below are the list of metrics provided by Gatekeeper:
 
 - Name: `gatekeeper_audit_last_run_time`
 
-    Description: `Timestamp of last audit run time`
+    Description: `Timestamp of last audit run starting time`
+
+    Aggregation: `LastValue`
+
+- Name: `gatekeeper_audit_last_run_end_time`
+
+    Description: `Timestamp of last audit run ending time`
 
     Aggregation: `LastValue`
 

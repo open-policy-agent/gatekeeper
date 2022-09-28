@@ -77,6 +77,13 @@ spec:
       name: gatekeeper-update-crds-hook
       annotations:
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+        {{- include "gatekeeper.podLabels" . }}
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
@@ -99,11 +106,17 @@ spec:
         resources:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      {{- with .Values.crds }}
       affinity:
-        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
-      nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml .affinity | nindent 8 }}
       tolerations:
-        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
+        {{- toYaml .tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      {{- end }}
 {{- end }}

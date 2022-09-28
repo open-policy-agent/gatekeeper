@@ -15,16 +15,24 @@ package audit
 import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+type Dependencies struct {
+	Client          *constraintclient.Client
+	ProcessExcluder *process.Excluder
+	CacheLister     *CacheLister
+	ExpansionSystem *expansion.System
+}
+
 // AddToManager adds audit manager to the Manager.
-func AddToManager(m manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) error {
+func AddToManager(m manager.Manager, deps *Dependencies) error {
 	if *auditInterval == 0 {
 		log.Info("auditing is disabled")
 		return nil
 	}
-	am, err := New(m, opa, processExcluder, cacheLister)
+	am, err := New(m, deps)
 	if err != nil {
 		return err
 	}

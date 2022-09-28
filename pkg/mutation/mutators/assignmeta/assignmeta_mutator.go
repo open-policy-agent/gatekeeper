@@ -55,7 +55,12 @@ type Mutator struct {
 var _ types.Mutator = &Mutator{}
 
 func (m *Mutator) Matches(mutable *types.Mutable) bool {
-	matches, err := match.Matches(&m.assignMetadata.Spec.Match, mutable.Object, mutable.Namespace)
+	target := &match.Matchable{
+		Object:    mutable.Object,
+		Namespace: mutable.Namespace,
+		Source:    mutable.Source,
+	}
+	matches, err := match.Matches(&m.assignMetadata.Spec.Match, target)
 	if err != nil {
 		log.Error(err, "Matches failed for assign metadata", "assignMeta", m.assignMetadata.Name)
 		return false

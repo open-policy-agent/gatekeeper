@@ -103,6 +103,14 @@ func setScope(scope string) buildArg {
 	}
 }
 
+func setSource(source string) buildArg {
+	return func(obj *unstructured.Unstructured) {
+		if err := unstructured.SetNestedField(obj.Object, source, "spec", "match", "source"); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func setName(name string) buildArg {
 	return func(obj *unstructured.Unstructured) {
 		if err := unstructured.SetNestedField(obj.Object, name, "spec", "match", "name"); err != nil {

@@ -43,7 +43,12 @@ func (m *Mutator) Matches(mutable *types.Mutable) bool {
 	if !match.AppliesTo(m.assign.Spec.ApplyTo, gvk) {
 		return false
 	}
-	matches, err := match.Matches(&m.assign.Spec.Match, mutable.Object, mutable.Namespace)
+	target := &match.Matchable{
+		Object:    mutable.Object,
+		Namespace: mutable.Namespace,
+		Source:    mutable.Source,
+	}
+	matches, err := match.Matches(&m.assign.Spec.Match, target)
 	if err != nil {
 		log.Error(err, "Matches failed for assign", "assign", m.assign.Name)
 		return false

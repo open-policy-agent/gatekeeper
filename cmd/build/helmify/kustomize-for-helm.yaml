@@ -80,10 +80,12 @@ spec:
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
             - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
             - --max-serving-threads={{ .Values.maxServingThreads }}
+            - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
@@ -159,8 +161,9 @@ spec:
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
-            - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
+            - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -210,6 +213,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-mutating-webhook-configuration
+  annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:
@@ -237,6 +241,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
+  annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:

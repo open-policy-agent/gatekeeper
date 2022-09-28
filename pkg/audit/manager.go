@@ -15,7 +15,9 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
@@ -76,6 +78,8 @@ type Manager struct {
 
 	// auditCache lists objects from the audit's cache if auditFromCache is enabled.
 	auditCache *CacheLister
+
+	expansionSystem *expansion.System
 }
 
 // StatusViolation represents each violation under status.
@@ -125,7 +129,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) (*Manager, error) {
+func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -139,15 +143,16 @@ func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *pro
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             opa,
+		opa:             deps.Client,
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 		mgr:             mgr,
 		reporter:        reporter,
-		processExcluder: processExcluder,
+		processExcluder: deps.ProcessExcluder,
 		eventRecorder:   recorder,
 		gkNamespace:     util.GetNamespace(),
-		auditCache:      cacheLister,
+		auditCache:      deps.CacheLister,
+		expansionSystem: deps.ExpansionSystem,
 	}
 	return am, nil
 }
@@ -161,9 +166,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	// record audit latency
 	defer func() {
 		logFinish(am.log)
-		latency := time.Since(startTime)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
+		}
+		if err := am.reporter.reportRunEnd(endTime); err != nil {
+			am.log.Error(err, "failed to report run end time")
 		}
 	}()
 
@@ -503,17 +512,19 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 			objNs := objFile.GetNamespace()
-			ns := corev1.Namespace{}
+			var ns *corev1.Namespace
 			if objNs != "" {
-				ns, err = nsCache.Get(ctx, am.client, objNs)
+				nsRef, err := nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
 					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
+				ns = &nsRef
 			}
 			augmentedObj := target.AugmentedUnstructured{
 				Object:    *objFile,
-				Namespace: &ns,
+				Namespace: ns,
+				Source:    mutationtypes.SourceTypeOriginal,
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
 			if err != nil {
@@ -521,9 +532,35 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				continue
 			}
 
-			results := ToResults(&augmentedObj.Object, resp)
+			// Expand object and review any resultant resources
+			base := &mutationtypes.Mutable{
+				Object:    objFile,
+				Namespace: ns,
+				Username:  "",
+				Source:    mutationtypes.SourceTypeOriginal,
+			}
+			resultants, err := am.expansionSystem.Expand(base)
+			if err != nil {
+				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
+				continue
+			}
+			for _, resultant := range resultants {
+				au := target.AugmentedUnstructured{
+					Object:    *resultant.Obj,
+					Namespace: ns,
+					Source:    mutationtypes.SourceTypeGenerated,
+				}
+				resultantResp, err := am.opa.Review(ctx, au)
+				if err != nil {
+					// updated to not return err immediately
+					errs = append(errs, err)
+					continue
+				}
+				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+			}
 
 			if len(resp.Results()) > 0 {
+				results := ToResults(&augmentedObj.Object, resp)
 				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {
 					// updated to not return err immediately

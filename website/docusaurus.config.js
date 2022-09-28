@@ -27,7 +27,7 @@ module.exports = {
       },
       items: [
         {
-          href: 'https://github.com/open-policy-agent/gatekeeper-library',
+          href: 'https://open-policy-agent.github.io/gatekeeper-library/',
           label: 'Library',
           position: 'left',
         },
