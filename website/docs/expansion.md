@@ -1,5 +1,5 @@
 ---
-id: expansion title: Validation of Workload Resources
+id: expansion
 title: Validation of Workload Resources
 ---
 
@@ -77,11 +77,17 @@ Users can test their expansion configuration using the
 The `ExpansionTemplate` custom resource specifies:
 
 - Which resource(s) should be expanded, specified by their GVK
-- The GVK of the resultant resources
-- Which field to use as the "source" for the resultant resource. The source is a
-  field on the parent resource which will be used as the base for expanding it
-  before any mutators are applied. For example, in a case where a `Deployment`
-  expands into a `Pod`, `spec.template` would typically be the source.
+- The GVK of the resultant resource
+- Which field to use as the "source" for the resultant resource. The template
+  source is a field on the parent resource which will be used as the base for
+  expanding it before any mutators are applied. For example, in a case where a
+  `Deployment` expands into a `Pod`, `spec.template` would typically be the
+  source.
+- Optionally, an enforcement action override to use when validating resultant
+  resources. If this field is set, any violations against the resultant resource
+  will use this enforcement action. If an enforcement action is not specified by
+  the `ExpansionTemplate`, the enforcement action set by the Constraint in
+  violation will be used.
 
 Here is an example of a `ExpansionTemplate` that specifies that `DeamonSet`,
 `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet`
@@ -98,15 +104,18 @@ spec:
       kinds: ["DeamonSet", "Deployment", "Job", "ReplicaSet", "ReplicationController", "StatefulSet"]
       versions: ["v1"]
   templateSource: "spec.template"
+  enforcementAction: "warn"
   generatedGVK:
     kind: "Pod"
     group: ""
     version: "v1"
 ```
 
-With this `ExpansionTemplate`, any constraints that are configured to
-target `Pods` will be evaluated on the "mock Pods" when a `Deployment`
-/`ReplicaSet` is being reviewed.
+With this `ExpansionTemplate`, any constraints that are configured to target
+`Pods` will be evaluated on the "mock Pods" when a `Deployment` /`ReplicaSet` is
+being reviewed. Any violations created against the mock Pod will have their
+enforcement action set to `warn`, regardless of the enforcement actions
+specified by the Constraint in violation.
 
 #### Match Source
 
