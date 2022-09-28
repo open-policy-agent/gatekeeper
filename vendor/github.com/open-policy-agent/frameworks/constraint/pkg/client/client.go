@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -415,7 +416,22 @@ func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Response
 			}
 		}
 
-		err = c.driver.AddData(ctx, name, key, processedData)
+		// Round trip data to force untyped JSON, as drivers are not type-aware
+		bytes, err := json.Marshal(processedData)
+		if err != nil {
+			errMap[name] = err
+
+			continue
+		}
+		var processedDataCpy interface{}
+		err = json.Unmarshal(bytes, &processedDataCpy)
+		if err != nil {
+			errMap[name] = err
+
+			continue
+		}
+
+		err = c.driver.AddData(ctx, name, key, processedDataCpy)
 		if err != nil {
 			errMap[name] = err
 
