@@ -21,8 +21,9 @@ type System struct {
 }
 
 type Resultant struct {
-	Obj          *unstructured.Unstructured
-	TemplateName string
+	Obj               *unstructured.Unstructured
+	TemplateName      string
+	EnforcementAction string
 }
 
 func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
@@ -120,8 +121,9 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	for _, te := range templates {
 		res, err := expandResource(base.Object, base.Namespace, te)
 		resultants = append(resultants, &Resultant{
-			Obj:          res,
-			TemplateName: te.ObjectMeta.Name,
+			Obj:               res,
+			TemplateName:      te.ObjectMeta.Name,
+			EnforcementAction: te.Spec.EnforcementAction,
 		})
 		if err != nil {
 			return nil, err
