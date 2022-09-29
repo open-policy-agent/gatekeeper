@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 import (
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
@@ -46,6 +46,7 @@ type AssignMetadataStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // AssignMetadata is the Schema for the assignmetadata API.
 type AssignMetadata struct {
