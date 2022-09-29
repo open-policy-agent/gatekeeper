@@ -1,5 +1,5 @@
 ---
-id: gator
+id: gator 
 title: The gator CLI
 ---
 
@@ -15,6 +15,7 @@ To install `gator`, you may either
 relevant to your system or build it directly from source. On macOS and Linux, you can also install `gator` using [Homebrew](https://brew.sh).
 
 To build from source:
+
 ```
 go get github.com/open-policy-agent/gatekeeper/cmd/gator
 ```
@@ -27,26 +28,29 @@ brew install gator
 ## The `gator test` subcommand
 
 `gator test` allows users to test a set of Kubernetes objects against a set of
-Templates and Constraints.  The command returns violations when found and
-communicates success or failure via its exit status.
+Templates and Constraints. The command returns violations when found and
+communicates success or failure via its exit status. This command will also
+attempt to expand any resources passed in if a supplied `ExpansionTemplate`
+matches these resources.
 
-Note: The `gator verify` command was first called `gator test`.  These names
-were changed to better align `gator` with other projects in the
-open-policy-agent space.
+Note: The `gator verify` command was first called `gator test`. These names were
+changed to better align `gator` with other projects in the open-policy-agent
+space.
 
 ### Usage
 
 #### Specifying inputs
 
-`gator test` supports inputs through the `--filename` flag and via stdin.  The
+`gator test` supports inputs through the `--filename` flag and via stdin. The
 two methods of input can be in combination or individually.
 
-The `--filename` flag can specify a single file or a directory.  If a file is
+The `--filename` flag can specify a single file or a directory. If a file is
 specified, that file must end in one of the following extensions: `.json`,
-`.yaml`, `.yml`.  Directories will be walked, and any files of extensions other
+`.yaml`, `.yml`. Directories will be walked, and any files of extensions other
 than the aforementioned three will be skipped.
 
-For example, to verify a manifest (piped via stdin) against a folder of policies:
+For example, to verify a manifest (piped via stdin) against a folder of
+policies:
 
 ```
 cat my-manifest.yaml | gator test --filename=template-and-constraints/
@@ -61,11 +65,11 @@ gator test -f=my-manifest.yaml -f=templates-and-constraints/
 #### Exit Codes
 
 `gator test` will return a `0` exit status when the objects, Templates, and
-Constraints are successfully ingested, no errors occur during evaluation, and
-no violations are found.
+Constraints are successfully ingested, no errors occur during evaluation, and no
+violations are found.
 
-An error during evaluation, for example a failure to read a file, will result
-in a `1` exit status with an error message printed to stderr.
+An error during evaluation, for example a failure to read a file, will result in
+a `1` exit status with an error message printed to stderr.
 
 Policy violations will generate a `1` exit status as well, but violation
 information will be printed to stdout.
@@ -73,18 +77,18 @@ information will be printed to stdout.
 ##### Enforcement Actions
 
 While violation data will always be returned when an object is found to be
-violating a Constraint, the exit status can vary.  A constraint with
+violating a Constraint, the exit status can vary. A constraint with
 `spec.enforcementAction: ""` or `spec.enforcementAction: deny` will produce a
-`1` exit code, but other enforcement actions like `dryrun` will not.  This is
+`1` exit code, but other enforcement actions like `dryrun` will not. This is
 meant to make the exit code of `1` consistent with rejection of the object by
-Gatekeeper's webhook.  A Constraint set to `warn` would not trigger a rejection
-in the webhook, but _would_ produce a violation message.  The same is true for
+Gatekeeper's webhook. A Constraint set to `warn` would not trigger a rejection
+in the webhook, but _would_ produce a violation message. The same is true for
 that constraint when used in `gator test`.
 
 #### Output Formatting
 
 `gator test` supports a `--output` flag that allows the user to specify a
-structured data format for the violation data.  This information is printed to
+structured data format for the violation data. This information is printed to
 stdout.
 
 The allowed values are `yaml` and `json`, specified like:
@@ -111,9 +115,11 @@ directory containing a Suite, and the files it uses for tests.
 
 ### Suites
 
-[An example Suite file](https://github.com/open-policy-agent/gatekeeper-library/blob/8765ec11c12a523688ed77485c7a458df84266d6/library/general/allowedrepos/suite.yaml).
+[An example Suite file](https://github.com/open-policy-agent/gatekeeper-library/blob/8765ec11c12a523688ed77485c7a458df84266d6/library/general/allowedrepos/suite.yaml)
+.
 
 To be valid, a Suite file must declare:
+
 ```yaml
 kind: Suite
 apiVersion: test.gatekeeper.sh/v1alpha1
@@ -137,19 +143,21 @@ ConstraintTemplate to not compile.
 Each Test contains a list of Cases under the `cases` field.
 
 A Case validates an object against a Constraint. The case may specify that the
-object is expected to pass or fail validation, and may make assertions about
-the returned violations (if any).
+object is expected to pass or fail validation, and may make assertions about the
+returned violations (if any).
 
 A Case must specify `assertions` and whether it expects violations. The simplest
 way to declare this is:
-  
+
 The Case expects at least one violation:
+
 ```yaml
 assertions:
 - violations: yes
 ```
 
 The Case expects no violations:
+
 ```yaml
 assertions:
 - violations: no
@@ -159,12 +167,12 @@ Assertions contain the following fields, acting as conditions for each assertion
 to check.
 
 - `violations` is either "yes", "no", or a non-negative integer.
-  - If "yes", at least one violation must otherwise match the assertion.
-  - If "no", then no violation messages must otherwise match the assertion.
-  - If a nonnegative integer, then exactly that many violations must match.
-    Defaults to "yes".
+    - If "yes", at least one violation must otherwise match the assertion.
+    - If "no", then no violation messages must otherwise match the assertion.
+    - If a nonnegative integer, then exactly that many violations must match.
+      Defaults to "yes".
 - `message` matches violations containing the exact string specified. `message`
-  is case-sensitive. If not specified or explicitly set to empty string, all 
+  is case-sensitive. If not specified or explicitly set to empty string, all
   messages returned by the Constraint are considered matching.
 
 A Case may specify multiple assertions. For example:
@@ -199,7 +207,8 @@ This Case specifies that there is at least one violation, and no violations
 contain the string "foobar".
 
 A Case may specify `inventory`, which is a list of paths to files containing
-Kubernetes objects to put in `data.inventory` for testing referential constraints.
+Kubernetes objects to put in `data.inventory` for testing referential
+constraints.
 
 ```yaml
 inventory:
@@ -213,12 +222,13 @@ repository.
 ### Usage
 
 To run a specific suite:
+
 ```
 gator verify suite.yaml
 ```
 
-To run all suites in the current directory and all child directories
-recursively
+To run all suites in the current directory and all child directories recursively
+
 ```
 gator verify ./...
 ```
@@ -232,12 +242,51 @@ gator verify path/to/suites/... --run "disallowed"
 
 Run `gator verify --help` for more information.
 
+## The `gator expand` subcommand
+
+`gator expand` allows users to test the behavior of their Expansion configs. The
+command accepts a file or directory containing the expansion configs, which
+should include the resource(s) under test, the `ExpansionTemplate`(s), and
+optionally any Mutation CRs. The command will output a manifest containing the
+expanded resources.
+
+If the mutators use spec.match.namespaceSelector, the namespace the resource
+belongs to must be supplied in order to correctly evaluate the match criteria.
+If a resource is specified for expansion but its non-default namespace is not
+supplied, the command will exit 1.
+
+### Usage
+
+Similar to `gator test`, `gator expand` expects a `--filename` flag, which can
+be a file or directory containing the resources under test. This flag can be
+repeated.
+
+```
+gator expand --filename="manifest.yaml" –filename="expansion-manifests/"
+```
+
+By default, `gator expand` will output to `stdout`, but a `–outputfile` can be
+specified to write the results to a file.
+
+```
+gator expand --filename="manifest.yaml" –outputfile="results.yaml"
+```
+
+`gator expand` can output in `yaml` or `json` (default is `yaml`).
+
+```
+gator expand --filename="manifest.yaml" –format="json"
+```
+
+See `gator expand –help` for more details. `gator expand` will exit 1 if there
+is a problem parsing the configs or expanding the resources.
+
 ## Gotchas
 
 ### Duplicate violation messages
 
-Rego de-duplicates identical violation messages. If you want to be sure that
-a test returns multiple violations, use a unique message for each violation.
+Rego de-duplicates identical violation messages. If you want to be sure that a
+test returns multiple violations, use a unique message for each violation.
 Otherwise, if you specify an exact number of violations, the test may fail.
 
 ### Matching is case-sensitive
@@ -259,8 +308,8 @@ use `gator` on other systems, let us know by replying to
 [this issue](https://github.com/open-policy-agent/gatekeeper/issues/1655).
 
 `gator verify` has been manually tested on Windows and works as of
-[this commit](https://github.com/open-policy-agent/gatekeeper/commit/b3ed94406583c85f3102c54a32f362d27f76da96).
-Continued functionality is not guaranteed.
+[this commit](https://github.com/open-policy-agent/gatekeeper/commit/b3ed94406583c85f3102c54a32f362d27f76da96)
+. Continued functionality is not guaranteed.
 
 File paths which include backslashes are not portable, so suites using such
 paths will not work as intended on Windows.

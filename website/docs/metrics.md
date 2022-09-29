@@ -51,6 +51,14 @@ Below are the list of metrics provided by Gatekeeper:
 
     Aggregation: `Distribution`
 
+## Expansion Template
+
+- Name: `gatekeeper_expansion_templates`
+
+  Description: `Number of observed expansion templates`
+
+  Aggregation: `LastValue`
+
 ## Webhook
 
 - Name: `gatekeeper_validation_request_count`

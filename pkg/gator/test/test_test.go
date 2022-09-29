@@ -60,7 +60,7 @@ func TestTest(t *testing.T) {
 	tcs := []struct {
 		name   string
 		inputs []string
-		want   []*types.Result
+		want   []*GatorResult
 		err    error
 	}{
 		{
@@ -78,21 +78,27 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintNeverValidate,
 				fixtures.Object,
 			},
-			want: []*types.Result{
+			want: []*GatorResult{
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 			},
 		},
@@ -104,16 +110,20 @@ func TestTest(t *testing.T) {
 				fixtures.ObjectReferentialInventory,
 				fixtures.ObjectReferentialDeny,
 			},
-			want: []*types.Result{
+			want: []*GatorResult{
 				{
-					Target:     target.Name,
-					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
-					Constraint: constraintReferential,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
+						Constraint: constraintReferential,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
-					Constraint: constraintReferential,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
+						Constraint: constraintReferential,
+					},
 				},
 			},
 		},
@@ -166,7 +176,6 @@ func TestTest(t *testing.T) {
 
 			resps, err := Test(objs)
 			if tc.err != nil {
-				// If we're checking for specific errors, use errors.Is() to verify
 				if err == nil {
 					t.Errorf("got nil err, want %v", tc.err)
 				}
@@ -179,9 +188,9 @@ func TestTest(t *testing.T) {
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction"))
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(GatorResult{}, "Metadata", "EnforcementAction", "ViolatingObject"))
 			if diff != "" {
-				t.Errorf("diff in Result objects (-want +got):\n%s", diff)
+				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
 		})
 	}

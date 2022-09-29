@@ -132,6 +132,7 @@ func autoConvert_v1alpha1_ExpansionTemplateSpec_To_unversioned_ExpansionTemplate
 	if err := Convert_v1alpha1_GeneratedGVK_To_unversioned_GeneratedGVK(&in.GeneratedGVK, &out.GeneratedGVK, s); err != nil {
 		return err
 	}
+	out.EnforcementAction = in.EnforcementAction
 	return nil
 }
 
@@ -146,6 +147,7 @@ func autoConvert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplate
 	if err := Convert_unversioned_GeneratedGVK_To_v1alpha1_GeneratedGVK(&in.GeneratedGVK, &out.GeneratedGVK, s); err != nil {
 		return err
 	}
+	out.EnforcementAction = in.EnforcementAction
 	return nil
 }
 

@@ -538,7 +538,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 	resultants, err := h.expansionSystem.Expand(base)
 	if err != nil {
-		return nil, fmt.Errorf("error expanding generator: %s", err)
+		return nil, fmt.Errorf("unable to expand object: %s", err)
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
@@ -552,6 +552,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		if err != nil {
 			return nil, fmt.Errorf("error reviewing resultant resource: %s", err)
 		}
+		expansion.OverrideEnforcementAction(res.EnforcementAction, resultantResp)
 		expansion.AggregateResponses(res.TemplateName, resp, resultantResp)
 	}
 

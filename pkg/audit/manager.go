@@ -541,7 +541,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			resultants, err := am.expansionSystem.Expand(base)
 			if err != nil {
-				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
+				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
 				continue
 			}
 			for _, resultant := range resultants {
@@ -556,6 +556,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					errs = append(errs, err)
 					continue
 				}
+				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
 				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
 			}
 

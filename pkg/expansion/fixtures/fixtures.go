@@ -18,6 +18,24 @@ spec:
     version: "v1"
 `
 
+	TempExpDeploymentExpandsPodsEnforceDryrun = `
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-deployments
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  templateSource: "spec.template"
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"
+  enforcementAction: "dryrun"
+`
+
 	DeploymentNginx = `
 apiVersion: apps/v1
 kind: Deployment
@@ -259,6 +277,7 @@ spec:
     kind: "Kitten"
     group: "kitten.myapp.sh"
     version: "v1alpha1"
+  enforcementAction: "dryrun"
 `
 
 	TemplateCatExpandsPurr = `
@@ -276,6 +295,7 @@ spec:
     kind: "Purr"
     group: "purr.myapp.sh"
     version: "v1alpha1"
+  enforcementAction: "warn"
 `
 
 	GeneratorCat = `
