@@ -364,6 +364,31 @@ EOF
   kubectl delete --ignore-not-found constrainttemplate k8sexternaldata
 }
 
+__expansion_audit_test() {
+  # we expect 2 violations; 1 for the deployment, 1 for the replicaset
+  local expected=2
+
+  local cstr="$(kubectl get k8srequiredlabels.constraints.gatekeeper.sh loadbalancers-must-have-env -ojson)"
+  if [[ $? -ne 0 ]]; then
+    echo "error retrieving constraint"
+    return 1
+  fi
+
+  echo "${cstr}"
+
+  local total_violations=$(echo "${cstr}" | jq '.status.totalViolations')
+  if [[ "${total_violations}" -ne "${expected}" ]]; then
+    echo "totalViolations is ${total_violations}, wanted ${expected}"
+    return 2
+  fi
+
+  local audit_matches=$(echo "${cstr}" | jq '.status.violations[].message' | grep -i '[Implied by expand-deployments]' | wc -l)
+  if [[ "${audit_matches}" -ne "${expected}" ]]; then
+    echo "violations from expand-deployments count is ${audit_matches}, wanted ${expected}"
+    return 3
+  fi
+}
+
 @test "gatekeeper expansion test" {
   if [ -z $ENABLE_GENERATOR_EXPANSION_TESTS ]; then
     skip "skipping generator expansion tests"
@@ -393,10 +418,22 @@ EOF
   # and the request should succeed
   run kubectl apply -f test/expansion/deployment_no_label.yaml
   assert_success
+  run kubectl delete -f test/expansion/deployment_no_label.yaml
+  run kubectl delete -f test/expansion/assignmeta_env.yaml
+
+  # test enforcement action override with 'warn'
+  run kubectl delete -f test/expansion/expand_deployments.yaml
+  run kubectl apply -f test/expansion/warn_expand_deployments.yaml
+  # creating a violating deployment should only 'warn' now
+  run kubectl apply -f test/expansion/deployment_no_label.yaml
+  assert_success
+  # with a violating deployment on cluster, test that audit produces expansion violations
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "__expansion_audit_test"
 
   # cleanup
   run kubectl delete --ignore-not-found namespace loadbalancers
   run kubectl delete --ignore-not-found -f test/expansion/expand_deployments.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/warn_expand_deployments.yaml
   run kubectl delete --ignore-not-found -f test/expansion/k8srequiredlabels_ct.yaml
   run kubectl delete --ignore-not-found -f test/expansion/loadbalancers_must_have_env.yaml
   run kubectl delete --ignore-not-found -f test/expansion/assignmeta_env.yaml

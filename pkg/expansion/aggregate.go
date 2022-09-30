@@ -22,6 +22,19 @@ func AggregateResponses(templateName string, parent *types.Responses, child *typ
 	}
 }
 
+func OverrideEnforcementAction(action string, resps *types.Responses) {
+	// If the enforcement action is empty, do not override
+	if action == "" {
+		return
+	}
+
+	for _, resp := range resps.ByTarget {
+		for _, res := range resp.Results {
+			res.EnforcementAction = action
+		}
+	}
+}
+
 func addPrefixToChildMsgs(templateName string, res *types.Response) {
 	for _, r := range res.Results {
 		r.Msg = fmt.Sprintf("%s %s", fmt.Sprintf(childMsgPrefix, templateName), r.Msg)
