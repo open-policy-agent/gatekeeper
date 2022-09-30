@@ -1,4 +1,4 @@
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: k8sexternalip

@@ -11,7 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
+	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -316,7 +316,7 @@ func newFakeReconciler(t *testing.T, c client.Client, events chan event.GenericE
 			), nil
 		},
 		scheme: s,
-		gvk:    mutationsv1alpha1.GroupVersion.WithKind("fake"),
+		gvk:    mutationsv1.GroupVersion.WithKind("fake"),
 		events: events,
 	}
 }
