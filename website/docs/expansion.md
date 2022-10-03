@@ -83,7 +83,7 @@ The `ExpansionTemplate` custom resource specifies:
   expanding it before any mutators are applied. For example, in a case where a
   `Deployment` expands into a `Pod`, `spec.template` would typically be the
   source.
-- Optionally, an enforcement action override to use when validating resultant
+- Optionally, an enforcement action override can be used when validating resultant
   resources. If this field is set, any violations against the resultant resource
   will use this enforcement action. If an enforcement action is not specified by
   the `ExpansionTemplate`, the enforcement action set by the Constraint in
