@@ -11,7 +11,7 @@ USE_LOCAL_IMG ?= false
 ENABLE_EXTERNAL_DATA ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 
-VERSION := v3.10.0-beta.1
+VERSION := v3.10.0-beta.2
 
 KIND_VERSION ?= 0.15.0
 # note: k8s version pinned since KIND image availability lags k8s releases
@@ -272,7 +272,7 @@ generate: __conversion-gen __controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths="./apis/..." paths="./pkg/..."
 	$(CONVERSION_GEN) \
 		--output-base=/gatekeeper \
-		--input-dirs=./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1 \
+		--input-dirs=./apis/mutations/v1,./apis/mutations/v1beta1,./apis/mutations/v1alpha1,./apis/expansion/v1alpha1 \
 		--go-header-file=./hack/boilerplate.go.txt \
 		--output-file-base=zz_generated.conversion
 

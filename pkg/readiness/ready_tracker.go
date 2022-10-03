@@ -26,7 +26,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
-	mutationv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
+	mutationv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
@@ -94,9 +94,9 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 		externalDataEnabled: externalDataEnabled,
 	}
 	if mutationEnabled {
-		tracker.assignMetadata = newObjTracker(mutationv1beta1.GroupVersion.WithKind("AssignMetadata"), fn)
-		tracker.assign = newObjTracker(mutationv1beta1.GroupVersion.WithKind("Assign"), fn)
-		tracker.modifySet = newObjTracker(mutationv1beta1.GroupVersion.WithKind("ModifySet"), fn)
+		tracker.assignMetadata = newObjTracker(mutationv1.GroupVersion.WithKind("AssignMetadata"), fn)
+		tracker.assign = newObjTracker(mutationv1.GroupVersion.WithKind("Assign"), fn)
+		tracker.modifySet = newObjTracker(mutationv1.GroupVersion.WithKind("ModifySet"), fn)
 	}
 	if externalDataEnabled {
 		tracker.externalDataProvider = newObjTracker(externaldatav1alpha1.SchemeGroupVersion.WithKind("Provider"), fn)
@@ -129,17 +129,17 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return t.config
 	case gvk.GroupVersion() == externaldatav1alpha1.SchemeGroupVersion && gvk.Kind == "Provider":
 		return t.externalDataProvider
-	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "AssignMetadata":
+	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
 			return t.assignMetadata
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "Assign":
+	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "Assign":
 		if t.mutationEnabled {
 			return t.assign
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1beta1.GroupVersion && gvk.Kind == "ModifySet":
+	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "ModifySet":
 		if t.mutationEnabled {
 			return t.modifySet
 		}
@@ -465,7 +465,7 @@ func (t *Tracker) trackAssignMetadata(ctx context.Context) error {
 		return nil
 	}
 
-	assignMetadataList := &mutationv1beta1.AssignMetadataList{}
+	assignMetadataList := &mutationv1.AssignMetadataList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, assignMetadataList); err != nil {
 		return fmt.Errorf("listing AssignMetadata: %w", err)
@@ -490,7 +490,7 @@ func (t *Tracker) trackAssign(ctx context.Context) error {
 		return nil
 	}
 
-	assignList := &mutationv1beta1.AssignList{}
+	assignList := &mutationv1.AssignList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, assignList); err != nil {
 		return fmt.Errorf("listing Assign: %w", err)
@@ -515,7 +515,7 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 		return nil
 	}
 
-	modifySetList := &mutationv1beta1.ModifySetList{}
+	modifySetList := &mutationv1.ModifySetList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, modifySetList); err != nil {
 		return fmt.Errorf("listing ModifySet: %w", err)

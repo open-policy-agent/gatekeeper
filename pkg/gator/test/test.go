@@ -119,6 +119,7 @@ func Test(objs []*unstructured.Unstructured) (*GatorResponses, error) {
 				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %v",
 					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)
 			}
+			expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantReview)
 			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
 		}
 

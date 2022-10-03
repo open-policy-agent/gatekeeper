@@ -40,6 +40,11 @@ type ExpansionTemplateSpec struct {
 	// GeneratedGVK specifies the GVK of the resources which the generator
 	// resource creates.
 	GeneratedGVK GeneratedGVK `json:"generatedGVK,omitempty"`
+
+	// EnforcementAction specifies the enforcement action to be used for resources
+	// matching the ExpansionTemplate. Specifying an empty value will use the
+	// enforcement action specified by the Constraint in violation.
+	EnforcementAction string `json:"enforcementAction,omitempty"`
 }
 
 type GeneratedGVK struct {

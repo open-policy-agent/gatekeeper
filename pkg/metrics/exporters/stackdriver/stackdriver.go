@@ -36,10 +36,18 @@ func Start(ctx context.Context) error {
 		MonitoredResource: monitoredresource.Autodetect(),
 	})
 	if err != nil {
+		if *ignoreMissingCreds {
+			log.Error(err, "Error initializing stackdriver exporter, not exporting stackdriver metrics")
+			return nil
+		}
 		return err
 	}
 
 	if err := exporter.StartMetricsExporter(); err != nil {
+		if *ignoreMissingCreds {
+			log.Error(err, "Error starting stackdriver exporter, not exporting stackdriver metrics")
+			return nil
+		}
 		return err
 	}
 	defer exporter.StopMetricsExporter()

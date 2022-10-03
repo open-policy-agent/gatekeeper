@@ -189,6 +189,13 @@ spec:
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
+                    type: string
                 type: object
               parameters:
                 description: Parameters define the behavior of the mutator.
@@ -426,6 +433,13 @@ spec:
                     type: array
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
+                    type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
                     type: string
                 type: object
               parameters:
@@ -674,6 +688,13 @@ spec:
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
                     type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
+                    type: string
                 type: object
               parameters:
                 properties:
@@ -877,6 +898,13 @@ spec:
                     type: array
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
+                    type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
                     type: string
                 type: object
               parameters:
@@ -1548,6 +1576,83 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.8.0
   labels:
     gatekeeper.sh/system: "yes"
+  name: expansiontemplate.expansion.gatekeeper.sh
+spec:
+  group: expansion.gatekeeper.sh
+  names:
+    kind: ExpansionTemplate
+    listKind: ExpansionTemplateList
+    plural: expansiontemplate
+    singular: expansiontemplate
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ExpansionTemplate is the Schema for the ExpansionTemplate API.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ExpansionTemplateSpec defines the desired state of ExpansionTemplate.
+            properties:
+              applyTo:
+                description: ApplyTo lists the specific groups, versions and kinds of generator resources which will be expanded.
+                items:
+                  description: ApplyTo determines what GVKs items the mutation should apply to. Globs are not allowed.
+                  properties:
+                    groups:
+                      items:
+                        type: string
+                      type: array
+                    kinds:
+                      items:
+                        type: string
+                      type: array
+                    versions:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
+              generatedGVK:
+                description: GeneratedGVK specifies the GVK of the resources which the generator resource creates.
+                properties:
+                  group:
+                    type: string
+                  kind:
+                    type: string
+                  version:
+                    type: string
+                type: object
+              templateSource:
+                description: TemplateSource specifies the source field on the generator resource to use as the base for expanded resource. For Pod-creating generators, this is usually spec.template
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.8.0
+  labels:
+    gatekeeper.sh/system: "yes"
   name: modifyset.mutations.gatekeeper.sh
 spec:
   group: mutations.gatekeeper.sh
@@ -1699,6 +1804,13 @@ spec:
                     type: array
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
+                    type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
                     type: string
                 type: object
               parameters:
@@ -1910,6 +2022,13 @@ spec:
                     type: array
                   scope:
                     description: Scope determines if cluster-scoped and/or namespaced-scoped resources are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
+                    type: string
+                  source:
+                    description: Source determines whether generated or original resources are matched. Accepts `Generated`|`Original`|`All` (defaults to `All`). A value of `Generated` will only match generated resources, while `Original` will only match regular resources.
+                    enum:
+                    - All
+                    - Generated
+                    - Original
                     type: string
                 type: object
               parameters:
@@ -2425,7 +2544,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.10.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.10.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -2543,7 +2662,7 @@ spec:
               fieldPath: metadata.namespace
         - name: CONTAINER_NAME
           value: manager
-        image: openpolicyagent/gatekeeper:v3.10.0-beta.1
+        image: openpolicyagent/gatekeeper:v3.10.0-beta.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

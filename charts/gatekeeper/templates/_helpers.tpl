@@ -81,5 +81,5 @@ Output post install webhook probe volume entry
 {{- define "gatekeeper.postInstallWebhookProbeVolume" -}}
 - name: cert
   secret:
-    secretName: gatekeeper-webhook-server-cert
+    secretName: {{ .Values.externalCertInjection.secretName }}
 {{- end -}}

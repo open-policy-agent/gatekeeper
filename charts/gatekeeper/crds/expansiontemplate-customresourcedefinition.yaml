@@ -51,9 +51,6 @@ spec:
                       type: array
                   type: object
                 type: array
-              enforcementAction:
-                description: EnforcementAction specifies the enforcement action to be used for resources matching the ExpansionTemplate. Specifying an empty value will use the enforcement action specified by the Constraint in violation.
-                type: string
               generatedGVK:
                 description: GeneratedGVK specifies the GVK of the resources which the generator resource creates.
                 properties:
