@@ -300,7 +300,7 @@ jobs:
           tar zxvf trivy_${{ env.TRIVY_VERSION }}_Linux-64bit.tar.gz
           echo "$(pwd)" >> $GITHUB_PATH
         env:
-          TRIVY_VERSION: "0.29.2"
+          TRIVY_VERSION: "0.32.1"
 
       - name: Run trivy on git repository
         run: |
