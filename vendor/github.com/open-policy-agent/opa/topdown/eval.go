@@ -78,6 +78,7 @@ type eval struct {
 	instr                  *Instrumentation
 	builtins               map[string]*Builtin
 	builtinCache           builtins.Cache
+	ndBuiltinCache         builtins.NDBCache
 	functionMocks          *functionMocksStack
 	virtualCache           *virtualCache
 	comprehensionCache     *comprehensionCache
@@ -793,6 +794,7 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 		Runtime:                e.runtime,
 		Cache:                  e.builtinCache,
 		InterQueryBuiltinCache: e.interQueryBuiltinCache,
+		NDBuiltinCache:         e.ndBuiltinCache,
 		Location:               e.query[e.index].Location,
 		QueryTracers:           e.tracers,
 		TraceEnabled:           e.traceEnabled,
@@ -810,6 +812,7 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 		f:     f,
 		terms: terms[1:],
 	}
+
 	return eval.eval(iter)
 }
 
@@ -909,20 +912,20 @@ func (e *eval) biunifyObjects(a, b ast.Object, b1, b2 *bindings, iter unifyItera
 		b = plugKeys(b, b2)
 	}
 
-	return e.biunifyObjectsRec(a, b, b1, b2, iter, a, 0)
+	return e.biunifyObjectsRec(a, b, b1, b2, iter, a, a.KeysIterator())
 }
 
-func (e *eval) biunifyObjectsRec(a, b ast.Object, b1, b2 *bindings, iter unifyIterator, keys ast.Object, idx int) error {
-	if idx == keys.Len() {
+func (e *eval) biunifyObjectsRec(a, b ast.Object, b1, b2 *bindings, iter unifyIterator, keys ast.Object, oki ast.ObjectKeysIterator) error {
+	key, more := oki.Next() // Get next key from iterator.
+	if !more {
 		return iter()
 	}
-	key, _ := keys.Elem(idx)
 	v2 := b.Get(key)
 	if v2 == nil {
 		return nil
 	}
 	return e.biunify(a.Get(key), v2, b1, b2, func() error {
-		return e.biunifyObjectsRec(a, b, b1, b2, iter, keys, idx+1)
+		return e.biunifyObjectsRec(a, b, b1, b2, iter, keys, oki)
 	})
 }
 
@@ -1671,6 +1674,11 @@ type evalBuiltin struct {
 	terms []*ast.Term
 }
 
+// Is this builtin non-deterministic, and did the caller provide an NDBCache?
+func (e *evalBuiltin) canUseNDBCache(bi *ast.Builtin) bool {
+	return bi.Nondeterministic && e.bctx.NDBuiltinCache != nil
+}
+
 func (e evalBuiltin) eval(iter unifyIterator) error {
 
 	operands := make([]*ast.Term, len(e.terms))
@@ -1682,21 +1690,70 @@ func (e evalBuiltin) eval(iter unifyIterator) error {
 	numDeclArgs := len(e.bi.Decl.FuncArgs().Args)
 
 	e.e.instr.startTimer(evalOpBuiltinCall)
+	var err error
 
-	err := e.f(e.bctx, operands, func(output *ast.Term) error {
+	// NOTE(philipc): We sometimes have to drop the very last term off
+	// the args list for cases where a builtin's result is used/assigned,
+	// because the last term will be a generated term, not an actual
+	// argument to the builtin.
+	endIndex := len(operands)
+	if len(operands) > numDeclArgs {
+		endIndex--
+	}
+
+	// We skip evaluation of the builtin entirely if the NDBCache is
+	// present, and we have a non-deterministic builtin already cached.
+	if e.canUseNDBCache(e.bi) {
+		e.e.instr.stopTimer(evalOpBuiltinCall)
+
+		// Unify against the NDBCache result if present.
+		if v, ok := e.bctx.NDBuiltinCache.Get(e.bi.Name, ast.NewArray(operands[:endIndex]...)); ok {
+			switch {
+			case e.bi.Decl.Result() == nil:
+				err = iter()
+			case len(operands) == numDeclArgs:
+				if v.Compare(ast.Boolean(false)) != 0 {
+					err = iter()
+				} // else: nothing to do, don't iter()
+			default:
+				err = e.e.unify(e.terms[endIndex], ast.NewTerm(v), iter)
+			}
+
+			if err != nil {
+				return Halt{Err: err}
+			}
+
+			return nil
+		}
+
+		e.e.instr.startTimer(evalOpBuiltinCall)
+
+		// Otherwise, we'll need to go through the normal unify flow.
+	}
+
+	// Normal unification flow for builtins:
+	err = e.f(e.bctx, operands, func(output *ast.Term) error {
 
 		e.e.instr.stopTimer(evalOpBuiltinCall)
 
 		var err error
 
-		if e.bi.Decl.Result() == nil {
+		switch {
+		case e.bi.Decl.Result() == nil:
 			err = iter()
-		} else if len(operands) == numDeclArgs {
+		case len(operands) == numDeclArgs:
 			if output.Value.Compare(ast.Boolean(false)) != 0 {
 				err = iter()
-			}
-		} else {
-			err = e.e.unify(e.terms[len(e.terms)-1], output, iter)
+			} // else: nothing to do, don't iter()
+		default:
+			err = e.e.unify(e.terms[endIndex], output, iter)
+		}
+
+		// If the NDBCache is present, we can assume this builtin
+		// call was not cached earlier.
+		if e.canUseNDBCache(e.bi) {
+			// Populate the NDBCache from the output term.
+			e.bctx.NDBuiltinCache.Put(e.bi.Name, ast.NewArray(operands[:endIndex]...), output.Value)
 		}
 
 		if err != nil {
@@ -2978,9 +3035,7 @@ func (e evalTerm) save(iter unifyIterator) error {
 		suffix := e.ref[e.pos:]
 		ref := make(ast.Ref, len(suffix)+1)
 		ref[0] = v
-		for i := 0; i < len(suffix); i++ {
-			ref[i+1] = suffix[i]
-		}
+		copy(ref[1:], suffix)
 
 		return e.e.biunify(ast.NewTerm(ref), e.rterm, e.bindings, e.rbindings, iter)
 	})
@@ -3041,24 +3096,30 @@ func (e evalEvery) eval(iter unifyIterator) error {
 }
 
 func (e *evalEvery) save(iter unifyIterator) error {
-	cpy := e.expr.Copy()
-	every := cpy.Terms.(*ast.Every)
+	return e.e.saveExpr(e.plug(e.expr), e.e.bindings, iter)
+}
 
-	for i := range every.Body { // TODO(sr): is there an easier way?
+func (e *evalEvery) plug(expr *ast.Expr) *ast.Expr {
+	cpy := expr.Copy()
+	every := cpy.Terms.(*ast.Every)
+	for i := range every.Body {
 		switch t := every.Body[i].Terms.(type) {
 		case *ast.Term:
-			every.Body[i].Terms = e.e.bindings.Plug(t)
+			every.Body[i].Terms = e.e.bindings.PlugNamespaced(t, e.e.caller.bindings)
 		case []*ast.Term:
-			for j := range t {
-				t[j] = e.e.bindings.Plug(t[j])
+			for j := 1; j < len(t); j++ { // don't plug operator, t[0]
+				t[j] = e.e.bindings.PlugNamespaced(t[j], e.e.caller.bindings)
 			}
+		case *ast.Every:
+			every.Body[i] = e.plug(every.Body[i])
 		}
 	}
 
-	every.Domain = e.e.bindings.plugNamespaced(every.Domain, e.e.caller.bindings)
+	every.Key = e.e.bindings.PlugNamespaced(every.Key, e.e.caller.bindings)
+	every.Value = e.e.bindings.PlugNamespaced(every.Value, e.e.caller.bindings)
+	every.Domain = e.e.bindings.PlugNamespaced(every.Domain, e.e.caller.bindings)
 	cpy.Terms = every
-
-	return e.e.saveExpr(cpy, e.e.bindings, iter)
+	return cpy
 }
 
 func (e *eval) comprehensionIndex(term *ast.Term) *ast.ComprehensionIndex {
