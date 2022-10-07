@@ -103,7 +103,7 @@ func (d *storages) getStorage(ctx context.Context, target string) (storage.Store
 }
 
 func inventoryPath(path []string) storage.Path {
-	return append([]string{"external"}, path...)
+	return append([]string{"inventory"}, path...)
 }
 
 func addData(ctx context.Context, store storage.Store, path storage.Path, data interface{}) error {
