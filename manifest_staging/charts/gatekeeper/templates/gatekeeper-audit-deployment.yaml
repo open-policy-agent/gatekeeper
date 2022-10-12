@@ -121,6 +121,8 @@ spec:
         - mountPath: /tmp/audit
           name: tmp-volume
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
+      env:
+        HELMSUBST_DEPLOYMENT_AUDIT_MANAGER_EXTRAENV: ""
       hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
