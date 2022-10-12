@@ -162,7 +162,6 @@ controllerManager:
   nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
-      cpu: 1000m
       memory: 512Mi
     requests:
       cpu: 100m
@@ -195,7 +194,6 @@ audit:
   nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
-      cpu: 1000m
       memory: 512Mi
     requests:
       cpu: 100m
