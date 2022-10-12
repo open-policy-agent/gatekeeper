@@ -92,7 +92,7 @@ spec:
               memory: 512Mi
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
           livenessProbe:
             httpGet:
               path: /healthz
@@ -195,7 +195,7 @@ spec:
               memory: 512Mi
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
