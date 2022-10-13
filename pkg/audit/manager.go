@@ -499,7 +499,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 // nsMapFromObjs creates a mapping of namespaceName -> corev1.Namespace for
 // every Namespace in input `objs`
 func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespace, error) {
-	var nsMap = make(map[string]*corev1.Namespace)
+	nsMap := make(map[string]*corev1.Namespace)
 	for _, obj := range objs {
 		if obj.GetKind() != "Namespace" {
 			continue
