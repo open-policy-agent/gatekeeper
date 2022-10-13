@@ -54,8 +54,8 @@ module.exports = {
               href: 'https://github.com/open-policy-agent/gatekeeper',
             },
             {
-              label: 'Slack',
-              href: 'https://openpolicyagent.slack.com/messages/CDTN970AX',
+              label: 'Slack (#opa-gatekeeper)',
+              href: 'https://slack.openpolicyagent.org/',
             },
             {
               label: 'Meetings',
