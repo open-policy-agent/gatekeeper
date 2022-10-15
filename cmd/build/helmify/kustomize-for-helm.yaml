@@ -95,15 +95,15 @@ spec:
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
-          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
-            name: webhook-server
-            protocol: TCP
-          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
-            name: metrics
-            protocol: TCP
-          - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
-            name: healthz
-            protocol: TCP
+            - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PORT
+              name: webhook-server
+              protocol: TCP
+            - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT
+              name: metrics
+              protocol: TCP
+            - containerPort: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+              name: healthz
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /readyz
@@ -130,6 +130,8 @@ spec:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""
+      env:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXTRAENV: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK
       dnsPolicy: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DNS_POLICY
 ---
@@ -167,12 +169,12 @@ spec:
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
-          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
-            name: metrics
-            protocol: TCP
-          - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
-            name: healthz
-            protocol: TCP
+            - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
+              name: metrics
+              protocol: TCP
+            - containerPort: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+              name: healthz
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /readyz
@@ -197,6 +199,8 @@ spec:
         HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""
       imagePullSecrets:
         HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""
+      env:
+        HELMSUBST_DEPLOYMENT_AUDIT_EXTRAENV: ""
       hostNetwork: HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK
       dnsPolicy: HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY
 ---
@@ -215,25 +219,25 @@ metadata:
   name: gatekeeper-mutating-webhook-configuration
   annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
 webhooks:
-- clientConfig:
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/mutate
-  failurePolicy: HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY
-  reinvocationPolicy: HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY
-  rules:
-  - HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES
-  matchPolicy: Exact
-  name: mutation.gatekeeper.sh
-  namespaceSelector:
-    matchExpressions:
-    - key: admission.gatekeeper.sh/ignore
-      operator: DoesNotExist
-    - HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
-  objectSelector: HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR
-  sideEffects: None
-  timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
+  - clientConfig:
+      service:
+        name: gatekeeper-webhook-service
+        namespace: gatekeeper-system
+        path: /v1/mutate
+    failurePolicy: HELMSUBST_MUTATING_WEBHOOK_FAILURE_POLICY
+    reinvocationPolicy: HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY
+    rules:
+      - HELMSUBST_MUTATING_WEBHOOK_OPERATION_RULES
+    matchPolicy: Exact
+    name: mutation.gatekeeper.sh
+    namespaceSelector:
+      matchExpressions:
+        - key: admission.gatekeeper.sh/ignore
+          operator: DoesNotExist
+        - HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
+    objectSelector: HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR
+    sideEffects: None
+    timeoutSeconds: HELMSUBST_MUTATING_WEBHOOK_TIMEOUT
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -243,30 +247,30 @@ metadata:
   name: gatekeeper-validating-webhook-configuration
   annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
 webhooks:
-- clientConfig:
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admit
-  name: validation.gatekeeper.sh
-  namespaceSelector:
-    matchExpressions:
-    - key: admission.gatekeeper.sh/ignore
-      operator: DoesNotExist
-    - HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
-  objectSelector: HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR
-  timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
-  failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
-  rules:
-  - HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
-- clientConfig:
-    service:
-      name: gatekeeper-webhook-service
-      namespace: gatekeeper-system
-      path: /v1/admitlabel
-  name: check-ignore-label.gatekeeper.sh
-  timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
-  failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
+  - clientConfig:
+      service:
+        name: gatekeeper-webhook-service
+        namespace: gatekeeper-system
+        path: /v1/admit
+    name: validation.gatekeeper.sh
+    namespaceSelector:
+      matchExpressions:
+        - key: admission.gatekeeper.sh/ignore
+          operator: DoesNotExist
+        - HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
+    objectSelector: HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR
+    timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+    failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY
+    rules:
+      - HELMSUBST_VALIDATING_WEBHOOK_OPERATION_RULES
+  - clientConfig:
+      service:
+        name: gatekeeper-webhook-service
+        namespace: gatekeeper-system
+        path: /v1/admitlabel
+    name: check-ignore-label.gatekeeper.sh
+    timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
+    failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -291,8 +295,8 @@ spec:
     pods: HELMSUBST_RESOURCEQUOTA_POD_LIMIT
   scopeSelector:
     matchExpressions:
-    - operator: In
-      scopeName: PriorityClass
-      values:
-      - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME
-      - HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME
+      - operator: In
+        scopeName: PriorityClass
+        values:
+          - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME
+          - HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME
