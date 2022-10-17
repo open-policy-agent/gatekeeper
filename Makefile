@@ -22,6 +22,8 @@ BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
 YQ_VERSION ?= 4.2.0
+FRAMEWORKS_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/frameworks/constraint)
+OPA_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/opa)
 
 HELM_ARGS ?=
 GATEKEEPER_NAMESPACE ?= gatekeeper-system
@@ -43,8 +45,10 @@ BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
 LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VERSION) \
 	-X github.com/open-policy-agent/gatekeeper/pkg/version.Vcs=$(BUILD_COMMIT) \
 	-X github.com/open-policy-agent/gatekeeper/pkg/version.Timestamp=$(BUILD_TIMESTAMP) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME)"
-
+	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME) \
+	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
+	-X main.opaVersion=$(OPA_VERSION)"
+	
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \nkind: Deployment\
 \nmetadata:\

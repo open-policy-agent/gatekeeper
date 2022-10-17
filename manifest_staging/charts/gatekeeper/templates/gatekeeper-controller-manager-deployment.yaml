@@ -136,6 +136,8 @@ spec:
           name: cert
           readOnly: true
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
+      env:
+        {{- toYaml .Values.controllerManager.extraEnv | nindent 8 }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}

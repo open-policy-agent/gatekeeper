@@ -1,15 +1,23 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/test"
 	"github.com/open-policy-agent/gatekeeper/cmd/gator/verify"
+	"github.com/open-policy-agent/gatekeeper/pkg/version"
 	"github.com/spf13/cobra"
 )
 
-const version = "alpha"
+const state = "alpha"
+
+var (
+	frameworksVersion string
+
+	opaVersion string
+)
 
 var commands = []*cobra.Command{
 	verify.Cmd,
@@ -24,7 +32,7 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:     "gator subcommand",
 	Short:   "gator is a suite of authorship tools for Gatekeeper",
-	Version: version,
+	Version: fmt.Sprintf("\nGator version: %s  (Feature State: %s), OPA version: %s, Framework version: %s", version.Version, state, opaVersion, frameworksVersion),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
