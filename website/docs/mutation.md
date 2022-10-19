@@ -3,9 +3,7 @@ id: mutation
 title: Mutation
 ---
 
-`Feature State`: Gatekeeper version v3.7+ (beta)
-
-> 🚧 This feature is in _beta_ stage and it is enabled by default.
+`Feature State`: Gatekeeper version v3.10+ (stable)
 
 The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
@@ -20,7 +18,7 @@ The rules for mutating metadata are more strict than for mutating the rest of th
 
 Here is an example of a simple AssignMetadata CRD:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -132,7 +130,7 @@ to use affinity/anti-affinity rules to [keep Pods from the same deployment on di
 Assign and AssignMetadata can do this via the `fromMetadata` field. Here is an example:
 
 ```
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -174,7 +172,7 @@ Pre-existing labels and annotations cannot be modified.
 
  An example of an AssignMetadata adding a label `owner` set to `admin`:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -195,7 +193,7 @@ New values are appended to the end of a list.
 For example, the following mutator removes an `--alsologtostderr` argument from all containers in a pod:
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: ModifySet
 metadata:
   name: remove-err-logging
@@ -221,7 +219,7 @@ spec:
 ### Adding an annotation
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -239,7 +237,7 @@ spec:
 Set the security context of container named `foo` in a Pod in namespace `bar` to be non-privileged
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-privileged
@@ -263,7 +261,7 @@ spec:
 #### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-image-pull-policy
@@ -287,7 +285,7 @@ spec:
 ### Adding a `network` sidecar to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-sidecar
@@ -315,7 +313,7 @@ spec:
 ### Adding dnsPolicy and dnsConfig to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-dns-policy
@@ -334,7 +332,7 @@ spec:
     assign:
       value: None
 ---
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-dns-config
