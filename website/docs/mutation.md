@@ -3,6 +3,8 @@ id: mutation
 title: Mutation
 ---
 
+`Feature State`: Gatekeeper version v3.10+ (stable)
+
 The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
 ## Mutation CRDs
