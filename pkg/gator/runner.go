@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -282,6 +283,27 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 		}
 	}
 
+	// check to see if obj is an AdmissionReview kind
+	if toReview.GetKind() == "AdmissionReview" && toReview.GroupVersionKind().Group == admissionv1.SchemeGroupVersion.Group {
+		// convert unstructured into AdmissionReview, don't allow unknown fields
+		var ar admissionv1.AdmissionReview
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(toReview.UnstructuredContent(), &ar, true); err != nil {
+			return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %v", ErrInvalidK8sAdmissionReview, err)
+		}
+
+		if ar.Request == nil { // then this admission review did not actually pass in an AdmissionRequest
+			return nil, fmt.Errorf("%w: request did not actually pass in an AdmissionRequest", ErrMissingK8sAdmissionRequest)
+		}
+
+		arr := target.AugmentedReview{
+			AdmissionRequest: ar.Request,
+			Source:           mutationtypes.SourceTypeOriginal,
+		}
+
+		return c.Review(ctx, arr)
+	}
+
+	// otherwise our object is some other k8s object
 	au := target.AugmentedUnstructured{
 		Object: *toReview,
 		Source: mutationtypes.SourceTypeOriginal,

@@ -1,6 +1,29 @@
+// fixtures package contains commonly used ConstraintTemplates, Constraints, Objects and other k8s resources
+// mostly used for testing.
 package fixtures
 
 const (
+	TemplateValidateUserInfo = `
+kind: ConstraintTemplate
+apiVersion: templates.gatekeeper.sh/v1beta1
+metadata:
+  name: validateuserinfo
+spec:
+  crd:
+    spec:
+      names:
+        kind: ValidateUserInfo
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8svalidateuserinfo
+        violation[{"msg": msg}] {
+          username := input.review.userInfo.username
+          not startswith(username, "system:")
+          msg := sprintf("username is not allowed to perform this operation: %v", [username])
+        }
+`
+
 	TemplateAlwaysValidate = `
 kind: ConstraintTemplate
 apiVersion: templates.gatekeeper.sh/v1beta1
@@ -445,5 +468,49 @@ metadata:
 spec:
   parameters:
     labels: ["abc"]
+`
+
+	// AdmissionReviewMissingRequest makes sure that our code can handle nil requests.
+	AdmissionReviewMissingRequest = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+`
+
+	BlankAdmissionReview = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  object:
+`
+
+	SystemAdmissionReview = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  userInfo:
+    username: "system:foo"
+`
+
+	NonSystemAdmissionReview = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1
+request:
+  userInfo:
+    username: "foo"
+`
+
+	// InvalidAdmissionReview cannot be converted into a typed AdmissionReview.
+	InvalidAdmissionReview = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1
+request:
+key_that_does_not_exist_in_spec: "some_value"
+`
+
+	ConstraintAlwaysValidateUserInfo = `
+kind: ValidateUserInfo
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-pass
 `
 )

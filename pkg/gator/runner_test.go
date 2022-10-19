@@ -1016,6 +1016,110 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "admission review object",
+			suite: Suite{
+				Tests: []Test{
+					{
+						Name:       "no op admission review object", // this test is akin to a no op
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{{
+							Name:       "no-violation",
+							Object:     "blank-ar.yaml",
+							Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						}},
+					},
+					{
+						Name:       "userInfo admission review object", // this test checks that the user name start with "system:"
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{
+							{
+								Name:       "user begins with \"system:\"",
+								Object:     "system-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+							},
+							{
+								Name:       "user doesn't begin with \"system:\"",
+								Object:     "non-system-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("username is not allowed to perform this operation")}},
+							},
+						},
+					},
+					{
+						Name:       "invalid admission review conversion", // this test makes sure that only valid AdmissionReview types get converted
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{{
+							Name:       "invalid admission review object",
+							Object:     "invalid-ar.yaml",
+							Assertions: []Assertion{{}},
+						}},
+					},
+					{
+						Name:       "missing admission request", // this test makes sure that we handle missing AdmissionRequests from the AdmissionReviews
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{{
+							Name:       "missing admission request object",
+							Object:     "missing-ar-ar.yaml",
+							Assertions: []Assertion{{}},
+						}},
+					},
+				},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateValidateUserInfo),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfo),
+				},
+				"blank-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.BlankAdmissionReview),
+				},
+				"system-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.SystemAdmissionReview),
+				},
+				"non-system-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NonSystemAdmissionReview),
+				},
+				"invalid-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.InvalidAdmissionReview),
+				},
+				"missing-ar-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewMissingRequest),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{
+					{
+						Name:        "no op admission review object",
+						CaseResults: []CaseResult{{Name: "no-violation"}},
+					},
+					{
+						Name: "userInfo admission review object",
+						CaseResults: []CaseResult{
+							{Name: "user begins with \"system:\""},
+							{Name: "user doesn't begin with \"system:\""},
+						},
+					},
+					{
+						Name: "invalid admission review conversion",
+						CaseResults: []CaseResult{
+							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
+						},
+					},
+					{
+						Name: "missing admission request",
+						CaseResults: []CaseResult{
+							{Name: "missing admission request object", Error: ErrMissingK8sAdmissionRequest},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
