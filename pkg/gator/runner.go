@@ -295,6 +295,11 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 			return nil, fmt.Errorf("%w: request did not actually pass in an AdmissionRequest", ErrMissingK8sAdmissionRequest)
 		}
 
+		// validate the AdmissionReview to match k8s api server behavior
+		if ar.Request.Object.Raw == nil && ar.Request.OldObject.Raw == nil {
+			return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", ErrNoObjectForReview)
+		}
+
 		arr := target.AugmentedReview{
 			AdmissionRequest: ar.Request,
 			Source:           mutationtypes.SourceTypeOriginal,

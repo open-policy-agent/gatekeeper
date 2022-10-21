@@ -1021,16 +1021,6 @@ func TestRunner_Run(t *testing.T) {
 			suite: Suite{
 				Tests: []Test{
 					{
-						Name:       "no op admission review object", // this test is akin to a no op
-						Template:   "template.yaml",
-						Constraint: "constraint.yaml",
-						Cases: []*Case{{
-							Name:       "no-violation",
-							Object:     "blank-ar.yaml",
-							Assertions: []Assertion{{Violations: intStrFromStr("no")}},
-						}},
-					},
-					{
 						Name:       "userInfo admission review object", // this test checks that the user name start with "system:"
 						Template:   "template.yaml",
 						Constraint: "constraint.yaml",
@@ -1048,24 +1038,38 @@ func TestRunner_Run(t *testing.T) {
 						},
 					},
 					{
-						Name:       "invalid admission review conversion", // this test makes sure that only valid AdmissionReview types get converted
+						Name:       "AdmissionReview with oldObject", // this test makes sure that we are submitting an old object for review
 						Template:   "template.yaml",
 						Constraint: "constraint.yaml",
-						Cases: []*Case{{
-							Name:       "invalid admission review object",
-							Object:     "invalid-ar.yaml",
-							Assertions: []Assertion{{}},
-						}},
+						Cases: []*Case{
+							{
+								Name:       "oldObject submits for review",
+								Object:     "oldObject-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+							},
+						},
 					},
 					{
-						Name:       "missing admission request", // this test makes sure that we handle missing AdmissionRequests from the AdmissionReviews
+						Name:       "invalid admission review usage", // this test covers error handling for invalid admission review objects
 						Template:   "template.yaml",
 						Constraint: "constraint.yaml",
-						Cases: []*Case{{
-							Name:       "missing admission request object",
-							Object:     "missing-ar-ar.yaml",
-							Assertions: []Assertion{{}},
-						}},
+						Cases: []*Case{
+							{
+								Name:       "invalid admission review object", // this is an AdmissionReview with unknown fields
+								Object:     "invalid-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "missing admission request object", // this is a blank AdmissionReview test
+								Object:     "missing-ar-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "no objects to review", // this is an AdmissionRequest with no objects to review
+								Object:     "no-objects-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+						},
 					},
 				},
 			},
@@ -1076,8 +1080,8 @@ func TestRunner_Run(t *testing.T) {
 				"constraint.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfo),
 				},
-				"blank-ar.yaml": &fstest.MapFile{
-					Data: []byte(fixtures.BlankAdmissionReview),
+				"no-objects-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewMissingObjectAndOldObject),
 				},
 				"system-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.SystemAdmissionReview),
@@ -1091,13 +1095,12 @@ func TestRunner_Run(t *testing.T) {
 				"missing-ar-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.AdmissionReviewMissingRequest),
 				},
+				"oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewWithOldObject),
+				},
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{
-					{
-						Name:        "no op admission review object",
-						CaseResults: []CaseResult{{Name: "no-violation"}},
-					},
 					{
 						Name: "userInfo admission review object",
 						CaseResults: []CaseResult{
@@ -1106,15 +1109,17 @@ func TestRunner_Run(t *testing.T) {
 						},
 					},
 					{
-						Name: "invalid admission review conversion",
+						Name: "AdmissionReview with oldObject",
 						CaseResults: []CaseResult{
-							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
+							{Name: "oldObject submits for review"},
 						},
 					},
 					{
-						Name: "missing admission request",
+						Name: "invalid admission review usage",
 						CaseResults: []CaseResult{
+							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
 							{Name: "missing admission request object", Error: ErrMissingK8sAdmissionRequest},
+							{Name: "no objects to review", Error: ErrNoObjectForReview},
 						},
 					},
 				},

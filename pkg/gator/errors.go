@@ -47,4 +47,8 @@ var (
 	// ErrMissingK8sAdmissionRequest occurs when a test attempts to pass in an AdmissionReview
 	// object but it does not actually pass in an AdmissionRequest object.
 	ErrMissingK8sAdmissionRequest = errors.New("missing an AdmissionRequest object")
+	// ErrReviewObject occurs when a test attempts to pass in an AdmissionRequest with no
+	// object or oldObject for the underlying framework to review.
+	// This mimicks the k8s api server behvaior.
+	ErrNoObjectForReview = errors.New("no object or oldObject found to review")
 )

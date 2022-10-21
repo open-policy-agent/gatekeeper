@@ -475,28 +475,45 @@ spec:
 kind: AdmissionReview
 apiVersion: admission.k8s.io/v1beta1
 `
-
-	BlankAdmissionReview = `
+	// AdmissionReviewMissingObjectAndOldObject makes sure we enforce having an object to review.
+	AdmissionReviewMissingObjectAndOldObject = `
 kind: AdmissionReview
 apiVersion: admission.k8s.io/v1beta1
 request:
-  object:
+  name:
 `
 
+	// AdmissionReviewWithOldObject proves that our code handles submitting a request with an oldObject for review.
+	AdmissionReviewWithOldObject = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  oldObject:
+    labels: 
+      - app: "bar"
+`
+	// SystemAdmissionReview holds a request coming from a system user name.
 	SystemAdmissionReview = `
 kind: AdmissionReview
 apiVersion: admission.k8s.io/v1beta1
 request:
   userInfo:
     username: "system:foo"
+  object:
+    labels: 
+      - app: "bar"
 `
 
+	// NonSystemAdmissionReview holds a request coming from a non system user name.
 	NonSystemAdmissionReview = `
 kind: AdmissionReview
 apiVersion: admission.k8s.io/v1
 request:
   userInfo:
     username: "foo"
+  object:
+    labels: 
+      - app: "bar"
 `
 
 	// InvalidAdmissionReview cannot be converted into a typed AdmissionReview.
