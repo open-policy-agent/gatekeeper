@@ -300,6 +300,18 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 			return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", ErrNoObjectForReview)
 		}
 
+		// enforce existing webhook policy behavior for gator verify
+		// https://github.com/open-policy-agent/gatekeeper/blob/91d29f6c9cc7a41bc0a8b766e4b6a138a529777f/pkg/webhook/policy.go#L150-L165
+		// TODO(acpana): figure out how to dedup the code here with the code in the webhook policy
+		if ar.Request.Operation == admissionv1.Delete {
+			if ar.Request.OldObject.Raw == nil {
+				return nil, fmt.Errorf("%w: Gatekeeper will expect the oldObject to be non nil on DELETE operations as per "+
+					"Kubernetes v1.15.0+ admission webhooks spec", ErrNilOldObject)
+			}
+
+			ar.Request.Object = ar.Request.OldObject
+		}
+
 		arr := target.AugmentedReview{
 			AdmissionRequest: ar.Request,
 			Source:           mutationtypes.SourceTypeOriginal,

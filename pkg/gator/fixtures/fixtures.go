@@ -492,6 +492,17 @@ request:
     labels: 
       - app: "bar"
 `
+
+	// DeleteAdmissionReviewWithNoOldObject enforces the AdmissionRequest behavior for k8s v1.15.0+ for DELETE operations.
+	DeleteAdmissionReviewWithNoOldObject = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  operation: "DELETE"
+  object:
+    labels:
+      - app: "bar"
+`
 	// SystemAdmissionReview holds a request coming from a system user name.
 	SystemAdmissionReview = `
 kind: AdmissionReview

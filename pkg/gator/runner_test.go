@@ -1069,6 +1069,11 @@ func TestRunner_Run(t *testing.T) {
 								Object:     "no-objects-ar.yaml",
 								Assertions: []Assertion{{}},
 							},
+							{
+								Name:       "no oldObject on delete", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-oldObject-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
 						},
 					},
 				},
@@ -1098,6 +1103,9 @@ func TestRunner_Run(t *testing.T) {
 				"oldObject-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.AdmissionReviewWithOldObject),
 				},
+				"no-oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.DeleteAdmissionReviewWithNoOldObject),
+				},
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{
@@ -1120,6 +1128,7 @@ func TestRunner_Run(t *testing.T) {
 							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
 							{Name: "missing admission request object", Error: ErrMissingK8sAdmissionRequest},
 							{Name: "no objects to review", Error: ErrNoObjectForReview},
+							{Name: "no oldObject on delete", Error: ErrNilOldObject},
 						},
 					},
 				},
