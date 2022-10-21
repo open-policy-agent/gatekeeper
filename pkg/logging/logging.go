@@ -17,6 +17,7 @@ const (
 	ConstraintViolations = "constraint_violations"
 	ResourceGroup        = "resource_group"
 	ResourceKind         = "resource_kind"
+	ResourceLabels       = "resource_labels"
 	ResourceAPIVersion   = "resource_api_version"
 	ResourceNamespace    = "resource_namespace"
 	ResourceName         = "resource_name"

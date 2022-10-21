@@ -754,7 +754,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		}
 
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details)
+		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, r.Msg, am.gkNamespace, am.eventRecorder)
 		}
@@ -1012,7 +1012,7 @@ func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{},
+	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
 ) {
 	l.Info(
 		message,
@@ -1029,6 +1029,7 @@ func logViolation(l logr.Logger,
 		logging.ResourceKind, resourceGroupVersionKind.Kind,
 		logging.ResourceNamespace, rnamespace,
 		logging.ResourceName, rname,
+		logging.ResourceLabels, rlabels,
 	)
 }
 
