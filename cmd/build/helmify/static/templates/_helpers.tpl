@@ -68,6 +68,10 @@ Output post install webhook probe container entry
   resources:
   {{- toYaml .Values.postInstall.resources | nindent 4 }}
   securityContext:
+    {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+    seccompProfile:
+      type: RuntimeDefault
+    {{- end }}
   {{- toYaml .Values.postInstall.securityContext | nindent 4 }}
   volumeMounts:
   - mountPath: /certs
