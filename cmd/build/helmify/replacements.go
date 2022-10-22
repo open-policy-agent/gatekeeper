@@ -47,8 +47,6 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_EXTRAENV: ""`: `{{- toYaml .Values.audit.extraEnv | nindent 8 }}`,
-
 	"HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME": `{{ .Values.audit.priorityClassName }}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""`: `{{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}`,
@@ -68,8 +66,6 @@ var replacements = map[string]string{
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""`: `{{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
-
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXTRAENV: ""`: `{{- toYaml .Values.controllerManager.extraEnv | nindent 8 }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME": `{{ .Values.controllerManager.priorityClassName }}`,
 
