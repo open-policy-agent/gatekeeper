@@ -49,6 +49,10 @@ spec:
           resources:
             {{- toYaml .Values.postUpgrade.resources | nindent 12 }}
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
       {{- with .Values.postUpgrade }}
       affinity:
