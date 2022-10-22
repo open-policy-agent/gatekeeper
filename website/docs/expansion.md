@@ -3,7 +3,7 @@ id: expansion
 title: Validation of Workload Resources
 ---
 
-`Feature State:` Gatekeeper version v3.7+ (alpha)
+`Feature State:` Gatekeeper version v3.10+ (alpha)
 
 > ❗This feature is in _alpha_ stage, and is not enabled by default. To
 > enable, set the `enable-generator-resource-expansion` flag.
@@ -31,7 +31,7 @@ resources. This sidecar configuration is not specified in the config of the
 workload resource (i.e. Deployment), but rather injected by Istio's webhook. In
 order to accurately represent mock resources modified by controllers or
 webhooks, Gatekeeper leverages its
-[Mutations](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation)
+[Mutations](mutation.md)
 feature to allow mock resources to be manipulated into their desired form. In
 the Istio example, `Assign` and `ModifySet` mutators could be configured to
 mimic Istio sidecar injection. For further details on mutating mock resources
@@ -40,7 +40,7 @@ see the [Example](#example) section.
 
 Any resources configured for expansion will be expanded by both the validating
 webhook and
-[Audit](https://open-policy-agent.github.io/gatekeeper/website/docs/audit). This
+[Audit](audit.md). This
 feature will only be enabled if a user creates a `ExpansionTemplate` that
 targets some resource that exists on the cluster.
 
@@ -69,7 +69,7 @@ resources on the cluster. If the `source` field is not set, the `Mutation` will
 apply to both expanded resources and real resources on the cluster.
 
 Users can test their expansion configuration using the
-[`gator expand` CLI](https://open-policy-agent.github.io/gatekeeper/website/docs/gator)
+[`gator expand` CLI](gator.md)
 .
 
 #### ExpansionTemplate
