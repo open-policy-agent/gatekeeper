@@ -26,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -458,6 +459,10 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	if err != nil {
 		return nil, []error{fmt.Errorf("unable to list objects from audit cache: %w", err)}
 	}
+	nsMap, err := nsMapFromObjs(objs)
+	if err != nil {
+		return nil, []error{fmt.Errorf("unable to build namespaces from cache: %w", err)}
+	}
 
 	var results []Result
 
@@ -465,7 +470,16 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	for i := range objs {
 		// Prevent referencing loop variables directly.
 		obj := objs[i]
-		resp, err := am.opa.Review(ctx, obj)
+		ns, exists := nsMap[obj.GetNamespace()]
+		if !exists {
+			ns = nil
+		}
+
+		au := &target.AugmentedUnstructured{
+			Object:    obj,
+			Namespace: ns,
+		}
+		resp, err := am.opa.Review(ctx, au)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("validating %v %s/%s: %v", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err))
 			continue
@@ -480,6 +494,26 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	}
 
 	return results, errs
+}
+
+// nsMapFromObjs creates a mapping of namespaceName -> corev1.Namespace for
+// every Namespace in input `objs`.
+func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespace, error) {
+	nsMap := make(map[string]*corev1.Namespace)
+	for _, obj := range objs {
+		if obj.GetKind() != "Namespace" {
+			continue
+		}
+
+		var ns corev1.Namespace
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &ns)
+		if err != nil {
+			return nil, fmt.Errorf("error converting cached namespace %s from unstructured: %w", obj.GetName(), err)
+		}
+		nsMap[obj.GetName()] = &ns
+	}
+
+	return nsMap, nil
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
@@ -541,7 +575,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 			resultants, err := am.expansionSystem.Expand(base)
 			if err != nil {
-				am.log.Error(err, "Unable to expand object", "objName", objFile.GetName())
+				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
 				continue
 			}
 			for _, resultant := range resultants {
@@ -556,6 +590,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 					errs = append(errs, err)
 					continue
 				}
+				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
 				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
 			}
 

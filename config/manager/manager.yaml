@@ -56,7 +56,7 @@ spec:
             - "--operation=webhook"
             - "--operation=mutation-webhook"
             - "--disable-opa-builtin={http.send}"
-          image: openpolicyagent/gatekeeper:v3.10.0-beta.1
+          image: openpolicyagent/gatekeeper:v3.11.0-beta.0
           imagePullPolicy: Always
           name: manager
           ports:
@@ -89,11 +89,10 @@ spec:
               value: "manager"
           resources:
             limits:
-              cpu: 1000m
               memory: 512Mi
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
           livenessProbe:
             httpGet:
               path: /healthz
@@ -149,7 +148,7 @@ spec:
             - --disable-cert-rotation
           command:
             - /manager
-          image: openpolicyagent/gatekeeper:v3.10.0-beta.1
+          image: openpolicyagent/gatekeeper:v3.11.0-beta.0
           env:
             # used by Gatekeeper
             - name: POD_NAMESPACE
@@ -193,11 +192,10 @@ spec:
               port: 9090
           resources:
             limits:
-              cpu: 1000m
               memory: 512Mi
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

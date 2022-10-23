@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
+	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	ctrlmutators "github.com/open-policy-agent/gatekeeper/pkg/controller/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -63,7 +63,7 @@ func newReconciler(
 		scheme:         mgr.GetScheme(),
 		reporter:       ctrlmutators.NewStatsReporter(),
 		cache:          ctrlmutators.NewMutationCache(),
-		gvk:            mutationsv1beta1.GroupVersion.WithKind(kind),
+		gvk:            mutationsv1.GroupVersion.WithKind(kind),
 		newMutationObj: newMutationObj,
 		mutatorFor:     mutatorFor,
 		log:            logf.Log.WithName("controller").WithValues(logging.Process, fmt.Sprintf("%s_controller", strings.ToLower(kind))),

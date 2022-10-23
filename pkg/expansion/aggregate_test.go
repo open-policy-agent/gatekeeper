@@ -91,6 +91,118 @@ func TestAggregateResponses(t *testing.T) {
 	}
 }
 
+func TestOverrideEnforcementAction(t *testing.T) {
+	tests := []struct {
+		name  string
+		ea    string
+		resps *types.Responses
+		want  *types.Responses
+	}{
+		{
+			name: "empty enforcement action override does not change response",
+			ea:   "",
+			resps: &types.Responses{
+				ByTarget: map[string]*types.Response{
+					"targetA": {
+						Target: "targetA",
+						Results: []*types.Result{
+							{
+								Target:            "targetA",
+								Msg:               "violationA",
+								EnforcementAction: "deny",
+							},
+						},
+					},
+				},
+			},
+			want: &types.Responses{
+				ByTarget: map[string]*types.Response{
+					"targetA": {
+						Target: "targetA",
+						Results: []*types.Result{
+							{
+								Target:            "targetA",
+								Msg:               "violationA",
+								EnforcementAction: "deny",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "deny enforcement action override with multiple targets and results",
+			ea:   "deny",
+			resps: &types.Responses{
+				ByTarget: map[string]*types.Response{
+					"targetA": {
+						Target: "targetA",
+						Results: []*types.Result{
+							{
+								Target:            "targetA",
+								Msg:               "violationA",
+								EnforcementAction: "warn",
+							},
+						},
+					},
+					"targetB": {
+						Target: "targetB",
+						Results: []*types.Result{
+							{
+								Target:            "targetB",
+								Msg:               "violationB",
+								EnforcementAction: "warn",
+							},
+							{
+								Target:            "targetB",
+								Msg:               "violationC",
+								EnforcementAction: "warn",
+							},
+						},
+					},
+				},
+			},
+			want: &types.Responses{
+				ByTarget: map[string]*types.Response{
+					"targetA": {
+						Target: "targetA",
+						Results: []*types.Result{
+							{
+								Target:            "targetA",
+								Msg:               "violationA",
+								EnforcementAction: "deny",
+							},
+						},
+					},
+					"targetB": {
+						Target: "targetB",
+						Results: []*types.Result{
+							{
+								Target:            "targetB",
+								Msg:               "violationB",
+								EnforcementAction: "deny",
+							},
+							{
+								Target:            "targetB",
+								Msg:               "violationC",
+								EnforcementAction: "deny",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			OverrideEnforcementAction(tc.ea, tc.resps)
+			if diff := cmp.Diff(tc.resps, tc.want); diff != "" {
+				t.Errorf("got : %v\nbut wanted: %v\ndiff: %s", tc.resps, tc.want, diff)
+			}
+		})
+	}
+}
+
 func buildResponses(fns []addFn) *types.Responses {
 	r := &types.Responses{ByTarget: make(map[string]*types.Response)}
 	for _, f := range fns {

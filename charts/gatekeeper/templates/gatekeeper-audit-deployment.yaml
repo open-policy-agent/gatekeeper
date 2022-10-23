@@ -62,11 +62,12 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        - --disable-cert-rotation={{ .Values.audit.disableCertRotation }}
+        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
         command:
         - /manager
         env:
@@ -120,6 +121,8 @@ spec:
         - mountPath: /tmp/audit
           name: tmp-volume
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
+      env:
+        {{- toYaml .Values.audit.extraEnv | nindent 8 }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}

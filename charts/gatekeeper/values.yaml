@@ -15,6 +15,7 @@ validatingWebhookObjectSelector: {}
 validatingWebhookCheckIgnoreFailurePolicy: Fail
 enableDeleteOperations: false
 enableExternalData: false
+enableGeneratorResourceExpansion: false
 enableTLSHealthcheck: false
 maxServingThreads: -1
 mutatingWebhookFailurePolicy: Ignore
@@ -37,7 +38,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.1
+      tag: v3.11.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -55,7 +56,7 @@ postUpgrade:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -66,7 +67,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.1
+      tag: v3.11.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -93,7 +94,7 @@ postInstall:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -104,7 +105,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.10.0-beta.1
+      tag: v3.11.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
   affinity: {}
@@ -115,7 +116,7 @@ preUninstall:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -123,7 +124,7 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.10.0-beta.1
+  release: v3.11.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations: {}
@@ -143,6 +144,7 @@ controllerManager:
   livenessTimeout: 1
   priorityClassName: system-cluster-critical
   disableCertRotation: false
+  tlsMinVersion: 1.3
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -160,16 +162,15 @@ controllerManager:
   nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
-      cpu: 1000m
       memory: 512Mi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -193,16 +194,15 @@ audit:
   nodeSelector: {kubernetes.io/os: linux}
   resources:
     limits:
-      cpu: 1000m
       memory: 512Mi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 999
     runAsNonRoot: true
@@ -222,7 +222,7 @@ crds:
     allowPrivilegeEscalation: false
     capabilities:
       drop:
-      - all
+      - ALL
     readOnlyRootFilesystem: true
     runAsGroup: 65532
     runAsNonRoot: true
@@ -239,3 +239,6 @@ upgradeCRDs:
   extraRules: []
 rbac:
   create: true
+externalCertInjection:
+  enabled: false
+  secretName: gatekeeper-webhook-server-cert

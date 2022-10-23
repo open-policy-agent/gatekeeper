@@ -122,7 +122,6 @@ type ModifySetStatus struct {
 // +kubebuilder:resource:path="modifyset"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
 // ModifySet allows the user to modify non-keyed lists, such as
 // the list of arguments to a container.

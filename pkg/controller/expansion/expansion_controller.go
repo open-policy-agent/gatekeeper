@@ -15,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -61,12 +62,18 @@ func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
 type Reconciler struct {
 	client.Client
-	system *expansion.System
-	scheme *runtime.Scheme
+	system   *expansion.System
+	scheme   *runtime.Scheme
+	registry *etRegistry
 }
 
 func newReconciler(mgr manager.Manager, system *expansion.System) *Reconciler {
-	return &Reconciler{Client: mgr.GetClient(), system: system, scheme: mgr.GetScheme()}
+	return &Reconciler{
+		Client:   mgr.GetClient(),
+		system:   system,
+		scheme:   mgr.GetScheme(),
+		registry: newRegistry(),
+	}
 }
 
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
@@ -97,6 +104,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.scheme.Convert(te, unversionedTE, nil); err != nil {
 		return reconcile.Result{}, err
 	}
+	nsName := types.NamespacedName{
+		Namespace: unversionedTE.GetNamespace(),
+		Name:      unversionedTE.GetName(),
+	}
 	if deleted {
 		// unversionedTE will be an empty struct. We set the metadata name, which is
 		// used as a key to delete it from the expansion system
@@ -105,11 +116,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 		log.Info("removed template expansion", "template name", unversionedTE.ObjectMeta.Name)
+		r.registry.remove(nsName)
 	} else {
 		if err := r.system.UpsertTemplate(unversionedTE); err != nil {
 			return reconcile.Result{}, err
 		}
 		log.Info("upserted template expansion", "template name", unversionedTE.ObjectMeta.Name)
+		r.registry.add(nsName)
+	}
+
+	if err := r.registry.report(ctx); err != nil {
+		log.Error(err, "error reporting template expansion metrics", "namespacedName", nsName)
 	}
 
 	return reconcile.Result{}, nil
