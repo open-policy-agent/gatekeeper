@@ -13,9 +13,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // Runner defines logic independent of how tests are run and the results are
@@ -312,20 +314,14 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 		return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", ErrNoObjectForReview)
 	}
 
-	// enforce existing webhook policy behavior for gator verify
-	// https://github.com/open-policy-agent/gatekeeper/blob/91d29f6c9cc7a41bc0a8b766e4b6a138a529777f/pkg/webhook/policy.go#L150-L165
-	// TODO(acpana): figure out how to dedup the code here with the code in the webhook policy
-	if ar.Request.Operation == admissionv1.Delete {
-		if ar.Request.OldObject.Raw == nil {
-			return nil, fmt.Errorf("%w: Gatekeeper will expect the oldObject to be non nil on DELETE operations as per "+
-				"Kubernetes v1.15.0+ admission webhooks spec", ErrNilOldObject)
-		}
-
-		ar.Request.Object = ar.Request.OldObject
+	// parse into webhook/admission type
+	req := &admission.Request{AdmissionRequest: *ar.Request}
+	if err := util.RequireOldObjectOnDelete(req); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrNilOldObject, err.Error())
 	}
 
 	arr := target.AugmentedReview{
-		AdmissionRequest: ar.Request,
+		AdmissionRequest: &req.AdmissionRequest,
 		Source:           mutationtypes.SourceTypeOriginal,
 	}
 

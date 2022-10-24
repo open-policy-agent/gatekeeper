@@ -147,21 +147,10 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
-	if req.AdmissionRequest.Operation == admissionv1.Delete {
-		// oldObject is the existing object.
-		// It is null for DELETE operations in API servers prior to v1.15.0.
-		// https://github.com/kubernetes/website/pull/14671
-		if req.AdmissionRequest.OldObject.Raw == nil {
-			vResp := admission.Denied("For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
-			vResp.Result.Code = http.StatusInternalServerError
-			return vResp
-		}
-		// For admission webhooks registered for DELETE operations on k8s built APIs or CRDs,
-		// the apiserver now sends the existing object as admissionRequest.Request.OldObject to the webhook
-		// object is the new object being admitted.
-		// It is null for DELETE operations.
-		// https://github.com/kubernetes/kubernetes/pull/76346
-		req.AdmissionRequest.Object = req.AdmissionRequest.OldObject
+	if err := util.RequireOldObjectOnDelete(&req); err != nil {
+		vResp := admission.Denied(err.Error())
+		vResp.Result.Code = http.StatusInternalServerError
+		return vResp
 	}
 
 	if userErr, err := h.validateGatekeeperResources(ctx, &req); err != nil {
