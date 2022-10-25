@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-func TestRequireOldObjectOnDelete(t *testing.T) {
+func TestSetObjectOnDelete(t *testing.T) {
 	testCases := []struct {
 		name    string
 		req     *admission.Request
@@ -47,7 +47,7 @@ func TestRequireOldObjectOnDelete(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RequireOldObjectOnDelete(tc.req)
+			err := SetObjectOnDelete(tc.req)
 
 			if tc.wantErr {
 				if err == nil {

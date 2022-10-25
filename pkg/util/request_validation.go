@@ -10,9 +10,9 @@ import (
 // nolint: revive // Moved error out of pkg/webhook/admission; needs capitalization for backwards compat.
 var ErrOldObjectIsNil = errors.New("For admission webhooks registered for DELETE operations, please use Kubernetes v1.15.0+.")
 
-// RequireOldObjectOnDelete enforces that we use at least K8s API v1.15.0+ on DELETE operations
+// SetObjectOnDelete enforces that we use at least K8s API v1.15.0+ on DELETE operations
 // and copies over the oldObject into the Object field for the given AdmissionRequest.
-func RequireOldObjectOnDelete(req *admission.Request) error {
+func SetObjectOnDelete(req *admission.Request) error {
 	if req.AdmissionRequest.Operation == admissionv1.Delete {
 		// oldObject is the existing object.
 		// It is null for DELETE operations in API servers prior to v1.15.0.

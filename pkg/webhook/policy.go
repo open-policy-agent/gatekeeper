@@ -147,7 +147,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.Allowed("Gatekeeper does not self-manage")
 	}
 
-	if err := util.RequireOldObjectOnDelete(&req); err != nil {
+	if err := util.SetObjectOnDelete(&req); err != nil {
 		vResp := admission.Denied(err.Error())
 		vResp.Result.Code = http.StatusInternalServerError
 		return vResp
