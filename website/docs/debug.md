@@ -54,9 +54,11 @@ In debugging decisions and constraints, a few pieces of information can be helpf
    * A trace of the evaluation
    * The input document being evaluated
 
-Writing out this information for every request would be very expensive, and it would be hard
-to find the relevant logs for a given request. Instead, Gatekeeper allows users to specify
-resources and requesting users for which information will be logged. They can do so by
+Writing out all the information above for every request would be very expensive in terms of memory and load on the API server. It would also be hard
+to find the relevant logs for a given request.
+
+For tracing, Gatekeeper **requires** operators to specify
+resources and requesting users for which traces will be logged. They can do so by
 configuring the `Config` resource, which lives in the `gatekeeper-system` namespace.
 
 Below is an example of a config resource:
@@ -78,6 +80,9 @@ spec:
     # Requests for which we want to run traces
     traces:
         # The requesting user for which traces will be run
+        # This field is required.
+        # To trace multiple users, feel free to pass in a list.
+        # To trace controllers, use the service accounts of those controlelrs.
       - user: "user_to_trace@company.com"
         kind:
           # The group, version, kind for which we want to run a trace
