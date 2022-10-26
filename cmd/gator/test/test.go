@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -90,7 +89,7 @@ func run(cmd *cobra.Command, args []string) {
 			errFatalf("pre-marshaling results to json: %v", err)
 		}
 
-		unmarshalled := []*types.Result{}
+		unmarshalled := []*test.GatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
 			errFatalf("pre-unmarshaling results from json: %v", err)
@@ -104,7 +103,11 @@ func run(cmd *cobra.Command, args []string) {
 	default:
 		if len(results) > 0 {
 			for _, result := range results {
-				fmt.Printf("Message: %q", result.Msg)
+				fmt.Printf("[%q] Message: %q \n", result.Constraint.GetName(), result.Msg)
+
+				if includeTrace {
+					fmt.Printf("Trace: %v", *result.Trace)
+				}
 			}
 		}
 	}
