@@ -140,5 +140,17 @@ func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error 
 		}
 	}
 
+	if r.Trace != nil {
+		prefix := ""
+		if verbose {
+			// if using verbose to print, let's keep the trace at the same level
+			prefix = "    --- "
+		}
+		_, err := w.WriteString(fmt.Sprintf("%sTRACE: %s\t%s\n", prefix, r.Name, *r.Trace))
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrWritingString, err)
+		}
+	}
+
 	return nil
 }

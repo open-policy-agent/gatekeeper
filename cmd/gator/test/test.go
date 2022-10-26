@@ -45,6 +45,7 @@ var Cmd = &cobra.Command{
 var (
 	flagFilenames []string
 	flagOutput    string
+	includeTrace  bool
 )
 
 const (
@@ -58,6 +59,7 @@ const (
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
+	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -69,7 +71,7 @@ func run(cmd *cobra.Command, args []string) {
 		errFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs)
+	responses, err := test.Test(unstrucs, includeTrace)
 	if err != nil {
 		errFatalf("auditing objects: %v\n", err)
 	}

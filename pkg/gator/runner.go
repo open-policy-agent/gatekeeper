@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"k8s.io/utils/pointer"
 )
 
 // Runner defines logic independent of how tests are run and the results are
@@ -28,12 +29,14 @@ type Runner struct {
 
 	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	newClient func() (Client, error)
+	newClient func(includeTrace bool) (Client, error)
 
 	scheme *runtime.Scheme
+
+	includeTrace bool
 }
 
-func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, error) {
+func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (Client, error), includeTrace bool) (*Runner, error) {
 	s := runtime.NewScheme()
 	err := apis.AddToScheme(s)
 	if err != nil {
@@ -41,9 +44,10 @@ func NewRunner(filesystem fs.FS, newClient func() (Client, error)) (*Runner, err
 	}
 
 	return &Runner{
-		filesystem: filesystem,
-		newClient:  newClient,
-		scheme:     s,
+		filesystem:   filesystem,
+		newClient:    newClient,
+		scheme:       s,
+		includeTrace: includeTrace,
 	}, nil
 }
 
@@ -114,7 +118,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 }
 
 func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
-	client, err := r.newClient()
+	client, err := r.newClient(r.includeTrace)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrCreatingClient, err)
 	}
@@ -169,7 +173,7 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 }
 
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
-	client, err := r.newClient()
+	client, err := r.newClient(r.includeTrace)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCreatingClient, err)
 	}
@@ -225,40 +229,43 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client Client) error
 // RunCase executes a Case and returns the result of the run.
 func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
-
-	err := r.checkCase(ctx, newClient, suiteDir, tc)
+	trace, err := r.checkCase(ctx, newClient, suiteDir, tc)
 
 	return CaseResult{
 		Name:    tc.Name,
 		Error:   err,
 		Runtime: Duration(time.Since(start)),
+		Trace:   trace,
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (err error) {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (trace *string, err error) {
 	if tc.Object == "" {
-		return fmt.Errorf("%w: must define object", ErrInvalidCase)
+		return nil, fmt.Errorf("%w: must define object", ErrInvalidCase)
 	}
 
 	if len(tc.Assertions) == 0 {
 		// Test cases must define at least one assertion.
-		return fmt.Errorf("%w: assertions must be non-empty", ErrInvalidCase)
+		return nil, fmt.Errorf("%w: assertions must be non-empty", ErrInvalidCase)
 	}
 
 	review, err := r.runReview(ctx, newClient, suiteDir, tc)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	results := review.Results()
+	if r.includeTrace {
+		trace = pointer.StringPtr(review.TraceDump())
+	}
 	for i := range tc.Assertions {
 		err = tc.Assertions[i].Run(results)
 		if err != nil {
-			return err
+			return trace, err
 		}
 	}
 
-	return nil
+	return trace, nil
 }
 
 func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (*types.Responses, error) {

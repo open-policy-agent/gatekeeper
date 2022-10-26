@@ -11,6 +11,13 @@ type GatorResult struct {
 	types.Result
 
 	ViolatingObject *unstructured.Unstructured
+
+	// Trace is an explanation of the underlying constraint evaluation.
+	// For instance, for OPA based evaluations, the trace is an explanation of the rego query:
+	// https://www.openpolicyagent.org/docs/v0.44.0/policy-reference/#tracing
+	// NOTE: This is a string pointer to differentiate between an empty ("") trace and an unset one (nil);
+	// also for efficiency reasons as traces could be arbitrarily large theoretically.
+	Trace *string
 }
 
 func fromFrameworkResult(frameResult *types.Result, violatingObject *unstructured.Unstructured) *GatorResult {
@@ -47,6 +54,7 @@ func (r *GatorResponses) Results() []*GatorResult {
 	for target, resp := range r.ByTarget {
 		for _, rr := range resp.Results {
 			rr.Target = target
+			rr.Trace = resp.Trace
 			res = append(res, rr)
 		}
 	}

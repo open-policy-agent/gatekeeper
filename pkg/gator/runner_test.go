@@ -1145,7 +1145,7 @@ func TestRunner_Run(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner, err := NewRunner(tc.f, NewOPAClient)
+			runner, err := NewRunner(tc.f, NewOPAClient, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1173,9 +1173,9 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		TestResults: []TestResult{{Error: ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func() (Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func(includeTrace bool) (Client, error) {
 		return nil, errors.New("error")
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1519,6 +1519,7 @@ func TestRunner_RunCase(t *testing.T) {
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
 				NewOPAClient,
+				false,
 			)
 			if err != nil {
 				t.Fatal(err)

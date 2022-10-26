@@ -33,8 +33,9 @@ const (
 )
 
 var (
-	run     string
-	verbose bool
+	run          string
+	verbose      bool
+	includeTrace bool
 )
 
 func init() {
@@ -42,6 +43,8 @@ func init() {
 		`regular expression which filters tests to run by name`)
 	Cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		`print extended test output`)
+	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false,
+		`include a trace for the underlying constraint framework evaluation`)
 }
 
 // Cmd is the gator verify subcommand.
@@ -104,7 +107,7 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, filter gator.Filter) error {
 	isFailure := false
 
-	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient)
+	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient, includeTrace)
 	if err != nil {
 		return err
 	}
