@@ -97,6 +97,10 @@ The audit pod emits JSON-formatted audit logs to stdout. The following is an exa
   "resource_kind": "Pod",
   "resource_namespace": "kube-system",
   "resource_name": "kube-scheduler-kind-control-plane"
+  "resource_labels": {
+    "env": "prod",
+    "my-app-system": "true"
+  }
 }
 ```
 
