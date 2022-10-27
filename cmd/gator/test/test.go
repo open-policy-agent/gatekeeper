@@ -84,12 +84,13 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		fmt.Print(string(b))
 	case stringYAML:
-		jsonb, err := json.Marshal(results)
+		yamlResults := test.GetYamlFriendlyResults(results)
+		jsonb, err := json.Marshal(yamlResults)
 		if err != nil {
 			errFatalf("pre-marshaling results to json: %v", err)
 		}
 
-		unmarshalled := []*test.GatorResult{}
+		unmarshalled := []*test.YamlGatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
 			errFatalf("pre-unmarshaling results from json: %v", err)

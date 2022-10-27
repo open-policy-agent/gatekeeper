@@ -10,7 +10,7 @@ import (
 type GatorResult struct {
 	types.Result
 
-	ViolatingObject *unstructured.Unstructured
+	ViolatingObject *unstructured.Unstructured `json:"violatingObject"`
 
 	// Trace is an explanation of the underlying constraint evaluation.
 	// For instance, for OPA based evaluations, the trace is an explanation of the rego query:
@@ -71,4 +71,30 @@ func (r *GatorResponses) Results() []*GatorResult {
 	})
 
 	return res
+}
+
+// YamlGatorResult is a GatorResult minues a level of indirection on
+// the ViolatingObject and with struct tags for yaml marshaling.
+type YamlGatorResult struct {
+	types.Result
+	ViolatingObject map[string]interface{} `yaml:"violatingObject"`
+	Trace           *string                `yaml:"trace,flow"`
+}
+
+// GetYamlFriendlyResults is a convenience func to remove a level of indirection between
+// unstructured.Unstructured and unstructured.Unstructured.Object when calling MarshalYaml.
+func GetYamlFriendlyResults(results []*GatorResult) []*YamlGatorResult {
+	var yamlResults []*YamlGatorResult
+
+	for _, r := range results {
+		yr := &YamlGatorResult{
+			Result:          r.Result,
+			ViolatingObject: r.ViolatingObject.DeepCopy().Object,
+			// Trace: fmt.Sprintf("%v", *r.Trace),
+			Trace: r.Trace,
+		}
+		yamlResults = append(yamlResults, yr)
+	}
+
+	return yamlResults
 }
