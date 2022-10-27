@@ -1,9 +1,11 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
@@ -42,23 +44,24 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	flagFilenames []string
-	flagOutput    string
-	includeTrace  bool
+	flagFilenames    []string
+	flagOutput       string
+	flagIncludeTrace bool
 )
 
 const (
 	flagNameFilename = "filename"
 	flagNameOutput   = "output"
 
-	stringJSON = "json"
-	stringYAML = "yaml"
+	stringJSON          = "json"
+	stringYAML          = "yaml"
+	stringHumanFriendly = "default"
 )
 
 func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
-	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
+	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -70,19 +73,32 @@ func run(cmd *cobra.Command, args []string) {
 		errFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, includeTrace)
+	responses, err := test.Test(unstrucs, flagIncludeTrace)
 	if err != nil {
 		errFatalf("auditing objects: %v\n", err)
 	}
 	results := responses.Results()
 
-	switch flagOutput {
+	output := formatOutput(flagOutput, flagIncludeTrace, results)
+	fmt.Print(output) // gator test users can pipe this out as needed
+
+	// Whether or not we return non-zero depends on whether we have a `deny`
+	// enforcementAction on one of the violated constraints
+	exitCode := 0
+	if enforceableFailure(results) {
+		exitCode = 1
+	}
+	os.Exit(exitCode)
+}
+
+func formatOutput(flagOutput string, includeTrace bool, results []*test.GatorResult) string {
+	switch strings.ToLower(flagOutput) {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
 			errFatalf("marshaling validation json results: %v", err)
 		}
-		fmt.Print(string(b))
+		return string(b)
 	case stringYAML:
 		yamlResults := test.GetYamlFriendlyResults(results)
 		jsonb, err := json.Marshal(yamlResults)
@@ -100,26 +116,23 @@ func run(cmd *cobra.Command, args []string) {
 		if err != nil {
 			errFatalf("marshaling validation yaml results: %v", err)
 		}
-		fmt.Print(string(yamlb))
+		return string(yamlb)
+	case stringHumanFriendly:
 	default:
+		var buf bytes.Buffer
 		if len(results) > 0 {
 			for _, result := range results {
-				fmt.Printf("[%q] Message: %q \n", result.Constraint.GetName(), result.Msg)
+				buf.WriteString(fmt.Sprintf("[%q] Message: %q \n", result.Constraint.GetName(), result.Msg))
 
 				if includeTrace {
-					fmt.Printf("Trace: %v", *result.Trace)
+					buf.WriteString(fmt.Sprintf("Trace: %v", *result.Trace))
 				}
 			}
 		}
+		return buf.String()
 	}
 
-	// Whether or not we return non-zero depends on whether we have a `deny`
-	// enforcementAction on one of the violated constraints
-	exitCode := 0
-	if enforceableFailure(results) {
-		exitCode = 1
-	}
-	os.Exit(exitCode)
+	return ""
 }
 
 func enforceableFailure(results []*test.GatorResult) bool {
