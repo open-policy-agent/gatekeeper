@@ -31,3 +31,15 @@ GIT_USER=<Your GitHub username> USE_SSH=true yarn deploy
 ```
 
 If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+
+## Search
+
+Gatekeeper docs website uses Algolia DocSearch service. Please see [here](https://docusaurus.io/docs/search) for more information.
+
+If the search index has any issues:
+
+1. Go to [Algolia search dashboard](https://www.algolia.com/apps/PT2IX43ZFM/explorer/browse/gatekeeper)
+1. Click manage index and export configuration
+1. Delete the index
+1. Import saved configuration
+1. Go to [Algolia crawler](https://crawler.algolia.com/admin/crawlers/a953b469-c85a-4dc6-8a1c-16028abc1936/overview) and restart crawling manually (takes about a few minutes to crawl). This is scheduled to run every week automatically.
