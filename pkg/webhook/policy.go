@@ -120,9 +120,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	server := mgr.GetWebhookServer()
-	server.TLSMinVersion = *tlsMinVersion
-	server.Register("/v1/admit", wh)
+	getServerConfig(mgr).Register("/v1/admit", wh)
 	return nil
 }
 
