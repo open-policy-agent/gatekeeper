@@ -55,13 +55,13 @@ Providers are designed to be in-cluster components that can communicate with ext
 
 Example provider _template_ can be found at: https://github.com/open-policy-agent/gatekeeper-external-data-provider
 
-### Providers maintained by community
+### Providers maintained by the community
 
 If you have built an external data provider and would like to add it to this list, please submit a PR to update this page.
 
 If you have any issues with a specific provider, please open an issue in the applicable provider's repository.
 
-The following external data providers are maintained by the community.
+The following external data providers are maintained by the community:
 
 - [ratify](https://github.com/deislabs/ratify)
 - [cosign-gatekeeper-provider](https://github.com/sigstore/cosign-gatekeeper-provider)
@@ -71,7 +71,7 @@ The following external data providers are maintained by the community.
 The following external data providers are samples and are not supported/maintained by the community:
 
 - [trivy-provider](https://github.com/sozercan/trivy-provider)
-- [tag-to-digest](https://github.com/sozercan/tagToDigest-provider)
+- [tag-to-digest-provider](https://github.com/sozercan/tagToDigest-provider)
 - [aad-provider](https://github.com/sozercan/aad-provider)
 
 ### API (v1alpha1)
