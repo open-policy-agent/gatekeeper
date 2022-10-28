@@ -107,7 +107,7 @@ func runE(cmd *cobra.Command, args []string) error {
 func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, filter gator.Filter) error {
 	isFailure := false
 
-	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient, includeTrace)
+	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient, gator.WithIncludeTrace(includeTrace))
 	if err != nil {
 		return err
 	}

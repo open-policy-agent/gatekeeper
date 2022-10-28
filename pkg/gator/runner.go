@@ -36,19 +36,32 @@ type Runner struct {
 	includeTrace bool
 }
 
-func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (Client, error), includeTrace bool) (*Runner, error) {
+func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (Client, error), opts ...RunnerOptions) (*Runner, error) {
 	s := runtime.NewScheme()
 	err := apis.AddToScheme(s)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Runner{
-		filesystem:   filesystem,
-		newClient:    newClient,
-		scheme:       s,
-		includeTrace: includeTrace,
-	}, nil
+	r := &Runner{
+		filesystem: filesystem,
+		newClient:  newClient,
+		scheme:     s,
+	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r, nil
+}
+
+type RunnerOptions func(*Runner)
+
+func WithIncludeTrace(includeTrace bool) RunnerOptions {
+	return func(r *Runner) {
+		r.includeTrace = includeTrace
+	}
 }
 
 // Run executes all Tests in the Suite and returns the results.

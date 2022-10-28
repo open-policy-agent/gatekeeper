@@ -272,7 +272,7 @@ func TestRunner_Run_Integer(t *testing.T) {
 				},
 			}
 
-			runner, err := NewRunner(f, NewOPAClient, false)
+			runner, err := NewRunner(f, NewOPAClient)
 			if err != nil {
 				t.Fatal(err)
 			}
