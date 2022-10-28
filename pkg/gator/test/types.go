@@ -17,7 +17,7 @@ type GatorResult struct {
 	// https://www.openpolicyagent.org/docs/v0.44.0/policy-reference/#tracing
 	// NOTE: This is a string pointer to differentiate between an empty ("") trace and an unset one (nil);
 	// also for efficiency reasons as traces could be arbitrarily large theoretically.
-	Trace *string
+	Trace *string `json:"trace"`
 }
 
 func fromFrameworkResult(frameResult *types.Result, violatingObject *unstructured.Unstructured) *GatorResult {
@@ -90,8 +90,7 @@ func GetYamlFriendlyResults(results []*GatorResult) []*YamlGatorResult {
 		yr := &YamlGatorResult{
 			Result:          r.Result,
 			ViolatingObject: r.ViolatingObject.DeepCopy().Object,
-			// Trace: fmt.Sprintf("%v", *r.Trace),
-			Trace: r.Trace,
+			Trace:           r.Trace,
 		}
 		yamlResults = append(yamlResults, yr)
 	}

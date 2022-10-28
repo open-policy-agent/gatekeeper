@@ -31,7 +31,6 @@ func Test_formatOutput(t *testing.T) {
 		name           string
 		inputFormat    string
 		input          []*test.GatorResult
-		includeTrace   bool
 		expectedOutput string
 	}{
 		{
@@ -40,10 +39,10 @@ func Test_formatOutput(t *testing.T) {
 			input: []*test.GatorResult{{
 				Result:          fooRes,
 				ViolatingObject: barObject,
-				Trace:           &xyzTrace,
+				Trace:           nil,
 			}},
-			includeTrace:   true,
-			expectedOutput: "[\"\"] Message: \"\" \nTrace: xyz",
+			expectedOutput: `[""] Message: "" 
+`,
 		},
 		{
 			name:        "yaml output",
@@ -53,10 +52,18 @@ func Test_formatOutput(t *testing.T) {
 				ViolatingObject: barObject,
 				Trace:           &xyzTrace,
 			}},
-			includeTrace: true,
-			expectedOutput: "- result:\n    target: foo\n    msg: \"\"\n    metadata: {}\n    constraint:\n" +
-				"        object:\n            kind: kind\n    enforcementaction: \"\"\n  violatingObject:\n    " +
-				"bar: xyz\n  trace: xyz\n",
+			expectedOutput: `- result:
+    target: foo
+    msg: ""
+    metadata: {}
+    constraint:
+        object:
+            kind: kind
+    enforcementaction: ""
+  violatingObject:
+    bar: xyz
+  trace: xyz
+`,
 		},
 		{
 			name:        "json output",
@@ -66,24 +73,23 @@ func Test_formatOutput(t *testing.T) {
 				ViolatingObject: barObject,
 				Trace:           &xyzTrace,
 			}},
-			includeTrace: false,
-			expectedOutput: "[\n" +
-				"    {\n" +
-				"        \"target\": \"foo\",\n" +
-				"        \"constraint\": {\n" +
-				"            \"kind\": \"kind\"\n" +
-				"        },\n" +
-				"        \"violatingObject\": {\n" +
-				"            \"bar\": \"xyz\"\n" +
-				"        },\n" +
-				"        \"Trace\": \"xyz\"\n" +
-				"    }\n" +
-				"]",
+			expectedOutput: `[
+    {
+        "target": "foo",
+        "constraint": {
+            "kind": "kind"
+        },
+        "violatingObject": {
+            "bar": "xyz"
+        },
+        "trace": "xyz"
+    }
+]`,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			output := formatOutput(tc.inputFormat, tc.includeTrace, tc.input)
+			output := formatOutput(tc.inputFormat, tc.input)
 			if diff := cmp.Diff(tc.expectedOutput, output); diff != "" {
 				t.Fatal(diff)
 			}

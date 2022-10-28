@@ -79,8 +79,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 	results := responses.Results()
 
-	output := formatOutput(flagOutput, flagIncludeTrace, results)
-	fmt.Print(output) // gator test users can pipe this out as needed
+	fmt.Print(formatOutput(flagOutput, results))
 
 	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
@@ -91,7 +90,7 @@ func run(cmd *cobra.Command, args []string) {
 	os.Exit(exitCode)
 }
 
-func formatOutput(flagOutput string, includeTrace bool, results []*test.GatorResult) string {
+func formatOutput(flagOutput string, results []*test.GatorResult) string {
 	switch strings.ToLower(flagOutput) {
 	case stringJSON:
 		b, err := json.MarshalIndent(results, "", "    ")
@@ -124,7 +123,7 @@ func formatOutput(flagOutput string, includeTrace bool, results []*test.GatorRes
 			for _, result := range results {
 				buf.WriteString(fmt.Sprintf("[%q] Message: %q \n", result.Constraint.GetName(), result.Msg))
 
-				if includeTrace {
+				if result.Trace != nil {
 					buf.WriteString(fmt.Sprintf("Trace: %v", *result.Trace))
 				}
 			}
