@@ -3,6 +3,7 @@ package gator
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type PrinterGo struct{}
@@ -146,7 +147,7 @@ func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error 
 			// if using verbose to print, let's keep the trace at the same level
 			prefix = "    --- "
 		}
-		_, err := w.WriteString(fmt.Sprintf("%sTRACE: %s\t%s\n", prefix, r.Name, *r.Trace))
+		_, err := w.WriteString(fmt.Sprintf("%sTRACE: %s\t%s\n", prefix, r.Name, strings.ReplaceAll(*r.Trace, "\n", "\n"+prefix)))
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrWritingString, err)
 		}
