@@ -41,4 +41,17 @@ var (
 	// ErrValidConstraint occurs when a test's configuration signals an expectation
 	// that a constraint should fail validation but no validation error is raised.
 	ErrValidConstraint = errors.New("constraint should have failed schema validation")
+	// ErrInvalidK8sAdmissionReview occurs when a test attempts to pass in an AdmissionReview
+	// object but we fail to convert the unstructured object into a typed AdmissionReview one.
+	ErrInvalidK8sAdmissionReview = errors.New("not a valid AdmissionReview object")
+	// ErrMissingK8sAdmissionRequest occurs when a test attempts to pass in an AdmissionReview
+	// object but it does not actually pass in an AdmissionRequest object.
+	ErrMissingK8sAdmissionRequest = errors.New("missing an AdmissionRequest object")
+	// ErrReviewObject occurs when a test attempts to pass in an AdmissionRequest with no
+	// object or oldObject for the underlying framework to review.
+	// This mimicks the k8s api server behvaior.
+	ErrNoObjectForReview = errors.New("no object or oldObject found to review")
+	// ErrNilOldObject indicates that the AdmissionRequest did not provide an oldObject.
+	// Gatekeeper expects oldObject to be non nil on DELETE operations.
+	ErrNilOldObject = errors.New("oldObject is nil")
 )

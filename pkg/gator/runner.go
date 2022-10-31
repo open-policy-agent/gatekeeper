@@ -13,8 +13,11 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // Runner defines logic independent of how tests are run and the results are
@@ -282,11 +285,47 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 		}
 	}
 
+	// check to see if obj is an AdmissionReview kind
+	if toReview.GetKind() == "AdmissionReview" && toReview.GroupVersionKind().Group == admissionv1.SchemeGroupVersion.Group {
+		return r.validateAndReviewAdmissionReviewRequest(ctx, c, toReview)
+	}
+
+	// otherwise our object is some other k8s object
 	au := target.AugmentedUnstructured{
 		Object: *toReview,
 		Source: mutationtypes.SourceTypeOriginal,
 	}
 	return c.Review(ctx, au)
+}
+
+func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c Client, toReview *unstructured.Unstructured) (*types.Responses, error) {
+	// convert unstructured into AdmissionReview, don't allow unknown fields
+	var ar admissionv1.AdmissionReview
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(toReview.UnstructuredContent(), &ar, true); err != nil {
+		return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %v", ErrInvalidK8sAdmissionReview, err)
+	}
+
+	if ar.Request == nil { // then this admission review did not actually pass in an AdmissionRequest
+		return nil, fmt.Errorf("%w: request did not actually pass in an AdmissionRequest", ErrMissingK8sAdmissionRequest)
+	}
+
+	// validate the AdmissionReview to match k8s api server behavior
+	if ar.Request.Object.Raw == nil && ar.Request.OldObject.Raw == nil {
+		return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", ErrNoObjectForReview)
+	}
+
+	// parse into webhook/admission type
+	req := &admission.Request{AdmissionRequest: *ar.Request}
+	if err := util.SetObjectOnDelete(req); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrNilOldObject, err.Error())
+	}
+
+	arr := target.AugmentedReview{
+		AdmissionRequest: &req.AdmissionRequest,
+		Source:           mutationtypes.SourceTypeOriginal,
+	}
+
+	return c.Review(ctx, arr)
 }
 
 func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {
