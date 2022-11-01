@@ -450,11 +450,13 @@ server := &http.Server{
 
 2. If `cert-controller` is disabled via the `--disable-cert-rotation` flag, you can use a cluster-wide, well-known CA certificate for Gatekeeper so that your external data provider can trust it without being deployed to the `gatekeeper-system` namespace.
 
-### Authenticate API server against Webhook (Self managed kube cluster only)
+### Authenticate API server against Webhook (Self managed K8s cluster only)
 
-To have requests coming from apiserver authenticated by webhook, following configuration can be made:
+**Note:** To enable authenticate api server requires modifying cluster resources that may not be possible in managed K8s cluster
 
-1. Deploy gatekeeper a client CA name. Provide name of the client ca with the flag `--client-cert-name`. The same name will be used to read certificate from the webhook secret. The webhook will only authenticate apiserver requests if both client ca name is provided with flag.
+To ensure a request to the Gatekeeper webhook is coming from the api server, Gatekeeper needs to validate the client cert in the request. To enable authenticate api server, the following configuration can be made:
+
+1. Deploy gatekeeper with a client CA cert name. Provide name of the client CA with the flag `--client-cert-name`. The same name will be used to read certificate from the webhook secret. The webhook will only authenticate apiserver requests if client CA name is provided with flag.
 
 2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag.
 
@@ -473,7 +475,7 @@ To have requests coming from apiserver authenticated by webhook, following confi
       namespace: <gatekeeper-namespace>
     type: Opaque
     ```
-3. You will need to make sure that apiserver includes appropriate certificate while sending requests to apiserver, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure apiserver attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting apiserver. Here is an example admission control configuration file:
+3. You will need to make sure that apiserver includes appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure apiserver attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting apiserver. Here is an example admission control configuration file:
     ```
     apiVersion: apiserver.config.k8s.io/v1
     kind: AdmissionConfiguration
