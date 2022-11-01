@@ -17,8 +17,8 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // Runner defines logic independent of how tests are run and the results are
@@ -58,7 +58,7 @@ func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (Client, erro
 
 type RunnerOptions func(*Runner)
 
-func WithIncludeTrace(includeTrace bool) RunnerOptions {
+func IncludeTrace(includeTrace bool) RunnerOptions {
 	return func(r *Runner) {
 		r.includeTrace = includeTrace
 	}
