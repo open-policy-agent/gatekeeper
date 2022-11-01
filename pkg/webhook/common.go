@@ -20,6 +20,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -59,6 +61,7 @@ var (
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace for each admission violation")
 	tlsMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
+	clientCAName                       = flag.String("client-cert-name", "", "name of the client certificate to authenticate apiserver request against")
 	// webhookName is deprecated, set this on the manifest YAML if needed".
 )
 
@@ -143,4 +146,13 @@ func (h *webhookHandler) skipExcludedNamespace(req *admissionv1.AdmissionRequest
 	}
 
 	return isNamespaceExcluded, err
+}
+
+func getServerConfig(mgr manager.Manager) *webhook.Server {
+	server := mgr.GetWebhookServer()
+	server.TLSMinVersion = *tlsMinVersion
+	if *clientCAName != "" {
+		server.ClientCAName = *clientCAName
+	}
+	return server
 }
