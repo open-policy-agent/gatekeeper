@@ -51,6 +51,9 @@ type Case struct {
 	Name string `json:"name"`
 
 	// Object is the path to the file containing a Kubernetes object to test.
+	// NOTE: Object can be an AdmissionReview resource as well to facilitate open box testing.
+	// To convert the object to an an AdmissionReview, the group, kind pair needs to be set
+	// as "AdmissionReview, admission.k8s.io"
 	Object string `json:"object"`
 
 	// Inventory is a list of paths to files containing Kubernetes objects to put

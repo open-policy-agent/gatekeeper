@@ -1016,6 +1016,124 @@ func TestRunner_Run(t *testing.T) {
 				}},
 			},
 		},
+		{
+			name: "admission review object",
+			suite: Suite{
+				Tests: []Test{
+					{
+						Name:       "userInfo admission review object", // this test checks that the user name start with "system:"
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{
+							{
+								Name:       "user begins with \"system:\"",
+								Object:     "system-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+							},
+							{
+								Name:       "user doesn't begin with \"system:\"",
+								Object:     "non-system-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("username is not allowed to perform this operation")}},
+							},
+						},
+					},
+					{
+						Name:       "AdmissionReview with oldObject", // this test makes sure that we are submitting an old object for review
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{
+							{
+								Name:       "oldObject submits for review",
+								Object:     "oldObject-ar.yaml",
+								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+							},
+						},
+					},
+					{
+						Name:       "invalid admission review usage", // this test covers error handling for invalid admission review objects
+						Template:   "template.yaml",
+						Constraint: "constraint.yaml",
+						Cases: []*Case{
+							{
+								Name:       "invalid admission review object", // this is an AdmissionReview with unknown fields
+								Object:     "invalid-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "missing admission request object", // this is a blank AdmissionReview test
+								Object:     "missing-ar-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "no objects to review", // this is an AdmissionRequest with no objects to review
+								Object:     "no-objects-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "no oldObject on delete", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-oldObject-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+						},
+					},
+				},
+			},
+			f: fstest.MapFS{
+				"template.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.TemplateValidateUserInfo),
+				},
+				"constraint.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfo),
+				},
+				"no-objects-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewMissingObjectAndOldObject),
+				},
+				"system-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.SystemAdmissionReview),
+				},
+				"non-system-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.NonSystemAdmissionReview),
+				},
+				"invalid-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.InvalidAdmissionReview),
+				},
+				"missing-ar-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewMissingRequest),
+				},
+				"oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.AdmissionReviewWithOldObject),
+				},
+				"no-oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.DeleteAdmissionReviewWithNoOldObject),
+				},
+			},
+			want: SuiteResult{
+				TestResults: []TestResult{
+					{
+						Name: "userInfo admission review object",
+						CaseResults: []CaseResult{
+							{Name: "user begins with \"system:\""},
+							{Name: "user doesn't begin with \"system:\""},
+						},
+					},
+					{
+						Name: "AdmissionReview with oldObject",
+						CaseResults: []CaseResult{
+							{Name: "oldObject submits for review"},
+						},
+					},
+					{
+						Name: "invalid admission review usage",
+						CaseResults: []CaseResult{
+							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
+							{Name: "missing admission request object", Error: ErrMissingK8sAdmissionRequest},
+							{Name: "no objects to review", Error: ErrNoObjectForReview},
+							{Name: "no oldObject on delete", Error: ErrNilOldObject},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
