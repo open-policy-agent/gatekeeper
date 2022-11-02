@@ -47,7 +47,7 @@ func TestResult_ToResult(t *testing.T) {
 		require.Len(t, ToResults(emptyObj, emptyResponses), 0)
 	})
 
-	t.Run("hadles nil responses", func(t *testing.T) {
+	t.Run("handles nil responses", func(t *testing.T) {
 		require.Len(t, ToResults(nil, nil), 0)
 	})
 }
