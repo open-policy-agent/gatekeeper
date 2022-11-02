@@ -106,6 +106,32 @@ echo
 wait
 clear
 
+echo
+p "This works great for pod resources, but what about workload resources that generate pod? For example, how do we enforce resource limits at the deployment level and audit them?"
+read
+p "Let's use the Validation of Workload Resources feature."
+read
+
+pe "kubectl apply -f expansion_templates"
+echo
+
+pe "cat expansion_templates/expand_deployment_expansiontemplate.yaml"
+echo
+
+echo "===== ENTER developer ======"
+echo
+
+pe "cat bad_resources/deployment_nolimit.yaml"
+echo
+
+pe "kubectl apply -f bad_resources/deployment_nolimit.yaml"
+echo
+
+NO_WAIT=false
+echo
+wait
+clear
+
 p "Weeks gone by, the company now has a new policy to rollout to production."
 echo
 
@@ -150,14 +176,31 @@ echo
 pe "kubectl apply -f dryrun/bad_resource/duplicate_ing.yaml"
 echo
 
+p "What if we rollout the policy in warn mode?"
+echo
+
+pe "kubectl apply -f warn/unique-ingress-host.yaml"
+echo
+
+pe "cat warn/unique-ingress-host.yaml"
+echo
+
+pe "cat warn/bad_resource/duplicate_ing.yaml"
+echo
+
+pe "kubectl apply -f warn/bad_resource/duplicate_ing.yaml"
+echo
 
 p "THE END"
 
 kubectl delete -f dryrun/existing_resources
 kubectl delete -f dryrun/bad_resource/
+kubectl delete -f warn/bad_resource/
 kubectl delete -f dryrun
 kubectl delete -f good_resources
 kubectl delete ns advanced-transaction-system
+kubectl delete -f bad_resources/deployment_nolimit.yaml
+kubectl delete -f expansion_templates
 kubectl delete -f constraints
 kubectl delete -f templates
 kubectl delete -f sync.yaml
