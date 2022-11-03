@@ -22,6 +22,7 @@ const (
 func TestValidationReportRequest(t *testing.T) {
 	wantTags := map[string]string{
 		"admission_status": "allow",
+		"admission_dryrun": "false",
 	}
 
 	ctx := context.Background()
@@ -30,12 +31,12 @@ func TestValidationReportRequest(t *testing.T) {
 		t.Fatalf("got newStatsReporter() error %v, want nil", err)
 	}
 
-	err = r.ReportValidationRequest(ctx, allowResponse, minValidationDuration)
+	err = r.ReportValidationRequest(ctx, allowResponse, "false", minValidationDuration)
 	if err != nil {
 		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
 	}
 
-	err = r.ReportValidationRequest(ctx, allowResponse, maxValidationDuration)
+	err = r.ReportValidationRequest(ctx, allowResponse, "false", maxValidationDuration)
 	if err != nil {
 		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
 	}
