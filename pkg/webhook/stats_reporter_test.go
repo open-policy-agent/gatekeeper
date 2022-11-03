@@ -17,6 +17,8 @@ const (
 
 	wantCount     int64 = 2
 	wantRowLength int   = 1
+
+	dryRun string = "false"
 )
 
 func TestValidationReportRequest(t *testing.T) {
@@ -31,12 +33,12 @@ func TestValidationReportRequest(t *testing.T) {
 		t.Fatalf("got newStatsReporter() error %v, want nil", err)
 	}
 
-	err = r.ReportValidationRequest(ctx, allowResponse, "false", minValidationDuration)
+	err = r.ReportValidationRequest(ctx, allowResponse, dryRun, minValidationDuration)
 	if err != nil {
 		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
 	}
 
-	err = r.ReportValidationRequest(ctx, allowResponse, "false", maxValidationDuration)
+	err = r.ReportValidationRequest(ctx, allowResponse, dryRun, maxValidationDuration)
 	if err != nil {
 		t.Fatalf("got ReportValidationRequest() error = %v, want nil", err)
 	}

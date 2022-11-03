@@ -164,11 +164,9 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 	requestResponse := unknownResponse
 	defer func() {
 		if h.reporter != nil {
-			var isDryRun string
+			isDryRun := "false"
 			if req.DryRun != nil && *req.DryRun {
 				isDryRun = "true"
-			} else {
-				isDryRun = "false"
 			}
 			if err := h.reporter.ReportValidationRequest(ctx, requestResponse, isDryRun, time.Since(timeStart)); err != nil {
 				log.Error(err, "failed to report request")
