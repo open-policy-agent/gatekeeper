@@ -69,6 +69,8 @@ Below are the list of metrics provided by Gatekeeper:
 
     - `admission_status`: [`allow`, `deny`]
 
+    - `admission_dryrun`: [`true`, `false`]
+
     Aggregation: `Count`
 
 - Name: `gatekeeper_validation_request_duration_seconds`
