@@ -145,6 +145,7 @@ controllerManager:
   priorityClassName: system-cluster-critical
   disableCertRotation: false
   tlsMinVersion: 1.3
+  clientCertName: ""
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:

@@ -64,6 +64,7 @@ spec:
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+        {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
