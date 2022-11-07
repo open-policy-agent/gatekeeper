@@ -54,7 +54,7 @@ In debugging decisions and constraints, a few pieces of information can be helpf
    * A trace of the evaluation
    * The input document being evaluated
 
-Writing out all the information above for every request would be very expensive in terms of memory and load on the API server. It would also be hard
+Writing out all the information above for every request would be expensive in terms of memory and load on the Gatekeeper server, which may lead to requests timing out. It would also be hard
 to find the relevant logs for a given request.
 
 For tracing, Gatekeeper **requires** operators to specify
