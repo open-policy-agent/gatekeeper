@@ -82,7 +82,7 @@ spec:
         # The requesting user for which traces will be run
         # This field is required.
         # To trace multiple users, feel free to pass in a list.
-        # To trace controllers, use the service accounts of those controlelrs.
+        # To trace controllers, use the service accounts of those controllers.
       - user: "user_to_trace@company.com"
         kind:
           # The group, version, kind for which we want to run a trace
