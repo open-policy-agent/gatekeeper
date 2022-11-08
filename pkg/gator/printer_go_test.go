@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"k8s.io/utils/pointer"
 )
 
 func TestPrinterGo_Print(t *testing.T) {
@@ -265,6 +266,36 @@ PASS
     === RUN   require-labels/without label
     --- PASS: require-labels/without label	(0.230s)
 --- PASS: require-labels	(0.400s)
+ok	tests.go	0.730s
+PASS
+`,
+		},
+		{
+			name: "with trace",
+			result: []SuiteResult{{
+				Path:    "tests.go",
+				Runtime: Duration(730 * time.Millisecond),
+				TestResults: []TestResult{
+					{
+						Name:    "test name",
+						Runtime: Duration(330 * time.Millisecond),
+						CaseResults: []CaseResult{{
+							Name:    "case name",
+							Runtime: Duration(100 * time.Millisecond),
+							Trace:   pointer.StringPtr("this is a trace"),
+						}},
+					},
+				},
+			}},
+			want: `TRACE: case name	this is a trace
+ok	tests.go	0.730s
+PASS
+`,
+			wantVerbose: `=== RUN   test name
+    === RUN   case name
+    --- PASS: case name	(0.100s)
+    --- TRACE: case name	this is a trace
+--- PASS: test name	(0.330s)
 ok	tests.go	0.730s
 PASS
 `,

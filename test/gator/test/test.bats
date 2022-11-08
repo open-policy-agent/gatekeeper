@@ -29,7 +29,7 @@ match_yaml_msg () {
   want_msg="${2}"
   violation_index="${3:-0}"
 
-  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].msg" - --exit-status); then
+  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].result.msg" - --exit-status); then
     printf "ERROR: failed to evaluate output\n"
     printf "GOT: %s\n" "$yaml_output"
     exit 1

@@ -102,6 +102,13 @@ type CaseResult struct {
 
 	// Runtime is the time it took for this Case to run.
 	Runtime Duration
+
+	// Trace is an explanation of the underlying constraint evaluation.
+	// For instance, for OPA based evaluations, the trace is an explanation of the rego query:
+	// https://www.openpolicyagent.org/docs/v0.44.0/policy-reference/#tracing
+	// NOTE: This is a string pointer to differentiate between an empty ("") trace and an unset one (nil);
+	// also for efficiency reasons as traces could be arbitrarily large theoretically.
+	Trace *string
 }
 
 // IsFailure returns true if the test failed to execute or produced an

@@ -26,10 +26,10 @@ func init() {
 	}
 }
 
-func Test(objs []*unstructured.Unstructured) (*GatorResponses, error) {
+func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses, error) {
 	// create the client
 
-	driver, err := local.New(local.Tracing(false))
+	driver, err := local.New(local.Tracing(includeTrace))
 	if err != nil {
 		return nil, err
 	}

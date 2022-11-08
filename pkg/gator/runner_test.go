@@ -1173,7 +1173,7 @@ func TestRunner_Run_ClientError(t *testing.T) {
 		TestResults: []TestResult{{Error: ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func() (Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func(includeTrace bool) (Client, error) {
 		return nil, errors.New("error")
 	})
 	if err != nil {
