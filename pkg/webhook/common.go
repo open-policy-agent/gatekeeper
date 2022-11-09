@@ -2,6 +2,8 @@ package webhook
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -50,6 +52,7 @@ const (
 	mutationsGroup     = "mutations.gatekeeper.sh"
 	externalDataGroup  = "externaldata.gatekeeper.sh"
 	namespaceKind      = "Namespace"
+	certCNName         = "kube-apiserver"
 )
 
 var (
@@ -153,6 +156,17 @@ func getServerConfig(mgr manager.Manager) *webhook.Server {
 	server.TLSMinVersion = *tlsMinVersion
 	if *clientCAName != "" {
 		server.ClientCAName = *clientCAName
+		server.TLSOpts = []func(*tls.Config){
+			func(cfg *tls.Config) {
+				cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					cert, _ := x509.ParseCertificate(rawCerts[0])
+					if cert.Subject.CommonName != certCNName {
+						return fmt.Errorf("x509: subject with cn=%s do not identify as kube-apiserver", cert.Subject.CommonName)
+					}
+					return nil
+				}
+			},
+		}
 	}
 	return server
 }

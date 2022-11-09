@@ -336,7 +336,7 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
 
 1. Deploy Gatekeeper with a client CA cert name. Provide name of the client CA with the flag `--client-cert-name`. The same name will be used to read certificate from the webhook secret. The webhook will only authenticate API server requests if client CA name is provided with flag.
 
-2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag.
+2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag. For client CA you could either use default kubernetes general ca located at `\etc\kubernetes\pki\ca.crt`, or you could generate your own CA for this purpose.
 
     ```
     kind: Secret
@@ -346,14 +346,34 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
       ca.key: <ca-key>
       tls.crt: <tls-crt>
       tls.key: <tls-key>
-      clientca.crt: <apiserver's ca.crt>
+      clientca.crt: <ca-crt>
     metadata:
       ...
       name: <gatekeeper-webhook-service-name>
       namespace: <gatekeeper-namespace>
     type: Opaque
     ```
-3. You will need to make sure the K8s API Server includes appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure API server attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
+3. Generate client certificates signed with CA authority to be attached by API server while talking to Gatekeeper webhook. Gatekeeper webhook expects API server to attach the certificate that has CN name as `kube-apiserver`. If certificate with anyother CN name is used, webhook will throw the error and not accept the request.
+
+    - Generate private key for API server
+
+      ```bash
+      openssl genrsa -out apiserver-client.key 2048
+      ```
+    - Generate a CSR for API server
+    
+      ```bash
+      openssl req -new -key apiserver-client.key -out apiserver-client.csr -subj="/CN=kube-apiserver"
+      ```
+    
+    - Generate public key for API server
+      | Replace `<ca-crt>` and `<ca-key>` with correct values
+
+      ```bash
+      openssl x509 -req -in apiserver-client.csr -CA <ca-crt> -CAkey <ca-key> -CAcreateserial -out apiserver-client.crt -days 825
+      ```
+
+4. You will need to make sure the K8s API Server includes appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure API server attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
     ```
     apiVersion: apiserver.config.k8s.io/v1
     kind: AdmissionConfiguration
@@ -376,7 +396,7 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
     apiVersion: v1
     clusters:
     - cluster:
-        certificate-authority-data: <clientca.crt> # same value as provided in gatekeeper webhook secret's clientca.crt 
+        certificate-authority-data: <ca-crt> # same value as provided in gatekeeper webhook secret's clientca.crt 
         server: https://<gatekeeper-webhook-service-name>.<gatekeeper-namespace>.svc:443
       name: kind-kind
     contexts:
@@ -389,8 +409,8 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
     users:
     - name: api-server
       user:
-        client-certificate-data: <client-certificate-signed-with-ca-authority> # i.e. cert signed with apiserver's ca
-        client-key-data: <key-mathcing-the-signed-client-certificate>
+        client-certificate-data: <apiserver-client.crt> 
+        client-key-data: <apiserver-client.key>
     ```
     **Note**: Default `gatekeeper-webhook-service-name` is `gatekeeper-webhook-service` and default `gatekeeper-namespace` is `gatekeeper-system`.
 
