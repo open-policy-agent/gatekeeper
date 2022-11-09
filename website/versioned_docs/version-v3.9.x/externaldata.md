@@ -449,3 +449,71 @@ server := &http.Server{
 ```
 
 2. If `cert-controller` is disabled via the `--disable-cert-rotation` flag, you can use a cluster-wide, well-known CA certificate for Gatekeeper so that your external data provider can trust it without being deployed to the `gatekeeper-system` namespace.
+
+### Authenticate the API server against Webhook (Self managed K8s cluster only)
+
+**Note:** To enable authenticating the API server you have to be able to modify cluster resources. This may not be possible for managed K8s clusters.
+
+To ensure a request to the Gatekeeper webhook is coming from the API server, Gatekeeper needs to validate the client cert in the request. To enable authenticate API server, the following configuration can be made:
+
+1. Deploy Gatekeeper with a client CA cert name. Provide name of the client CA with the flag `--client-cert-name`. The same name will be used to read certificate from the webhook secret. The webhook will only authenticate API server requests if client CA name is provided with flag.
+
+2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag.
+
+    ```
+    kind: Secret
+    apiVersion: v1
+    data:
+      ca.crt: <ca-crt>
+      ca.key: <ca-key>
+      tls.crt: <tls-crt>
+      tls.key: <tls-key>
+      clientca.crt: <apiserver's ca.crt>
+    metadata:
+      ...
+      name: <gatekeeper-webhook-service-name>
+      namespace: <gatekeeper-namespace>
+    type: Opaque
+    ```
+3. You will need to make sure the K8s API Server includes appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure API server attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
+    ```
+    apiVersion: apiserver.config.k8s.io/v1
+    kind: AdmissionConfiguration
+    plugins:
+    - name: ValidatingAdmissionWebhook
+      configuration:
+        apiVersion: apiserver.config.k8s.io/v1
+        kind: WebhookAdmissionConfiguration
+        kubeConfigFile: "<path-to-kubeconfig-file>"
+    - name: MutatingAdmissionWebhook
+      configuration:
+        apiVersion: apiserver.config.k8s.io/v1
+        kind: WebhookAdmissionConfiguration
+        kubeConfigFile: "<path-to-kubeconfig-file>"
+    ```
+  
+    KubeConfig file should look something like:
+
+    ```
+    apiVersion: v1
+    clusters:
+    - cluster:
+        certificate-authority-data: <clientca.crt> # same value as provided in gatekeeper webhook secret's clientca.crt 
+        server: https://<gatekeeper-webhook-service-name>.<gatekeeper-namespace>.svc:443
+      name: kind-kind
+    contexts:
+    - context:
+        cluster: kind-kind
+        user: api-server
+      name: kind-kind
+    current-context: kind-kind
+    kind: Config
+    users:
+    - name: api-server
+      user:
+        client-certificate-data: <client-certificate-signed-with-ca-authority> # i.e. cert signed with apiserver's ca
+        client-key-data: <key-mathcing-the-signed-client-certificate>
+    ```
+    **Note**: Default `gatekeeper-webhook-service-name` is `gatekeeper-webhook-service` and default `gatekeeper-namespace` is `gatekeeper-system`.
+
+    Visit [#authenticate-apiservers](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#authenticate-apiservers) for more details.
