@@ -240,9 +240,14 @@ the `run` flag:
 gator verify path/to/suites/... --run "disallowed"
 ```
 
-#### Advanced Usage
+#### Validating Metadata-Based Constraints
 
-`gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview) object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/gator/fixtures/fixtures.go#L506-L528). The `AdmissionReview` object can be specified where you would specify the object under test above:
+`gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview) 
+object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) 
+or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. 
+Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review)). 
+A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/gator/fixtures/fixtures.go#L506-L528). 
+The `AdmissionReview` object can be specified where you would specify the object under test above:
 
 ```yaml
   - name: both-disallowed
@@ -250,8 +255,6 @@ gator verify path/to/suites/... --run "disallowed"
     assertions:
     - violations: 1
 ```
-
-The `gator` code will check the `kind` and `group` of the object passed in above and determine if it is an `AdmissionReview` or not.
 
 Run `gator verify --help` for more information.
 
