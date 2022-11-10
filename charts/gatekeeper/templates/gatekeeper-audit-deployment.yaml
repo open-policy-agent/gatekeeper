@@ -123,9 +123,13 @@ spec:
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
       env:
         {{- toYaml .Values.audit.extraEnv | nindent 8 }}
+      {{- if .Values.audit.hostNetwork }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
+      {{- end }}
+      {{- if .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}
       nodeSelector:
         {{- toYaml .Values.audit.nodeSelector | nindent 8 }}
       {{- if .Values.audit.priorityClassName }}
@@ -135,8 +139,10 @@ spec:
         {{- toYaml .Values.audit.podSecurityContext | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
+      {{- if .Values.audit.tolerations }}
       tolerations:
         {{- toYaml .Values.audit.tolerations | nindent 8 }}
+      {{- end }}
       volumes:
       - name: cert
         secret:
