@@ -1,5 +1,5 @@
 #!/bin/bash
-dockerd &> dockerd-logfile &
+dockerd &> /dev/null &
 
 # block until the daemon starts
 until docker version > /dev/null 2>&1
