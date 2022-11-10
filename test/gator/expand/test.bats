@@ -70,7 +70,6 @@ test_dir () {
   fixtures_dir="$BATS_TEST_DIRNAME"/fixtures
   media_type=:application/vnb.oci.image.layer.v1+tar+gzip
 
-  # Test with 1 OCI image + 1 local directory as input
   img=localhost:5000/expansion-bundle:v1
 
   pushd "$fixtures_dir"/basic-expansion
