@@ -3,7 +3,6 @@ package webhook
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -52,7 +51,6 @@ const (
 	mutationsGroup     = "mutations.gatekeeper.sh"
 	externalDataGroup  = "externaldata.gatekeeper.sh"
 	namespaceKind      = "Namespace"
-	certCNName         = "kube-apiserver"
 )
 
 var (
@@ -65,6 +63,7 @@ var (
 	tlsMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	clientCAName                       = flag.String("client-cert-name", "", "name of the client certificate to authenticate apiserver request against")
+	certCNName                         = flag.String("client-cn-name", "kube-apiserver", "Expected CN name on the client certificate attached by apiserver in requests to the webhook")
 	// webhookName is deprecated, set this on the manifest YAML if needed".
 )
 
@@ -158,12 +157,14 @@ func getServerConfig(mgr manager.Manager) *webhook.Server {
 		server.ClientCAName = *clientCAName
 		server.TLSOpts = []func(*tls.Config){
 			func(cfg *tls.Config) {
-				cfg.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-					cert, _ := x509.ParseCertificate(rawCerts[0])
-					if cert.Subject.CommonName != certCNName {
-						return fmt.Errorf("x509: subject with cn=%s do not identify as kube-apiserver", cert.Subject.CommonName)
+				cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+					if len(cs.PeerCertificates) > 0 {
+						if cs.PeerCertificates[0].Subject.CommonName != *certCNName {
+							return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *clientCAName)
+						}
+						return nil
 					}
-					return nil
+					return fmt.Errorf("Failed to verify CN name of certificate")
 				}
 			},
 		}

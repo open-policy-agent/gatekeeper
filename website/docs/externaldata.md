@@ -458,7 +458,7 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
 
 1. Deploy Gatekeeper with a client CA cert name. Provide name of the client CA with the flag `--client-cert-name`. The same name will be used to read certificate from the webhook secret. The webhook will only authenticate API server requests if client CA name is provided with flag.
 
-2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag. For client CA you could either use default kubernetes general ca located at `\etc\kubernetes\pki\ca.crt`, or you could generate your own CA for this purpose.
+2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-cert-name` flag. You could generate your own CA for this purpose.
 
     ```
     kind: Secret
@@ -475,7 +475,19 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
       namespace: <gatekeeper-namespace>
     type: Opaque
     ```
-3. Generate client certificates signed with CA authority to be attached by API server while talking to Gatekeeper webhook. Gatekeeper webhook expects API server to attach the certificate that has CN name as `kube-apiserver`. If certificate with anyother CN name is used, webhook will throw the error and not accept the request.
+3. Generate CA and client certificates signed with CA authority to be attached by the API server while talking to Gatekeeper webhook. Gatekeeper webhook expects the API server to attach the certificate that has CN name as `kube-apiserver`. Use `--client-cn-name` to provide custom cert CN name if using a certificate with other CN name, otherwise webhook will throw the error and not accept the request.
+
+    - Generate private key for CA
+    
+      ```bash      
+        openssl genrsa -des3 -out myCA.key 2048
+      ```
+    
+    - Generate a root certificate
+
+    ```bash
+      openssl req -x509 -new -nodes -key myCA.key -sha256 -days 1825 -out myCA.crt
+    ```
 
     - Generate private key for API server
 
@@ -485,17 +497,16 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
     - Generate a CSR for API server
     
       ```bash
-      openssl req -new -key apiserver-client.key -out apiserver-client.csr -subj="/CN=kube-apiserver"
+      openssl req -new -key apiserver-client.key -out apiserver-client.csr
       ```
     
     - Generate public key for API server
-      | Replace `<ca-crt>` and `<ca-key>` with correct values
-
+      
       ```bash
-      openssl x509 -req -in apiserver-client.csr -CA <ca-crt> -CAkey <ca-key> -CAcreateserial -out apiserver-client.crt -days 825
+      openssl x509 -req -in apiserver-client.csr -CA myCA.crt -CAkey myCA.key -CAcreateserial -out apiserver-client.crt -days 365
       ```
 
-4. You will need to make sure the K8s API Server includes appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log error of `tls client didn't provide a certificate`. To make sure API server attaches correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
+4. You will need to make sure the K8s API Server includes the appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log an error of `tls client didn't provide a certificate`. To make sure the API server attaches the correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
     ```
     apiVersion: apiserver.config.k8s.io/v1
     kind: AdmissionConfiguration
