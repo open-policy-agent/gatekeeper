@@ -84,8 +84,7 @@ func newConflictDetector() *conflictDetector {
 // conflict is found.
 func (cd *conflictDetector) checkConflict(objName, imgURL string) {
 	if dupe, exists := cd.objs[objName]; exists {
-		warningMsg := fmt.Sprintf(nameConflictMsg, objName, imgURL, dupe)
-		fmt.Printf(warningMsg)
+		fmt.Printf(nameConflictMsg, objName, imgURL, dupe)
 	}
 	cd.objs[objName] = imgURL
 }
