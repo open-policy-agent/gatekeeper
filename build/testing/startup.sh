@@ -7,6 +7,6 @@ do
   sleep 1
 done
 
-docker run -d --rm -p 5000:5000 registry
+docker run -v /var/lib/docker -d --rm -p 5000:5000 library/registry:latest
 
 make test-gator
