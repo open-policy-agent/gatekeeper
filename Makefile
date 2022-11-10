@@ -454,9 +454,6 @@ __gator-testing-image:
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
 		--build-arg ORAS_VERSION=$(ORAS_VERSION)
 
-gatorade: __gator-testing-image
-	docker run -it --privileged -v $(shell pwd):/gatekeeper gatekeeper-testing ./build/testing/startup.sh
-
 .PHONY: vendor
 vendor:
 	go mod vendor
