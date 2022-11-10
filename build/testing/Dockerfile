@@ -12,12 +12,12 @@ RUN curl -SsLO https://github.com/oras-project/oras/releases/download/v${ORAS_VE
     mkdir -p oras-install/ && tar -zxf oras_${ORAS_VERSION}_*.tar.gz -C oras-install/ && \
     mv oras-install/oras /usr/local/bin/ && rm -rf oras_${ORAS_VERSION}_*.tar.gz oras-install/
 
-RUN curl -LsS https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64 -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq
+RUN curl -LsS https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64 -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq
 
 RUN apt-get update && yes | apt-get install jq
 
 RUN curl -fsSL https://get.docker.com | sh
-
 
 RUN mkdir /gatekeeper
 WORKDIR /gatekeeper

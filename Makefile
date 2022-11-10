@@ -119,7 +119,7 @@ test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
 .PHONY: test-gator-containerized
 test-gator-containerized: __gator-testing-image
-	docker run -it --privileged -v $(shell pwd):/gatekeeper gatekeeper-testing ./build/testing/startup.sh
+	docker run --privileged -v $(shell pwd):/gatekeeper gatekeeper-testing ./build/testing/startup.sh
 
 .PHONY: test-gator-verify
 test-gator-verify: gator
