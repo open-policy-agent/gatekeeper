@@ -18,6 +18,7 @@ KIND_VERSION ?= 0.17.0
 KUBERNETES_VERSION ?= 1.26.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
+ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
@@ -116,6 +117,10 @@ test-e2e:
 .PHONY: test-gator
 test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
+.PHONY: test-gator-containerized
+test-gator-containerized: __gator-testing-image
+	docker run -it --privileged -v $(shell pwd):/gatekeeper gatekeeper-testing ./build/testing/startup.sh
+
 .PHONY: test-gator-verify
 test-gator-verify: gator
 	./bin/gator verify test/gator/verify/suite.yaml
@@ -150,7 +155,7 @@ e2e-bootstrap: e2e-dependencies
 e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
-e2e-build-load-externaldata-image: docker-buildx-builder
+e2e-build-load-externaldata-image: docker-buildx-builderma
 	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
@@ -441,6 +446,16 @@ __tooling-image:
 __test-image:
 	docker build test/image \
 		-t gatekeeper-test
+
+__gator-testing-image:
+	docker build build/testing \
+		-t gatekeeper-testing \
+		--build-arg YQ_VERSION=$(YQ_VERSION) \
+		--build-arg BATS_VERSION=$(BATS_VERSION) \
+		--build-arg ORAS_VERSION=$(ORAS_VERSION)
+
+gatorade: __gator-testing-image
+	docker run -it --privileged -v $(shell pwd):/gatekeeper gatekeeper-testing ./build/testing/startup.sh
 
 .PHONY: vendor
 vendor:

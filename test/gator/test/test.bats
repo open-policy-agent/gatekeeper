@@ -196,3 +196,37 @@ match_yaml_msg () {
   want_msg="ingress host conflicts with an existing ingress <example-host.example.com>" 
   match_yaml_msg "${output[*]}" "${want_msg}"
 }
+
+@test "pull OCI images" {
+  artifacts_dir="$BATS_TEST_DIRNAME"/../oci-artifacts/
+  violating_ns="$BATS_TEST_DIRNAME"/fixtures/manifests/no-policies/violating-ns.yaml
+  media_type=:application/vnb.oci.image.layer.v1+tar+gzip
+
+  # Test with 1 OCI image + 1 local directory as input
+  img1=localhost:5000/my-bundle:v1
+
+  pushd "$artifacts_dir"
+  oras push $img1 ./templates/$media_type ./constraints/$media_type
+  popd
+
+  run bin/gator test --image=$img1 --filename="$violating_ns" -o=yaml
+  [ "$status" -eq 1 ]
+  want_msg="you must provide labels: {\"geo\"}"
+  match_yaml_msg "${output[*]}" "${want_msg}"
+
+  # Test with 2 OCI images + stdin as input
+  img2=localhost:5000/templates:v1
+  img3=localhost:5000/constraints:v1
+
+  pushd "$artifacts_dir"
+  run oras push $img2 ./templates/$media_type
+  [ "$status" -eq 0 ]
+  run oras push $img3 ./constraints/$media_type
+  [ "$status" -eq 0 ]
+  popd
+
+  run bin/gator test --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
+  [ "$status" -eq 1 ]
+  want_msg="you must provide labels: {\"geo\"}"
+  match_yaml_msg "${output[*]}" "${want_msg}"
+}
