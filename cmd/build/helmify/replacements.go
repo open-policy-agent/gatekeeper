@@ -5,7 +5,9 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""`: `{{- toYaml .Values.audit.resources | nindent 10 }}`,
 
-	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK": `{{ .Values.controllerManager.hostNetwork }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HOST_NETWORK: ""`: `{{- if .Values.controllerManager.hostNetwork }}
+      hostNetwork: {{ .Values.controllerManager.hostNetwork }}
+      {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DNS_POLICY": `{{ .Values.controllerManager.dnsPolicy }}`,
 
@@ -19,7 +21,9 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT": `{{ .Values.controllerManager.livenessTimeout }}`,
 
-	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK: ""`: `{{- if .Values.audit.hostNetwork }}
+      hostNetwork: {{ .Values.audit.hostNetwork }}
+      {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY": `{{ .Values.audit.dnsPolicy }}`,
 
@@ -43,9 +47,13 @@ var replacements = map[string]string{
           {{- end }}
           {{- toYaml .Values.audit.securityContext | nindent 10}}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""`: `{{- toYaml .Values.audit.tolerations | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""`: `{{- if .Values.audit.tolerations }}
+      tolerations: {{- toYaml .Values.audit.tolerations | nindent 8 }}
+      {{- end }}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_IMAGE_PULL_SECRETS: ""`: `{{- if .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_PRIORITY_CLASS_NAME": `{{ .Values.audit.priorityClassName }}`,
 
@@ -61,11 +69,17 @@ var replacements = map[string]string{
           {{- end }}
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""`: `{{- toYaml .Values.controllerManager.tolerations | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""`: `{{- if .Values.controllerManager.tolerations }}
+      tolerations: {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
+      {{- end }}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""`: `{{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""`: `{{- if .Values.controllerManager.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
+      {{- end}}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""`: `{{- if .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      {{- end }}`,
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_PRIORITY_CLASS_NAME": `{{ .Values.controllerManager.priorityClassName }}`,
 
