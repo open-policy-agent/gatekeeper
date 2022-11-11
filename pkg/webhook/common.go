@@ -160,7 +160,7 @@ func getServerConfig(mgr manager.Manager) *webhook.Server {
 				cfg.VerifyConnection = func(cs tls.ConnectionState) error {
 					if len(cs.PeerCertificates) > 0 {
 						if cs.PeerCertificates[0].Subject.CommonName != *certCNName {
-							return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *clientCAName)
+							return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *certCNName)
 						}
 						return nil
 					}
