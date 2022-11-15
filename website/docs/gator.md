@@ -1,5 +1,6 @@
 ---
-id: gator title: The gator CLI
+id: gator 
+title: The gator CLI
 ---
 
 `Feature State`: Gatekeeper version v3.11+ (beta)

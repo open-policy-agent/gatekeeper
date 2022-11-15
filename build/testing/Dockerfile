@@ -4,7 +4,7 @@ ARG BATS_VERSION
 ARG ORAS_VERSION
 ARG YQ_VERSION
 
-RUN	curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && \
+RUN curl -sSLO https://github.com/bats-core/bats-core/archive/v${BATS_VERSION}.tar.gz && \
     tar -zxvf v${BATS_VERSION}.tar.gz && \
     bash bats-core-${BATS_VERSION}/install.sh /usr/local
 
