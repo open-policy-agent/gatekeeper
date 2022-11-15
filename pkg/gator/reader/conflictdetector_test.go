@@ -8,10 +8,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func newObj(name string, gvk schema.GroupVersionKind) *unstructured.Unstructured {
+func newObj(name string, ns string, gvk schema.GroupVersionKind) *unstructured.Unstructured {
 	u := unstructured.Unstructured{}
 	u.SetName(name)
 	u.SetGroupVersionKind(gvk)
+	u.SetNamespace(ns)
 	return &u
 }
 
@@ -26,7 +27,7 @@ func TestDetectConflicts(t *testing.T) {
 			sources: []*source{
 				{
 					filename: "file1.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -34,7 +35,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file2.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -43,13 +44,14 @@ func TestDetectConflicts(t *testing.T) {
 			},
 			want: []conflict{
 				{
-					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
-						name:             "dupe",
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						namespace: "my-ns",
+						name:      "dupe",
 					},
 					a: &source{
 						filename: "file2.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -57,7 +59,7 @@ func TestDetectConflicts(t *testing.T) {
 					},
 					b: &source{
 						filename: "file1.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -71,7 +73,7 @@ func TestDetectConflicts(t *testing.T) {
 			sources: []*source{
 				{
 					filename: "file1.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeA", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeA", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -79,7 +81,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file2.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeA", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeA", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -87,7 +89,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file3.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeB", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeB", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -95,7 +97,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file4.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeB", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeB", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -104,13 +106,14 @@ func TestDetectConflicts(t *testing.T) {
 			},
 			want: []conflict{
 				{
-					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
-						name:             "dupeA",
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						name:      "dupeA",
+						namespace: "my-ns",
 					},
 					a: &source{
 						filename: "file2.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupeA", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupeA", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -118,7 +121,7 @@ func TestDetectConflicts(t *testing.T) {
 					},
 					b: &source{
 						filename: "file1.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupeA", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupeA", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -126,13 +129,14 @@ func TestDetectConflicts(t *testing.T) {
 					},
 				},
 				{
-					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
-						name:             "dupeB",
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						name:      "dupeB",
+						namespace: "my-ns",
 					},
 					a: &source{
 						filename: "file4.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupeB", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupeB", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -140,7 +144,7 @@ func TestDetectConflicts(t *testing.T) {
 					},
 					b: &source{
 						filename: "file3.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupeB", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupeB", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -154,7 +158,7 @@ func TestDetectConflicts(t *testing.T) {
 			sources: []*source{
 				{
 					filename: "file1.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -162,7 +166,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file2.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -170,7 +174,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file3.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -179,13 +183,14 @@ func TestDetectConflicts(t *testing.T) {
 			},
 			want: []conflict{
 				{
-					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
-						name:             "dupe",
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						namespace: "my-ns",
+						name:      "dupe",
 					},
 					a: &source{
 						filename: "file2.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -193,7 +198,7 @@ func TestDetectConflicts(t *testing.T) {
 					},
 					b: &source{
 						filename: "file1.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -201,13 +206,14 @@ func TestDetectConflicts(t *testing.T) {
 					},
 				},
 				{
-					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
-						name:             "dupe",
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						namespace: "my-ns",
+						name:      "dupe",
 					},
 					a: &source{
 						filename: "file3.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -215,7 +221,7 @@ func TestDetectConflicts(t *testing.T) {
 					},
 					b: &source{
 						filename: "file2.yaml",
-						objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 							Group:   "group",
 							Version: "v1",
 							Kind:    "Thing",
@@ -229,7 +235,7 @@ func TestDetectConflicts(t *testing.T) {
 			sources: []*source{
 				{
 					filename: "file1.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeA", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeA", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -237,7 +243,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file2.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupeB", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupeB", "my-ns", schema.GroupVersionKind{
 						Group:   "group",
 						Version: "v1",
 						Kind:    "Thing",
@@ -250,7 +256,7 @@ func TestDetectConflicts(t *testing.T) {
 			sources: []*source{
 				{
 					filename: "file1.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "groupA",
 						Version: "v1",
 						Kind:    "Thing",
@@ -258,7 +264,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					filename: "file2.yaml",
-					objs: []*unstructured.Unstructured{newObj("dupe", schema.GroupVersionKind{
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
 						Group:   "groupB",
 						Version: "v1",
 						Kind:    "Thing",

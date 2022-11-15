@@ -17,24 +17,29 @@ type source struct {
 	objs     []*unstructured.Unstructured
 }
 
-type gvkn struct {
-	schema.GroupVersionKind
-	name string
+type gknn struct {
+	schema.GroupKind
+	name      string
+	namespace string
 }
 
 type conflict struct {
-	id gvkn
+	id gknn
 	a  *source
 	b  *source
 }
 
 func detectConflicts(sources []*source) []conflict {
 	var conflicts []conflict
-	cmap := make(map[gvkn]*source)
+	cmap := make(map[gknn]*source)
 
 	for _, s := range sources {
 		for _, obj := range s.objs {
-			key := gvkn{GroupVersionKind: obj.GroupVersionKind(), name: obj.GetName()}
+			key := gknn{
+				GroupKind: schema.GroupKind{Group: obj.GroupVersionKind().Group, Kind: obj.GetKind()},
+				name:      obj.GetName(),
+				namespace: obj.GetNamespace(),
+			}
 			if dupe, exists := cmap[key]; exists {
 				conflicts = append(conflicts, conflict{
 					id: key,
