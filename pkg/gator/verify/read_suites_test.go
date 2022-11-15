@@ -1,4 +1,4 @@
-package gator
+package verify
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/utils/pointer"
 )
 
@@ -148,7 +149,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 				},
 			},
 			want:    nil,
-			wantErr: ErrInvalidYAML,
+			wantErr: gator.ErrInvalidYAML,
 		},
 		{
 			name:      "directory",
@@ -303,7 +304,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: intStrFromInt(2),
+							Violations: gator.IntStrFromInt(2),
 							Message:    pointer.StringPtr("some message"),
 						}},
 					}},
@@ -344,7 +345,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: intStrFromInt(2),
+							Violations: gator.IntStrFromInt(2),
 							Message:    pointer.StringPtr("some message"),
 						}},
 					}},
@@ -385,7 +386,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: intStrFromInt(2),
+							Violations: gator.IntStrFromInt(2),
 							Message:    pointer.StringPtr("some message"),
 						}},
 					}},
@@ -426,7 +427,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: intStrFromInt(2),
+							Violations: gator.IntStrFromInt(2),
 							Message:    pointer.StringPtr("some message"),
 						}},
 					}},
@@ -466,7 +467,7 @@ tests:
 					}, {
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
-							Violations: intStrFromStr("yes"),
+							Violations: gator.IntStrFromStr("yes"),
 						}},
 					}, {
 						Object:    "referential.yaml",
@@ -513,7 +514,7 @@ tests: {}
 `),
 				},
 			},
-			wantErr: ErrInvalidYAML,
+			wantErr: gator.ErrInvalidYAML,
 		},
 	}
 

@@ -1,10 +1,12 @@
-package gator
+package verify
 
 import (
 	"context"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 )
 
 const templateV1Beta1Integer = `
@@ -272,7 +274,7 @@ func TestRunner_Run_Integer(t *testing.T) {
 				},
 			}
 
-			runner, err := NewRunner(f, NewOPAClient)
+			runner, err := NewRunner(f, gator.NewOPAClient)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,10 +285,10 @@ func TestRunner_Run_Integer(t *testing.T) {
 					Constraint: "constraint.yaml",
 					Cases: []*Case{{
 						Object:     "allow.yaml",
-						Assertions: []Assertion{{Violations: intStrFromInt(0)}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromInt(0)}},
 					}, {
 						Object:     "disallow.yaml",
-						Assertions: []Assertion{{Violations: intStrFromInt(1)}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromInt(1)}},
 					}},
 				}},
 			}

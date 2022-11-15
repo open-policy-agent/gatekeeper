@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/verify"
 	"github.com/spf13/cobra"
 )
 
@@ -93,11 +93,11 @@ func runE(cmd *cobra.Command, args []string) error {
 	}
 	targetPath = strings.Trim(targetPath, "/")
 
-	suites, err := gator.ReadSuites(fileSystem, targetPath, originalPath, recursive)
+	suites, err := verify.ReadSuites(fileSystem, targetPath, originalPath, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}
-	filter, err := gator.NewFilter(run)
+	filter, err := verify.NewFilter(run)
 	if err != nil {
 		return fmt.Errorf("compiling filter: %w", err)
 	}
@@ -105,15 +105,15 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, filter gator.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, filter verify.Filter) error {
 	isFailure := false
 
-	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient, gator.IncludeTrace(includeTrace))
+	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace))
 	if err != nil {
 		return err
 	}
 
-	results := make([]gator.SuiteResult, len(suites))
+	results := make([]verify.SuiteResult, len(suites))
 	i := 0
 
 	for _, suite := range suites {
@@ -133,7 +133,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, fil
 		i++
 	}
 	w := &strings.Builder{}
-	printer := gator.PrinterGo{}
+	printer := verify.PrinterGo{}
 	err = printer.Print(w, results, verbose)
 	if err != nil {
 		return err

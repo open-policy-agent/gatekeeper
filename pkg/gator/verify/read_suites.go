@@ -1,7 +1,6 @@
-package gator
+package verify
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -23,8 +23,6 @@ var (
 	// ErrUnsupportedExtension indicates that a user attempted to run tests in
 	// a file type which is not supported.
 	ErrUnsupportedExtension = errors.New("unsupported extension")
-	// ErrInvalidYAML indicates that a .yaml/.yml file was not parseable.
-	ErrInvalidYAML = errors.New("invalid yaml")
 	// ErrNotADirectory indicates that a user is mistakenly attempting to
 	// perform a directory-only action on a file (for example, recursively
 	// traversing it).
@@ -185,7 +183,7 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 	}
 	err = yaml.Unmarshal(bytes, u.Object)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing yaml file %q: %v", ErrInvalidYAML, path, err)
+		return nil, fmt.Errorf("%w: parsing yaml file %q: %v", gator.ErrInvalidYAML, path, err)
 	}
 	gvk := u.GroupVersionKind()
 	if gvk.Group != Group || gvk.Kind != Kind {
@@ -195,37 +193,10 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 
 	suite := Suite{}
 
-	err = parseYAML(bytes, &suite)
+	err = gator.ParseYaml(bytes, &suite)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidYAML, err)
 	}
 
 	return &suite, nil
-}
-
-func parseYAML(yamlBytes []byte, v interface{}) error {
-	obj := make(map[string]interface{})
-
-	err := yaml.Unmarshal(yamlBytes, obj)
-	if err != nil {
-		return err
-	}
-
-	return fixYAML(obj, v)
-}
-
-// Pass through JSON since k8s parsing logic doesn't fully handle objects
-// parsed directly from YAML. Without passing through JSON, the OPA client
-// panics when handed scalar types it doesn't recognize.
-func fixYAML(obj map[string]interface{}, v interface{}) error {
-	jsonBytes, err := json.Marshal(obj)
-	if err != nil {
-		return err
-	}
-
-	return parseJSON(jsonBytes, v)
-}
-
-func parseJSON(jsonBytes []byte, v interface{}) error {
-	return json.Unmarshal(jsonBytes, v)
 }

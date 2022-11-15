@@ -1,10 +1,11 @@
-package gator
+package verify
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/utils/pointer"
 )
 
@@ -18,33 +19,33 @@ func TestAssertion_Run(t *testing.T) {
 		name:      "default to expect violation",
 		assertion: &Assertion{},
 		results:   nil,
-		wantErr:   ErrNumViolations,
+		wantErr:   gator.ErrNumViolations,
 	}, {
 		name: "no violations",
 		assertion: &Assertion{
-			Violations: intStrFromInt(0),
+			Violations: gator.IntStrFromInt(0),
 		},
 		results: nil,
 		wantErr: nil,
 	}, {
 		name: "negative violations",
 		assertion: &Assertion{
-			Violations: intStrFromInt(-1),
+			Violations: gator.IntStrFromInt(-1),
 		},
 		results: nil,
-		wantErr: ErrInvalidYAML,
+		wantErr: gator.ErrInvalidYAML,
 	}, {
 		name: "violation with message",
 		assertion: &Assertion{
-			Violations: intStrFromInt(1),
+			Violations: gator.IntStrFromInt(1),
 			Message:    pointer.StringPtr("message"),
 		},
 		results: nil,
-		wantErr: ErrNumViolations,
+		wantErr: gator.ErrNumViolations,
 	}, {
 		name: "no violations with message",
 		assertion: &Assertion{
-			Violations: intStrFromStr("no"),
+			Violations: gator.IntStrFromStr("no"),
 			Message:    pointer.StringPtr("message"),
 		},
 		results: nil,
@@ -52,13 +53,13 @@ func TestAssertion_Run(t *testing.T) {
 	}, {
 		name: "fail no violations with message",
 		assertion: &Assertion{
-			Violations: intStrFromStr("no"),
+			Violations: gator.IntStrFromStr("no"),
 			Message:    pointer.StringPtr("message"),
 		},
 		results: []*types.Result{{
 			Msg: "message",
 		}},
-		wantErr: ErrNumViolations,
+		wantErr: gator.ErrNumViolations,
 	}}
 
 	for _, tt := range tests {

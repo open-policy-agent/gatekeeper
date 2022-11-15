@@ -1,4 +1,4 @@
-package gator
+package reader
 
 import (
 	"io"

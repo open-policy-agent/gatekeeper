@@ -1,4 +1,4 @@
-package gator
+package reader
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -46,7 +47,7 @@ func clean(yaml string) string {
 	return result.String()
 }
 
-func readUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
+func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 	splits := strings.Split(string(bytes), "\n---")
 	var result []*unstructured.Unstructured
 
@@ -58,7 +59,7 @@ func readUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 
 		u, err := readUnstructured([]byte(split))
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
+			return nil, fmt.Errorf("%w: %v", gator.ErrInvalidYAML, err)
 		}
 
 		result = append(result, u)
@@ -71,7 +72,7 @@ func readUnstructured(bytes []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{
 		Object: make(map[string]interface{}),
 	}
-	err := parseYAML(bytes, u)
+	err := gator.ParseYaml(bytes, u)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +90,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 
 	u, err := readUnstructured(bytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %v", ErrAddingTemplate, path, err)
+		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %v", gator.ErrAddingTemplate, path, err)
 	}
 
 	template, err := ToTemplate(scheme, u)
@@ -107,13 +108,13 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*templates.ConstraintTemplate, error) {
 	gvk := u.GroupVersionKind()
 	if gvk.Group != templatesv1.SchemeGroupVersion.Group || gvk.Kind != "ConstraintTemplate" {
-		return nil, fmt.Errorf("%w", ErrNotATemplate)
+		return nil, fmt.Errorf("%w", gator.ErrNotATemplate)
 	}
 
 	t, err := scheme.New(gvk)
 	if err != nil {
 		// The type isn't registered in the scheme.
-		return nil, fmt.Errorf("%w: %v", ErrAddingTemplate, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
 	}
 
 	// YAML parsing doesn't properly handle ObjectMeta, so we must
@@ -126,19 +127,19 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	}
 	err = json.Unmarshal(jsonBytes, t)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrAddingTemplate, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
 	}
 
 	v, isVersionless := t.(versionless)
 	if !isVersionless {
-		return nil, fmt.Errorf("%w: %T", ErrConvertingTemplate, t)
+		return nil, fmt.Errorf("%w: %T", gator.ErrConvertingTemplate, t)
 	}
 
 	template, err := v.ToVersionless()
 	if err != nil {
 		// This shouldn't happen unless there's a bug in the conversion functions.
 		// Most likely it means the conversion functions weren't generated.
-		return nil, fmt.Errorf("%w: %v", ErrConvertingTemplate, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrConvertingTemplate, err)
 	}
 
 	return template, nil
@@ -155,13 +156,13 @@ func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 
 	u, err := readUnstructured(bytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing Constraint from %q: %v", ErrAddingConstraint, path, err)
+		return nil, fmt.Errorf("%w: parsing Constraint from %q: %v", gator.ErrAddingConstraint, path, err)
 	}
 
 	return u, nil
 }
 
-func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
+func ReadConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 	u, err := ReadObject(f, path)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func readConstraint(f fs.FS, path string) (*unstructured.Unstructured, error) {
 
 	gvk := u.GroupVersionKind()
 	if gvk.Group != "constraints.gatekeeper.sh" {
-		return nil, ErrNotAConstraint
+		return nil, gator.ErrNotAConstraint
 	}
 
 	return u, nil
@@ -193,7 +194,7 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading yaml source: %w", err)
 		}
-		if err = fixYAML(u.Object, &u.Object); err != nil {
+		if err = gator.FixYAML(u.Object, &u.Object); err != nil {
 			return nil, fmt.Errorf("passing yaml through json: %w", err)
 		}
 

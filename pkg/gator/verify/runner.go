@@ -1,4 +1,4 @@
-package gator
+package verify
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -29,14 +31,14 @@ type Runner struct {
 
 	// newClient instantiates a Client for compiling Templates/Constraints, and
 	// validating objects against them.
-	newClient func(includeTrace bool) (Client, error)
+	newClient func(includeTrace bool) (gator.Client, error)
 
 	scheme *runtime.Scheme
 
 	includeTrace bool
 }
 
-func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (Client, error), opts ...RunnerOptions) (*Runner, error) {
+func NewRunner(filesystem fs.FS, newClient func(includeTrace bool) (gator.Client, error), opts ...RunnerOptions) (*Runner, error) {
 	s := runtime.NewScheme()
 	err := apis.AddToScheme(s)
 	if err != nil {
@@ -116,7 +118,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 		if errors.Is(err, constraints.ErrSchema) {
 			err = nil
 		} else {
-			err = fmt.Errorf("%w: got error %v but want %v", ErrValidConstraint, err, constraints.ErrSchema)
+			err = fmt.Errorf("%w: got error %v but want %v", gator.ErrValidConstraint, err, constraints.ErrSchema)
 		}
 	} else if err == nil {
 		results, err = r.runCases(ctx, suiteDir, filter, t)
@@ -133,7 +135,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
 	client, err := r.newClient(r.includeTrace)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrCreatingClient, err)
+		return fmt.Errorf("%w: %v", gator.ErrCreatingClient, err)
 	}
 
 	err = r.addTemplate(suiteDir, t.Template, client)
@@ -143,10 +145,10 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) 
 
 	constraintPath := t.Constraint
 	if constraintPath == "" {
-		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
+		return fmt.Errorf("%w: missing constraint", gator.ErrInvalidSuite)
 	}
 
-	cObj, err := readConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
+	cObj, err := reader.ReadConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
 	if err != nil {
 		return err
 	}
@@ -158,7 +160,7 @@ func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) 
 // runCases executes every Case in the Test. Returns the results for every Case,
 // or an error if there was a problem executing the Test.
 func (r *Runner) runCases(ctx context.Context, suiteDir string, filter Filter, t Test) ([]CaseResult, error) {
-	newClient := func() (Client, error) {
+	newClient := func() (gator.Client, error) {
 		c, err := r.makeTestClient(ctx, suiteDir, t)
 		if err != nil {
 			return nil, err
@@ -185,10 +187,10 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 	return CaseResult{Name: tc.Name, Skipped: true}
 }
 
-func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (Client, error) {
+func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (gator.Client, error) {
 	client, err := r.newClient(r.includeTrace)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingClient, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrCreatingClient, err)
 	}
 
 	err = r.addTemplate(suiteDir, t.Template, client)
@@ -204,43 +206,43 @@ func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (C
 	return client, nil
 }
 
-func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath string, client Client) error {
+func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath string, client gator.Client) error {
 	if constraintPath == "" {
-		return fmt.Errorf("%w: missing constraint", ErrInvalidSuite)
+		return fmt.Errorf("%w: missing constraint", gator.ErrInvalidSuite)
 	}
 
-	cObj, err := readConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
+	cObj, err := reader.ReadConstraint(r.filesystem, path.Join(suiteDir, constraintPath))
 	if err != nil {
 		return err
 	}
 
 	_, err = client.AddConstraint(ctx, cObj)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrAddingConstraint, err)
+		return fmt.Errorf("%w: %v", gator.ErrAddingConstraint, err)
 	}
 	return nil
 }
 
-func (r *Runner) addTemplate(suiteDir, templatePath string, client Client) error {
+func (r *Runner) addTemplate(suiteDir, templatePath string, client gator.Client) error {
 	if templatePath == "" {
-		return fmt.Errorf("%w: missing template", ErrInvalidSuite)
+		return fmt.Errorf("%w: missing template", gator.ErrInvalidSuite)
 	}
 
-	template, err := ReadTemplate(r.scheme, r.filesystem, path.Join(suiteDir, templatePath))
+	template, err := reader.ReadTemplate(r.scheme, r.filesystem, path.Join(suiteDir, templatePath))
 	if err != nil {
 		return err
 	}
 
 	_, err = client.AddTemplate(context.Background(), template)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrAddingTemplate, err)
+		return fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
 	}
 
 	return nil
 }
 
 // RunCase executes a Case and returns the result of the run.
-func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) CaseResult {
+func (r *Runner) runCase(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) CaseResult {
 	start := time.Now()
 	trace, err := r.checkCase(ctx, newClient, suiteDir, tc)
 
@@ -252,14 +254,14 @@ func (r *Runner) runCase(ctx context.Context, newClient func() (Client, error), 
 	}
 }
 
-func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (trace *string, err error) {
+func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) (trace *string, err error) {
 	if tc.Object == "" {
-		return nil, fmt.Errorf("%w: must define object", ErrInvalidCase)
+		return nil, fmt.Errorf("%w: must define object", gator.ErrInvalidCase)
 	}
 
 	if len(tc.Assertions) == 0 {
 		// Test cases must define at least one assertion.
-		return nil, fmt.Errorf("%w: assertions must be non-empty", ErrInvalidCase)
+		return nil, fmt.Errorf("%w: assertions must be non-empty", gator.ErrInvalidCase)
 	}
 
 	review, err := r.runReview(ctx, newClient, suiteDir, tc)
@@ -281,7 +283,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (Client, error)
 	return trace, nil
 }
 
-func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error), suiteDir string, tc *Case) (*types.Responses, error) {
+func (r *Runner) runReview(ctx context.Context, newClient func() (gator.Client, error), suiteDir string, tc *Case) (*types.Responses, error) {
 	c, err := newClient()
 	if err != nil {
 		return nil, err
@@ -294,7 +296,7 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 	}
 	if len(toReviewObjs) != 1 {
 		return nil, fmt.Errorf("%w: %q defines %d objects",
-			ErrMultipleObjects, toReviewPath, len(toReviewObjs))
+			gator.ErrMultipleObjects, toReviewPath, len(toReviewObjs))
 	}
 	toReview := toReviewObjs[0]
 
@@ -318,26 +320,26 @@ func (r *Runner) runReview(ctx context.Context, newClient func() (Client, error)
 	return c.Review(ctx, au)
 }
 
-func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c Client, toReview *unstructured.Unstructured) (*types.Responses, error) {
+func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c gator.Client, toReview *unstructured.Unstructured) (*types.Responses, error) {
 	// convert unstructured into AdmissionReview, don't allow unknown fields
 	var ar admissionv1.AdmissionReview
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(toReview.UnstructuredContent(), &ar, true); err != nil {
-		return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %v", ErrInvalidK8sAdmissionReview, err)
+		return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %v", gator.ErrInvalidK8sAdmissionReview, err)
 	}
 
 	if ar.Request == nil { // then this admission review did not actually pass in an AdmissionRequest
-		return nil, fmt.Errorf("%w: request did not actually pass in an AdmissionRequest", ErrMissingK8sAdmissionRequest)
+		return nil, fmt.Errorf("%w: request did not actually pass in an AdmissionRequest", gator.ErrMissingK8sAdmissionRequest)
 	}
 
 	// validate the AdmissionReview to match k8s api server behavior
 	if ar.Request.Object.Raw == nil && ar.Request.OldObject.Raw == nil {
-		return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", ErrNoObjectForReview)
+		return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", gator.ErrNoObjectForReview)
 	}
 
 	// parse into webhook/admission type
 	req := &admission.Request{AdmissionRequest: *ar.Request}
 	if err := util.SetObjectOnDelete(req); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNilOldObject, err.Error())
+		return nil, fmt.Errorf("%w: %v", gator.ErrNilOldObject, err.Error())
 	}
 
 	arr := target.AugmentedReview{
@@ -348,7 +350,7 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 	return c.Review(ctx, arr)
 }
 
-func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventoryPath string) error {
+func (r *Runner) addInventory(ctx context.Context, c gator.Client, suiteDir, inventoryPath string) error {
 	p := path.Join(suiteDir, inventoryPath)
 
 	inventory, err := readObjects(r.filesystem, p)
@@ -360,7 +362,7 @@ func (r *Runner) addInventory(ctx context.Context, c Client, suiteDir, inventory
 		_, err = c.AddData(ctx, obj)
 		if err != nil {
 			return fmt.Errorf("%w: %v %v/%v: %v",
-				ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
+				gator.ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
 
@@ -379,14 +381,14 @@ func readObjects(f fs.FS, path string) ([]*unstructured.Unstructured, error) {
 		return nil, err
 	}
 
-	objs, err := readUnstructureds(bytes)
+	objs, err := reader.ReadUnstructureds(bytes)
 	if err != nil {
 		return nil, fmt.Errorf("reading %q: %w", path, err)
 	}
 
 	nObjs := len(objs)
 	if nObjs == 0 {
-		return nil, fmt.Errorf("%w: path %q defines no YAML objects", ErrNoObjects, path)
+		return nil, fmt.Errorf("%w: path %q defines no YAML objects", gator.ErrNoObjects, path)
 	}
 
 	return objs, nil

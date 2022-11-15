@@ -7,7 +7,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/expand"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/spf13/cobra"
 
 	// yaml.v3 inserts a space before '-', which is inconsistent with standard
@@ -68,20 +69,15 @@ func init() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	unstrucs, err := gator.ReadSources(flagFilenames)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		errFatalf("reading: %v\n", err)
 	}
-	imgData, err := gator.PullImages(flagImages, flagTempDir)
-	if err != nil {
-		errFatalf("error pulling remote image: %s", err)
-	}
-	unstrucs = append(unstrucs, imgData...)
 	if len(unstrucs) == 0 {
 		errFatalf("no input data identified\n")
 	}
 
-	resultants, err := gator.Expand(unstrucs)
+	resultants, err := expand.Expand(unstrucs)
 	if err != nil {
 		errFatalf("error expanding resources: %v", err)
 	}

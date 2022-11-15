@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/spf13/cobra"
@@ -71,15 +71,10 @@ func init() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-	unstrucs, err := gator.ReadSources(flagFilenames)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		errFatalf("reading: %v", err)
 	}
-	imgData, err := gator.PullImages(flagImages, flagTempDir)
-	if err != nil {
-		errFatalf("error pulling remote image: %s", err)
-	}
-	unstrucs = append(unstrucs, imgData...)
 	if len(unstrucs) == 0 {
 		errFatalf("no input data identified")
 	}

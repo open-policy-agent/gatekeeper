@@ -1,4 +1,4 @@
-package gator
+package verify
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -53,7 +54,7 @@ func (a *Assertion) Run(results []*types.Result) error {
 
 	// Default to assuming the object fails validation.
 	if a.Violations == nil {
-		a.Violations = intStrFromStr("yes")
+		a.Violations = gator.IntStrFromStr("yes")
 	}
 
 	err := a.matchesCount(matching)
@@ -69,7 +70,7 @@ func (a *Assertion) matchesCount(matching int32) error {
 	case intstr.Int:
 		if a.Violations.IntVal < 0 {
 			return fmt.Errorf(`%w: assertion.violation, if set, must be a nonnegative integer, "yes", or "no"`,
-				ErrInvalidYAML)
+				gator.ErrInvalidYAML)
 		}
 		return a.matchesCountInt(matching)
 	case intstr.String:
@@ -78,7 +79,7 @@ func (a *Assertion) matchesCount(matching int32) error {
 		// Requires a bug in intstr unmarshalling code, or a misuse of the IntOrStr
 		// type in Go code.
 		return fmt.Errorf("%w: assertion.violations improperly parsed to type %d",
-			ErrInvalidYAML, a.Violations.Type)
+			gator.ErrInvalidYAML, a.Violations.Type)
 	}
 }
 
@@ -87,10 +88,10 @@ func (a *Assertion) matchesCountInt(matching int32) error {
 	if wantMatching != matching {
 		if a.Message != nil {
 			return fmt.Errorf("%w: got %d violations containing %q but want exactly %d",
-				ErrNumViolations, matching, *a.Message, wantMatching)
+				gator.ErrNumViolations, matching, *a.Message, wantMatching)
 		}
 		return fmt.Errorf("%w: got %d violations but want exactly %d",
-			ErrNumViolations, matching, wantMatching)
+			gator.ErrNumViolations, matching, wantMatching)
 	}
 
 	return nil
@@ -102,10 +103,10 @@ func (a *Assertion) matchesCountStr(matching int32) error {
 		if matching == 0 {
 			if a.Message != nil {
 				return fmt.Errorf("%w: got %d violations containing %q but want at least %d",
-					ErrNumViolations, matching, *a.Message, 1)
+					gator.ErrNumViolations, matching, *a.Message, 1)
 			}
 			return fmt.Errorf("%w: got %d violations but want at least %d",
-				ErrNumViolations, matching, 1)
+				gator.ErrNumViolations, matching, 1)
 		}
 
 		return nil
@@ -113,16 +114,16 @@ func (a *Assertion) matchesCountStr(matching int32) error {
 		if matching > 0 {
 			if a.Message != nil {
 				return fmt.Errorf("%w: got %d violations containing %q but want none",
-					ErrNumViolations, matching, *a.Message)
+					gator.ErrNumViolations, matching, *a.Message)
 			}
 			return fmt.Errorf("%w: got %d violations but want none",
-				ErrNumViolations, matching)
+				gator.ErrNumViolations, matching)
 		}
 
 		return nil
 	default:
 		return fmt.Errorf(`%w: assertion.violation, if set, must be a nonnegative integer, "yes", or "no"`,
-			ErrInvalidYAML)
+			gator.ErrInvalidYAML)
 	}
 }
 
@@ -149,7 +150,7 @@ func (a *Assertion) getMsgRegex() (*regexp.Regexp, error) {
 		a.msgRegex, err = regexp.Compile(*a.Message)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidRegex, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidRegex, err)
 	}
 
 	return a.msgRegex, nil

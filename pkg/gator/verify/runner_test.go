@@ -1,4 +1,4 @@
-package gator
+package verify
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
@@ -33,7 +34,7 @@ func TestRunner_Run(t *testing.T) {
 			f: fstest.MapFS{},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrInvalidSuite,
+					Error: gator.ErrInvalidSuite,
 				}},
 			},
 		},
@@ -65,7 +66,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingTemplate,
+					Error: gator.ErrAddingTemplate,
 				}},
 			},
 		},
@@ -83,7 +84,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingTemplate,
+					Error: gator.ErrAddingTemplate,
 				}},
 			},
 		},
@@ -101,7 +102,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingTemplate,
+					Error: gator.ErrAddingTemplate,
 				}},
 			},
 		},
@@ -119,7 +120,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingTemplate,
+					Error: gator.ErrAddingTemplate,
 				}},
 			},
 		},
@@ -137,7 +138,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrNotATemplate,
+					Error: gator.ErrNotATemplate,
 				}},
 			},
 		},
@@ -155,7 +156,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrInvalidSuite,
+					Error: gator.ErrInvalidSuite,
 				}},
 			},
 		},
@@ -199,7 +200,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrValidConstraint,
+					Error: gator.ErrValidConstraint,
 				}},
 			},
 		},
@@ -211,14 +212,14 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -256,14 +257,14 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Skip:       true,
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -303,14 +304,14 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -348,14 +349,14 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}, {
 					Template:   "deny-template.yaml",
 					Constraint: "deny-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -388,7 +389,7 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -406,7 +407,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrInvalidYAML,
+						Error: gator.ErrInvalidYAML,
 					}},
 				}},
 			},
@@ -420,7 +421,7 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Object:     "object.yaml",
 						Inventory:  []string{"inventory.yaml"},
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -441,7 +442,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrNoObjects,
+						Error: gator.ErrNoObjects,
 					}},
 				}},
 			},
@@ -454,7 +455,7 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -472,7 +473,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrMultipleObjects,
+						Error: gator.ErrMultipleObjects,
 					}},
 				}},
 			},
@@ -485,7 +486,7 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -503,7 +504,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrNoObjects,
+						Error: gator.ErrNoObjects,
 					}},
 				}},
 			},
@@ -517,7 +518,7 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Object:     "object.yaml",
 						Inventory:  []string{"inventory.yaml"},
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -538,7 +539,7 @@ func TestRunner_Run(t *testing.T) {
 			want: SuiteResult{
 				TestResults: []TestResult{{
 					CaseResults: []CaseResult{{
-						Error: ErrAddInventory,
+						Error: gator.ErrAddInventory,
 					}},
 				}},
 			},
@@ -600,7 +601,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrAddingConstraint,
+					Error: gator.ErrAddingConstraint,
 				}},
 			},
 		},
@@ -622,7 +623,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					Error: ErrNotAConstraint,
+					Error: gator.ErrNotAConstraint,
 				}},
 			},
 		},
@@ -656,7 +657,7 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -684,7 +685,7 @@ func TestRunner_Run(t *testing.T) {
 					Constraint: "allow-constraint.yaml",
 					Cases: []*Case{{
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -723,7 +724,7 @@ func TestRunner_Run(t *testing.T) {
 			},
 			want: SuiteResult{
 				TestResults: []TestResult{{
-					CaseResults: []CaseResult{{Error: ErrInvalidCase}},
+					CaseResults: []CaseResult{{Error: gator.ErrInvalidCase}},
 				}},
 			},
 		},
@@ -738,11 +739,11 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Name:       "allowed-1",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}, {
 						Name:       "allowed-2",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}, {
 					Name:       "deny",
@@ -751,7 +752,7 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Name:       "denied",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -796,12 +797,12 @@ func TestRunner_Run(t *testing.T) {
 						Name:       "allow",
 						Object:     "allow.yaml",
 						Inventory:  []string{"inventory.yaml"},
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}, {
 						Name:       "deny",
 						Object:     "deny.yaml",
 						Inventory:  []string{"inventory.yaml"},
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}},
 				}},
 			},
@@ -843,11 +844,11 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Name:       "included",
 						Object:     "included.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}, {
 						Name:       "excluded",
 						Object:     "excluded.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -886,11 +887,11 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Name:       "included",
 						Object:     "included.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}, {
 						Name:       "not-included",
 						Object:     "not-included.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -929,11 +930,11 @@ func TestRunner_Run(t *testing.T) {
 					Cases: []*Case{{
 						Name:       "cluster-scope",
 						Object:     "included.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}, {
 						Name:       "namespace-scope",
 						Object:     "not-included.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 					}},
 				}},
 			},
@@ -973,16 +974,16 @@ func TestRunner_Run(t *testing.T) {
 						Name:       "selected",
 						Object:     "object.yaml",
 						Inventory:  []string{"inventory.yaml"},
-						Assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 					}, {
 						Name:       "not-selected",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 						Inventory:  []string{"inventory-2.yaml"},
 					}, {
 						Name:       "missing-namespace",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("missing Namespace")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.StringPtr("missing Namespace")}},
 					}},
 				}},
 			},
@@ -1028,12 +1029,12 @@ func TestRunner_Run(t *testing.T) {
 							{
 								Name:       "user begins with \"system:\"",
 								Object:     "system-ar.yaml",
-								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 							},
 							{
 								Name:       "user doesn't begin with \"system:\"",
 								Object:     "non-system-ar.yaml",
-								Assertions: []Assertion{{Violations: intStrFromStr("yes"), Message: pointer.StringPtr("username is not allowed to perform this operation")}},
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.StringPtr("username is not allowed to perform this operation")}},
 							},
 						},
 					},
@@ -1045,7 +1046,7 @@ func TestRunner_Run(t *testing.T) {
 							{
 								Name:       "oldObject submits for review",
 								Object:     "oldObject-ar.yaml",
-								Assertions: []Assertion{{Violations: intStrFromStr("no")}},
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("no")}},
 							},
 						},
 					},
@@ -1125,10 +1126,10 @@ func TestRunner_Run(t *testing.T) {
 					{
 						Name: "invalid admission review usage",
 						CaseResults: []CaseResult{
-							{Name: "invalid admission review object", Error: ErrInvalidK8sAdmissionReview},
-							{Name: "missing admission request object", Error: ErrMissingK8sAdmissionRequest},
-							{Name: "no objects to review", Error: ErrNoObjectForReview},
-							{Name: "no oldObject on delete", Error: ErrNilOldObject},
+							{Name: "invalid admission review object", Error: gator.ErrInvalidK8sAdmissionReview},
+							{Name: "missing admission request object", Error: gator.ErrMissingK8sAdmissionRequest},
+							{Name: "no objects to review", Error: gator.ErrNoObjectForReview},
+							{Name: "no oldObject on delete", Error: gator.ErrNilOldObject},
 						},
 					},
 				},
@@ -1145,7 +1146,7 @@ func TestRunner_Run(t *testing.T) {
 
 			ctx := context.Background()
 
-			runner, err := NewRunner(tc.f, NewOPAClient)
+			runner, err := NewRunner(tc.f, gator.NewOPAClient)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1170,10 +1171,10 @@ func TestRunner_Run_ClientError(t *testing.T) {
 	t.Parallel()
 
 	want := SuiteResult{
-		TestResults: []TestResult{{Error: ErrCreatingClient}},
+		TestResults: []TestResult{{Error: gator.ErrCreatingClient}},
 	}
 
-	runner, err := NewRunner(fstest.MapFS{}, func(includeTrace bool) (Client, error) {
+	runner, err := NewRunner(fstest.MapFS{}, func(includeTrace bool) (gator.Client, error) {
 		return nil, errors.New("error")
 	})
 	if err != nil {
@@ -1212,7 +1213,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: nil,
-			want:       CaseResult{Error: ErrInvalidCase},
+			want:       CaseResult{Error: gator.ErrInvalidCase},
 		},
 		{
 			name:       "explicit expect allow boolean",
@@ -1220,7 +1221,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromStr("no"),
+				Violations: gator.IntStrFromStr("no"),
 			}},
 			want: CaseResult{},
 		},
@@ -1231,7 +1232,7 @@ func TestRunner_RunCase(t *testing.T) {
 			object:     fixtures.Object,
 			assertions: []Assertion{{}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1239,9 +1240,9 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   fixtures.TemplateAlwaysValidate,
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
-			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+			assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1250,7 +1251,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(0),
+				Violations: gator.IntStrFromInt(0),
 			}},
 			want: CaseResult{},
 		},
@@ -1260,10 +1261,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(1),
+				Violations: gator.IntStrFromInt(1),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1275,7 +1276,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("first message"),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		// Single violation
@@ -1292,7 +1293,7 @@ func TestRunner_RunCase(t *testing.T) {
 			template:   fixtures.TemplateNeverValidate,
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
-			assertions: []Assertion{{Violations: intStrFromStr("yes")}},
+			assertions: []Assertion{{Violations: gator.IntStrFromStr("yes")}},
 			want:       CaseResult{},
 		},
 		{
@@ -1301,7 +1302,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(1),
+				Violations: gator.IntStrFromInt(1),
 			}},
 			want: CaseResult{},
 		},
@@ -1311,10 +1312,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(2),
+				Violations: gator.IntStrFromInt(2),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1323,10 +1324,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromStr("no"),
+				Violations: gator.IntStrFromStr("no"),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1335,10 +1336,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(0),
+				Violations: gator.IntStrFromInt(0),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1350,7 +1351,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("never validate"),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		{
@@ -1372,7 +1373,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("never validate [("),
 			}},
 			want: CaseResult{
-				Error: ErrInvalidRegex,
+				Error: gator.ErrInvalidRegex,
 			},
 		},
 		{
@@ -1384,7 +1385,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		// Deny multiple violations
@@ -1394,7 +1395,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(2),
+				Violations: gator.IntStrFromInt(2),
 			}},
 			want: CaseResult{},
 		},
@@ -1416,10 +1417,10 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(1),
+				Violations: gator.IntStrFromInt(1),
 				Message:    pointer.StringPtr("first message"),
 			}, {
-				Violations: intStrFromInt(1),
+				Violations: gator.IntStrFromInt(1),
 				Message:    pointer.StringPtr("second message"),
 			}},
 			want: CaseResult{},
@@ -1440,7 +1441,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Violations: intStrFromInt(2),
+				Violations: gator.IntStrFromInt(2),
 				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
@@ -1456,7 +1457,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Message: pointer.StringPtr("third message"),
 			}},
 			want: CaseResult{
-				Error: ErrNumViolations,
+				Error: gator.ErrNumViolations,
 			},
 		},
 		// Invalid assertions
@@ -1469,7 +1470,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: &intstr.IntOrString{Type: 3},
 			}},
 			want: CaseResult{
-				Error: ErrInvalidYAML,
+				Error: gator.ErrInvalidYAML,
 			},
 		},
 		{
@@ -1481,7 +1482,7 @@ func TestRunner_RunCase(t *testing.T) {
 				Violations: &intstr.IntOrString{Type: intstr.String, StrVal: "other"},
 			}},
 			want: CaseResult{
-				Error: ErrInvalidYAML,
+				Error: gator.ErrInvalidYAML,
 			},
 		},
 	}
@@ -1518,7 +1519,7 @@ func TestRunner_RunCase(t *testing.T) {
 					constraintFile: &fstest.MapFile{Data: []byte(tc.constraint)},
 					objectFile:     &fstest.MapFile{Data: []byte(tc.object)},
 				},
-				NewOPAClient,
+				gator.NewOPAClient,
 			)
 			if err != nil {
 				t.Fatal(err)

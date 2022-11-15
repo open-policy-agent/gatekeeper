@@ -1,9 +1,11 @@
-package gator
+package verify
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 )
 
 type Filter interface {
@@ -57,7 +59,7 @@ func NewFilter(filter string) (Filter, error) {
 	case 2:
 		return newAndFilter(filters[0], filters[1])
 	default:
-		return nil, fmt.Errorf(`%w: a filter may include at most one "//"`, ErrInvalidFilter)
+		return nil, fmt.Errorf(`%w: a filter may include at most one "//"`, gator.ErrInvalidFilter)
 	}
 }
 
@@ -85,7 +87,7 @@ type orFilter struct {
 func newOrFilter(filter string) (Filter, error) {
 	regex, err := regexp.Compile(filter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
 	}
 
 	return &orFilter{regex: regex}, nil
@@ -121,12 +123,12 @@ var _ Filter = &andFilter{}
 func newAndFilter(testFilter, caseFilter string) (Filter, error) {
 	testRegex, err := regexp.Compile(testFilter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
 	}
 
 	caseRegex, err := regexp.Compile(caseFilter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
 	}
 
 	return &andFilter{testRegex: testRegex, caseRegex: caseRegex}, nil

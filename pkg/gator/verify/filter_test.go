@@ -1,8 +1,10 @@
-package gator
+package verify
 
 import (
 	"errors"
 	"testing"
+
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 )
 
 func TestFilter_Error(t *testing.T) {
@@ -26,7 +28,7 @@ func TestFilter_Error(t *testing.T) {
 		{
 			name:   "or filter error",
 			filter: "labels(",
-			want:   ErrInvalidFilter,
+			want:   gator.ErrInvalidFilter,
 		},
 		{
 			name:   "and filter",
@@ -36,17 +38,17 @@ func TestFilter_Error(t *testing.T) {
 		{
 			name:   "and filter test error",
 			filter: "labels(//allow",
-			want:   ErrInvalidFilter,
+			want:   gator.ErrInvalidFilter,
 		},
 		{
 			name:   "and filter case error",
 			filter: "labels//allow(",
-			want:   ErrInvalidFilter,
+			want:   gator.ErrInvalidFilter,
 		},
 		{
 			name:   "too many splits error",
 			filter: "a//b//c",
-			want:   ErrInvalidFilter,
+			want:   gator.ErrInvalidFilter,
 		},
 	}
 
@@ -59,7 +61,7 @@ func TestFilter_Error(t *testing.T) {
 
 			_, err := NewFilter(tc.filter)
 			if !errors.Is(err, tc.want) {
-				t.Fatalf(`got NewFilter("(") error = %v, want %v`, err, ErrInvalidFilter)
+				t.Fatalf(`got NewFilter("(") error = %v, want %v`, err, gator.ErrInvalidFilter)
 			}
 		})
 	}
