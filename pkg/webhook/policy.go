@@ -120,7 +120,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	getServerConfig(mgr).Register("/v1/admit", wh)
+	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admit", wh)
 	return nil
 }
 
