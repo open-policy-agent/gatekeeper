@@ -49,14 +49,14 @@ func detectConflicts(sources []*source) []conflict {
 	return conflicts
 }
 
-func logConflict(c conflict) {
-	log.Println(fmt.Sprintf(warningMsg, c.id.name, sourceDebugInfo(c.a), sourceDebugInfo(c.b)))
+func logConflict(c *conflict) {
+	log.Printf(warningMsg+"\n", c.id.name, sourceDebugInfo(c.a), sourceDebugInfo(c.b))
 }
 
 // sourceDebugInfo returns a string identifying the source.
-// For sources pulled from stdin: "stdin"
-// For sources pulled from a file: "file: <filename>"
-// For sources pulled from an image: "file: <filename>, image: <imgURL>"
+// For sources pulled from stdin: "stdin".
+// For sources pulled from a file: "file: <filename>".
+// For sources pulled from an image: "file: <filename>, image: <imgURL>".
 func sourceDebugInfo(s *source) string {
 	if s.stdin {
 		return "stdin"

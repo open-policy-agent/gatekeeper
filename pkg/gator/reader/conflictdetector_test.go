@@ -44,7 +44,7 @@ func TestDetectConflicts(t *testing.T) {
 			want: []conflict{
 				{
 					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{"group", "v1", "Thing"},
+						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
 						name:             "dupe",
 					},
 					a: &source{
@@ -105,7 +105,7 @@ func TestDetectConflicts(t *testing.T) {
 			want: []conflict{
 				{
 					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{"group", "v1", "Thing"},
+						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
 						name:             "dupeA",
 					},
 					a: &source{
@@ -127,7 +127,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{"group", "v1", "Thing"},
+						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
 						name:             "dupeB",
 					},
 					a: &source{
@@ -180,7 +180,7 @@ func TestDetectConflicts(t *testing.T) {
 			want: []conflict{
 				{
 					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{"group", "v1", "Thing"},
+						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
 						name:             "dupe",
 					},
 					a: &source{
@@ -202,7 +202,7 @@ func TestDetectConflicts(t *testing.T) {
 				},
 				{
 					id: gvkn{
-						GroupVersionKind: schema.GroupVersionKind{"group", "v1", "Thing"},
+						GroupVersionKind: schema.GroupVersionKind{Group: "group", Version: "v1", Kind: "Thing"},
 						name:             "dupe",
 					},
 					a: &source{

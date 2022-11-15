@@ -37,8 +37,8 @@ func ReadSources(filenames []string, images []string, tempDir string) ([]*unstru
 	sources = append(sources, &source{stdin: true, objs: stdinUnstructs})
 
 	conflicts := detectConflicts(sources)
-	for _, c := range conflicts {
-		logConflict(c)
+	for i := range conflicts {
+		logConflict(&conflicts[i])
 	}
 
 	return sourcesToUnstruct(sources), nil

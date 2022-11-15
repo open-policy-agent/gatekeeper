@@ -14,7 +14,7 @@ import (
 
 const tempFilePrefix = "gator-bundle-"
 
-func PullImage(imgURL string, tempDir string) (string, func() error, error) {
+func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	ctx := context.Background()
 	path, err := os.MkdirTemp(tempDir, tempFilePrefix)
 	if err != nil {
@@ -35,8 +35,8 @@ func PullImage(imgURL string, tempDir string) (string, func() error, error) {
 	registry := content.Registry{Resolver: resolver}
 
 	fileStore := content.NewFile(path)
-	closeFn := func() error {
-		return fileStore.Close()
+	closeFn := func() {
+		fileStore.Close()
 	}
 
 	_, err = oras.Copy(ctx, registry, imgURL, fileStore, "")
