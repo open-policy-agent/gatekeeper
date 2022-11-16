@@ -14,6 +14,11 @@ import (
 
 const tempFilePrefix = "gator-bundle-"
 
+// PullImage pulls an OCI image at `imgURL` into a temporary directory with a
+// random name, created under the path `tempDir`. If `tempDir` is empty, a
+// default path from os.TempDir() is used. This func returns the directory path
+// that the image was pulled to, a handler function to clean up the directory
+// after it has been read, and an error (if any).
 func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	ctx := context.Background()
 	path, err := os.MkdirTemp(tempDir, tempFilePrefix)

@@ -272,6 +272,62 @@ func TestDetectConflicts(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "2 conflicts within the same source",
+			sources: []*source{
+				{
+					filename: "file1.yaml",
+					objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
+						Group:   "group",
+						Version: "v1",
+						Kind:    "Thing",
+					}),
+						newObj("dupe", "my-ns", schema.GroupVersionKind{
+							Group:   "group",
+							Version: "v1",
+							Kind:    "Thing",
+						}),
+					},
+				},
+			},
+			want: []conflict{
+				{
+					id: gknn{
+						GroupKind: schema.GroupKind{Group: "group", Kind: "Thing"},
+						namespace: "my-ns",
+						name:      "dupe",
+					},
+					a: &source{
+						filename: "file1.yaml",
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
+							Group:   "group",
+							Version: "v1",
+							Kind:    "Thing",
+						}),
+							newObj("dupe", "my-ns", schema.GroupVersionKind{
+								Group:   "group",
+								Version: "v1",
+								Kind:    "Thing",
+							}),
+						},
+					},
+					b: &source{
+						filename: "file1.yaml",
+						objs: []*unstructured.Unstructured{newObj("dupe", "my-ns", schema.GroupVersionKind{
+							Group:   "group",
+							Version: "v1",
+							Kind:    "Thing",
+						}),
+							newObj("dupe", "my-ns", schema.GroupVersionKind{
+								Group:   "group",
+								Version: "v1",
+								Kind:    "Thing",
+							}),
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
