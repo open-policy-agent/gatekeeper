@@ -118,9 +118,9 @@ test-e2e:
 test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
 .PHONY: test-gator-containerized
-test-gator-containerized: __gator-testing-image
-	docker run --privileged -v $(shell pwd):/gatekeeper -v /var/lib/docker \
-	gatekeeper-testing ./build/testing/startup.sh
+test-gator-containerized: __test-image
+	docker run --privileged -v $(shell pwd):/app -v /var/lib/docker \
+	gatekeeper-test ./test/image/gator-test.sh
 
 .PHONY: test-gator-verify
 test-gator-verify: gator
@@ -446,11 +446,7 @@ __tooling-image:
 
 __test-image:
 	docker build test/image \
-		-t gatekeeper-test
-
-__gator-testing-image:
-	docker build build/testing \
-		-t gatekeeper-testing \
+		-t gatekeeper-test \
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
 		--build-arg ORAS_VERSION=$(ORAS_VERSION)
