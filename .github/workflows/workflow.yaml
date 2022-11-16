@@ -468,7 +468,7 @@ jobs:
             _dist/*.tar.gz
 
       - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@v1.6.0
+        uses: stefanprodan/helm-gh-pages@v1.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: charts
