@@ -452,6 +452,8 @@ server := &http.Server{
 
 ### Authenticate the API server against Webhook (Self managed K8s cluster only)
 
+> ⚠️ Two new flags will be introduced in v3.11 because of these changes. And since they are not backward compatible, you may need a clean install to make use of them.
+
 **Note:** To enable authenticating the API server you have to be able to modify cluster resources. This may not be possible for managed K8s clusters.
 
 To ensure a request to the Gatekeeper webhook is coming from the API server, Gatekeeper needs to validate the client cert in the request. To enable authenticate API server, the following configuration can be made:
