@@ -67,7 +67,7 @@ func init() {
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
-	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to unpack download images to, if using the --%s flag. Optional.", flagNameImage))
+	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(cmd *cobra.Command, args []string) {
