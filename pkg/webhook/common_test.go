@@ -9,7 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -77,36 +77,33 @@ func TestTLSConfig(t *testing.T) {
 	ts.StartTLS()
 	defer ts.Close()
 
-	goodHTTPClient, err := clientCertSetup(*certCNName, ca, caPrivKey, certpool)
+	goodHTTPClient, err := getClient(*certCNName, ca, caPrivKey, certpool)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	badHTTPClient, err := clientCertSetup("test", ca, caPrivKey, certpool)
+	badHTTPClient, err := getClient("test", ca, caPrivKey, certpool)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	tc := []struct {
-		Name       string
-		CommonName string
-		WantError  bool
-		Msg        string
-		Client     *http.Client
+		Name      string
+		WantError bool
+		Msg       string
+		Client    *http.Client
 	}{
 		{
-			Name:       "Connecting to server with valid certificate that has expected CN name",
-			CommonName: "kube-apiserver",
-			WantError:  false,
-			Msg:        "success!",
-			Client:     goodHTTPClient,
+			Name:      "Connecting to server with valid certificate that has expected CN name",
+			WantError: false,
+			Msg:       "success!",
+			Client:    goodHTTPClient,
 		},
 		{
-			Name:       "Connecting to server with unvalid certificate that has unexpected CN name",
-			CommonName: "test",
-			WantError:  true,
-			Msg:        "",
-			Client:     badHTTPClient,
+			Name:      "Connecting to server with unvalid certificate that has unexpected CN name",
+			WantError: true,
+			Msg:       "",
+			Client:    badHTTPClient,
 		},
 	}
 
@@ -117,7 +114,7 @@ func TestTLSConfig(t *testing.T) {
 
 			if !tt.WantError {
 				// verify the response
-				respBodyBytes, err := ioutil.ReadAll(resp.Body)
+				respBodyBytes, err := io.ReadAll(resp.Body)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -235,7 +232,7 @@ func serverCertSetup(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, 
 	return
 }
 
-func clientCertSetup(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, certPool *x509.CertPool) (httpClient *http.Client, err error) {
+func getClient(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, certPool *x509.CertPool) (httpClient *http.Client, err error) {
 	// set up our client certificate
 	client := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
