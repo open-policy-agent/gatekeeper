@@ -3,6 +3,10 @@ id: failing-closed
 title: Failing Closed
 ---
 
+## Admission Webhook Fail-Open by Default
+
+Currently Gatekeeper is defaulting to using `failurePolicy: Ignore` for admission request webhook errors. The impact of this is that when the webhook is down, or otherwise unreachable, constraints will not be enforced. Audit is expected to pick up any slack in enforcement by highlighting invalid resources that made it into the cluster.
+
 Here we discuss how to configure Gatekeeper to fail closed and some factors you may want to consider before doing so.
 
 ## How to Fail Closed
