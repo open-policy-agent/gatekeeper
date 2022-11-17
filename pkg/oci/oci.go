@@ -42,6 +42,7 @@ func PullImage(imgURL string, tempDir string) (string, func(), error) {
 	fileStore := content.NewFile(path)
 	closeFn := func() {
 		fileStore.Close()
+		os.RemoveAll(path)
 	}
 
 	_, err = oras.Copy(ctx, registry, imgURL, fileStore, "")
