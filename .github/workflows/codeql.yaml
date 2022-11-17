@@ -20,12 +20,12 @@ jobs:
         uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@18fe527fa8b29f134bb91f32f1a5dc5abb15ed7f
+        uses: github/codeql-action/init@678fc3afe258fb2e0cdc165ccf77b85719de7b3c
         with:
           languages: go
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@18fe527fa8b29f134bb91f32f1a5dc5abb15ed7f
+        uses: github/codeql-action/autobuild@678fc3afe258fb2e0cdc165ccf77b85719de7b3c
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@18fe527fa8b29f134bb91f32f1a5dc5abb15ed7f
+        uses: github/codeql-action/analyze@678fc3afe258fb2e0cdc165ccf77b85719de7b3c
