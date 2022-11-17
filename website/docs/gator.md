@@ -44,8 +44,7 @@ space.
 #### Specifying inputs
 
 `gator test` supports inputs through the `--filename` and `--image` flags, and
-via `tdin. The three methods of input can be used in combination or individually. The `
---filename` and `--image` flags are repeatable.
+via stdin. The three methods of input can be used in combination or individually. The `--filename` and `--image` flags are repeatable.
 
 The `--filename` flag can specify a single file or a directory. If a file is
 specified, that file must end in one of the following extensions: `.json`,
