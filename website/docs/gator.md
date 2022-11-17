@@ -306,7 +306,7 @@ Or, using an OCI Artifact for the expansion configuration:
 gator expand --filename="my-deployment.yaml" --image=localhost:5000/gator/expansion-policy:v1
 ```
 
-By default, `gator expand` will output to stdout, but a `–outputfile` can be
+By default, `gator expand` will output to stdout, but a `–outputfile` flag can be
 specified to write the results to a file.
 
 ```
