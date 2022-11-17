@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	lg "log"
 	"math/big"
 	"net"
 	"net/http"
@@ -22,6 +23,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
+
+type chanWriter chan string
+
+func (w chanWriter) Write(p []byte) (n int, err error) {
+	w <- string(p)
+	return len(p), nil
+}
 
 func TestCongifureWebhookServer(t *testing.T) {
 	expectedServer := &webhook.Server{
@@ -74,6 +82,8 @@ func TestTLSConfig(t *testing.T) {
 		fmt.Fprintln(w, "success!")
 	}))
 	ts.TLS = serverTLSConf
+	errc := make(chanWriter, 10)
+	ts.Config.ErrorLog = lg.New(errc, "", 0)
 	ts.StartTLS()
 	defer ts.Close()
 
@@ -87,23 +97,46 @@ func TestTLSConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	diffCa, diffCaPEM, diffCaPrivKey, err := getCA(*certCNName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	diffCertpool := x509.NewCertPool()
+	diffCertpool.AppendCertsFromPEM(diffCaPEM.Bytes())
+
+	diffHTTPClient, err := getClient(*certCNName, diffCa, diffCaPrivKey, diffCertpool)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tc := []struct {
 		Name      string
 		WantError bool
 		Msg       string
 		Client    *http.Client
+		Error     error
 	}{
 		{
 			Name:      "Connecting to server with valid certificate that has expected CN name",
 			WantError: false,
 			Msg:       "success!",
 			Client:    goodHTTPClient,
+			Error:     nil,
 		},
 		{
-			Name:      "Connecting to server with unvalid certificate that has unexpected CN name",
+			Name:      "Connecting to server with valid certificate but with wrong CN name",
 			WantError: true,
 			Msg:       "",
 			Client:    badHTTPClient,
+			Error:     fmt.Errorf("Get \"%s\": remote error: tls: bad certificate", ts.URL),
+		},
+		{
+			Name:      "Connecting to server with invalid certificate that has expected CN name",
+			WantError: true,
+			Msg:       "",
+			Client:    diffHTTPClient,
+			Error:     fmt.Errorf("x509: certificate signed by unknown authority"),
 		},
 	}
 
@@ -111,8 +144,9 @@ func TestTLSConfig(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			resp, err := tt.Client.Get(ts.URL)
 			assert.Equal(t, err != nil, tt.WantError)
-
-			if !tt.WantError {
+			if tt.WantError {
+				assert.ErrorContains(t, err, tt.Error.Error())
+			} else {
 				// verify the response
 				respBodyBytes, err := io.ReadAll(resp.Body)
 				if err != nil {
@@ -123,8 +157,18 @@ func TestTLSConfig(t *testing.T) {
 			}
 		})
 	}
+
+	select {
+	case v := <-errc:
+		if !strings.Contains(v, fmt.Sprintf("x509: subject with cn=test do not identify as %s", *certCNName)) {
+			t.Errorf("expected an error log message containing '%s'; got %q", fmt.Sprintf("x509: subject with cn=test do not identify as %s", *certCNName), v)
+		}
+	case <-time.After(5 * time.Second):
+		t.Errorf("timeout waiting for logged error")
+	}
 }
 
+// returns a CA, CA PEM and private key.
 func getCA(s string) (ca *x509.Certificate, caPEM *bytes.Buffer, caPrivKey *rsa.PrivateKey, err error) {
 	// set up our CA certificate
 	ca = &x509.Certificate{
@@ -140,7 +184,7 @@ func getCA(s string) (ca *x509.Certificate, caPEM *bytes.Buffer, caPrivKey *rsa.
 		BasicConstraintsValid: true,
 	}
 
-	// create our private and public key
+	// create private and public key
 	caPrivKey, err = rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, nil, nil, err
@@ -174,8 +218,9 @@ func getCA(s string) (ca *x509.Certificate, caPEM *bytes.Buffer, caPrivKey *rsa.
 	return
 }
 
+// return server TLS configurations.
 func serverCertSetup(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, certPool *x509.CertPool) (serverTLSConf *tls.Config, err error) {
-	// set up our server certificate
+	// set up server certificate
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
@@ -232,8 +277,9 @@ func serverCertSetup(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, 
 	return
 }
 
+// returns http client that can connect to TLS server.
 func getClient(s string, ca *x509.Certificate, caPrivKey *rsa.PrivateKey, certPool *x509.CertPool) (httpClient *http.Client, err error) {
-	// set up our client certificate
+	// set up client certificate
 	client := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
