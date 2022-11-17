@@ -155,17 +155,21 @@ func congifureWebhookServer(server *webhook.Server) *webhook.Server {
 		server.ClientCAName = *clientCAName
 		server.TLSOpts = []func(*tls.Config){
 			func(cfg *tls.Config) {
-				cfg.VerifyConnection = func(cs tls.ConnectionState) error {
-					if len(cs.PeerCertificates) > 0 {
-						if cs.PeerCertificates[0].Subject.CommonName != *certCNName {
-							return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *certCNName)
-						}
-						return nil
-					}
-					return fmt.Errorf("Failed to verify CN name of certificate")
-				}
+				cfg.VerifyConnection = getCertNameVerifier()
 			},
 		}
 	}
 	return server
+}
+
+func getCertNameVerifier() func(cs tls.ConnectionState) error {
+	return func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) > 0 {
+			if cs.PeerCertificates[0].Subject.CommonName != *certCNName {
+				return fmt.Errorf("x509: subject with cn=%s do not identify as %s", cs.PeerCertificates[0].Subject.CommonName, *certCNName)
+			}
+			return nil
+		}
+		return fmt.Errorf("Failed to verify CN name of certificate")
+	}
 }
