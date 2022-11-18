@@ -246,7 +246,7 @@ gator verify path/to/suites/... --run "disallowed"
 object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) 
 or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. 
 Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review) for more guidance). 
-A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/master/pkg/gator/fixtures/fixtures.go#L506-L528). 
+A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/03e6adb74f1714242cf936fd27eee19a0eda2d52/pkg/gator/fixtures/fixtures.go#L506-L528). 
 The `AdmissionReview` object can be specified where you would specify the object under test above:
 
 ```yaml
