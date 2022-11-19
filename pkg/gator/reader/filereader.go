@@ -160,7 +160,6 @@ func readStdin() ([]*unstructured.Unstructured, error) {
 	return us, nil
 }
 
-// TODO refactor this so it takes one path instead of an array?
 func normalize(filenames []string) ([]string, error) {
 	var output []string
 
