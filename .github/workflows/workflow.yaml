@@ -319,10 +319,10 @@ jobs:
 
   benchmark:
     name: "Benchmark"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      # TODO
       contents: write
       pull-requests: write
     steps:
@@ -330,26 +330,45 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download release benchmark file
-        run: ...#TODO
+        uses: robinraju/release-downloader@v1.6
+        id: get-latest-benchmark
+        continue-on-error: true
+        with: 
+          latest: true
+          fileName: "release_benchmarks.txt"
 
       - name: Run benchmarks
-        run: make benchmark-test BENCHMARK_FILE_NAME=pr_benchmarks.txt
+        run: |
+          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz" &&\
+            tar -zxvf kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz &&\
+            sudo mv kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64 /usr/local/kubebuilder
+          make benchmark-test BENCHMARK_FILE_NAME=pr_benchmarks.txt
+        if: ${{ steps.get-latest-benchmark.outcome == 'success' }}
+        env:
+          KUBEBUILDER_VERSION: 2.3.1
 
       - name: Compare benchmarks
         id: get-comment-body
+        if: ${{ steps.get-latest-benchmark.outcome == 'success' }}
         run: |
+          export GOPATH="$HOME/go"
+          PATH="$GOPATH/bin:$PATH"
           go install golang.org/x/perf/cmd/benchstat@latest
-          benchstat pr_benchmarks.txt release_benchmarks.txt > results.txt
-          body=$(cat results.txt)
-          echo ::set-output name=body::$body
-
+          benchstat release_benchmarks.txt pr_benchmarks.txt > benchstat.txt
+          delimiter=$(openssl rand -hex 8)
+          echo 'msg<<$delimiter' >> $GITHUB_OUTPUT
+          cat benchstat.txt >> $GITHUB_OUTPUT
+          echo '$delimiter' >> $GITHUB_OUTPUT
+        
       - name: Create commit comment
-        uses: peter-evans/commit-comment@v1
+        if: ${{ steps.get-latest-benchmark.outcome == 'success' }}
+        uses: peter-evans/create-or-update-comment@v2
         with:
-          body: ${{ steps.get-comment-body.outputs.body }}
-          sha: ${{ github.event.pull_request.head.sha }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ```  
+            ${{ steps.get-comment-body.outputs.msg }}
+            ```
 
   pre-release:
     name: "Pre Release"
@@ -494,8 +513,13 @@ jobs:
 
       - name: Run benchmarks
         run: |
+          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz" &&\
+            tar -zxvf kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz &&\
+            sudo mv kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64 /usr/local/kubebuilder
           make benchmark-test BENCHMARK_FILE_NAME=release_benchmarks.txt
           mv benchmarks.txt _dist/release_benchmarks.txt
+        env:
+          KUBEBUILDER_VERSION: 2.3.1
 
       - name: Create GitHub release
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
