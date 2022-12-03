@@ -13,7 +13,7 @@ ENABLE_GENERATOR_EXPANSION ?= false
 
 VERSION := v3.11.0-beta.0
 
-KIND_VERSION ?= 0.15.0
+KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.25.0
 KUSTOMIZE_VERSION ?= 3.8.9
@@ -140,7 +140,7 @@ e2e-dependencies:
 	# Install yq
 	curl -L https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_linux_amd64 -o ${GITHUB_WORKSPACE}/bin/yq && chmod +x ${GITHUB_WORKSPACE}/bin/yq
 
-KIND_NODE_VERSION := kindest/node:v$(KUBERNETES_VERSION)
+KIND_NODE_VERSION ?= kindest/node:v$(KUBERNETES_VERSION)
 e2e-bootstrap: e2e-dependencies
 	# Check for existing kind cluster
 	if [ $$(${GITHUB_WORKSPACE}/bin/kind get clusters) ]; then ${GITHUB_WORKSPACE}/bin/kind delete cluster; fi

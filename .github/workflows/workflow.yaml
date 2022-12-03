@@ -154,6 +154,44 @@ jobs:
           path: |
             logs-*.json
 
+  build_test_126:
+    name: "Build and Test - k8s 1.26"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go 1.19
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap KUBERNETES_VERSION="1.25.0" KIND_NODE_VERSION="sozercan/node:v1.26.0-rc.1"
+      - name: Run e2e
+        run: |
+          make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
+          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
+          go mod tidy
+          # there should be no additional manifest or go.mod changes
+          git diff --exit-code
+          make test-e2e
+      - name: Save logs
+        run: |
+          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-controller.json
+          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-audit.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs
+          path: |
+            logs-*.json
+
   helm_build_test:
     name: "[Helm] Build and Test"
     runs-on: ubuntu-latest
