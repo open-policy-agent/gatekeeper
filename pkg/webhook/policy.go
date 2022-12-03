@@ -253,6 +253,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 				logging.ConstraintKind, r.Constraint.GetKind(),
 				logging.ConstraintAction, r.EnforcementAction,
+				logging.ConstraintViolations, r.Msg,
 				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
