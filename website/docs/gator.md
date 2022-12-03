@@ -324,11 +324,15 @@ is a problem parsing the configs or expanding the resources.
 
 ## Bundling Policy into OCI Artifacts
 
-Policy can be bundled into OCI Artifacts for ingestion by `gator test|expand`.
-The bundle can be composed of any arbitrary file structure, which `gator` will
-walk recursively. Any files that do not end in `json|yaml|yml` will be ignored.
-`gator` does not enforce any file schema in the artifacts; it only requires that
-all files of the support extensions describe valid Kubernetes resources.
+It may be useful to bundle policy files into OCI Artifacts for ingestion during
+CI/CD workflows. The workflow could perform validation on inbound objects using
+`gator test|expand`.
+
+A policy bundle can be composed of any arbitrary file structure, which `gator`
+will walk recursively. Any files that do not end in `json|yaml|yml` will be
+ignored. `gator` does not enforce any file schema in the artifacts; it only
+requires that all files of the support extensions describe valid Kubernetes
+resources.
 
 We recommend using the [Oras CLI](https://oras.land/cli/) to create OCI
 artifacts. For example, to push a bundle containing the 2 local directories
