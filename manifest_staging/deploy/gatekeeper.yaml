@@ -795,16 +795,16 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.10.0
   labels:
     gatekeeper.sh/system: "yes"
-  name: assignimages.mutations.gatekeeper.sh
+  name: assignimage.mutations.gatekeeper.sh
 spec:
   group: mutations.gatekeeper.sh
   names:
     kind: AssignImage
     listKind: AssignImageList
-    plural: assignimages
+    plural: assignimage
     singular: assignimage
   preserveUnknownFields: false
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
@@ -818,6 +818,10 @@ spec:
             description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
+            properties:
+              name:
+                maxLength: 63
+                type: string
             type: object
           spec:
             description: AssignImageSpec defines the desired state of AssignImage.
@@ -1019,6 +1023,8 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 status:
   acceptedNames:
     kind: ""
