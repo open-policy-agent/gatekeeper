@@ -328,13 +328,37 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
+      
+      - name: Get all releases
+        uses: octokit/request-action@v2.x
+        id: get-releases
+        with:
+          route: GET /repos/${{ github.repository }}/releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create release data json
+        run: |
+          cat <<EOF > semver.json
+          ${{ steps.get-releases.outputs.data }}
+          EOF
+          arr=( $(jq -r '.[] | select(.prerelease == false and .draft == false) | .tag_name' semver.json) )
+          echo "${arr[@]}"
 
+      - name: Get the latest release 
+        id: get-latest-semver-release
+        run: |
+          npm install --global semver
+          echo "release=v3.10.0" >> $GITHUB_OUTPUT
+          version=( $(semver "${arr[@]}") )
+          rm semver.json
+          
       - name: Download release benchmark file
         uses: robinraju/release-downloader@v1.6
         id: get-latest-benchmark
         continue-on-error: true
         with: 
-          latest: true
+          tag: ${{ steps.get-latest-semver-release.outputs.release }}
           fileName: "release_benchmarks.txt"
 
       - name: Run benchmarks
@@ -366,7 +390,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            Here is how this PR compares againt latest released version in terms of benchmark. Unless this PR containts huge updates, if the performace is significantly lower consider optimizing your changes to improve the performace closest to latest released benchmark.
+            This PR compares its performance to the latest released version. If it performs significantly lower, consider optimizing your changes to improve the performance.
             ```  
             ${{ steps.get-comment-body.outputs.msg }}
             ```
