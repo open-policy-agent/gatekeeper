@@ -65,7 +65,7 @@ func (m *fakeMutator) Mutate(mutable *types.Mutable) (bool, error) {
 	return true, nil
 }
 
-func (m *fakeMutator) UsesExternalData() bool {
+func (m *fakeMutator) MustTerminate() bool {
 	return false
 }
 

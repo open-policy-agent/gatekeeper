@@ -41,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -340,6 +341,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateAssign(req)
 	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
 		return h.validateModifySet(req)
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignImage":
+		return h.validateAssignImage(req)
 	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
 		return h.validateProvider(req)
 	}
@@ -445,6 +448,23 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 		return false, err
 	}
 	err = assign.IsValidAssign(unversioned)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	unversioned := &mutationsunversioned.AssignImage{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
+	}
+	err = assignimage.IsValidAssignImage(unversioned)
 	if err != nil {
 		return true, err
 	}

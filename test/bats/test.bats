@@ -52,6 +52,8 @@ teardown_file() {
 @test "mutation crds are established" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assign.mutations.gatekeeper.sh"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignmetadata.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/modifyset.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignimages.mutations.gatekeeper.sh"
 }
 
 @test "waiting for validating webhook" {
@@ -82,9 +84,16 @@ teardown_file() {
   run kubectl get svc mutate-svc -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutations}"
   assert_equal 'Assign//k8sexternalip:1' "${output}"
 
+  kubectl apply -f ${BATS_TESTS_DIR}/mutations/assign_image.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignImage add-domain-digest"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
+  run kubectl get svc mutate-svc -o jsonpath="{.spec.containers[name:test].image}"
+  assert_equal "foocorp.org/nginx@sha256:abcde67890123456789abc345678901a" "${output}"
+
   kubectl delete --ignore-not-found svc mutate-svc
   kubectl delete --ignore-not-found assignmetadata k8sownerlabel
   kubectl delete --ignore-not-found assign k8sexternalip
+  kubectl delete --ignore-not-found assignimage add-domain-digest
 }
 
 @test "applying sync config" {

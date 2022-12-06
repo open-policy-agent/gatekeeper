@@ -7,6 +7,7 @@ resources:
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
 - bases/mutations.gatekeeper.sh_assign.yaml
+- bases/mutations.gatekeeper.sh_assignimages.yaml
 - bases/mutations.gatekeeper.sh_assignmetadata.yaml
 - bases/mutations.gatekeeper.sh_modifyset.yaml
 - bases/expansion.gatekeeper.sh_expansiontemplate.yaml
@@ -46,6 +47,7 @@ patchesStrategicMerge:
 #- patches/max_name_size_for_modifyset.yaml
 #- patches/max_name_size_for_assign.yaml
 #- patches/max_name_size_for_assignmetadata.yaml
+#- patches/max_name_size_for_assignimages.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_configs.yaml

@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -82,8 +83,31 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		Events:       events,
 		EventsSource: eventsSource,
 	}
-
 	if err := modifySet.Add(mgr); err != nil {
+		return err
+	}
+
+	assignImage := core.Adder{
+		Tracker:        a.Tracker,
+		GetPod:         a.GetPod,
+		MutationSystem: a.MutationSystem,
+		Kind:           "AssignImage",
+		NewMutationObj: func() client.Object { return &v1alpha1.AssignImage{} },
+		MutatorFor: func(obj client.Object) (types.Mutator, error) {
+			// The type is provided by the `NewObj` function above. If we
+			// are fed the wrong type, this is a non-recoverable error and we
+			// may as well crash for visibility
+			assignImage := obj.(*v1alpha1.AssignImage) // nolint:forcetypeassert
+			unversioned := &mutationsunversioned.AssignImage{}
+			if err := scheme.Convert(assignImage, unversioned, nil); err != nil {
+				return nil, err
+			}
+			return mutators.MutatorForAssignImage(unversioned)
+		},
+		Events:       events,
+		EventsSource: eventsSource,
+	}
+	if err := assignImage.Add(mgr); err != nil {
 		return err
 	}
 

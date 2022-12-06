@@ -3,6 +3,7 @@ package mutators
 import (
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 )
@@ -18,7 +19,13 @@ func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (
 	return assignmeta.MutatorForAssignMetadata(assignMeta)
 }
 
-// MutatorForModifySet builds an AssignMetadataMutator from the given ModifySet object.
+// MutatorForModifySet builds an ModifySetMutator from the given ModifySet object.
 func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*modifyset.Mutator, error) {
 	return modifyset.MutatorForModifySet(modifySet)
+}
+
+// MutatorForAssignImage builds an AssignImageMutator from the given AssignImage
+// object.
+func MutatorForAssignImage(assignImage *mutationsunversioned.AssignImage) (*assignimage.Mutator, error) {
+	return assignimage.MutatorForAssignImage(assignImage)
 }
