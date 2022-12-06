@@ -19,7 +19,7 @@ func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (
 	return assignmeta.MutatorForAssignMetadata(assignMeta)
 }
 
-// MutatorForModifySet builds an ModifySetMutator from the given ModifySet object.
+// MutatorForModifySet builds a ModifySetMutator from the given ModifySet object.
 func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*modifyset.Mutator, error) {
 	return modifyset.MutatorForModifySet(modifySet)
 }

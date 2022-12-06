@@ -4,11 +4,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.8.0
   labels:
-    app: '{{ template "gatekeeper.name" . }}'
-    chart: '{{ template "gatekeeper.name" . }}'
     gatekeeper.sh/system: "yes"
-    heritage: '{{ .Release.Service }}'
-    release: '{{ .Release.Name }}'
   name: assignimages.mutations.gatekeeper.sh
 spec:
   group: mutations.gatekeeper.sh

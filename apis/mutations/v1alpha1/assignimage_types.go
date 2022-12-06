@@ -73,7 +73,6 @@ type AssignImageStatus struct {
 // +kubebuilder:resource:path="assignimage"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
 // AssignImage is the Schema for the assignimage API.
 type AssignImage struct {
