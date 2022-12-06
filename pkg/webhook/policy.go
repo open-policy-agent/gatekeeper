@@ -253,14 +253,13 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
 				logging.ConstraintKind, r.Constraint.GetKind(),
 				logging.ConstraintAction, r.EnforcementAction,
-				logging.ConstraintViolations, r.Msg,
 				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
 				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
 				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
 				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
 				logging.ResourceName, resourceName,
 				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-			).Info("denied admission")
+			).Info(fmt.Sprintf("denied admission: %s", r.Msg))
 		}
 		if *emitAdmissionEvents {
 			annotations := map[string]string{
