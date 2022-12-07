@@ -130,13 +130,16 @@ func (c *cache) unsafeInsert(k ast.Value, v InterQueryCacheValue) (dropped int) 
 			return dropped
 		}
 
-		for key := c.l.Front(); key != nil && (c.usage+size > limit); key = key.Next() {
+		for key := c.l.Front(); key != nil && (c.usage+size > limit); key = c.l.Front() {
 			dropKey := key.Value.(ast.Value)
 			c.unsafeDelete(dropKey)
 			c.l.Remove(key)
 			dropped++
 		}
 	}
+
+	// By deleting the old value, if it exists, we ensure the usage variable stays correct
+	c.unsafeDelete(k)
 
 	c.items[k.String()] = v
 	c.l.PushBack(k)
@@ -155,7 +158,7 @@ func (c *cache) unsafeDelete(k ast.Value) {
 		return
 	}
 
-	c.usage -= int64(value.SizeInBytes())
+	c.usage -= value.SizeInBytes()
 	delete(c.items, k.String())
 }
 
