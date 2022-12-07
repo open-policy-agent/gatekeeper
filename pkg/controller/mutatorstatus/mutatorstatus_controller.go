@@ -225,8 +225,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
-		fmt.Printf("Reconcile problem getting resource, err: %s\n", err)
-		// END DEBUG
 		return reconcile.Result{}, err
 	}
 

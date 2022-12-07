@@ -179,7 +179,7 @@ teardown_file() {
 }
 
 @test "waiting for namespaces to be synced using metrics endpoint" {
-  kubectl run --generator=run-pod/v1 temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
   num_namespaces=$(kubectl get ns -o json | jq '.items | length')

@@ -621,10 +621,6 @@ func probeIsReady(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	// TODO rm debug
-	fmt.Printf("probeIsReady() got resp code %d", resp.StatusCode)
-	// END DEBUG
-
 	return resp.StatusCode >= 200 && resp.StatusCode < 400, nil
 }
 

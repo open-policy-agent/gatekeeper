@@ -101,7 +101,7 @@ all: lint test manager
 
 # Run tests
 native-test:
-	 GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -race -bench . -coverprofile cover.out
+	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... -race -bench . -coverprofile cover.out
 
 # Hook to run docker tests
 .PHONY: test
