@@ -247,6 +247,7 @@ func Test_Test_withTrace(t *testing.T) {
 	diff := cmp.Diff(want, got, cmpopts.IgnoreFields(
 		GatorResult{},
 		"Metadata",
+		"EvaluationMeta",
 		"EnforcementAction",
 		"ViolatingObject",
 		"Trace", // ignore Trace for now, we will assert non nil further down
