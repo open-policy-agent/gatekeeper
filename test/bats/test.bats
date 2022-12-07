@@ -87,7 +87,8 @@ teardown_file() {
   kubectl apply -f ${BATS_TESTS_DIR}/mutations/assign_image.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignImage add-domain-digest"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
-  run kubectl get svc mutate-svc -o jsonpath="{.spec.containers[name:test].image}"
+  run kubectl get pod nginx-test-pod -o jsonpath="{.spec.containers[0].image}"
+  echo "got output ${output}"
   assert_equal "foocorp.org/nginx@sha256:abcde67890123456789abc345678901a" "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc

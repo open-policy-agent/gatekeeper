@@ -34,7 +34,6 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -80,8 +79,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
-		mgr manager.Manager,
-		cs *watch.ControllerSwitch,
+	mgr manager.Manager,
+	cs *watch.ControllerSwitch,
 ) reconcile.Reconciler {
 	return &ReconcileMutatorStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
@@ -125,7 +124,12 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 			}
 		}
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: kind})
+		// AssignImage is the only mutator in v1alpha1 still
+		v := "v1"
+		if kind == "AssignImage" {
+			v = "v1alpha1"
+		}
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: v, Kind: kind})
 		u.SetName(name)
 		return packerMap(u)
 	}
@@ -205,20 +209,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
-
-	// TODO rm debug
-	fmt.Printf("Reconcile() gvk: %s\n", gvk)
-	wrongSchema := schema.GroupVersionKind{
-		Group:   "mutations.gatekeeper.sh",
-		Version: "v1",
-		Kind:    "AssignImage",
-	}
-	if gvk == wrongSchema {
-		errStr := fmt.Sprintf("Reconcile got wrong GVK for AssignImage: %s, wanted version to be v1alpha1", gvk)
-		panic(errStr)
-	}
-	// END DEBUG
-
 	if err != nil {
 		// Unrecoverable, do not retry.
 		log.Error(err, "unpacking request", "request", request)
@@ -235,11 +225,6 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
-		// If the mutator does not exist, we are done
-		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
-		// TODO rm debug
 		fmt.Printf("Reconcile problem getting resource, err: %s\n", err)
 		// END DEBUG
 		return reconcile.Result{}, err

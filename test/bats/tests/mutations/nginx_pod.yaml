@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx-test
+  name: nginx-test-pod
   labels:
     role: myrole
 spec:
