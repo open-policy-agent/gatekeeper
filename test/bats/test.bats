@@ -84,17 +84,25 @@ teardown_file() {
   run kubectl get svc mutate-svc -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutations}"
   assert_equal 'Assign//k8sexternalip:1' "${output}"
 
+  # Test AssignImage
   kubectl apply -f ${BATS_TESTS_DIR}/mutations/assign_image.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignImage add-domain-digest"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
   run kubectl get pod nginx-test-pod -o jsonpath="{.spec.containers[0].image}"
-  echo "got output ${output}"
   assert_equal "foocorp.org/nginx@sha256:abcde67890123456789abc345678901a" "${output}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete pod nginx-test-pod"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete assignimage add-domain-digest"
+
+  # Test removing the AssignImage does not apply mutation
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
+  run kubectl get pod nginx-test-pod -o jsonpath="{.spec.containers[0].image}"
+  assert_equal "nginx:latest" "${output}"
 
   kubectl delete --ignore-not-found svc mutate-svc
   kubectl delete --ignore-not-found assignmetadata k8sownerlabel
   kubectl delete --ignore-not-found assign k8sexternalip
   kubectl delete --ignore-not-found assignimage add-domain-digest
+  kubectl delete --ignore-not-found pod nginx-test-pod
 }
 
 @test "applying sync config" {
@@ -171,7 +179,7 @@ teardown_file() {
 }
 
 @test "waiting for namespaces to be synced using metrics endpoint" {
-  kubectl run temp --image=curlimages/curl -- tail -f /dev/null
+  kubectl run --generator=run-pod/v1 temp --image=curlimages/curl -- tail -f /dev/null
   kubectl wait --for=condition=Ready --timeout=60s pod temp
 
   num_namespaces=$(kubectl get ns -o json | jq '.items | length')

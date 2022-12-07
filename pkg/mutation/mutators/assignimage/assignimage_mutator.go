@@ -116,7 +116,7 @@ func (m *Mutator) String() string {
 // the given assignImage instance.
 func MutatorForAssignImage(assignImage *mutationsunversioned.AssignImage) (*Mutator, error) {
 	// This is not always set by the kubernetes API server
-	assignImage.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "Assign"})
+	assignImage.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "AssignImage"})
 
 	path, err := parser.Parse(assignImage.Spec.Location)
 	if err != nil {
