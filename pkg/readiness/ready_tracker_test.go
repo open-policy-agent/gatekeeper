@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -309,7 +309,7 @@ func Test_Provider(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := externaldatav1alpha1.ProviderSpec{
+		want := externaldatav1beta1.ProviderSpec{
 			URL:                   "http://demo",
 			Timeout:               1,
 			InsecureTLSSkipVerify: true,

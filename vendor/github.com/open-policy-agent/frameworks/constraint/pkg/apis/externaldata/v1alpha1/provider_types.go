@@ -36,6 +36,7 @@ type ProviderSpec struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:deprecatedversion:warning="externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead."
 
 // Provider is the Schema for the Provider API
 // +k8s:openapi-gen=true

@@ -316,7 +316,9 @@ spec:
     singular: provider
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - deprecated: true
+    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead.
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Provider is the Schema for the Provider API
