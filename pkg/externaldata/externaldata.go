@@ -20,5 +20,5 @@ import (
 var ExternalDataEnabled *bool
 
 func init() {
-	ExternalDataEnabled = flag.Bool("enable-external-data", false, "(alpha) Enable external data feature")
+	ExternalDataEnabled = flag.Bool("enable-external-data", true, "Enable external data feature")
 }

@@ -3,5 +3,6 @@ kind: Provider
 metadata:
   name: dummy-provider
 spec:
-  url: https://dummy-provider.gatekeeper-system:8090/validate
+  url: http://dummy-provider.gatekeeper-system:8090/validate
   timeout: 1
+  insecureTLSSkipVerify: true
