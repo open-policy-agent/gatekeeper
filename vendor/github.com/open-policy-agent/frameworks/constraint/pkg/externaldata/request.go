@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 )
 
 const (
@@ -48,7 +48,7 @@ type Request struct {
 // NewProviderRequest creates a new request for the external data provider.
 func NewProviderRequest(keys []string) *ProviderRequest {
 	return &ProviderRequest{
-		APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
+		APIVersion: "externaldata.gatekeeper.sh/v1beta1",
 		Kind:       "ProviderRequest",
 		Request: Request{
 			Keys: keys,
@@ -57,10 +57,10 @@ func NewProviderRequest(keys []string) *ProviderRequest {
 }
 
 // SendRequestToProvider is a function that sends a request to the external data provider.
-type SendRequestToProvider func(ctx context.Context, provider *v1alpha1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error)
+type SendRequestToProvider func(ctx context.Context, provider *v1beta1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error)
 
 // DefaultSendRequestToProvider is the default function to send the request to the external data provider.
-func DefaultSendRequestToProvider(ctx context.Context, provider *v1alpha1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error) {
+func DefaultSendRequestToProvider(ctx context.Context, provider *v1beta1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error) {
 	externaldataRequest := NewProviderRequest(keys)
 	body, err := json.Marshal(externaldataRequest)
 	if err != nil {
@@ -101,7 +101,7 @@ func DefaultSendRequestToProvider(ctx context.Context, provider *v1alpha1.Provid
 }
 
 // getClient returns a new HTTP client, and set up its TLS configuration if necessary.
-func getClient(provider *v1alpha1.Provider, clientCert *tls.Certificate) (*http.Client, error) {
+func getClient(provider *v1beta1.Provider, clientCert *tls.Certificate) (*http.Client, error) {
 	u, err := url.Parse(provider.Spec.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse provider URL %s: %w", provider.Spec.URL, err)

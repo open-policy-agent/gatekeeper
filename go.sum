@@ -906,8 +906,6 @@ github.com/onsi/gomega v1.19.0 h1:4ieX6qQjPP/BfC3mpsAtIGGlxTWPeA3Inl/7DtXw1tw=
 github.com/onsi/gomega v1.19.0/go.mod h1:LY+I3pBVzYsTBU1AnDwOSxaYi9WoWiqgwooUqq9yPro=
 github.com/open-policy-agent/cert-controller v0.4.0 h1:AQntgNq7fsoHgnoKrOk0lpRyab1na09vibeJCX4YBCs=
 github.com/open-policy-agent/cert-controller v0.4.0/go.mod h1:uOQW+2tMU51vSxy1Yt162oVUTMdqLuotC0aObQxrh6k=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20221207024755-1c9ce4f40b85 h1:alu7r2pWxc2W84jmvwNxB11saNYZ8plwNHPSmMIFSxo=
-github.com/open-policy-agent/frameworks/constraint v0.0.0-20221207024755-1c9ce4f40b85/go.mod h1:/NVKF2zJ/lppUwgCgnrkK9WF/MiY0WcD/z30jSN4nZw=
 github.com/open-policy-agent/opa v0.47.0 h1:d6g0oDNLraIcWl9LXW8cBzRYf2zt7vSbPGEd2+8K3Lg=
 github.com/open-policy-agent/opa v0.47.0/go.mod h1:cM7ngEoEdAIfyu9mOHaVcgLAHYkY6amrYfotm+BSkYQ=
 github.com/opencontainers/go-digest v0.0.0-20170106003457-a6d0ee40d420/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
@@ -1056,6 +1054,8 @@ github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a/go.mod h1:s
 github.com/smartystreets/goconvey v1.6.4/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/soheilhy/cmux v0.1.4/go.mod h1:IM3LyeVVIOuxMH7sFAkER9+bJ4dT7Ms6E4xg4kGIyLM=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
+github.com/sozercan/frameworks/constraint v0.0.0-20221207223710-6bbb1d3df208 h1:qNzgas0lhzumRrutD8rwR88pmtdgqEA4/BCbeL8yBlc=
+github.com/sozercan/frameworks/constraint v0.0.0-20221207223710-6bbb1d3df208/go.mod h1:ABVHc0ds1/c9R+bTNmScNo89/ldwxLPfL0uyXkebulc=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/afero v1.2.2/go.mod h1:9ZxEEn6pIJ8Rxe320qSDBk6AsU0r9pR7Q4OcevTdifk=

@@ -3,7 +3,7 @@ package externaldata
 import (
 	"context"
 
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
@@ -30,7 +30,7 @@ var (
 
 	gvkExternalData = schema.GroupVersionKind{
 		Group:   "externaldata.gatekeeper.sh",
-		Version: "v1alpha1",
+		Version: "v1beta1",
 		Kind:    "Provider",
 	}
 )
@@ -96,7 +96,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Provider
 	return c.Watch(
-		&source.Kind{Type: &externaldatav1alpha1.Provider{}},
+		&source.Kind{Type: &externaldatav1beta1.Provider{}},
 		&handler.EnqueueRequestForObject{})
 }
 
@@ -104,20 +104,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	log.Info("Reconcile", "request", request)
 
 	deleted := false
-	provider := &externaldatav1alpha1.Provider{}
+	provider := &externaldatav1beta1.Provider{}
 	err := r.Get(ctx, request.NamespacedName, provider)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
-		provider = &externaldatav1alpha1.Provider{
+		provider = &externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: request.NamespacedName.Name,
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Provider",
-				APIVersion: "v1alpha1",
+				APIVersion: "v1beta1",
 			},
 		}
 	}
