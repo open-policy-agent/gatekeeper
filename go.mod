@@ -28,8 +28,9 @@ require (
 	github.com/open-policy-agent/cert-controller v0.4.0
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20221006234738-a3d297b3152f
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.13.0
+	github.com/prometheus/client_golang v1.13.1
 	github.com/spf13/cobra v1.5.0
+	github.com/stretchr/testify v1.8.1
 	go.opencensus.io v0.23.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/zap v1.21.0
@@ -39,10 +40,10 @@ require (
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.24.7
+	k8s.io/api v0.24.8
 	k8s.io/apiextensions-apiserver v0.24.6
-	k8s.io/apimachinery v0.24.7
-	k8s.io/client-go v0.24.7
+	k8s.io/apimachinery v0.24.8
+	k8s.io/client-go v0.24.8
 	k8s.io/klog/v2 v2.70.1
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.12.3
@@ -93,6 +94,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/open-policy-agent/opa v0.44.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect

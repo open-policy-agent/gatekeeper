@@ -174,7 +174,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs)
+			resps, err := Test(objs, false)
 			if tc.err != nil {
 				if err == nil {
 					t.Errorf("got nil err, want %v", tc.err)
@@ -193,6 +193,72 @@ func TestTest(t *testing.T) {
 				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// Test_Test_withTrace proves that we can get a Trace populated when we ask for it.
+func Test_Test_withTrace(t *testing.T) {
+	inputs := []string{
+		fixtures.TemplateNeverValidate,
+		fixtures.ConstraintNeverValidate,
+		fixtures.Object,
+	}
+
+	var objs []*unstructured.Unstructured
+	for _, input := range inputs {
+		u, err := readUnstructured([]byte(input))
+		if err != nil {
+			t.Fatalf("readUnstructured for input %q: %v", input, err)
+		}
+		objs = append(objs, u)
+	}
+
+	resps, err := Test(objs, true)
+	if err != nil {
+		t.Errorf("got err '%v', want nil", err)
+	}
+
+	got := resps.Results()
+
+	want := []*GatorResult{
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+	}
+
+	diff := cmp.Diff(want, got, cmpopts.IgnoreFields(
+		GatorResult{},
+		"Metadata",
+		"EnforcementAction",
+		"ViolatingObject",
+		"Trace", // ignore Trace for now, we will assert non nil further down
+	))
+	if diff != "" {
+		t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
+	}
+
+	for _, gotResult := range got {
+		if gotResult.Trace == nil {
+			t.Errorf("did not find a trace when we expected to find one")
+		}
 	}
 }
 

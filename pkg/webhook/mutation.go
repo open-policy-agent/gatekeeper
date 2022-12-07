@@ -88,9 +88,7 @@ func AddMutatingWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	server := mgr.GetWebhookServer()
-	server.TLSMinVersion = *tlsMinVersion
-	server.Register("/v1/mutate", wh)
+	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/mutate", wh)
 
 	return nil
 }

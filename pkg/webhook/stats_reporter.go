@@ -30,6 +30,7 @@ var (
 		stats.UnitSeconds)
 
 	admissionStatusKey = tag.MustNewKey("admission_status")
+	admissionDryRunKey = tag.MustNewKey("admission_dryrun")
 	mutationStatusKey  = tag.MustNewKey("mutation_status")
 )
 
@@ -41,7 +42,7 @@ func init() {
 
 // StatsReporter reports webhook metrics.
 type StatsReporter interface {
-	ReportValidationRequest(ctx context.Context, response requestResponse, d time.Duration) error
+	ReportValidationRequest(ctx context.Context, response requestResponse, isDryRun string, d time.Duration) error
 	ReportMutationRequest(ctx context.Context, response requestResponse, d time.Duration) error
 }
 
@@ -53,19 +54,21 @@ func newStatsReporter() (StatsReporter, error) {
 	return &reporter{}, nil
 }
 
-func (r *reporter) ReportValidationRequest(ctx context.Context, response requestResponse, d time.Duration) error {
-	return r.reportRequest(ctx, response, admissionStatusKey, validationResponseTimeInSecM.M(d.Seconds()))
+func (r *reporter) ReportValidationRequest(ctx context.Context, response requestResponse, isDryRun string, d time.Duration) error {
+	mutators := []tag.Mutator{tag.Insert(admissionStatusKey, string(response)), tag.Insert(admissionDryRunKey, isDryRun)}
+	return r.reportRequest(ctx, mutators, validationResponseTimeInSecM.M(d.Seconds()))
 }
 
 func (r *reporter) ReportMutationRequest(ctx context.Context, response requestResponse, d time.Duration) error {
-	return r.reportRequest(ctx, response, mutationStatusKey, mutationResponseTimeInSecM.M(d.Seconds()))
+	mutators := []tag.Mutator{tag.Insert(mutationStatusKey, string(response))}
+	return r.reportRequest(ctx, mutators, mutationResponseTimeInSecM.M(d.Seconds()))
 }
 
 // Captures req count metric, recording the count and the duration.
-func (r *reporter) reportRequest(ctx context.Context, response requestResponse, statusKey tag.Key, m stats.Measurement) error {
+func (r *reporter) reportRequest(ctx context.Context, mutators []tag.Mutator, m stats.Measurement) error {
 	ctx, err := tag.New(
 		ctx,
-		tag.Insert(statusKey, string(response)),
+		mutators...,
 	)
 	if err != nil {
 		return err
@@ -81,7 +84,7 @@ func register() error {
 			Description: "The number of requests that are routed to validation webhook",
 			Measure:     validationResponseTimeInSecM,
 			Aggregation: view.Count(),
-			TagKeys:     []tag.Key{admissionStatusKey},
+			TagKeys:     []tag.Key{admissionStatusKey, admissionDryRunKey},
 		},
 		{
 			Name:        validationRequestDurationMetricName,

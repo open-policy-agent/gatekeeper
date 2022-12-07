@@ -3428,6 +3428,10 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - gatekeeper-system
   rules:
   - apiGroups:
     - '*'
@@ -3463,6 +3467,10 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - gatekeeper-system
   rules:
   - apiGroups:
     - '*'
@@ -3501,6 +3509,12 @@ webhooks:
   failurePolicy: Fail
   matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - gatekeeper-system
   rules:
   - apiGroups:
     - ""

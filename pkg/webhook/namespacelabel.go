@@ -39,9 +39,7 @@ func AddLabelWebhook(mgr manager.Manager, _ Dependencies) error {
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	server := mgr.GetWebhookServer()
-	server.TLSMinVersion = *tlsMinVersion
-	server.Register("/v1/admitlabel", wh)
+	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admitlabel", wh)
 	return nil
 }
 
