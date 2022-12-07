@@ -188,7 +188,7 @@ func TestTest(t *testing.T) {
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(GatorResult{}, "Metadata", "EnforcementAction", "ViolatingObject"))
+			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(GatorResult{}, "Metadata", "EvaluationMeta", "EnforcementAction", "ViolatingObject"))
 			if diff != "" {
 				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
