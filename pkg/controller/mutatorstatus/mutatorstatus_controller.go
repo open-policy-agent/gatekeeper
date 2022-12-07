@@ -25,6 +25,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -79,8 +80,8 @@ func (a *Adder) Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(
-	mgr manager.Manager,
-	cs *watch.ControllerSwitch,
+		mgr manager.Manager,
+		cs *watch.ControllerSwitch,
 ) reconcile.Reconciler {
 	return &ReconcileMutatorStatus{
 		// Separate reader and writer because manager's default client bypasses the cache for unstructured resources.
@@ -162,6 +163,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
+	err = c.Watch(
+		&source.Kind{Type: &mutationsv1alpha1.AssignImage{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"})),
+	)
+	if err != nil {
+		return err
+	}
 	return c.Watch(
 		&source.Kind{Type: &mutationsv1.ModifySet{}},
 		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "ModifySet"})),
@@ -197,6 +205,20 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	}
 
 	gvk, unpackedRequest, err := util.UnpackRequest(request)
+
+	// TODO rm debug
+	fmt.Printf("Reconcile() gvk: %s\n", gvk)
+	wrongSchema := schema.GroupVersionKind{
+		Group:   "mutations.gatekeeper.sh",
+		Version: "v1",
+		Kind:    "AssignImage",
+	}
+	if gvk == wrongSchema {
+		errStr := fmt.Sprintf("Reconcile got wrong GVK for AssignImage: %s, wanted version to be v1alpha1", gvk)
+		panic(errStr)
+	}
+	// END DEBUG
+
 	if err != nil {
 		// Unrecoverable, do not retry.
 		log.Error(err, "unpacking request", "request", request)
@@ -217,6 +239,9 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
+		// TODO rm debug
+		fmt.Printf("Reconcile problem getting resource, err: %s\n", err)
+		// END DEBUG
 		return reconcile.Result{}, err
 	}
 
