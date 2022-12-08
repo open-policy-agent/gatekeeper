@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
@@ -70,6 +71,14 @@ type Driver struct {
 
 	// clientCertWatcher is a watcher for the TLS certificate used to communicate with providers.
 	clientCertWatcher *certwatcher.CertWatcher
+}
+
+// RegoEvaluationMeta has rego specific metadata from evaluation.
+type RegoEvaluationMeta struct {
+	// TemplateRunTime is the number of milliseconds it took to evaluate all constraints for a template.
+	TemplateRunTime float64 `json:"templateRunTime"`
+	// ConstraintCount indicates how many constraints were evaluated for an underlying rego engine eval call.
+	ConstraintCount uint `json:"constraintCount"`
 }
 
 // AddTemplate adds templ to Driver. Normalizes modules into usable forms for
@@ -238,6 +247,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 	defer d.mtx.RUnlock()
 
 	for kind, kindConstraints := range constraintsByKind {
+		evalStartTime := time.Now()
 		compiler := d.compilers.getCompiler(target, kind)
 		if compiler == nil {
 			// The Template was just removed, so the Driver is in an inconsistent
@@ -254,6 +264,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		}
 
 		resultSet, trace, err := d.eval(ctx, compiler, target, path, parsedInput, opts...)
+		evalEndTime := time.Since(evalStartTime)
 		if err != nil {
 			resultSet = make(rego.ResultSet, 0, len(kindConstraints))
 			for _, constraint := range kindConstraints {
@@ -277,6 +288,13 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		kindResults, err := drivers.ToResults(constraintsMap, resultSet)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		for _, result := range kindResults {
+			result.EvaluationMeta = RegoEvaluationMeta{
+				TemplateRunTime: float64(evalEndTime.Nanoseconds()) / 1000000,
+				ConstraintCount: uint(len(kindResults)),
+			}
 		}
 
 		results = append(results, kindResults...)

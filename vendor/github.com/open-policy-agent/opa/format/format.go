@@ -316,12 +316,12 @@ func (w *writer) writeRule(rule *ast.Rule, isElse, useContainsKW, useIf bool, co
 	// this excludes partial sets UNLESS `contains` is used
 	partialSetException := useContainsKW || rule.Head.Value != nil
 
-	if (len(rule.Body) == 0 || isExpandedConst) && !isElse {
+	if len(rule.Body) == 0 || isExpandedConst {
 		w.endLine()
 		return comments
 	}
 
-	if useIf && partialSetException && !isElse {
+	if useIf && partialSetException {
 		w.write(" if")
 		if len(rule.Body) == 1 {
 			if rule.Body[0].Location.Row == rule.Head.Location.Row {
@@ -406,7 +406,8 @@ func (w *writer) writeElse(rule *ast.Rule, useContainsKW, useIf bool, comments [
 		w.startLine()
 	}
 
-	rule.Else.Head.Name = "else"
+	rule.Else.Head.Name = "else" // NOTE(sr): whaaat
+	rule.Else.Head.Reference = ast.Ref{ast.VarTerm("else")}
 	rule.Else.Head.Args = nil
 	comments = w.insertComments(comments, rule.Else.Head.Location)
 
@@ -427,7 +428,12 @@ func (w *writer) writeElse(rule *ast.Rule, useContainsKW, useIf bool, comments [
 }
 
 func (w *writer) writeHead(head *ast.Head, isDefault, isExpandedConst, useContainsKW, useIf bool, comments []*ast.Comment) []*ast.Comment {
-	w.write(head.Name.String())
+	ref := head.Ref()
+	if head.Key != nil && head.Value == nil {
+		ref = ref.GroundPrefix()
+	}
+	w.write(ref.String())
+
 	if len(head.Args) > 0 {
 		w.write("(")
 		var args []interface{}
@@ -441,7 +447,7 @@ func (w *writer) writeHead(head *ast.Head, isDefault, isExpandedConst, useContai
 		if useContainsKW && head.Value == nil {
 			w.write(" contains ")
 			comments = w.writeTerm(head.Key, comments)
-		} else { // no `if` for p[x] notation
+		} else if head.Value == nil { // no `if` for p[x] notation
 			w.write("[")
 			comments = w.writeTerm(head.Key, comments)
 			w.write("]")
@@ -471,10 +477,19 @@ func (w *writer) insertComments(comments []*ast.Comment, loc *ast.Location) []*a
 
 func (w *writer) writeBody(body ast.Body, comments []*ast.Comment) []*ast.Comment {
 	comments = w.insertComments(comments, body.Loc())
-	offset := 0
 	for i, expr := range body {
-		if i > 0 && expr.Location.Row-body[i-1].Location.Row-offset > 1 {
-			w.blankLine()
+		// Insert a blank line in before the expression if it was not right
+		// after the previous expression.
+		if i > 0 {
+			lastRow := body[i-1].Location.Row
+			for _, c := range body[i-1].Location.Text {
+				if c == '\n' {
+					lastRow++
+				}
+			}
+			if expr.Location.Row > lastRow+1 {
+				w.blankLine()
+			}
 		}
 		w.startLine()
 
@@ -854,7 +869,7 @@ func (w *writer) writeComprehension(open, close byte, term *ast.Term, body ast.B
 }
 
 func (w *writer) writeComprehensionBody(open, close byte, body ast.Body, term, compr *ast.Location, comments []*ast.Comment) []*ast.Comment {
-	var exprs []interface{}
+	exprs := make([]interface{}, 0, len(body))
 	for _, expr := range body {
 		exprs = append(exprs, expr)
 	}
@@ -1004,7 +1019,7 @@ func groupIterable(elements []interface{}, last *ast.Location) [][]interface{} {
 	})
 
 	var lines [][]interface{}
-	var cur []interface{}
+	cur := make([]interface{}, 0, len(elements))
 	for i, t := range elements {
 		elem := t
 		loc := getLoc(elem)
