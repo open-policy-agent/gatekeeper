@@ -283,6 +283,8 @@ __namespace_exclusion_test() {
 $(cat test/externaldata/dummy-provider/manifest/provider.yaml)
   caBundle: $(cat test/externaldata/dummy-provider/certs/ca.crt | base64 | tr -d '\n')
 EOF
+  # substitute namespace in the provider YAML for Helm custom namespace test
+  sed -i "s/gatekeeper-system/${GATEKEEPER_NAMESPACE}/g" ${tmp}/provider.yaml
 
   run kubectl apply -f ${tmp}/provider.yaml
   assert_success
