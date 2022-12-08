@@ -13,6 +13,7 @@ Mutation policies are defined using mutation-specific CRDs, called __mutators__:
 - AssignMetadata - defines changes to the metadata section of a resource
 - Assign - any change outside the metadata section
 - ModifySet - adds or removes entries from a list, such as the arguments to a container
+- AssignImage - defines changes to the components of an image string
 
 The rules for mutating metadata are more strict than for mutating the rest of the resource. The differences are described in more detail below.
 
@@ -214,6 +215,44 @@ spec:
 - `operation` can be `merge` to insert values into the list if missing, or `prune` to remove values from the list. `merge` is default.
 
 
+### AssignImage
+
+AssignImage is a mutator specifically for changing the components of an image
+string. Suppose you have an image like `my.registry.io:2000/repo/app:latest`.
+`my.registry.io:2000` would be the domain, `repo/app` would be the path, and
+`:latest` would be the tag. The domain, path, and tag of an image can be changed
+separately or in conjunction.
+
+For example, to change the whole image to `my.registry.io/repo/app@sha256:abcde67890123456789abc345678901a`:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: assign-container-image
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "my.registry.io"
+    assignPath: "repo/app"
+    assignTag: "@sha256:abcde67890123456789abc345678901a"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
+```
+
+Only one of `[assignDomain, assignPath, assignTag]` is required. Note that `assignTag`
+must start with `:` or `@`. Also, if `assignPath` is set to a value which could potentially
+be interpreted as a domain, such as `my.repo.lib/app`, then `assignDomain` must
+also be specified.
+
 ## Examples
 
 ### Adding an annotation
@@ -352,6 +391,29 @@ spec:
       value:
         nameservers:
         - 1.2.3.4
+```
+
+### Setting a Pod's container image to use a specific digest:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: add-nginx-digest
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:nginx].image"
+  parameters:
+    assignTag: "@sha256:abcde67890123456789abc345678901a"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
 ```
 
 ### External Data
