@@ -128,7 +128,7 @@ func MutatorForAssignImage(assignImage *mutationsunversioned.AssignImage) (*Muta
 	}
 
 	if hasListTerminal(path) {
-		return nil, fmt.Errorf("assignImage %s can't change a list without a key", assignImage.GetName())
+		return nil, fmt.Errorf("assignImage %s cannot mutate list-type fields", assignImage.GetName())
 	}
 
 	err = core.CheckKeyNotChanged(path)

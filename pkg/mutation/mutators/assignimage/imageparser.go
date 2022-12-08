@@ -6,18 +6,17 @@ import (
 	"strings"
 )
 
-type image struct {
-	domain string
-	path   string
-	tag    string
-}
-
 var (
-	// domainRegexp defines a schema for a domain component. Primarily, this is to
-	// avoid the possibility of injecting `/` tokens, which could cause part of
-	// the domain component to "leak" over to the location component, ultimately
-	// causing non convergence.
-	domainRegexp = regexp.MustCompile(`^\w[\w.\-_]*(:\d+)?$`)
+	// We perform validation on the components of an image string to ensure that
+	// the user cannot define a mutator which does not converge. This would
+	// otherwise be possible by injecting tokens we use to split an image string,
+	// [@:/], into components that would cause that component to be split the next
+	// time the mutation is applied and "leak" to its neighbor. Some validation is
+	// done as regex on individual components, and other validation which looks at
+	// multiple components together is done in code.
+
+	//domainRegexp defines a schema for a domain component.
+	domainRegexp = regexp.MustCompile(`(^\w[\w\-_]*\.[\w\-_\.]*[\w](:\d+)?$)|(^localhost(:\d+)?$)`)
 
 	// pathRegexp defines a schema for a location component. It follows the convention
 	// specified in the docker distribution reference. The regex  restricts
@@ -29,6 +28,12 @@ var (
 	// tagRegexp defines a schema for a tag component. It must start with `:` or `@`.
 	tagRegexp = regexp.MustCompile(`(^:[\w][\w.-]{0,127}$)|(^@[A-Za-z][A-Za-z0-9]*([-_+.][A-Za-z][A-Za-z0-9]*)*[:][0-9A-Fa-f]{32,}$)`)
 )
+
+type image struct {
+	domain string
+	path   string
+	tag    string
+}
 
 func mutateImage(domain, path, tag, mutableImgRef string) string {
 	oldImg := newImage(mutableImgRef)
@@ -87,26 +92,26 @@ func validateImageParts(domain, path, tag string) error {
 		return fmt.Errorf("at least one of [assignDomain, assignPath, assignTag] must be set")
 	}
 	if domain != "" && !domainRegexp.MatchString(domain) {
-		return fmt.Errorf("assignDomain %q does not match pattern %q", domain, domainRegexp.String())
+		return fmt.Errorf("assignDomain %q does not match pattern %s", domain, domainRegexp.String())
 	}
 	// match the whole string for path (anchoring with `$` is tricky here)
 	if path != "" && path != pathRegexp.FindString(path) {
-		return fmt.Errorf("assignPath %q does not match pattern %q", path, pathRegexp.String())
+		return fmt.Errorf("assignPath %q does not match pattern %s", path, pathRegexp.String())
 	}
 	if tag != "" && !tagRegexp.MatchString(tag) {
-		return fmt.Errorf("assignTag %q does not match pattern %q", tag, tagRegexp.String())
+		return fmt.Errorf("assignTag %q does not match pattern %s", tag, tagRegexp.String())
 	}
 
 	// Check if the path looks like a domain string, and the domain is not set.
 	// This prevents part of the path field from "leaking" to the domain, causing
-	// nonconvergent behavior.
+	// non convergent behavior.
 	// For example, suppose: domain="", path="gcr.io/repo", tag=""
 	// Suppose no value is currently set on the mutable, so the result is
 	// just "gcr.io/repo". When this value mutated again, "gcr.io" is parsed into
-	// the domain component, so the result would be "gcr.io/gcr.io/repo".
+	// the domain component, so the result would be "gcr.io/gcr.io/repo" and so on.
 	if domain == "" {
 		if d, _ := splitDomain(path); d != "" {
-			return fmt.Errorf("assignDomain must be set if assignPath %q can be interpretted as part of a domain", path)
+			return fmt.Errorf("assignDomain must be set if the first part of assignPath %q can be interpretted as part of a domain", path)
 		}
 	}
 

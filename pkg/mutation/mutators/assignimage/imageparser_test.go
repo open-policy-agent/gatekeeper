@@ -196,8 +196,39 @@ func TestValidateImageParts(t *testing.T) {
 			domain: "a.b.c:123",
 		},
 		{
-			name:   "valid domain with _",
-			domain: "a_b_c:123",
+			name:    "invalid domain no .",
+			domain:  "foobar",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain leading .",
+			domain:  ".foobar",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain trailing .",
+			domain:  "foobar.",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain . before port",
+			domain:  "foobar.:5000",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain / before port",
+			domain:  "foobar/:5000",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain leading and trailing .",
+			domain:  ".foobar.",
+			wantErr: true,
+		},
+		{
+			name:    "invalid domain with _ and port but no .",
+			domain:  "a_b_c:123",
+			wantErr: true,
 		},
 		{
 			name:    "invalid domain with leading /",
@@ -342,6 +373,26 @@ func TestValidateImageParts(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "invalid tag trailing :",
+			tag:     ":latest:",
+			wantErr: true,
+		},
+		{
+			name:    "invalid tag trailing @",
+			tag:     ":latest@",
+			wantErr: true,
+		},
+		{
+			name:    "invalid tag : inside",
+			tag:     ":lat:est",
+			wantErr: true,
+		},
+		{
+			name:    "invalid tag @ inside",
+			tag:     "@sha256:12345678901234567890123456789012@sha256:12345678901234567890123456789012",
+			wantErr: true,
+		},
+		{
 			name:    "invalid tag double :",
 			tag:     "::latest",
 			wantErr: true,
@@ -362,10 +413,10 @@ func TestValidateImageParts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateImageParts(tc.domain, tc.path, tc.tag)
 			if !tc.wantErr && err != nil {
-				t.Errorf("did not want error but got: %v", err)
+				t.Errorf("(domain=%s, path=%s, tag=%s) did not want error but got: %v", tc.domain, tc.path, tc.tag, err)
 			}
 			if tc.wantErr && err == nil {
-				t.Error("wanted error but got nil")
+				t.Errorf("(domain=%s, path=%s, tag=%s) wanted error but got nil", tc.domain, tc.path, tc.tag)
 			}
 		})
 	}
