@@ -15,7 +15,7 @@ var (
 	// done as regex on individual components, and other validation which looks at
 	// multiple components together is done in code.
 
-	//domainRegexp defines a schema for a domain component.
+	// domainRegexp defines a schema for a domain component.
 	domainRegexp = regexp.MustCompile(`(^\w[\w\-_]*\.[\w\-_\.]*[\w](:\d+)?$)|(^localhost(:\d+)?$)`)
 
 	// pathRegexp defines a schema for a location component. It follows the convention
