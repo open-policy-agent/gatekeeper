@@ -286,9 +286,9 @@ EOF
 
   run kubectl apply -f ${tmp}/provider.yaml
   assert_success
-  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml
+  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
-  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml
+  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n gatekeeper-system"
 
