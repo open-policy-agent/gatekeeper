@@ -3,7 +3,7 @@ id: gator
 title: The gator CLI
 ---
 
-`Feature State`: Gatekeeper version v3.7+ (alpha)
+`Feature State`: Gatekeeper version v3.11+ (beta)
 
 The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
 Constraints in a local environment.
