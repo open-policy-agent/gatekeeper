@@ -222,6 +222,17 @@ func TestMutate(t *testing.T) {
 			fn:  podTest("myreg.io//not.good:ABC123_//lib.com.repo//localhost@blah101"),
 		},
 		{
+			name: "mutate path and tag colon in imageref's domain still converges",
+			cfg: &aiTestConfig{
+				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				location: `spec.containers[name:foo].image`,
+				path:     "repo/app",
+				tag:      ":latest",
+			},
+			obj: newPod("a.b.c:/not.good:ABC123_//lib.com.repo//localhost@blah101", "foo"),
+			fn:  podTest("a.b.c:/repo/app:latest"),
+		},
+		{
 			name: "mutate path to domain-like string with domain set",
 			cfg: &aiTestConfig{
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
