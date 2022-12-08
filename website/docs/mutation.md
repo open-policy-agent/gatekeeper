@@ -214,7 +214,6 @@ spec:
 - `spec.parameters.values.fromList` holds the list of values that will be added or removed.
 - `operation` can be `merge` to insert values into the list if missing, or `prune` to remove values from the list. `merge` is default.
 
-
 ### AssignImage
 
 AssignImage is a mutator specifically for changing the components of an image
