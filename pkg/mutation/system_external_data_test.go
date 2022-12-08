@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -112,7 +112,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "when placeholder is part of a map[string]interface{}",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent: true,
@@ -143,7 +143,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "when placeholder is part of a []interface{}",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent: true,
@@ -182,7 +182,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "system error",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent:  true,
@@ -208,7 +208,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "error when sending request",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return nil, http.StatusInternalServerError, errors.New("error")
 				},
 			},
@@ -229,7 +229,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "failure policy fail",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent: true,
@@ -260,7 +260,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "failure policy use default",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent: true,
@@ -299,7 +299,7 @@ func TestSystem_resolvePlaceholders(t *testing.T) {
 			name: "failure policy ignore",
 			fields: fields{
 				providerCache: fakes.ExternalDataProviderCache,
-				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldatav1beta1.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
+				sendRequestToExternalDataProvider: func(ctx context.Context, provider *externaldataUnversioned.Provider, keys []string, clientCert *tls.Certificate) (*externaldata.ProviderResponse, int, error) {
 					return &externaldata.ProviderResponse{
 						Response: externaldata.Response{
 							Idempotent: true,

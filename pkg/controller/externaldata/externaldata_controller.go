@@ -3,6 +3,7 @@ package externaldata
 import (
 	"context"
 
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -14,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,11 +76,18 @@ type Reconciler struct {
 	opa           *constraintclient.Client
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
+	scheme        *runtime.Scheme
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager, opa *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
-	r := &Reconciler{opa: opa, providerCache: providerCache, Client: mgr.GetClient(), tracker: tracker}
+	r := &Reconciler{
+		opa:           opa,
+		providerCache: providerCache,
+		Client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		tracker:       tracker,
+	}
 	return r
 }
 
@@ -125,8 +134,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	deleted = deleted || !provider.GetDeletionTimestamp().IsZero()
 	tracker := r.tracker.For(gvkExternalData)
 
+	unversionedProvider := &externaldataUnversioned.Provider{}
+	if err := r.scheme.Convert(provider, unversionedProvider, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{}, err
+	}
+
 	if !deleted {
-		if err := r.providerCache.Upsert(provider); err != nil {
+		if err := r.providerCache.Upsert(unversionedProvider); err != nil {
 			log.Error(err, "Upsert failed", "resource", request.NamespacedName)
 			tracker.TryCancelExpect(provider)
 			return reconcile.Result{}, err

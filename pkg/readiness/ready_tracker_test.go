@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -283,7 +283,11 @@ func Test_Provider(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), providerCache); err != nil {
+	if err := setupController(mgr,
+		wm,
+		opaClient,
+		mutation.NewSystem(mutation.SystemOpts{}),
+		providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -303,7 +307,7 @@ func Test_Provider(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := externaldatav1beta1.ProviderSpec{
+		want := externaldataUnversioned.ProviderSpec{
 			URL:                   "http://demo",
 			Timeout:               1,
 			InsecureTLSSkipVerify: true,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -130,7 +131,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := externaldatav1beta1.ProviderSpec{
+		want := externaldataUnversioned.ProviderSpec{
 			URL:                   "http://my-provider:8080",
 			Timeout:               10,
 			InsecureTLSSkipVerify: true,
@@ -155,7 +156,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		wantSpec := externaldatav1beta1.ProviderSpec{
+		wantSpec := externaldataUnversioned.ProviderSpec{
 			URL:                   "http://my-provider:8080",
 			Timeout:               20,
 			InsecureTLSSkipVerify: true,

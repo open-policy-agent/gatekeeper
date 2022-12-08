@@ -18,7 +18,7 @@ limitations under the License.
 // Package v1alpha1 contains API Schema definitions for the externaldata v1alpha1 API group
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1
+// +k8s:conversion-gen=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=externaldata.gatekeeper.sh
 package v1alpha1

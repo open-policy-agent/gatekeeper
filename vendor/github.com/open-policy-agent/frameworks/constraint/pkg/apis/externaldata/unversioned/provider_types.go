@@ -13,9 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package unversioned
 
 import (
+	"reflect"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,9 +37,8 @@ type ProviderSpec struct {
 // +genclient
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +kubebuilder:resource:scope=Cluster
-// +kubebuilder:storageversion
-// +k8s:conversion-gen-external-types=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata
+// +kubebuilder:skip
+
 // Provider is the Schema for the providers API
 // +k8s:openapi-gen=true
 type Provider struct {
@@ -59,6 +60,6 @@ type ProviderList struct {
 	Items []Provider `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&Provider{}, &ProviderList{})
+func (p *Provider) SemanticEqual(other *Provider) bool {
+	return reflect.DeepEqual(p.Spec, other.Spec)
 }

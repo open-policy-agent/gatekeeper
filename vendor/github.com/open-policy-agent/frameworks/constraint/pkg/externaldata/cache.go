@@ -8,21 +8,21 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 )
 
 type ProviderCache struct {
-	cache map[string]v1beta1.Provider
+	cache map[string]unversioned.Provider
 	mux   sync.RWMutex
 }
 
 func NewCache() *ProviderCache {
 	return &ProviderCache{
-		cache: make(map[string]v1beta1.Provider),
+		cache: make(map[string]unversioned.Provider),
 	}
 }
 
-func (c *ProviderCache) Get(key string) (v1beta1.Provider, error) {
+func (c *ProviderCache) Get(key string) (unversioned.Provider, error) {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
 
@@ -30,10 +30,10 @@ func (c *ProviderCache) Get(key string) (v1beta1.Provider, error) {
 		dc := *v.DeepCopy()
 		return dc, nil
 	}
-	return v1beta1.Provider{}, fmt.Errorf("key is not found in provider cache")
+	return unversioned.Provider{}, fmt.Errorf("key is not found in provider cache")
 }
 
-func (c *ProviderCache) Upsert(provider *v1beta1.Provider) error {
+func (c *ProviderCache) Upsert(provider *unversioned.Provider) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -73,7 +73,7 @@ func isValidTimeout(timeout int) bool {
 	return timeout >= 0
 }
 
-func isValidCABundle(provider *v1beta1.Provider) error {
+func isValidCABundle(provider *unversioned.Provider) error {
 	// verify attempts to parse the caBundle as a PEM encoded certificate
 	// to make sure it is valid before adding it to the cache
 	verify := func(caBundle string) error {
