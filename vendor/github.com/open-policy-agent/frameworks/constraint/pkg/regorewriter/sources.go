@@ -1,7 +1,6 @@
 package regorewriter
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -103,7 +102,7 @@ func (s *Sources) Write() error {
 				return err
 			}
 			glog.Infof("Writing %s", path)
-			if err := ioutil.WriteFile(path, content, 0o600); err != nil {
+			if err := os.WriteFile(path, content, 0o600); err != nil {
 				return err
 			}
 		}
