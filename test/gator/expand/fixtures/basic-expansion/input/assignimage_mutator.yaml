@@ -9,10 +9,10 @@ spec:
     versions: [ "v1" ]
   location: "spec.containers[name:*].image"
   parameters:
-    assignTag: "latest"
+    assignTag: ":latest"
   match:
     source: "All"
     scope: Namespaced
     kinds:
     - apiGroups: [ "*" ]
-      kinds: [ "Pod"
+      kinds: [ "Pod" ]
