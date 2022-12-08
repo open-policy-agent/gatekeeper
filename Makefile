@@ -178,6 +178,7 @@ e2e-helm-deploy: e2e-helm-install
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
 		--set disabledBuiltins={http.send} \
+		--set externaldataEnabled=false \
 		--set logMutations=true \
 		--set mutationAnnotations=true;\
 
