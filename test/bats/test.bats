@@ -290,9 +290,10 @@ EOF
   assert_success
   kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n gatekeeper-system"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n ${GATEKEEPER_NAMESPACE}"
 
   # validation test
+  echo '# external data - validation test' >&3
   kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
@@ -311,6 +312,7 @@ EOF
   assert_success
 
   # mutation test
+  echo '# external data - mutation test' >&3
   run kubectl apply -f test/externaldata/dummy-provider/mutation/valid.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata annotate-owner"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign a-sidecar-injection"
