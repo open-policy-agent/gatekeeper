@@ -5,7 +5,7 @@ go 1.18
 // Prevent otel dependencies from getting out of sync.
 replace (
 	// TODO remove this
-	github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20221208200210-50804f458e77
+	github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20221209213418-5318d135016f
 
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.20.0
 	go.opentelemetry.io/otel => go.opentelemetry.io/otel v0.20.0

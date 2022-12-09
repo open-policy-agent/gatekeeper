@@ -130,9 +130,8 @@ func makeProvider(name string) *externaldatav1beta1.Provider {
 			Name: name,
 		},
 		Spec: externaldatav1beta1.ProviderSpec{
-			URL:                   "http://demo",
-			Timeout:               1,
-			InsecureTLSSkipVerify: true,
+			URL:     "http://demo",
+			Timeout: 1,
 		},
 	}
 }

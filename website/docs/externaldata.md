@@ -69,7 +69,6 @@ metadata:
 spec:
   url: http://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., http://my-provider.my-namespace:8090/validate)
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
-  insecureTLSSkipVerify: true # need to enable this if the provider uses HTTP so that Gatekeeper can skip TLS verification.
 ```
 
 #### `ProviderRequest`

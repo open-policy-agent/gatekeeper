@@ -3,6 +3,7 @@ package fakes
 import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -20,9 +21,9 @@ func init() {
 			Name: ExternalDataProviderName,
 		},
 		Spec: externaldataUnversioned.ProviderSpec{
-			URL:                   "http://localhost:8080/validate",
-			Timeout:               1,
-			InsecureTLSSkipVerify: true,
+			URL:      "https://localhost:8080/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
 		},
 	})
 }

@@ -28,15 +28,12 @@ type ProviderSpec struct {
 	// CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format.
 	// It is used to verify the signature of the provider's certificate.
 	CABundle string `json:"caBundle,omitempty"`
-	// InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
-	InsecureTLSSkipVerify bool `json:"insecureTLSSkipVerify,omitempty"`
 }
 
 // +genclient
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:storageversion
 // +k8s:conversion-gen-external-types=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata
 // Provider is the Schema for the providers API
 // +k8s:openapi-gen=true

@@ -119,7 +119,6 @@ func autoConvert_v1beta1_ProviderSpec_To_unversioned_ProviderSpec(in *ProviderSp
 	out.URL = in.URL
 	out.Timeout = in.Timeout
 	out.CABundle = in.CABundle
-	out.InsecureTLSSkipVerify = in.InsecureTLSSkipVerify
 	return nil
 }
 
@@ -132,7 +131,6 @@ func autoConvert_unversioned_ProviderSpec_To_v1beta1_ProviderSpec(in *unversione
 	out.URL = in.URL
 	out.Timeout = in.Timeout
 	out.CABundle = in.CABundle
-	out.InsecureTLSSkipVerify = in.InsecureTLSSkipVerify
 	return nil
 }
 

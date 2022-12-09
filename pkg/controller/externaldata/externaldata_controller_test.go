@@ -16,6 +16,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -67,9 +68,9 @@ func TestReconcile(t *testing.T) {
 			Name: "my-provider",
 		},
 		Spec: externaldatav1beta1.ProviderSpec{
-			URL:                   "http://my-provider:8080",
-			Timeout:               10,
-			InsecureTLSSkipVerify: true,
+			URL:      "https://my-provider:8080",
+			Timeout:  10,
+			CABundle: util.ValidCABundle,
 		},
 	}
 
@@ -132,9 +133,9 @@ func TestReconcile(t *testing.T) {
 		}
 
 		want := externaldataUnversioned.ProviderSpec{
-			URL:                   "http://my-provider:8080",
-			Timeout:               10,
-			InsecureTLSSkipVerify: true,
+			URL:      "https://my-provider:8080",
+			Timeout:  10,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(want, entry.Spec); diff != "" {
 			t.Fatal(diff)
@@ -157,9 +158,9 @@ func TestReconcile(t *testing.T) {
 		}
 
 		wantSpec := externaldataUnversioned.ProviderSpec{
-			URL:                   "http://my-provider:8080",
-			Timeout:               20,
-			InsecureTLSSkipVerify: true,
+			URL:      "https://my-provider:8080",
+			Timeout:  20,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(wantSpec, entry.Spec); diff != "" {
 			t.Fatal(diff)

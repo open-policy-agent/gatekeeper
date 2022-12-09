@@ -37,9 +37,6 @@ spec:
               caBundle:
                 description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
                 type: string
-              insecureTLSSkipVerify:
-                description: InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
-                type: boolean
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
@@ -49,7 +46,7 @@ spec:
             type: object
         type: object
     served: true
-    storage: false
+    storage: true
   - name: v1beta1
     schema:
       openAPIV3Schema:
@@ -69,9 +66,6 @@ spec:
               caBundle:
                 description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
                 type: string
-              insecureTLSSkipVerify:
-                description: InsecureTLSSkipVerify skips the verification of Provider's certificate if enabled.
-                type: boolean
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
@@ -81,4 +75,4 @@ spec:
             type: object
         type: object
     served: true
-    storage: true
+    storage: false

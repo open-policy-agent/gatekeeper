@@ -13,6 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1beta1 contains API Schema definitions for the externaldata v1beta1 API group
+// Package unversioned contains API Schema definitions for the externaldata unversioned API group
 // +k8s:deepcopy-gen=package
 package unversioned

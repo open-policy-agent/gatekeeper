@@ -37,6 +37,7 @@ import (
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -308,9 +309,9 @@ func Test_Provider(t *testing.T) {
 		}
 
 		want := externaldataUnversioned.ProviderSpec{
-			URL:                   "http://demo",
-			Timeout:               1,
-			InsecureTLSSkipVerify: true,
+			URL:      "https://demo",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(want, instance.Spec); diff != "" {
 			t.Fatal(diff)
