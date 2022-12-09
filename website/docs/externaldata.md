@@ -55,20 +55,21 @@ The following external data providers are samples and are not supported/maintain
 - [tag-to-digest-provider](https://github.com/sozercan/tagToDigest-provider)
 - [aad-provider](https://github.com/sozercan/aad-provider)
 
-### API (v1alpha1)
+### API (v1beta1)
 
 #### `Provider`
 
 Provider resource defines the provider and the configuration for it.
 
 ```yaml
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
+apiVersion: externaldata.gatekeeper.sh/v1beta1
 kind: Provider
 metadata:
   name: my-provider
 spec:
-  url: http://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., http://my-provider.my-namespace:8090/validate)
+  url: https://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., https://my-provider.my-namespace:8090/validate)
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
+  caBundle: <caBundle> # CA bundle to use for TLS verification.
 ```
 
 #### `ProviderRequest`
@@ -212,7 +213,7 @@ spec:
 
 ```json
 {
-  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "apiVersion": "externaldata.gatekeeper.sh/v1beta1",
   "kind": "ProviderResponse",
   "response": {
     "idempotent": true,
@@ -270,7 +271,7 @@ spec:
 
 ```json
 {
-  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "apiVersion": "externaldata.gatekeeper.sh/v1beta1",
   "kind": "ProviderResponse",
   "response": {
     "idempotent": true,
@@ -313,16 +314,21 @@ There are several limitations when using external data with the mutating webhook
 
 Since external data providers are in-cluster HTTP servers backed by Kubernetes services, communication is not encrypted by default. This can potentially lead to security issues such as request eavesdropping, tampering, and man-in-the-middle attack.
 
-To further harden the security posture of the external data feature, starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers. In this section, we will describe the steps required to configure them.
+To further harden the security posture of the external data feature,
+
+- starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers
+- starting with Gatekeeper v3.11.0, TLS or mutual TLS (mTLS) via HTTPS protocol are _required_ between Gatekeeper and external data providers
+
+In this section, we will describe the steps required to configure them.
 
 ### Prerequisites
 
-- A Gatekeeper deployment **v3.9.0+**.
+- A Gatekeeper deployment with version >= v3.9.0.
 - The certificate of your certificate authority (CA) in PEM format.
 - The certificate of your external data provider in PEM format, signed by the CA above.
 - The private key of the external data provider in PEM format.
 
-### (Optional) How to generate a self-signed CA and a keypair for the external data provider
+### How to generate a self-signed CA and a keypair for the external data provider
 
 In this section, we will describe how to generate a self-signed CA and a keypair using `openssl`.
 
@@ -377,7 +383,7 @@ cat ca.crt | base64 | tr -d '\n'
 With the encoded CA certificate, you can define the Provider spec as follows:
 
 ```yaml
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
+apiVersion: externaldata.gatekeeper.sh/v1beta1
 kind: Provider
 metadata:
   name: my-provider
