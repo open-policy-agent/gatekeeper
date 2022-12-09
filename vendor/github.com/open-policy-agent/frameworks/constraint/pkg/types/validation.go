@@ -23,6 +23,9 @@ type Result struct {
 
 	// The enforcement action of the constraint
 	EnforcementAction string `json:"enforcementAction,omitempty"`
+
+	// EvaluationMeta has metadata for a Result's evaluation.
+	EvaluationMeta interface{} `json:"evaluationMeta,omitempty"`
 }
 
 // Response is a collection of Constraint violations for a particular Target.

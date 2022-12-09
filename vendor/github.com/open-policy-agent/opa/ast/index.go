@@ -32,7 +32,7 @@ type RuleIndex interface {
 
 // IndexResult contains the result of an index lookup.
 type IndexResult struct {
-	Kind      DocKind
+	Kind      RuleKind
 	Rules     []*Rule
 	Else      map[*Rule][]*Rule
 	Default   *Rule
@@ -40,7 +40,7 @@ type IndexResult struct {
 }
 
 // NewIndexResult returns a new IndexResult object.
-func NewIndexResult(kind DocKind) *IndexResult {
+func NewIndexResult(kind RuleKind) *IndexResult {
 	return &IndexResult{
 		Kind: kind,
 		Else: map[*Rule][]*Rule{},
@@ -57,7 +57,7 @@ type baseDocEqIndex struct {
 	isVirtual    func(Ref) bool
 	root         *trieNode
 	defaultRule  *Rule
-	kind         DocKind
+	kind         RuleKind
 }
 
 func newBaseDocEqIndex(isVirtual func(Ref) bool) *baseDocEqIndex {
@@ -73,7 +73,7 @@ func (i *baseDocEqIndex) Build(rules []*Rule) bool {
 		return false
 	}
 
-	i.kind = rules[0].Head.DocKind()
+	i.kind = rules[0].Head.RuleKind()
 	indices := newrefindices(i.isVirtual)
 
 	// build indices for each rule.
@@ -246,15 +246,20 @@ func (i *refindices) Update(rule *Rule, expr *Expr) {
 
 	op := expr.Operator()
 
-	if op.Equal(Equality.Ref()) {
+	switch {
+	case op.Equal(Equality.Ref()):
 		i.updateEq(rule, expr)
-	} else if op.Equal(Equal.Ref()) && len(expr.Operands()) == 2 {
+
+	case op.Equal(Equal.Ref()) && len(expr.Operands()) == 2:
 		// NOTE(tsandall): if equal() is called with more than two arguments the
 		// output value is being captured in which case the indexer cannot
 		// exclude the rule if the equal() call would return false (because the
 		// false value must still be produced.)
 		i.updateEq(rule, expr)
-	} else if op.Equal(GlobMatch.Ref()) {
+
+	case op.Equal(GlobMatch.Ref()) && len(expr.Operands()) == 3:
+		// NOTE(sr): Same as with equal() above -- 4 operands means the output
+		// of `glob.match` is captured and the rule can thus not be excluded.
 		i.updateGlobMatch(rule, expr)
 	}
 }
