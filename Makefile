@@ -190,7 +190,10 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set disabledBuiltins={http.send};\
+		--set disabledBuiltins={http.send} \
+		--set enableExternalData=true \
+		--set logMutations=true \
+		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade:
 	./helm_migrate.sh

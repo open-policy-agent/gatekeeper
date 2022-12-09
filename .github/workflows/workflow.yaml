@@ -179,12 +179,14 @@ jobs:
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+          kubectl get secrets -n ${{ matrix.GATEKEEPER_NAMESPACE }} gatekeeper-webhook-server-cert -o yaml
 
       - name: Save logs
         if: ${{ always() }}
         run: |
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
+          kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
