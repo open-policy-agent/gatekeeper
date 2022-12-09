@@ -15,7 +15,7 @@ VERSION := v3.11.0-beta.0
 
 KIND_VERSION ?= 0.15.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.25.0
+KUBERNETES_VERSION ?= 1.26.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.2.1
 BATS_TESTS_FILE ?= test/bats/test.bats
@@ -48,7 +48,7 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VER
 	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME) \
 	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
 	-X main.opaVersion=$(OPA_VERSION)"
-	
+
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \nkind: Deployment\
 \nmetadata:\
