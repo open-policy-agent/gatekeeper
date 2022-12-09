@@ -13,7 +13,7 @@ ENABLE_GENERATOR_EXPANSION ?= false
 
 VERSION := v3.11.0-beta.0
 
-KIND_VERSION ?= 0.15.0
+KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
 KUSTOMIZE_VERSION ?= 3.8.9
