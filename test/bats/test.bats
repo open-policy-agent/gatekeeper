@@ -286,8 +286,6 @@ EOF
   # substitute namespace in the provider YAML for Helm custom namespace test
   sed -i "s/gatekeeper-system/${GATEKEEPER_NAMESPACE}/g" ${tmp}/provider.yaml
 
-  echo $(cat ${tmp}/provider.yaml) >&3
-
   run kubectl apply -f ${tmp}/provider.yaml
   assert_success
   kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml -n ${GATEKEEPER_NAMESPACE}

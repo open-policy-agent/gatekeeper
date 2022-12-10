@@ -179,7 +179,6 @@ jobs:
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
-          kubectl get secrets -n ${{ matrix.GATEKEEPER_NAMESPACE }} gatekeeper-webhook-server-cert -o yaml
 
       - name: Save logs
         if: ${{ always() }}
