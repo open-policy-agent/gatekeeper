@@ -15,7 +15,8 @@ func (d Duration) String() string {
 
 // SuiteResult is the Result of running a Suite of tests.
 type SuiteResult struct {
-	// Path is the absolute path to the file which defines Suite.
+	// Path is the path to the file which defines Suite.
+	// This may be absolute or relative.
 	Path string
 
 	// Error is the error which stopped the Suite from executing.

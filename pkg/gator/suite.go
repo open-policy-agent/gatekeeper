@@ -12,8 +12,11 @@ type Suite struct {
 	// each.
 	Tests []Test `json:"tests"`
 
-	// Path is the filepath of this Suite on disk.
-	Path string `json:"-"`
+	// AbsolutePath is the absolute filepath of this Suite on disk.
+	AbsolutePath string `json:"-"`
+
+	// InputPath is the filepath passed by clients using this Suite.
+	InputPath string `json:"-"`
 
 	// Skip, if true, skips this Suite.
 	Skip bool `json:"skip"`
