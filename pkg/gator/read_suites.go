@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -48,7 +49,7 @@ const (
 // Returns an error if:
 // - path is a file that does not define a Suite
 // - any matched files containing Suites are not parseable.
-func ReadSuites(f fs.FS, target string, recursive bool) ([]*Suite, error) {
+func ReadSuites(f fs.FS, target, originalPath string, recursive bool) ([]*Suite, error) {
 	if f == nil {
 		return nil, ErrNoFileSystem
 	}
@@ -84,11 +85,13 @@ func ReadSuites(f fs.FS, target string, recursive bool) ([]*Suite, error) {
 		return nil, err
 	}
 
-	return readSuites(f, files)
+	return readSuites(f, files, originalPath)
 }
 
 // readSuites reads the passed set of files into Suites on the given filesystem.
-func readSuites(f fs.FS, files []string) ([]*Suite, error) {
+// originalPath argument is used to construct paths relative to the original input
+// path from the traversed file system walks.
+func readSuites(f fs.FS, files []string, originalPath string) ([]*Suite, error) {
 	var suites []*Suite
 	for _, file := range files {
 		suite, err := readSuite(f, file)
@@ -97,14 +100,28 @@ func readSuites(f fs.FS, files []string) ([]*Suite, error) {
 		}
 
 		if suite != nil {
-			suite.Path = file
+			suite.AbsolutePath = file
+
+			// trim any prefixes like "/" or "./" in order for the
+			// .Cut call below to actually work with the absolute path
+			// contained in the file var.
+			cutPath := strings.TrimPrefix(originalPath, "/")
+			cutPath = strings.TrimPrefix(cutPath, "./")
+
+			_, after, found := strings.Cut(file, cutPath)
+			if !found {
+				return nil, fmt.Errorf("could not find %s in %s", cutPath, file)
+			}
+
+			suite.InputPath = originalPath + after
+
 			suites = append(suites, suite)
 		}
 	}
 
 	// Ensure Suites are returned in a deterministic order.
 	sort.Slice(suites, func(i, j int) bool {
-		return suites[i].Path < suites[j].Path
+		return suites[i].AbsolutePath < suites[j].AbsolutePath
 	})
 
 	return suites, nil
