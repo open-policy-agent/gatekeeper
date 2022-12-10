@@ -15,12 +15,13 @@ func TestReadSuites(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name       string
-		target     string
-		recursive  bool
-		fileSystem fs.FS
-		want       []*Suite
-		wantErr    error
+		name         string
+		target       string
+		originalPath string
+		recursive    bool
+		fileSystem   fs.FS
+		want         []*Suite
+		wantErr      error
 	}{
 		{
 			name:       "no filesystem",
@@ -70,7 +71,23 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []*Suite{{Path: "test.yaml"}},
+			want:    []*Suite{{AbsolutePath: "test.yaml"}},
+			wantErr: nil,
+		},
+		{
+			name:         "single target relative path",
+			target:       "test.yaml",
+			originalPath: "./test.yaml",
+			recursive:    false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+`),
+				},
+			},
+			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "./test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -145,7 +162,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []*Suite{{Path: "tests/test.yaml"}},
+			want:    []*Suite{{AbsolutePath: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -163,7 +180,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 					Data: []byte(`some data`),
 				},
 			},
-			want:    []*Suite{{Path: "tests/test.yaml"}},
+			want:    []*Suite{{AbsolutePath: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -190,13 +207,14 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []*Suite{{Path: "tests/test.yaml"}},
+			want:    []*Suite{{AbsolutePath: "tests/test.yaml"}},
 			wantErr: nil,
 		},
 		{
-			name:      "recursive directory with subdirectory",
-			target:    "tests",
-			recursive: true,
+			name:         "recursive directory with subdirectory",
+			target:       "tests",
+			originalPath: "./tests",
+			recursive:    true,
 			fileSystem: fstest.MapFS{
 				"tests/annotations/test.yaml": &fstest.MapFile{
 					Data: []byte(`
@@ -218,9 +236,9 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 				},
 			},
 			want: []*Suite{
-				{Path: "tests/annotations/test.yaml"},
-				{Path: "tests/labels/test.yaml"},
-				{Path: "tests/test.yaml"},
+				{AbsolutePath: "tests/annotations/test.yaml", InputPath: "./tests/annotations/test.yaml"},
+				{AbsolutePath: "tests/labels/test.yaml", InputPath: "./tests/labels/test.yaml"},
+				{AbsolutePath: "tests/test.yaml", InputPath: "./tests/test.yaml"},
 			},
 			wantErr: nil,
 		},
@@ -236,7 +254,7 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 `),
 				},
 			},
-			want:    []*Suite{{Path: "tests/labels.yaml/test.yaml"}},
+			want:    []*Suite{{AbsolutePath: "tests/labels.yaml/test.yaml"}},
 			wantErr: nil,
 		},
 		{
@@ -276,7 +294,7 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
+				AbsolutePath: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -316,7 +334,7 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
+				AbsolutePath: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -357,7 +375,7 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
+				AbsolutePath: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -398,8 +416,8 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
-				Skip: true,
+				AbsolutePath: "test.yaml",
+				Skip:         true,
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -439,7 +457,7 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
+				AbsolutePath: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -474,7 +492,7 @@ tests:
 				},
 			},
 			want: []*Suite{{
-				Path: "test.yaml",
+				AbsolutePath: "test.yaml",
 				Tests: []Test{{
 					Template:   "template.yaml",
 					Constraint: "constraint.yaml",
@@ -506,13 +524,25 @@ tests: {}
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, gotErr := ReadSuites(tc.fileSystem, tc.target, tc.recursive)
+			var (
+				got    []*Suite
+				gotErr error
+				ignore cmp.Option
+			)
+			// for tests that don't mimic a relative path test mode
+			if tc.originalPath == "" {
+				got, gotErr = ReadSuites(tc.fileSystem, tc.target, tc.target, tc.recursive)
+				ignore = cmpopts.IgnoreFields(Suite{}, "InputPath")
+			} else {
+				got, gotErr = ReadSuites(tc.fileSystem, tc.target, tc.originalPath, tc.recursive)
+			}
+
 			if !errors.Is(gotErr, tc.wantErr) {
 				t.Fatalf("got error %v, want error %v",
 					gotErr, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty(), cmpopts.IgnoreUnexported(Assertion{})); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty(), cmpopts.IgnoreUnexported(Assertion{}), ignore); diff != "" {
 				t.Error(diff)
 			}
 		})
