@@ -317,7 +317,7 @@ Since external data providers are in-cluster HTTP servers backed by Kubernetes s
 To further harden the security posture of the external data feature,
 
 - starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers
-- starting with Gatekeeper v3.11.0, TLS or mutual TLS (mTLS) via HTTPS protocol are _required_ between Gatekeeper and external data providers
+- starting with Gatekeeper v3.11.0, TLS or mutual TLS (mTLS) via HTTPS protocol are _required_ between Gatekeeper and external data providers with a minimum TLS version of 1.3
 
 In this section, we will describe the steps required to configure them.
 
