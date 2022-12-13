@@ -83,12 +83,12 @@ func readFile(filename string) ([]*source, error) {
 	}
 
 	var sources []*source
-	normalized, err := normalize([]string{filename})
+	expanded, err := expandDirectories([]string{filename})
 	if err != nil {
 		return nil, fmt.Errorf("normalizing filenames: %w", err)
 	}
 
-	for _, f := range normalized {
+	for _, f := range expanded {
 		file, err := os.Open(f)
 		if err != nil {
 			return nil, fmt.Errorf("opening file %q: %w", f, err)
@@ -160,7 +160,7 @@ func readStdin() ([]*unstructured.Unstructured, error) {
 	return us, nil
 }
 
-func normalize(filenames []string) ([]string, error) {
+func expandDirectories(filenames []string) ([]string, error) {
 	var output []string
 
 	for _, filename := range filenames {

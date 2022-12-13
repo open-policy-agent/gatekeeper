@@ -156,7 +156,7 @@ e2e-bootstrap: e2e-dependencies
 e2e-build-load-image: docker-buildx
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
-e2e-build-load-externaldata-image: docker-buildx-builderma
+e2e-build-load-externaldata-image: docker-buildx-builder
 	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test

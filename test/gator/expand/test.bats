@@ -79,6 +79,4 @@ test_dir () {
   run bin/gator expand --image=$img --format=yaml
   [ "$status" -eq 0 ]
   match_yaml_in_dir "${output}" "basic-expansion"
-
-
 }
