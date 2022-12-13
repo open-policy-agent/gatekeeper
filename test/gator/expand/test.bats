@@ -68,7 +68,7 @@ test_dir () {
 
 @test "expand OCI image" {
   fixtures_dir="$BATS_TEST_DIRNAME"/fixtures
-  media_type=:application/vnb.oci.image.layer.v1+tar+gzip
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
 
   img=localhost:5000/expansion-bundle:v1
 
