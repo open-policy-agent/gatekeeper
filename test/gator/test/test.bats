@@ -200,7 +200,7 @@ match_yaml_msg () {
 @test "pull OCI images" {
   artifacts_dir="$BATS_TEST_DIRNAME"/../oci-artifacts/
   violating_ns="$BATS_TEST_DIRNAME"/fixtures/manifests/no-policies/violating-ns.yaml
-  media_type=:application/vnb.oci.image.layer.v1+tar+gzip
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
 
   # Test with 1 OCI image + 1 local directory as input
   img1=localhost:5000/my-bundle:v1
