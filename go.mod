@@ -5,7 +5,7 @@ go 1.18
 // Prevent otel dependencies from getting out of sync.
 replace (
 	// TODO remove this
-	github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20221209213418-5318d135016f
+	github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20221213191139-ffb12197eb0c
 
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.20.0
 	go.opentelemetry.io/otel => go.opentelemetry.io/otel v0.20.0
@@ -37,7 +37,7 @@ require (
 	go.opencensus.io v0.23.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/zap v1.21.0
-	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10
+	golang.org/x/net v0.4.0
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
@@ -96,7 +96,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
-	github.com/open-policy-agent/opa v0.47.0 // indirect
+	github.com/open-policy-agent/opa v0.47.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
