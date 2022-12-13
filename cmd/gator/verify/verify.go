@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/open-policy-agent/gatekeeper/pkg/gator"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/verify"
 	"github.com/spf13/cobra"
 )
