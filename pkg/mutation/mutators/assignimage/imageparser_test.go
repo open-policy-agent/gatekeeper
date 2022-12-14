@@ -454,8 +454,6 @@ func TestValidateImageParts(t *testing.T) {
 					t.Errorf("got error of unexpected type: %s", err)
 				}
 			}
-			if tc.errFn != nil && err == nil {
-			}
 		})
 	}
 }
