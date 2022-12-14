@@ -7,7 +7,7 @@ Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.o
    * An extensible, parameterized [policy library](https://open-policy-agent.github.io/gatekeeper-library/website/)
    * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
    * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
-   * Native Kubernetes CRDs for [mutation](mutation.md) support
+   * Native Kubernetes CRDs for [mutation](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation/) support
    * Audit functionality
    * External data support
 
