@@ -63,6 +63,8 @@ Or you can specify both as flags:
 gator test -f=my-manifest.yaml -f=templates-and-constraints/
 ```
 
+> ❗The `--image` flag is in _alpha_ stage.
+
 The `--image` flag specifies a content addressable OCI artifact containing
 policy files. The image(s) will be copied into the local filesystem in a
 temporary directory, the location of which can be overridden with
