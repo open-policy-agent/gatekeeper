@@ -105,7 +105,7 @@ jobs:
           make e2e-dependencies KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
 
       - name: gator test
-        run: make test-gator
+        run: make test-gator-containerized
 
   build_test:
     name: "Build and Test"

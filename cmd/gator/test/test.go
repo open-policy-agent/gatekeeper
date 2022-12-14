@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/spf13/cobra"
@@ -47,11 +47,15 @@ var (
 	flagFilenames    []string
 	flagOutput       string
 	flagIncludeTrace bool
+	flagImages       []string
+	flagTempDir      string
 )
 
 const (
 	flagNameFilename = "filename"
 	flagNameOutput   = "output"
+	flagNameImage    = "image"
+	flagNameTempDir  = "tempdir"
 
 	stringJSON          = "json"
 	stringYAML          = "yaml"
@@ -62,10 +66,12 @@ func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "f", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, `include a trace for the underlying constraint framework evaluation`)
+	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
+	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(cmd *cobra.Command, args []string) {
-	unstrucs, err := gator.ReadSources(flagFilenames)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		errFatalf("reading: %v", err)
 	}

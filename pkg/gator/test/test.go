@@ -9,7 +9,8 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/expand"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -46,7 +47,7 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 			continue
 		}
 
-		templ, err := gator.ToTemplate(scheme, obj)
+		templ, err := reader.ToTemplate(scheme, obj)
 		if err != nil {
 			return nil, fmt.Errorf("converting unstructured %q to template: %w", obj.GetName(), err)
 		}
@@ -79,7 +80,7 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 	}
 
 	// create the expander
-	er, err := gator.NewExpander(objs)
+	er, err := expand.NewExpander(objs)
 	if err != nil {
 		return nil, fmt.Errorf("error creating expander: %s", err)
 	}
