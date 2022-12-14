@@ -298,7 +298,7 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.4.0
 ## explicit; go 1.17
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20221207024755-1c9ce4f40b85 => github.com/sozercan/frameworks/constraint v0.0.0-20221213191139-ffb12197eb0c
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20221214024800-b745745c4118
 ## explicit; go 1.18
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
@@ -1164,7 +1164,6 @@ sigs.k8s.io/structured-merge-diff/v4/value
 # sigs.k8s.io/yaml v1.3.0
 ## explicit; go 1.12
 sigs.k8s.io/yaml
-# github.com/open-policy-agent/frameworks/constraint => github.com/sozercan/frameworks/constraint v0.0.0-20221213191139-ffb12197eb0c
 # go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.20.0
 # go.opentelemetry.io/otel => go.opentelemetry.io/otel v0.20.0
 # go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v0.20.0
