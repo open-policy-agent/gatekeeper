@@ -5,7 +5,7 @@
 ####################################################################################################
 
 # match_yaml_in_dir checks that the yaml output (arg1) equals the contents of
-# output.txt in the directory (arg2).
+# output/output.yaml in the directory (arg2).
 match_yaml_in_dir () {
   yaml_output="${1}"
   match_dir="${2}"
@@ -64,4 +64,19 @@ test_dir () {
   got=$(cat "${out_file}")
   match_yaml_in_dir "${got}" "${dir_name}"
   rm "${out_file}"
+}
+
+@test "expand OCI image" {
+  fixtures_dir="$BATS_TEST_DIRNAME"/fixtures
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
+
+  img=localhost:5000/expansion-bundle:v1
+
+  pushd "$fixtures_dir"/basic-expansion
+  oras push $img ./input/$media_type
+  popd
+
+  run bin/gator expand --image=$img --format=yaml
+  [ "$status" -eq 0 ]
+  match_yaml_in_dir "${output}" "basic-expansion"
 }
