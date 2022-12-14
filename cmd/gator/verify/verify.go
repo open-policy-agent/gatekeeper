@@ -89,10 +89,11 @@ func runE(cmd *cobra.Command, args []string) error {
 	if strings.HasSuffix(originalPath, "/...") {
 		recursive = true
 		targetPath = strings.TrimSuffix(targetPath, "...")
+		originalPath = strings.TrimSuffix(originalPath, "...")
 	}
 	targetPath = strings.Trim(targetPath, "/")
 
-	suites, err := gator.ReadSuites(fileSystem, targetPath, recursive)
+	suites, err := gator.ReadSuites(fileSystem, targetPath, originalPath, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}

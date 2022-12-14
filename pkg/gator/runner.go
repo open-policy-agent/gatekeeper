@@ -70,15 +70,15 @@ func (r *Runner) Run(ctx context.Context, filter Filter, s *Suite) SuiteResult {
 
 	if s.Skip {
 		return SuiteResult{
-			Path:    s.Path,
+			Path:    s.InputPath,
 			Skipped: true,
 		}
 	}
 
-	results, err := r.runTests(ctx, filter, s.Path, s.Tests)
+	results, err := r.runTests(ctx, filter, s.AbsolutePath, s.Tests)
 
 	return SuiteResult{
-		Path:        s.Path,
+		Path:        s.InputPath,
 		Error:       err,
 		Runtime:     Duration(time.Since(start)),
 		TestResults: results,
