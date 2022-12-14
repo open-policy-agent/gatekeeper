@@ -34,6 +34,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -225,6 +226,10 @@ func (r *ReconcileMutatorStatus) Reconcile(ctx context.Context, request reconcil
 	instance := &unstructured.Unstructured{}
 	instance.SetGroupVersionKind(gvk)
 	if err := r.reader.Get(ctx, unpackedRequest.NamespacedName, instance); err != nil {
+		// If the mutator does not exist, we are done
+		if errors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
 		return reconcile.Result{}, err
 	}
 
