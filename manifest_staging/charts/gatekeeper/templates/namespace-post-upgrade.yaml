@@ -38,11 +38,8 @@ spec:
             - label
             - ns
             - {{ .Release.Namespace }}
-            {{- range .Values.postUpgrade.labelNamespace.extraNamespaces }}
-            - {{ . }}
-            {{- end }}
             - admission.gatekeeper.sh/ignore=no-self-managing
-            {{- range .Values.postInstall.labelNamespace.podSecurity }}
+            {{- range .Values.postUpgrade.labelNamespace.podSecurity }}
             - {{ . }}
             {{- end }}
             - --overwrite
@@ -54,6 +51,27 @@ spec:
               type: RuntimeDefault
             {{- end }}
             {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
+        {{- if .Values.postUpgrade.labelNamespace.extraNamespaces }}
+        - name: kubectl-label-extra
+          image: "{{ .Values.postUpgrade.labelNamespace.image.repository }}:{{ .Values.postUpgrade.labelNamespace.image.tag }}"
+          imagePullPolicy: {{ .Values.postUpgrade.labelNamespace.image.pullPolicy }}
+          args:
+            - label
+            - ns
+            {{- range .Values.postUpgrade.labelNamespace.extraNamespaces }}
+            - {{ . }}
+            {{- end }}
+            - admission.gatekeeper.sh/ignore=extra-namespaces
+            - --overwrite
+          resources:
+            {{- toYaml .Values.postUpgrade.resources | nindent 12 }}
+          securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
+            {{- toYaml .Values.postUpgrade.securityContext | nindent 12 }}
+        {{- end }}
       {{- with .Values.postUpgrade }}
       affinity:
         {{- toYaml .affinity | nindent 8 }}
