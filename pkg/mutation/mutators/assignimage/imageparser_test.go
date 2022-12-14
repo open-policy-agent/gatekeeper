@@ -450,10 +450,8 @@ func TestValidateImageParts(t *testing.T) {
 			if tc.errFn != nil {
 				if err == nil {
 					t.Errorf("(domain=%s, path=%s, tag=%s) wanted error but got nil", tc.domain, tc.path, tc.tag)
-				} else {
-					if !tc.errFn(err) {
-						t.Errorf("got error of unexpected type: %s", err)
-					}
+				} else if !tc.errFn(err) {
+					t.Errorf("got error of unexpected type: %s", err)
 				}
 			}
 			if tc.errFn != nil && err == nil {
