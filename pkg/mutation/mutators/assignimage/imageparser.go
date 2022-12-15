@@ -87,12 +87,28 @@ func splitDomain(name string) (domain, remainder string) {
 	return name[:i], name[i+1:]
 }
 
+func validateDomain(domain string) error {
+	if domain == "" {
+		return nil
+	}
+
+	if !domainRegexp.MatchString(domain) {
+		return fmt.Errorf("assignDomain %q does not match pattern %s", domain, domainRegexp.String())
+	}
+
+	if d, r := splitDomain(domain + "/"); d != domain || r != "" {
+		return fmt.Errorf("domain %q could not be regognized as a valid domain", domain)
+	}
+
+	return nil
+}
+
 func validateImageParts(domain, path, tag string) error {
 	if domain == "" && path == "" && tag == "" {
 		return fmt.Errorf("at least one of [assignDomain, assignPath, assignTag] must be set")
 	}
-	if domain != "" && !domainRegexp.MatchString(domain) {
-		return fmt.Errorf("assignDomain %q does not match pattern %s", domain, domainRegexp.String())
+	if err := validateDomain(domain); err != nil {
+		return err
 	}
 	// match the whole string for path (anchoring with `$` is tricky here)
 	if path != "" && path != pathRegexp.FindString(path) {
