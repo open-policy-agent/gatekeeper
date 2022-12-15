@@ -10,7 +10,7 @@ DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 
-VERSION := v3.11.0-beta.0
+VERSION := v3.11.0-rc.1
 
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
