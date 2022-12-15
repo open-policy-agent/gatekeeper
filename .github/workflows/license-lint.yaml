@@ -1,0 +1,26 @@
+name: license-lint
+on: [push, pull_request]
+
+jobs:
+  license-lint:
+    name: "license-lint"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Go 1.19
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: license-lint
+        run: |
+          export GOPATH="$HOME/go"
+          PATH="$GOPATH/bin:$PATH"
+          go install istio.io/tools/cmd/license-lint@1.16.0
+
+          license-lint --config ./.github/license-lint-config.yml 2>&1
