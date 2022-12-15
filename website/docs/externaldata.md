@@ -3,11 +3,7 @@ id: externaldata
 title: External Data
 ---
 
-`Feature State`: Gatekeeper version v3.7+ (alpha)
-
-> ❗ This feature is still in alpha stage, so the final form can still change (feedback is welcome!).
-
-> ✅  Mutation is supported with external data starting from v3.8.0.
+`Feature State`: Gatekeeper version v3.11+ (beta)
 
 ## Motivation
 
@@ -32,22 +28,7 @@ Key benefits provided by the external data solution:
   - For mutation, we can batch requests via lazy evaluation.
   - For validation, we make batching easier via [`external_data`](#external-data-for-Gatekeeper-validating-webhook) Rego function design.
 
-## Enabling external data support
 
-### YAML
-You can enable external data support by adding `--enable-external-data` in gatekeeper audit and controller-manager deployment arguments.
-
-### Helm
-You can also enable external data by installing or upgrading Helm chart by setting `enableExternalData=true`:
-
-```sh
-helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
-	--set enableExternalData=true
-```
-
-### Dev/Test
-
-For dev/test deployments, use `make deploy ENABLE_EXTERNAL_DATA=true`
 
 ## Providers
 
@@ -74,21 +55,21 @@ The following external data providers are samples and are not supported/maintain
 - [tag-to-digest-provider](https://github.com/sozercan/tagToDigest-provider)
 - [aad-provider](https://github.com/sozercan/aad-provider)
 
-### API (v1alpha1)
+### API (v1beta1)
 
 #### `Provider`
 
 Provider resource defines the provider and the configuration for it.
 
 ```yaml
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
+apiVersion: externaldata.gatekeeper.sh/v1beta1
 kind: Provider
 metadata:
   name: my-provider
 spec:
-  url: http://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., http://my-provider.my-namespace:8090/validate)
+  url: https://<service-name>.<namespace>:<port>/<endpoint> # URL to the external data source (e.g., https://my-provider.my-namespace:8090/validate)
   timeout: <timeout> # timeout value in seconds (e.g., 1). this is the timeout on the Provider custom resource, not the provider implementation.
-  insecureTLSSkipVerify: true # need to enable this if the provider uses HTTP so that Gatekeeper can skip TLS verification.
+  caBundle: <caBundle> # CA bundle to use for TLS verification.
 ```
 
 #### `ProviderRequest`
@@ -232,7 +213,7 @@ spec:
 
 ```json
 {
-  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "apiVersion": "externaldata.gatekeeper.sh/v1beta1",
   "kind": "ProviderResponse",
   "response": {
     "idempotent": true,
@@ -290,7 +271,7 @@ spec:
 
 ```json
 {
-  "apiVersion": "externaldata.gatekeeper.sh/v1alpha1",
+  "apiVersion": "externaldata.gatekeeper.sh/v1beta1",
   "kind": "ProviderResponse",
   "response": {
     "idempotent": true,
@@ -333,16 +314,21 @@ There are several limitations when using external data with the mutating webhook
 
 Since external data providers are in-cluster HTTP servers backed by Kubernetes services, communication is not encrypted by default. This can potentially lead to security issues such as request eavesdropping, tampering, and man-in-the-middle attack.
 
-To further harden the security posture of the external data feature, starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers. In this section, we will describe the steps required to configure them.
+To further harden the security posture of the external data feature,
+
+- starting from Gatekeeper v3.9.0, TLS and mutual TLS (mTLS) via HTTPS protocol are supported between Gatekeeper and external data providers
+- starting with Gatekeeper v3.11.0, TLS or mutual TLS (mTLS) via HTTPS protocol are _required_ between Gatekeeper and external data providers with a minimum TLS version of 1.3
+
+In this section, we will describe the steps required to configure them.
 
 ### Prerequisites
 
-- A Gatekeeper deployment **v3.9.0+**.
+- A Gatekeeper deployment with version >= v3.9.0.
 - The certificate of your certificate authority (CA) in PEM format.
 - The certificate of your external data provider in PEM format, signed by the CA above.
 - The private key of the external data provider in PEM format.
 
-### (Optional) How to generate a self-signed CA and a keypair for the external data provider
+### How to generate a self-signed CA and a keypair for the external data provider
 
 In this section, we will describe how to generate a self-signed CA and a keypair using `openssl`.
 
@@ -397,7 +383,7 @@ cat ca.crt | base64 | tr -d '\n'
 With the encoded CA certificate, you can define the Provider spec as follows:
 
 ```yaml
-apiVersion: externaldata.gatekeeper.sh/v1alpha1
+apiVersion: externaldata.gatekeeper.sh/v1beta1
 kind: Provider
 metadata:
   name: my-provider
@@ -432,7 +418,7 @@ After that, you can attach Gatekeeper's CA certificate in your TLS config and en
 ```go
 caCert, err := ioutil.ReadFile("/tmp/gatekeeper/ca.crt")
 if err != nil {
-	panic(err)
+  panic(err)
 }
 
 clientCAs := x509.NewCertPool()
@@ -475,7 +461,7 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
 
 2. You will need to patch the webhook secret manually to attach client ca crt. Update secret `gatekeeper-webhook-server-cert` to include `clientca.crt`. Key name `clientca.crt` should match the name passed with `--client-ca-name` flag. You could generate your own CA for this purpose.
 
-    ```
+    ```yaml
     kind: Secret
     apiVersion: v1
     data:
@@ -490,14 +476,15 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
       namespace: <gatekeeper-namespace>
     type: Opaque
     ```
+
 3. Generate CA and client certificates signed with CA authority to be attached by the API server while talking to Gatekeeper webhook. Gatekeeper webhook expects the API server to attach the certificate that has CN name as `kube-apiserver`. Use `--client-cn-name` to provide custom cert CN name if using a certificate with other CN name, otherwise webhook will throw the error and not accept the request.
 
     - Generate private key for CA
-    
-      ```bash      
+
+      ```bash
         openssl genrsa -des3 -out myCA.key 2048
       ```
-    
+
     - Generate a root certificate
 
       ```bash
@@ -509,21 +496,24 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
       ```bash
       openssl genrsa -out apiserver-client.key 2048
       ```
+
     - Generate a CSR for API server
-    
+
       ```bash
       openssl req -new -key apiserver-client.key -out apiserver-client.csr
       ```
-    
+
     - Generate public key for API server
-      
+
       ```bash
       openssl x509 -req -in apiserver-client.csr -CA myCA.crt -CAkey myCA.key -CAcreateserial -out apiserver-client.crt -days 365
       ```
+
       > The client certificate generated by the above command will expire in 365 days, and you must renew it before it expires. Adjust the value of `-day` to set the expiry on the client certificate according to your need.
 
 4. You will need to make sure the K8s API Server includes the appropriate certificate while sending requests to the webhook, otherwise webhook will not accept these requests and will log an error of `tls client didn't provide a certificate`. To make sure the API server attaches the correct certificate to requests being sent to webhook, you must specify the location of the admission control configuration file via the `--admission-control-config-file` flag while starting the API server. Here is an example admission control configuration file:
-    ```
+
+    ```yaml
     apiVersion: apiserver.config.k8s.io/v1
     kind: AdmissionConfiguration
     plugins:
@@ -538,14 +528,14 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
         kind: WebhookAdmissionConfiguration
         kubeConfigFile: "<path-to-kubeconfig-file>"
     ```
-  
+
     KubeConfig file should look something like:
 
-    ```
+    ```yaml
     apiVersion: v1
     clusters:
     - cluster:
-        certificate-authority-data: <myCA.crt> # same value as provided in gatekeeper webhook secret's clientca.crt 
+        certificate-authority-data: <myCA.crt> # same value as provided in gatekeeper webhook secret's clientca.crt
         server: https://<gatekeeper-webhook-service-name>.<gatekeeper-namespace>.svc:443
       name: <cluster-name>
     contexts:
@@ -558,9 +548,27 @@ To ensure a request to the Gatekeeper webhook is coming from the API server, Gat
     users:
     - name: api-server
       user:
-        client-certificate-data: <apiserver-client.crt> 
+        client-certificate-data: <apiserver-client.crt>
         client-key-data: <apiserver-client.key>
     ```
+
     **Note**: Default `gatekeeper-webhook-service-name` is `gatekeeper-webhook-service` and default `gatekeeper-namespace` is `gatekeeper-system`.
 
     Visit [#authenticate-apiservers](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#authenticate-apiservers) for more details.
+
+## Disabling external data support
+
+External data support is enabled by default. If you don't need external data support, you can disable it.
+
+### YAML
+
+You can disable external data support by adding `--enable-external-data=false` in gatekeeper audit and controller-manager deployment arguments.
+
+### Helm
+
+You can also disable external data by installing or upgrading Helm chart by setting `enableExternalData=false`:
+
+```sh
+helm install gatekeeper/gatekeeper --name-template=gatekeeper --namespace gatekeeper-system --create-namespace \
+  --set enableExternalData=false
+```

@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -99,7 +99,7 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 		tracker.modifySet = newObjTracker(mutationv1.GroupVersion.WithKind("ModifySet"), fn)
 	}
 	if externalDataEnabled {
-		tracker.externalDataProvider = newObjTracker(externaldatav1alpha1.SchemeGroupVersion.WithKind("Provider"), fn)
+		tracker.externalDataProvider = newObjTracker(externaldatav1beta1.SchemeGroupVersion.WithKind("Provider"), fn)
 	}
 	return &tracker
 }
@@ -127,7 +127,7 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return noopExpectations{}
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
-	case gvk.GroupVersion() == externaldatav1alpha1.SchemeGroupVersion && gvk.Kind == "Provider":
+	case gvk.GroupVersion() == externaldatav1beta1.SchemeGroupVersion && gvk.Kind == "Provider":
 		return t.externalDataProvider
 	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
@@ -540,7 +540,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 		return nil
 	}
 
-	providerList := &externaldatav1alpha1.ProviderList{}
+	providerList := &externaldatav1beta1.ProviderList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, providerList); err != nil {
 		return fmt.Errorf("listing Provider: %w", err)

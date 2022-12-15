@@ -170,6 +170,6 @@ func getCertNameVerifier() func(cs tls.ConnectionState) error {
 			}
 			return nil
 		}
-		return fmt.Errorf("Failed to verify CN name of certificate")
+		return fmt.Errorf("failed to verify CN name of certificate")
 	}
 }

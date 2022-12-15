@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -474,7 +474,7 @@ func (h *validationHandler) validateProvider(req *admission.Request) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	provider := &v1alpha1.Provider{}
+	provider := &externaldataUnversioned.Provider{}
 	if err := runtimeScheme.Convert(obj, provider, nil); err != nil {
 		return false, err
 	}

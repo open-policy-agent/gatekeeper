@@ -16,9 +16,9 @@ import (
 	"flag"
 )
 
-// ExternalDataEnabled indicates if the external data feature is enabled.
+// ExternalDataEnabled indicates if the external data feature is enabled. It is enabled by default.
 var ExternalDataEnabled *bool
 
 func init() {
-	ExternalDataEnabled = flag.Bool("enable-external-data", false, "(alpha) Enable external data feature")
+	ExternalDataEnabled = flag.Bool("enable-external-data", true, "Enable external data feature")
 }

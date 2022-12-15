@@ -176,7 +176,7 @@ jobs:
 
       - name: Run e2e
         run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest
+          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
 
@@ -185,57 +185,13 @@ jobs:
         run: |
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
+          kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: helm-logs
-          path: |
-            logs-*.json
-
-  build_test_externaldata:
-    name: "[External Data] Build and Test"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
-
-      - name: Set up Go 1.19
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
-
-      - name: Bootstrap e2e
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
-
-      - name: Run e2e
-        run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
-          make e2e-build-load-externaldata-image
-          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true ENABLE_EXTERNAL_DATA=true
-          go mod tidy
-          # there should be no additional manifest or go.mod changes
-          git diff --exit-code
-          make test-e2e ENABLE_EXTERNAL_DATA_TESTS=1
-
-      - name: Save logs
-        if: ${{ always() }}
-        run: |
-          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-externaldata-controller.json
-          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-externaldata-audit.json
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        if: ${{ always() }}
-        with:
-          name: externaldata-logs
           path: |
             logs-*.json
 

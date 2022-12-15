@@ -396,12 +396,14 @@ github.com/onsi/gomega/types
 # github.com/open-policy-agent/cert-controller v0.4.0
 ## explicit; go 1.17
 github.com/open-policy-agent/cert-controller/pkg/rotator
-# github.com/open-policy-agent/frameworks/constraint v0.0.0-20221207024755-1c9ce4f40b85
+# github.com/open-policy-agent/frameworks/constraint v0.0.0-20221214024800-b745745c4118
 ## explicit; go 1.18
 github.com/open-policy-agent/frameworks/constraint/deploy
 github.com/open-policy-agent/frameworks/constraint/pkg/apis
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints
+github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1
+github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1alpha1
 github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1
@@ -417,7 +419,7 @@ github.com/open-policy-agent/frameworks/constraint/pkg/handler
 github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter
 github.com/open-policy-agent/frameworks/constraint/pkg/schema
 github.com/open-policy-agent/frameworks/constraint/pkg/types
-# github.com/open-policy-agent/opa v0.47.0
+# github.com/open-policy-agent/opa v0.47.2
 ## explicit; go 1.17
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -666,7 +668,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10
+# golang.org/x/net v0.4.0
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp

@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 )
 
 const (
@@ -48,7 +48,7 @@ type Request struct {
 // NewProviderRequest creates a new request for the external data provider.
 func NewProviderRequest(keys []string) *ProviderRequest {
 	return &ProviderRequest{
-		APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
+		APIVersion: "externaldata.gatekeeper.sh/v1beta1",
 		Kind:       "ProviderRequest",
 		Request: Request{
 			Keys: keys,
@@ -57,10 +57,10 @@ func NewProviderRequest(keys []string) *ProviderRequest {
 }
 
 // SendRequestToProvider is a function that sends a request to the external data provider.
-type SendRequestToProvider func(ctx context.Context, provider *v1alpha1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error)
+type SendRequestToProvider func(ctx context.Context, provider *unversioned.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error)
 
 // DefaultSendRequestToProvider is the default function to send the request to the external data provider.
-func DefaultSendRequestToProvider(ctx context.Context, provider *v1alpha1.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error) {
+func DefaultSendRequestToProvider(ctx context.Context, provider *unversioned.Provider, keys []string, clientCert *tls.Certificate) (*ProviderResponse, int, error) {
 	externaldataRequest := NewProviderRequest(keys)
 	body, err := json.Marshal(externaldataRequest)
 	if err != nil {
@@ -100,21 +100,22 @@ func DefaultSendRequestToProvider(ctx context.Context, provider *v1alpha1.Provid
 	return &externaldataResponse, resp.StatusCode, nil
 }
 
-// getClient returns a new HTTP client, and set up its TLS configuration if necessary.
-func getClient(provider *v1alpha1.Provider, clientCert *tls.Certificate) (*http.Client, error) {
+// getClient returns a new HTTP client, and set up its TLS configuration.
+func getClient(provider *unversioned.Provider, clientCert *tls.Certificate) (*http.Client, error) {
 	u, err := url.Parse(provider.Spec.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse provider URL %s: %w", provider.Spec.URL, err)
+	}
+
+	if u.Scheme != HTTPSScheme {
+		return nil, fmt.Errorf("only HTTPS scheme is supported")
 	}
 
 	client := &http.Client{
 		Timeout: time.Duration(provider.Spec.Timeout) * time.Second,
 	}
 
-	tlsConfig := &tls.Config{
-		//nolint:gosec
-		InsecureSkipVerify: provider.Spec.InsecureTLSSkipVerify,
-	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13}
 
 	// present our client cert to the server
 	// in case provider wants to verify it
@@ -122,21 +123,19 @@ func getClient(provider *v1alpha1.Provider, clientCert *tls.Certificate) (*http.
 		tlsConfig.Certificates = []tls.Certificate{*clientCert}
 	}
 
-	if u.Scheme == HTTPSScheme && !provider.Spec.InsecureTLSSkipVerify {
-		// if the provider presents its own CA bundle,
-		// we will use it to verify the server's certificate
-		caBundleData, err := base64.StdEncoding.DecodeString(provider.Spec.CABundle)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode CA bundle: %w", err)
-		}
-
-		providerCertPool := x509.NewCertPool()
-		if ok := providerCertPool.AppendCertsFromPEM(caBundleData); !ok {
-			return nil, fmt.Errorf("failed to append provider's CA bundle to certificate pool")
-		}
-
-		tlsConfig.RootCAs = providerCertPool
+	// if the provider presents its own CA bundle,
+	// we will use it to verify the server's certificate
+	caBundleData, err := base64.StdEncoding.DecodeString(provider.Spec.CABundle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode CA bundle: %w", err)
 	}
+
+	providerCertPool := x509.NewCertPool()
+	if ok := providerCertPool.AppendCertsFromPEM(caBundleData); !ok {
+		return nil, fmt.Errorf("failed to append provider's CA bundle to certificate pool")
+	}
+
+	tlsConfig.RootCAs = providerCertPool
 
 	client.Transport = &http.Transport{
 		TLSClientConfig: tlsConfig,

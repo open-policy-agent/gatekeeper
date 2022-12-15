@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -86,7 +86,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String, clientCert *t
 		}
 
 		wg.Add(1)
-		go func(provider *v1alpha1.Provider, keys []string) {
+		go func(provider *externaldataUnversioned.Provider, keys []string) {
 			defer wg.Done()
 
 			resp, _, err := fn(context.Background(), provider, keys, clientCert)

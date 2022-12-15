@@ -8,7 +8,6 @@ GATOR_IMG := $(GATOR_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
-ENABLE_EXTERNAL_DATA ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 
 VERSION := v3.11.0-beta.0
@@ -153,7 +152,7 @@ e2e-bootstrap: e2e-dependencies
 	# Create a new kind cluster
 	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
 
-e2e-build-load-image: docker-buildx
+e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-build-load-externaldata-image: docker-buildx-builder
@@ -197,7 +196,10 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set disabledBuiltins={http.send};\
+		--set disabledBuiltins={http.send} \
+		--set enableExternalData=true \
+		--set logMutations=true \
+		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade:
 	./helm_migrate.sh
@@ -237,10 +239,6 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
-ifeq ($(ENABLE_EXTERNAL_DATA),true)
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
-endif
 ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
