@@ -38,7 +38,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.11.0-rc.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -67,7 +67,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.11.0-rc.1
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces: []
@@ -105,7 +105,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.11.0-rc.1
       pullPolicy: IfNotPresent
       pullSecrets: []
   affinity: {}
@@ -124,7 +124,7 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.11.0-beta.0
+  release: v3.11.0-rc.1
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations: {}

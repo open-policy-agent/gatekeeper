@@ -121,8 +121,6 @@ spec:
         - mountPath: /tmp/audit
           name: tmp-volume
       dnsPolicy: {{ .Values.audit.dnsPolicy }}
-      env:
-        {{- toYaml .Values.audit.extraEnv | nindent 8 }}
       hostNetwork: {{ .Values.audit.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}
