@@ -41,7 +41,8 @@ postUpgrade:
       tag: v3.11.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
-    extraNamespaces: []
+    extraNamespaces:
+    - kube-system
     podSecurity: ["pod-security.kubernetes.io/audit=restricted",
       "pod-security.kubernetes.io/audit-version=latest",
       "pod-security.kubernetes.io/warn=restricted",
@@ -70,7 +71,8 @@ postInstall:
       tag: v3.11.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
-    extraNamespaces: []
+    extraNamespaces:
+    - kube-system
     podSecurity: ["pod-security.kubernetes.io/audit=restricted",
       "pod-security.kubernetes.io/audit-version=latest",
       "pod-security.kubernetes.io/warn=restricted",
@@ -133,7 +135,8 @@ podCountLimit: "100"
 secretAnnotations: {}
 enableRuntimeDefaultSeccompProfile: true
 controllerManager:
-  exemptNamespaces: []
+  exemptNamespaces:
+  - kube-system
   exemptNamespacePrefixes: []
   hostNetwork: false
   dnsPolicy: ClusterFirst
