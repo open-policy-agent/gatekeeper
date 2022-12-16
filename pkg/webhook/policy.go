@@ -193,6 +193,22 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	if *logStatsAdmission {
+		logging.LogStatsEntries(
+			h.opa,
+			log.WithValues(
+				logging.Process, "admission",
+				logging.EventType, "review_response_stats",
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+			),
+			resp.StatsEntries, "admission review request stats",
+		)
+	}
+
 	res := resp.Results()
 	denyMsgs, warnMsgs := h.getValidationMessages(res, &req)
 
