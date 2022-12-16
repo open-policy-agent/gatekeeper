@@ -62,6 +62,7 @@ var (
 	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults            []updateListEntry
+	logStatsAudit                = flag.Bool("log-stats-audit", false, "(alpha) log stats metrics for the audit run")
 )
 
 // Manager allows us to audit resources periodically.
@@ -491,6 +492,15 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 			continue
 		}
 
+		if *logStatsAudit {
+			logging.LogStatsEntries(
+				am.opa,
+				log.WithValues(logging.Process, "audit"),
+				resp.StatsEntries,
+				"audit from cache review request stats",
+			)
+		}
+
 		for _, r := range resp.Results() {
 			results = append(results, Result{
 				Result: r,
@@ -600,6 +610,15 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 			}
 
 			if len(resp.Results()) > 0 {
+				if *logStatsAudit {
+					logging.LogStatsEntries(
+						am.opa,
+						log.WithValues(logging.Process, "audit"),
+						resp.StatsEntries,
+						"audit review request stats",
+					)
+				}
+
 				results := ToResults(&augmentedObj.Object, resp)
 				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {

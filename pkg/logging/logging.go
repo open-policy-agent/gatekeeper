@@ -1,5 +1,11 @@
 package logging
 
+import (
+	"github.com/go-logr/logr"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
+)
+
 // Log keys.
 const (
 	Process               = "process"
@@ -27,3 +33,30 @@ const (
 	Mutator               = "mutator"
 	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )
+
+func LogStatsEntries(client *client.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
+	for _, se := range entries {
+		labelledLogger := logger
+		for _, label := range se.Labels {
+			labelledLogger = labelledLogger.WithValues(label.Name, label.Value)
+		}
+
+		for _, stat := range se.Stats {
+			labelledLogger = labelledLogger.WithValues(
+				"scope", se.Scope,
+				"statsFor", se.StatsFor,
+				"source_type", stat.Source.Type,
+				"source_value", stat.Source.Value,
+				"name", stat.Name,
+				"value", stat.Value,
+			)
+
+			if client != nil {
+				desc := client.GetDescriptionForStat(stat.Source, stat.Name)
+				labelledLogger = labelledLogger.WithValues("description", desc)
+			}
+
+			labelledLogger.Info(msg)
+		}
+	}
+}
