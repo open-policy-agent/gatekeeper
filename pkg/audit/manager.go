@@ -58,6 +58,7 @@ var (
 	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
 	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from audit cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
+	logEvalMetricsAudit       = flag.Bool("log-eval-metrics-audit", false, "(alpha) log evaluation metrics for the audit run")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
 	emptyAuditResults         []updateListEntry
@@ -490,6 +491,19 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 				Result: r,
 				obj:    &obj,
 			})
+
+			if *logEvalMetricsAudit {
+				am.log.WithValues(
+					logging.Process, "audit",
+					logging.EventType, "violation",
+					logging.ConstraintName, r.Constraint.GetName(),
+					logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+					logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+					logging.ConstraintKind, r.Constraint.GetKind(),
+					logging.ConstraintAction, r.EnforcementAction,
+					logging.EvaluationMetrics, r.EvaluationMeta,
+				).Info("logging evaluation metrics")
+			}
 		}
 	}
 
@@ -756,6 +770,19 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
 		if *emitAuditEvents {
 			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, r.Msg, am.gkNamespace, am.eventRecorder)
+		}
+
+		if *logEvalMetricsAudit {
+			am.log.WithValues(
+				logging.Process, "audit",
+				logging.EventType, "violation",
+				logging.ConstraintName, r.Constraint.GetName(),
+				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind, r.Constraint.GetKind(),
+				logging.ConstraintAction, r.EnforcementAction,
+				logging.EvaluationMetrics, r.EvaluationMeta,
+			).Info("logging evaluation metrics")
 		}
 	}
 	return nil

@@ -229,7 +229,7 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
 	var denyMsgs, warnMsgs []string
 	var resourceName string
-	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
+	if len(res) > 0 && (*logDenies || *emitAdmissionEvents || *logEvalMetrics) {
 		resourceName = req.AdmissionRequest.Name
 		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
 			// On a CREATE operation, the client may omit name and
@@ -260,6 +260,24 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ResourceName, resourceName,
 				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
 			).Info(fmt.Sprintf("denied admission: %s", r.Msg))
+		}
+		if *logEvalMetrics {
+			log.WithValues(
+				logging.Process, "admission",
+				logging.EventType, "violation",
+				logging.ConstraintName, r.Constraint.GetName(),
+				logging.ConstraintGroup, r.Constraint.GroupVersionKind().Group,
+				logging.ConstraintAPIVersion, r.Constraint.GroupVersionKind().Version,
+				logging.ConstraintKind, r.Constraint.GetKind(),
+				logging.ConstraintAction, r.EnforcementAction,
+				logging.ResourceGroup, req.AdmissionRequest.Kind.Group,
+				logging.ResourceAPIVersion, req.AdmissionRequest.Kind.Version,
+				logging.ResourceKind, req.AdmissionRequest.Kind.Kind,
+				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
+				logging.ResourceName, resourceName,
+				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
+				logging.EvaluationMetrics, r.EvaluationMeta,
+			).Info("logging evaluation metrics")
 		}
 		if *emitAdmissionEvents {
 			annotations := map[string]string{

@@ -25,4 +25,6 @@ const (
 	MutationApplied      = "mutation_applied"
 	Mutator              = "mutator"
 	DebugLevel           = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
+
+	EvaluationMetrics = "evaluation_metrics"
 )

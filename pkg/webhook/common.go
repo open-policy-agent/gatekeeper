@@ -58,6 +58,7 @@ var (
 	deserializer                       = codecs.UniversalDeserializer()
 	disableEnforcementActionValidation = flag.Bool("disable-enforcementaction-validation", false, "disable validation of the enforcementAction field of a constraint")
 	logDenies                          = flag.Bool("log-denies", false, "log detailed info on each deny")
+	logEvalMetrics                     = flag.Bool("log-eval-metrics", false, "(alpha) log evaluation metrics info on each deny")
 	emitAdmissionEvents                = flag.Bool("emit-admission-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace for each admission violation")
 	tlsMinVersion                      = flag.String("tls-min-version", "1.3", "minimum version of TLS supported")
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
