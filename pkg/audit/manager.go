@@ -1013,6 +1013,9 @@ func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
 	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
 ) {
+	userConstraintAnnotations := constraint.GetAnnotations()
+	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
+
 	l.Info(
 		message,
 		logging.Details, details,
@@ -1023,6 +1026,7 @@ func logViolation(l logr.Logger,
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
+		logging.ConstraintAnnotations, userConstraintAnnotations,
 		logging.ResourceGroup, resourceGroupVersionKind.Group,
 		logging.ResourceAPIVersion, resourceGroupVersionKind.Version,
 		logging.ResourceKind, resourceGroupVersionKind.Kind,

@@ -92,6 +92,9 @@ The audit pod emits JSON-formatted audit logs to stdout. The following is an exa
   "constraint_name": "container-must-have-limits",
   "constraint_namespace": "",
   "constraint_action": "deny",
+  "constraint_annotations": {
+    "test-annotation-1": "annotation_1"
+  },
   "resource_group": "",
   "resource_api_version": "v1",
   "resource_kind": "Pod",
