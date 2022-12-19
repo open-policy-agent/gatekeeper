@@ -29,6 +29,7 @@ type (
 		Location         *Location                    `json:"-"`
 		Scope            string                       `json:"scope"`
 		Title            string                       `json:"title,omitempty"`
+		Entrypoint       bool                         `json:"entrypoint,omitempty"`
 		Description      string                       `json:"description,omitempty"`
 		Organizations    []string                     `json:"organizations,omitempty"`
 		RelatedResources []*RelatedResourceAnnotation `json:"related_resources,omitempty"`
@@ -132,6 +133,13 @@ func (a *Annotations) Compare(other *Annotations) int {
 
 	if cmp := compareSchemas(a.Schemas, other.Schemas); cmp != 0 {
 		return cmp
+	}
+
+	if a.Entrypoint != other.Entrypoint {
+		if a.Entrypoint {
+			return 1
+		}
+		return -1
 	}
 
 	if cmp := util.Compare(a.Custom, other.Custom); cmp != 0 {
@@ -324,6 +332,10 @@ func (a *Annotations) toObject() (*Object, *Error) {
 		obj.Insert(StringTerm("title"), StringTerm(a.Title))
 	}
 
+	if a.Entrypoint {
+		obj.Insert(StringTerm("entrypoint"), BooleanTerm(true))
+	}
+
 	if len(a.Description) > 0 {
 		obj.Insert(StringTerm("description"), StringTerm(a.Description))
 	}
@@ -426,6 +438,10 @@ func attachAnnotationsNodes(mod *Module) Errors {
 		if err := validateAnnotationScopeAttachment(a); err != nil {
 			errs = append(errs, err)
 		}
+
+		if err := validateAnnotationEntrypointAttachment(a); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	return errs
@@ -447,6 +463,13 @@ func validateAnnotationScopeAttachment(a *Annotations) *Error {
 	}
 
 	return NewError(ParseErr, a.Loc(), "invalid annotation scope '%v'", a.Scope)
+}
+
+func validateAnnotationEntrypointAttachment(a *Annotations) *Error {
+	if a.Entrypoint && !(a.Scope == annotationScopeRule || a.Scope == annotationScopePackage) {
+		return NewError(ParseErr, a.Loc(), "annotation entrypoint applied to non-rule or package scope '%v'", a.Scope)
+	}
+	return nil
 }
 
 // Copy returns a deep copy of a.
@@ -575,32 +598,39 @@ func BuildAnnotationSet(modules []*Module) (*AnnotationSet, Errors) {
 	return as, nil
 }
 
+// NOTE(philipc): During copy propagation, the underlying Nodes can be
+// stripped away from the annotations, leading to nil deref panics. We
+// silently ignore these cases for now, as a workaround.
 func (as *AnnotationSet) add(a *Annotations) *Error {
 	switch a.Scope {
 	case annotationScopeRule:
-		rule := a.node.(*Rule)
-		as.byRule[rule] = append(as.byRule[rule], a)
+		if rule, ok := a.node.(*Rule); ok {
+			as.byRule[rule] = append(as.byRule[rule], a)
+		}
 	case annotationScopePackage:
-		pkg := a.node.(*Package)
-		if exist, ok := as.byPackage[pkg]; ok {
-			return errAnnotationRedeclared(a, exist.Location)
+		if pkg, ok := a.node.(*Package); ok {
+			if exist, ok := as.byPackage[pkg]; ok {
+				return errAnnotationRedeclared(a, exist.Location)
+			}
+			as.byPackage[pkg] = a
 		}
-		as.byPackage[pkg] = a
 	case annotationScopeDocument:
-		rule := a.node.(*Rule)
-		path := rule.Path()
-		x := as.byPath.get(path)
-		if x != nil {
-			return errAnnotationRedeclared(a, x.Value.Location)
+		if rule, ok := a.node.(*Rule); ok {
+			path := rule.Path()
+			x := as.byPath.get(path)
+			if x != nil {
+				return errAnnotationRedeclared(a, x.Value.Location)
+			}
+			as.byPath.insert(path, a)
 		}
-		as.byPath.insert(path, a)
 	case annotationScopeSubpackages:
-		pkg := a.node.(*Package)
-		x := as.byPath.get(pkg.Path)
-		if x != nil && x.Value != nil {
-			return errAnnotationRedeclared(a, x.Value.Location)
+		if pkg, ok := a.node.(*Package); ok {
+			x := as.byPath.get(pkg.Path)
+			if x != nil && x.Value != nil {
+				return errAnnotationRedeclared(a, x.Value.Location)
+			}
+			as.byPath.insert(pkg.Path, a)
 		}
-		as.byPath.insert(pkg.Path, a)
 	}
 	return nil
 }
@@ -639,7 +669,8 @@ func (as *AnnotationSet) GetPackageScope(pkg *Package) *Annotations {
 // Flatten returns a flattened list view of this AnnotationSet.
 // The returned slice is sorted, first by the annotations' target path, then by their target location
 func (as *AnnotationSet) Flatten() []*AnnotationsRef {
-	var refs []*AnnotationsRef
+	// This preallocation often won't be optimal, but it's superior to starting with a nil slice.
+	refs := make([]*AnnotationsRef, 0, len(as.byPath.Children)+len(as.byRule)+len(as.byPackage))
 
 	refs = as.byPath.flatten(refs)
 

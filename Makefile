@@ -8,16 +8,16 @@ GATOR_IMG := $(GATOR_REPOSITORY):latest
 # DEV_TAG will be replaced with short Git SHA on pre-release stage in CI
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
-ENABLE_EXTERNAL_DATA ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
 
-VERSION := v3.11.0-beta.0
+VERSION := v3.11.0-rc.1
 
-KIND_VERSION ?= 0.15.0
+KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
-KUBERNETES_VERSION ?= 1.25.0
+KUBERNETES_VERSION ?= 1.26.0
 KUSTOMIZE_VERSION ?= 3.8.9
-BATS_VERSION ?= 1.2.1
+BATS_VERSION ?= 1.8.2
+ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
@@ -48,7 +48,7 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VER
 	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME) \
 	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
 	-X main.opaVersion=$(OPA_VERSION)"
-	
+
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \nkind: Deployment\
 \nmetadata:\
@@ -116,6 +116,11 @@ test-e2e:
 .PHONY: test-gator
 test-gator: gator test-gator-verify test-gator-test test-gator-expand
 
+.PHONY: test-gator-containerized
+test-gator-containerized: __test-image
+	docker run --privileged -v $(shell pwd):/app -v /var/lib/docker \
+	gatekeeper-test ./test/image/gator-test.sh
+
 .PHONY: test-gator-verify
 test-gator-verify: gator
 	./bin/gator verify test/gator/verify/suite.yaml
@@ -147,7 +152,7 @@ e2e-bootstrap: e2e-dependencies
 	# Create a new kind cluster
 	TERM=dumb ${GITHUB_WORKSPACE}/bin/kind create cluster --image $(KIND_NODE_VERSION) --wait 5m
 
-e2e-build-load-image: docker-buildx
+e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 	kind load docker-image --name kind ${IMG} ${CRD_IMG}
 
 e2e-build-load-externaldata-image: docker-buildx-builder
@@ -155,7 +160,7 @@ e2e-build-load-externaldata-image: docker-buildx-builder
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
-e2e-verify-release: patch-image deploy test-e2e
+e2e-verify-release: e2e-build-load-externaldata-image patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
 
 e2e-helm-install:
@@ -191,7 +196,10 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--set emitAuditEvents=true \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
-		--set disabledBuiltins={http.send};\
+		--set disabledBuiltins={http.send} \
+		--set enableExternalData=true \
+		--set logMutations=true \
+		--set mutationAnnotations=true;\
 
 e2e-helm-upgrade:
 	./helm_migrate.sh
@@ -231,10 +239,6 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: patch-image manifests
-ifeq ($(ENABLE_EXTERNAL_DATA),true)
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
-	@grep -q -v 'enable-external-data' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-external-data=true' ./config/overlays/dev/manager_image_patch.yaml
-endif
 ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
@@ -440,7 +444,10 @@ __tooling-image:
 
 __test-image:
 	docker build test/image \
-		-t gatekeeper-test
+		-t gatekeeper-test \
+		--build-arg YQ_VERSION=$(YQ_VERSION) \
+		--build-arg BATS_VERSION=$(BATS_VERSION) \
+		--build-arg ORAS_VERSION=$(ORAS_VERSION)
 
 .PHONY: vendor
 vendor:

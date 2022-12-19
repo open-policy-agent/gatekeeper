@@ -56,7 +56,7 @@ var (
 	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
 	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
 	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
-	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from audit cache when auditing")
 	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
 	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
 	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
@@ -481,7 +481,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		}
 		resp, err := am.opa.Review(ctx, au)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("validating %v %s/%s: %v", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err))
+			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
 			continue
 		}
 
@@ -586,8 +586,7 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				}
 				resultantResp, err := am.opa.Review(ctx, au)
 				if err != nil {
-					// updated to not return err immediately
-					errs = append(errs, err)
+					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
 					continue
 				}
 				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
@@ -1014,6 +1013,9 @@ func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
 	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
 ) {
+	userConstraintAnnotations := constraint.GetAnnotations()
+	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
+
 	l.Info(
 		message,
 		logging.Details, details,
@@ -1024,6 +1026,7 @@ func logViolation(l logr.Logger,
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
+		logging.ConstraintAnnotations, userConstraintAnnotations,
 		logging.ResourceGroup, resourceGroupVersionKind.Group,
 		logging.ResourceAPIVersion, resourceGroupVersionKind.Version,
 		logging.ResourceKind, resourceGroupVersionKind.Kind,

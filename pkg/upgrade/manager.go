@@ -79,6 +79,7 @@ func (um *Manager) upgrade(ctx context.Context) error {
 		"constraints.gatekeeper.sh/v1alpha1",
 		"templates.gatekeeper.sh/v1alpha1",
 		"mutations.gatekeeper.sh/v1alpha1",
+		"externaldata.gatekeeper.sh/v1alpha1",
 	}
 	for _, gv := range gvs {
 		if err := um.upgradeGroupVersion(ctx, gv); err != nil {

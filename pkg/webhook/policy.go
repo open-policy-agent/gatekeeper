@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
@@ -120,7 +120,7 @@ func AddPolicyWebhook(mgr manager.Manager, deps Dependencies) error {
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	getServerConfig(mgr).Register("/v1/admit", wh)
+	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/admit", wh)
 	return nil
 }
 
@@ -259,7 +259,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				logging.ResourceNamespace, req.AdmissionRequest.Namespace,
 				logging.ResourceName, resourceName,
 				logging.RequestUsername, req.AdmissionRequest.UserInfo.Username,
-			).Info("denied admission")
+			).Info(fmt.Sprintf("denied admission: %s", r.Msg))
 		}
 		if *emitAdmissionEvents {
 			annotations := map[string]string{
@@ -474,7 +474,7 @@ func (h *validationHandler) validateProvider(req *admission.Request) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	provider := &v1alpha1.Provider{}
+	provider := &externaldataUnversioned.Provider{}
 	if err := runtimeScheme.Convert(obj, provider, nil); err != nil {
 		return false, err
 	}

@@ -25,19 +25,19 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
@@ -156,8 +156,9 @@ func Test_AssignMetadata(t *testing.T) {
 	opaClient := setupOpa(t)
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -198,8 +199,9 @@ func Test_ModifySet(t *testing.T) {
 	opaClient := setupOpa(t)
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -238,8 +240,9 @@ func Test_Assign(t *testing.T) {
 	opaClient := setupOpa(t)
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -265,14 +268,6 @@ func Test_Assign(t *testing.T) {
 func Test_Provider(t *testing.T) {
 	g := gomega.NewWithT(t)
 
-	defer func() {
-		externalDataEnabled := false
-		externaldata.ExternalDataEnabled = &externalDataEnabled
-	}()
-
-	externalDataEnabled := true
-	externaldata.ExternalDataEnabled = &externalDataEnabled
-
 	providerCache := frameworksexternaldata.NewCache()
 
 	err := os.Setenv("POD_NAME", "no-pod")
@@ -289,7 +284,11 @@ func Test_Provider(t *testing.T) {
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
 
-	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), providerCache); err != nil {
+	if err := setupController(mgr,
+		wm,
+		opaClient,
+		mutation.NewSystem(mutation.SystemOpts{}),
+		providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -309,10 +308,10 @@ func Test_Provider(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := externaldatav1alpha1.ProviderSpec{
-			URL:                   "http://demo",
-			Timeout:               1,
-			InsecureTLSSkipVerify: true,
+		want := externaldataUnversioned.ProviderSpec{
+			URL:      "https://demo",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(want, instance.Spec); diff != "" {
 			t.Fatal(diff)
@@ -341,8 +340,9 @@ func Test_Tracker(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
+	providerCache := frameworksexternaldata.NewCache()
 
-	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
@@ -438,7 +438,9 @@ func Test_Tracker_UnregisteredCachedData(t *testing.T) {
 	// Wire up the rest.
 	mgr, wm := setupManager(t)
 	opaClient := setupOpa(t)
-	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), nil); err != nil {
+	providerCache := frameworksexternaldata.NewCache()
+
+	if err := setupController(mgr, wm, opaClient, mutation.NewSystem(mutation.SystemOpts{}), providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 

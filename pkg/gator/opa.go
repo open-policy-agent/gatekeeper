@@ -6,8 +6,8 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 )
 
-func NewOPAClient() (Client, error) {
-	driver, err := local.New(local.Tracing(false))
+func NewOPAClient(includeTrace bool) (Client, error) {
+	driver, err := local.New(local.Tracing(includeTrace))
 	if err != nil {
 		return nil, err
 	}

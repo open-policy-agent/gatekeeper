@@ -3,7 +3,7 @@ id: gator
 title: The gator CLI
 ---
 
-`Feature State`: Gatekeeper version v3.7+ (alpha)
+`Feature State`: Gatekeeper version v3.11+ (beta)
 
 The `gator` CLI is a tool for evaluating Gatekeeper ConstraintTemplates and
 Constraints in a local environment.
@@ -12,7 +12,8 @@ Constraints in a local environment.
 
 To install `gator`, you may either
 [download the binary](https://github.com/open-policy-agent/gatekeeper/releases)
-relevant to your system or build it directly from source. On macOS and Linux, you can also install `gator` using [Homebrew](https://brew.sh).
+relevant to your system or build it directly from source. On macOS and Linux,
+you can also install `gator` using [Homebrew](https://brew.sh).
 
 To build from source:
 
@@ -21,6 +22,7 @@ go get github.com/open-policy-agent/gatekeeper/cmd/gator
 ```
 
 Install with Homebrew:
+
 ```
 brew install gator
 ```
@@ -41,16 +43,15 @@ space.
 
 #### Specifying inputs
 
-`gator test` supports inputs through the `--filename` flag and via stdin. The
-two methods of input can be in combination or individually.
+`gator test` supports inputs through the `--filename` and `--image` flags, and
+via stdin. The three methods of input can be used in combination or individually. The `--filename` and `--image` flags are repeatable.
 
 The `--filename` flag can specify a single file or a directory. If a file is
 specified, that file must end in one of the following extensions: `.json`,
 `.yaml`, `.yml`. Directories will be walked, and any files of extensions other
 than the aforementioned three will be skipped.
 
-For example, to verify a manifest (piped via stdin) against a folder of
-policies:
+For example, to test a manifest (piped via stdin) against a folder of policies:
 
 ```
 cat my-manifest.yaml | gator test --filename=template-and-constraints/
@@ -60,6 +61,25 @@ Or you can specify both as flags:
 
 ```
 gator test -f=my-manifest.yaml -f=templates-and-constraints/
+```
+
+> ❗The `--image` flag is in _alpha_ stage.
+
+The `--image` flag specifies a content addressable OCI artifact containing
+policy files. The image(s) will be copied into the local filesystem in a
+temporary directory, the location of which can be overridden with
+the `--tempdir`
+flag. Only files with the aforementioned extensions will be processed. For
+information on how to create OCI policy bundles, see
+the [Bundling Policy into OCI Artifacts](#bundling-policy-into-oci-artifacts)
+section.
+
+For example, to test a manifest (piped via stdin) against an OCI Artifact
+containing policies:
+
+```
+cat my-manifest.yaml | gator test --image=localhost:5000/gator/template-library:v1 \
+  --image=localhost:5000/gator/constraints:v1 
 ```
 
 #### Exit Codes
@@ -240,6 +260,24 @@ the `run` flag:
 gator verify path/to/suites/... --run "disallowed"
 ```
 
+#### Validating Metadata-Based Constraint Templates
+
+`gator verify` may be used with an [`AdmissionReview`](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/admission#AdmissionReview) 
+object to test your constraints. This can be helpful to simulate a certain operation (`CREATE`, `UPDATE`, `DELETE`, etc.) 
+or [`UserInfo`](https://pkg.go.dev/k8s.io/kubernetes@v1.25.3/pkg/apis/authentication#UserInfo) metadata. 
+Recall that the `input.review.user` can be accessed in the Rego code (see [Input Review](howto.md#input-review) for more guidance). 
+A few examples for how to structure your yaml can be found [here](https://github.com/open-policy-agent/gatekeeper/blob/03e6adb74f1714242cf936fd27eee19a0eda2d52/pkg/gator/fixtures/fixtures.go#L506-L528). 
+The `AdmissionReview` object can be specified where you would specify the object under test above:
+
+```yaml
+  - name: both-disallowed
+    object: path/to/test_admission_review.yaml
+    assertions:
+    - violations: 1
+```
+
+Note that [`audit`](audit.md) or `gator test` are different enforcement points and they don't have the `AdmissionReview` request metadata.
+
 Run `gator verify --help` for more information.
 
 ## The `gator expand` subcommand
@@ -257,15 +295,20 @@ supplied, the command will exit 1.
 
 ### Usage
 
-Similar to `gator test`, `gator expand` expects a `--filename` flag, which can
-be a file or directory containing the resources under test. This flag can be
-repeated.
+Similar to `gator test`, `gator expand` expects a `--filename` or `--image`
+flag. The flags can be used individually, in combination, and/or repeated.
 
 ```
-gator expand --filename="manifest.yaml" –filename="expansion-manifests/"
+gator expand --filename="manifest.yaml" –filename="expansion-policy/" 
 ```
 
-By default, `gator expand` will output to `stdout`, but a `–outputfile` can be
+Or, using an OCI Artifact for the expansion configuration:
+
+```
+gator expand --filename="my-deployment.yaml" --image=localhost:5000/gator/expansion-policy:v1
+```
+
+By default, `gator expand` will output to stdout, but a `–outputfile` flag can be
 specified to write the results to a file.
 
 ```
@@ -280,6 +323,30 @@ gator expand --filename="manifest.yaml" –format="json"
 
 See `gator expand –help` for more details. `gator expand` will exit 1 if there
 is a problem parsing the configs or expanding the resources.
+
+## Bundling Policy into OCI Artifacts
+
+It may be useful to bundle policy files into OCI Artifacts for ingestion during
+CI/CD workflows. The workflow could perform validation on inbound objects using
+`gator test|expand`.
+
+A policy bundle can be composed of any arbitrary file structure, which `gator`
+will walk recursively. Any files that do not end in `json|yaml|yml` will be
+ignored. `gator` does not enforce any file schema in the artifacts; it only
+requires that all files of the support extensions describe valid Kubernetes
+resources.
+
+We recommend using the [Oras CLI](https://oras.land/cli/) to create OCI
+artifacts. For example, to push a bundle containing the 2 local directories
+`constraints` and `template_library`:
+
+```
+oras push localhost:5000/gator/policy-bundle:v1 ./constraints/:application/vnd.oci.image.layer.v1.tar+gzip \
+  ./template_library/:application/vnd.oci.image.layer.v1.tar+gzip
+```
+
+This expects that the `constraints` and `template_library` directories are at
+the path that this command is being run from.
 
 ## Gotchas
 
