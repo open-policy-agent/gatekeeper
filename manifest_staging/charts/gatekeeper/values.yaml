@@ -48,6 +48,7 @@ postUpgrade:
       "pod-security.kubernetes.io/warn-version=latest",
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
+    extraAnnotations: {}
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -77,6 +78,7 @@ postInstall:
       "pod-security.kubernetes.io/warn-version=latest",
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
+    extraAnnotations: {}
   probeWebhook:
     enabled: true
     image:
