@@ -160,7 +160,7 @@ e2e-build-load-externaldata-image: docker-buildx-builder
 	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
-e2e-verify-release: patch-image deploy test-e2e
+e2e-verify-release: e2e-build-load-externaldata-image patch-image deploy test-e2e
 	echo -e '\n\n======= manager logs =======\n\n' && kubectl logs -n ${GATEKEEPER_NAMESPACE} -l control-plane=controller-manager
 
 e2e-helm-install:
