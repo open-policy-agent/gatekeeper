@@ -13,6 +13,9 @@ metadata:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    {{- if .Values.postInstall.labelNamespace.extraAnnotations }}
+    {{- toYaml .Values.postInstall.labelNamespace.extraAnnotations | trim | nindent 4 }}
+    {{- end }}
 spec:
   template:
     metadata:
