@@ -20,6 +20,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -92,6 +93,7 @@ var (
 )
 
 var (
+	logFile              = flag.String("log-file", "", "Log to file, if specified. Default is to log to stderr.")
 	logLevel             = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
 	logLevelKey          = flag.String("log-level-key", "level", "JSON key for the log level field, defaults to `level`")
 	logLevelEncoder      = flag.String("log-level-encoder", "lower", "Encoder for the value of the log level field. Valid values: [`lower`, `capital`, `color`, `capitalcolor`], default: `lower`")
@@ -138,23 +140,47 @@ func main() {
 		}()
 	}
 
+	var logStream io.Writer
+	if *logFile != "" {
+		handle, err := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			setupLog.Error(fmt.Errorf("unable to open log file %s: %w", *logFile, err), "error initializing logging")
+		}
+		defer handle.Close()
+		logStream = handle
+	}
+
 	switch *logLevel {
 	case "DEBUG":
 		eCfg := zap.NewDevelopmentEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		logger := crzap.New(crzap.UseDevMode(true), crzap.Encoder(zapcore.NewConsoleEncoder(eCfg)))
+		opts := []crzap.Opts{
+			crzap.UseDevMode(true),
+			crzap.Encoder(zapcore.NewConsoleEncoder(eCfg)),
+		}
+		if logStream != nil {
+			opts = append(opts, crzap.WriteTo(logStream))
+		}
+		logger := crzap.New(opts...)
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
 	case "WARNING", "ERROR":
-		setLoggerForProduction(encoder)
+		setLoggerForProduction(encoder, logStream)
 	case "INFO":
 		fallthrough
 	default:
 		eCfg := zap.NewProductionEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		logger := crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg)))
+		opts := []crzap.Opts{
+			crzap.UseDevMode(false),
+			crzap.Encoder(zapcore.NewJSONEncoder(eCfg)),
+		}
+		if logStream != nil {
+			opts = append(opts, crzap.WriteTo(logStream))
+		}
+		logger := crzap.New(opts...)
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
 	}
@@ -404,8 +430,11 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	}
 }
 
-func setLoggerForProduction(encoder zapcore.LevelEncoder) {
+func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	sink := zapcore.AddSync(os.Stderr)
+	if dest != nil {
+		sink = zapcore.AddSync(dest)
+	}
 	var opts []zap.Option
 	encCfg := zap.NewProductionEncoderConfig()
 	encCfg.LevelKey = *logLevelKey

@@ -93,6 +93,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -164,6 +165,7 @@ spec:
             - --enable-external-data={{ .Values.enableExternalData }}
             - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
+            - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
             - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
