@@ -16,7 +16,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"crypto/x509"
 	"errors"
 	"flag"
@@ -281,18 +280,38 @@ func innerMain() int {
 		}
 	}
 
-	signalCtx := ctrl.SetupSignalHandler()
-	ctx, cancel := context.WithCancel(signalCtx)
-	errChan := make(chan error)
-
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
-	go setupControllers(mgr, sw, tracker, setupFinished, cancel, errChan)
+	setupErr := make(chan error)
+	go func() {
+		setupErr <- setupControllers(mgr, sw, tracker, setupFinished)
+	}()
 
 	setupLog.Info("starting manager")
+	mgrErr := make(chan error)
+	go func() {
+		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "problem running manager")
+			mgrErr <- err
+		}
+	}()
+
+	// block until either setupControllers or mgr has an error, or mgr exits
 	hadError := false
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
-		hadError = true
+blockingLoop:
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-setupErr:
+			if err != nil {
+				hadError = true
+				break blockingLoop
+			}
+		case err := <-mgrErr:
+			if err != nil {
+				hadError = true
+			}
+			// if manager has returned, we should exit the program
+			break blockingLoop
+		}
 	}
 
 	// Manager stops controllers asynchronously.
@@ -301,26 +320,15 @@ func innerMain() int {
 	setupLog.Info("disabling controllers...")
 	sw.Stop()
 
-	err = <-errChan
-	if err != nil {
-		hadError = true
-	}
-
 	if hadError {
 		return 1
 	}
 	return 0
 }
 
-func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}, cancel func(), errChan chan<- error) {
-	defer close(errChan)
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
-
-	onErr := func(err error) {
-		errChan <- err
-		cancel()
-	}
 
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
@@ -337,15 +345,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		certWatcher, err := certwatcher.New(certFile, keyFile)
 		if err != nil {
 			setupLog.Error(err, "unable to create client cert watcher")
-			onErr(err)
-			return
+			return err
 		}
 
 		setupLog.Info("setting up client cert watcher")
 		if err := mgr.Add(certWatcher); err != nil {
 			setupLog.Error(err, "unable to register client cert watcher")
-			onErr(err)
-			return
+			return err
 		}
 
 		// register the client cert watcher to the driver
@@ -358,15 +364,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	driver, err := local.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
-		onErr(err)
-		return
+		return err
 	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
-		onErr(err)
-		return
+		return err
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
@@ -377,20 +381,17 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	if !ok {
 		err := fmt.Errorf("expected dynamic cache, got: %T", c)
 		setupLog.Error(err, "fetching dynamic cache")
-		onErr(err)
-		return
+		return err
 	}
 
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
-		onErr(err)
-		return
+		return err
 	}
 	if err := mgr.Add(wm); err != nil {
 		setupLog.Error(err, "unable to register watch manager with the manager")
-		onErr(err)
-		return
+		return err
 	}
 
 	// processExcluder is used for namespace exclusion for specified processes in config
@@ -413,8 +414,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
-		onErr(err)
-		return
+		return err
 	}
 
 	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
@@ -427,8 +427,7 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		}
 		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
-			onErr(err)
-			return
+			return err
 		}
 	}
 
@@ -443,24 +442,22 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
-			onErr(err)
-			return
+			return err
 		}
 	}
 
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade with the manager")
-		onErr(err)
-		return
+		return err
 	}
 
 	setupLog.Info("setting up metrics")
 	if err := metrics.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register metrics with the manager")
-		onErr(err)
-		return
+		return err
 	}
+	return nil
 }
 
 func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
