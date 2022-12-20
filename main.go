@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"flag"
@@ -125,11 +126,15 @@ func init() {
 }
 
 func main() {
+	os.Exit(innerMain())
+}
+
+func innerMain() int {
 	flag.Parse()
 	encoder, ok := logLevelEncoders[*logLevelEncoder]
 	if !ok {
 		setupLog.Error(fmt.Errorf("invalid log level encoder: %v", *logLevelEncoder), "Invalid log level encoder")
-		os.Exit(1)
+		return 1
 	}
 
 	if *enableProfile {
@@ -215,7 +220,7 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		return 1
 	}
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
@@ -242,7 +247,7 @@ func main() {
 			ExtKeyUsages:   &keyUsages,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
-			os.Exit(1)
+			return 1
 		}
 	} else {
 		close(setupFinished)
@@ -256,14 +261,14 @@ func main() {
 	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled)
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
-		os.Exit(1)
+		return 1
 	}
 
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to create health check")
-		os.Exit(1)
+		return 1
 	}
 
 	// only setup healthcheck when flag is set and available webhook count > 0
@@ -272,16 +277,20 @@ func main() {
 		setupLog.Info("setting up TLS healthcheck probe")
 		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
 			setupLog.Error(err, "unable to create tls health check")
-			os.Exit(1)
+			return 1
 		}
 	}
 
+	signalCtx := ctrl.SetupSignalHandler()
+	ctx, cancel := context.WithCancel(signalCtx)
+	errChan := make(chan error)
+
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
-	go setupControllers(mgr, sw, tracker, setupFinished)
+	go setupControllers(mgr, sw, tracker, setupFinished, cancel, errChan)
 
 	setupLog.Info("starting manager")
 	hadError := false
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		hadError = true
 	}
@@ -292,14 +301,26 @@ func main() {
 	setupLog.Info("disabling controllers...")
 	sw.Stop()
 
-	if hadError {
-		os.Exit(1)
+	err = <-errChan
+	if err != nil {
+		hadError = true
 	}
+
+	if hadError {
+		return 1
+	}
+	return 0
 }
 
-func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}, cancel func(), errChan chan<- error) {
+	defer close(errChan)
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
+
+	onErr := func(err error) {
+		errChan <- err
+		cancel()
+	}
 
 	var providerCache *frameworksexternaldata.ProviderCache
 	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
@@ -316,13 +337,15 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		certWatcher, err := certwatcher.New(certFile, keyFile)
 		if err != nil {
 			setupLog.Error(err, "unable to create client cert watcher")
-			os.Exit(1)
+			onErr(err)
+			return
 		}
 
 		setupLog.Info("setting up client cert watcher")
 		if err := mgr.Add(certWatcher); err != nil {
 			setupLog.Error(err, "unable to register client cert watcher")
-			os.Exit(1)
+			onErr(err)
+			return
 		}
 
 		// register the client cert watcher to the driver
@@ -335,13 +358,15 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	driver, err := local.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
@@ -352,17 +377,20 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	if !ok {
 		err := fmt.Errorf("expected dynamic cache, got: %T", c)
 		setupLog.Error(err, "fetching dynamic cache")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 	if err := mgr.Add(wm); err != nil {
 		setupLog.Error(err, "unable to register watch manager with the manager")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	// processExcluder is used for namespace exclusion for specified processes in config
@@ -385,7 +413,8 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 
 	if err := controller.AddToManager(mgr, &opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
@@ -398,7 +427,8 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		}
 		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
-			os.Exit(1)
+			onErr(err)
+			return
 		}
 	}
 
@@ -413,20 +443,23 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		}
 		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
-			os.Exit(1)
+			onErr(err)
+			return
 		}
 	}
 
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade with the manager")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 
 	setupLog.Info("setting up metrics")
 	if err := metrics.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register metrics with the manager")
-		os.Exit(1)
+		onErr(err)
+		return
 	}
 }
 
