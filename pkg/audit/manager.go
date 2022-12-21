@@ -1078,8 +1078,8 @@ func mergeErrors(errs []error) error {
 	for i, err := range errs {
 		if i != 0 {
 			sb.WriteString("\n")
-			sb.WriteString(err.Error())
 		}
+		sb.WriteString(err.Error())
 	}
 	return errors.New(sb.String())
 }
