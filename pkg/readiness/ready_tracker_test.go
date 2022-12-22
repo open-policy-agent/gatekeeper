@@ -240,8 +240,9 @@ func Test_AssignImage(t *testing.T) {
 	opaClient := setupOpa(t)
 
 	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
 
-	if err := setupController(mgr, wm, opaClient, mutationSystem, nil); err != nil {
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
 		t.Fatalf("setupControllers: %v", err)
 	}
 
