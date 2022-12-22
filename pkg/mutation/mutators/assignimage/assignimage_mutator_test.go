@@ -1,7 +1,9 @@
 package assignimage
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
@@ -262,9 +264,9 @@ func TestMutate(t *testing.T) {
 
 func TestMutatorForAssignImage(t *testing.T) {
 	tests := []struct {
-		name    string
-		cfg     *aiTestConfig
-		wantErr bool
+		name  string
+		cfg   *aiTestConfig
+		errFn func(error) bool
 	}{
 		{
 			name: "valid assignImage",
@@ -285,7 +287,10 @@ func TestMutatorForAssignImage(t *testing.T) {
 				location: "metadata.labels.image",
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
-			wantErr: true,
+			errFn: func(err error) bool {
+				_, ok := err.(metadataRootError)
+				return ok
+			},
 		},
 		{
 			name: "terminal list returns err",
@@ -296,7 +301,10 @@ func TestMutatorForAssignImage(t *testing.T) {
 				location: "spec.containers[name:foo]",
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
-			wantErr: true,
+			errFn: func(err error) bool {
+				_, ok := err.(listTerminalError)
+				return ok
+			},
 		},
 		{
 			name: "syntactically invalid location returns err",
@@ -307,7 +315,9 @@ func TestMutatorForAssignImage(t *testing.T) {
 				location: "/x/y/zx[)",
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
-			wantErr: true,
+			errFn: func(err error) bool {
+				return strings.Contains(err.Error(), "invalid location format")
+			},
 		},
 		{
 			name: "bad assigns return err",
@@ -318,18 +328,10 @@ func TestMutatorForAssignImage(t *testing.T) {
 				location: "spec.containers[name:foo].image",
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
-			wantErr: true,
-		},
-		{
-			name: "metadata root returns err",
-			cfg: &aiTestConfig{
-				domain:   "a.b.c",
-				path:     "new/app",
-				tag:      ":latest",
-				location: "metadata.labels.image",
-				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+			errFn: func(err error) bool {
+				_, ok := errors.Unwrap(err).(domainLikePathError)
+				return ok
 			},
-			wantErr: true,
 		},
 	}
 
@@ -339,11 +341,12 @@ func TestMutatorForAssignImage(t *testing.T) {
 			if err != nil && mut != nil {
 				t.Errorf("returned non-nil mutator but got err: %s", err)
 			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("did not want error but got: %v", err)
-			}
-			if tc.wantErr && err == nil {
-				t.Error("wanted error but got nil")
+			if tc.errFn != nil {
+				if err == nil {
+					t.Errorf("wanted err but  got nil")
+				} else if !tc.errFn(err) {
+					t.Errorf("got error of unexpected type: %s", err)
+				}
 			}
 		})
 	}

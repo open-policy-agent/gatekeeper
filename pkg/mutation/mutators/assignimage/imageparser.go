@@ -13,7 +13,8 @@ var (
 	// [@:/], into components that would cause that component to be split the next
 	// time the mutation is applied and "leak" to its neighbor. Some validation is
 	// done as regex on individual components, and other validation which looks at
-	// multiple components together is done in code.
+	// multiple components together is done in code. All validation for domain and
+	// tag must be put in validateDomain and validateTag respectively.
 
 	// domainRegexp defines a schema for a domain component.
 	domainRegexp = regexp.MustCompile(`(^\w[\w\-_]*\.[\w\-_\.]*[\w](:\d+)?$)|(^localhost(:\d+)?$)`)
@@ -43,16 +44,22 @@ func mutateImage(domain, path, tag, mutableImgRef string) string {
 
 func newImage(imageRef string) image {
 	domain, remainder := splitDomain(imageRef)
-	var pt string
+	path, tag := splitTag(remainder)
+	return image{domain: domain, path: path, tag: tag}
+}
+
+// splitTag separates the path and tag components from a string.
+func splitTag(remainder string) (string, string) {
+	var path string
 	tag := ""
 	if tagSep := strings.IndexAny(remainder, ":@"); tagSep > -1 {
-		pt = remainder[:tagSep]
+		path = remainder[:tagSep]
 		tag = remainder[tagSep:]
 	} else {
-		pt = remainder
+		path = remainder
 	}
 
-	return image{domain: domain, path: pt, tag: tag}
+	return path, tag
 }
 
 func (img image) newMutatedImage(domain, path, tag string) image {
@@ -93,11 +100,32 @@ func validateDomain(domain string) error {
 	}
 
 	if !domainRegexp.MatchString(domain) {
-		return fmt.Errorf("assignDomain %q does not match pattern %s", domain, domainRegexp.String())
+		return newInvalidDomainError(domain)
 	}
 
+	// The error below should theoretically be unreachable, as the regex
+	// validation should preclude this from happening. This check is included
+	// anyway to prevent code drift, and ensure that if a domain is validated
+	// it can also be recognized as a domain.
 	if d, r := splitDomain(domain + "/"); d != domain || r != "" {
-		return fmt.Errorf("domain %q could not be regognized as a valid domain", domain)
+		return fmt.Errorf("domain %q could not be recognized as a valid domain", domain)
+	}
+
+	return nil
+}
+
+func validateTag(tag string) error {
+	if tag == "" {
+		return nil
+	}
+
+	if !tagRegexp.MatchString(tag) {
+		return newInvalidTagError(tag)
+	}
+
+	// This error should never happen, but the check is included to prevent drift.
+	if _, t := splitTag(tag); t != tag {
+		return fmt.Errorf("tag %q could not be recognized as a valid tag or digest", tag)
 	}
 
 	return nil
@@ -105,17 +133,17 @@ func validateDomain(domain string) error {
 
 func validateImageParts(domain, path, tag string) error {
 	if domain == "" && path == "" && tag == "" {
-		return fmt.Errorf("at least one of [assignDomain, assignPath, assignTag] must be set")
+		return newMissingComponentsError()
 	}
 	if err := validateDomain(domain); err != nil {
 		return err
 	}
 	// match the whole string for path (anchoring with `$` is tricky here)
 	if path != "" && path != pathRegexp.FindString(path) {
-		return fmt.Errorf("assignPath %q does not match pattern %s", path, pathRegexp.String())
+		return newInvalidPathError(path)
 	}
-	if tag != "" && !tagRegexp.MatchString(tag) {
-		return fmt.Errorf("assignTag %q does not match pattern %s", tag, tagRegexp.String())
+	if err := validateTag(tag); err != nil {
+		return err
 	}
 
 	// Check if the path looks like a domain string, and the domain is not set.
@@ -127,7 +155,7 @@ func validateImageParts(domain, path, tag string) error {
 	// the domain component, so the result would be "gcr.io/gcr.io/repo" and so on.
 	if domain == "" {
 		if d, _ := splitDomain(path); d != "" {
-			return fmt.Errorf("assignDomain must be set if the first part of assignPath %q can be interpretted as part of a domain", path)
+			return newDomainLikePathError(path)
 		}
 	}
 

@@ -112,7 +112,7 @@ func (m *Mutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignImage.GetGeneration())
 }
 
-// MutatorForAssign returns an mutator built from
+// MutatorForAssignImage returns a mutator built from
 // the given assignImage instance.
 func MutatorForAssignImage(assignImage *mutationsunversioned.AssignImage) (*Mutator, error) {
 	// This is not always set by the kubernetes API server
@@ -120,15 +120,15 @@ func MutatorForAssignImage(assignImage *mutationsunversioned.AssignImage) (*Muta
 
 	path, err := parser.Parse(assignImage.Spec.Location)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid location format `%s` for Assign %s", assignImage.Spec.Location, assignImage.GetName())
+		return nil, errors.Wrapf(err, "invalid location format `%s` for assignImage %s", assignImage.Spec.Location, assignImage.GetName())
 	}
 
 	if core.HasMetadataRoot(path) {
-		return nil, fmt.Errorf("assignImage %s can't change metadata", assignImage.GetName())
+		return nil, newMetadataRootError(assignImage.GetName())
 	}
 
 	if hasListTerminal(path) {
-		return nil, fmt.Errorf("assignImage %s cannot mutate list-type fields", assignImage.GetName())
+		return nil, newListTerminalError(assignImage.GetName())
 	}
 
 	err = core.CheckKeyNotChanged(path)

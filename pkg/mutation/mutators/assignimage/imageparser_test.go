@@ -1,7 +1,6 @@
 package assignimage
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -161,31 +160,36 @@ func TestNewImage(t *testing.T) {
 
 func isDomainError(domain string) func(error) bool {
 	return func(err error) bool {
-		return strings.Contains(err.Error(), fmt.Sprintf("assignDomain %q does not match pattern", domain))
+		_, ok := err.(invalidDomainError)
+		return ok && strings.Contains(err.Error(), domain)
 	}
 }
 
 func isPathError(path string) func(error) bool {
 	return func(err error) bool {
-		return strings.Contains(err.Error(), fmt.Sprintf("assignPath %q does not match pattern", path))
+		_, ok := err.(invalidPathError)
+		return ok && strings.Contains(err.Error(), path)
 	}
 }
 
 func isTagError(tag string) func(error) bool {
 	return func(err error) bool {
-		return strings.Contains(err.Error(), fmt.Sprintf("assignTag %q does not match pattern", tag))
+		_, ok := err.(invalidTagError)
+		return ok && strings.Contains(err.Error(), tag)
 	}
 }
 
 func isEmptyArgsError() func(error) bool {
 	return func(err error) bool {
-		return strings.Contains(err.Error(), "at least one of")
+		_, ok := err.(missingComponentsError)
+		return ok
 	}
 }
 
 func isPathlikeDomainError() func(error) bool {
 	return func(err error) bool {
-		return strings.Contains(err.Error(), "assignDomain must be set if")
+		_, ok := err.(domainLikePathError)
+		return ok
 	}
 }
 
