@@ -141,7 +141,7 @@ number of instances to run, please refer to [operations audit](operations.md#aud
         medium: Memory
     ```
 
-By default, audit will request each resource from the Kubernetes API during each audit cycle. To rely on the OPA cache instead, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into OPA before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
+By default, audit will request each resource from the Kubernetes API during each audit cycle. To rely on the audit informer cache instead, use the flag `--audit-from-cache=true`. Note that this requires replication of Kubernetes resources into the audit cache before they can be evaluated against the enforced policies. Refer to the [Replicating data](sync.md) section for more information.
 
 ### Audit using kinds specified in the constraints only
 

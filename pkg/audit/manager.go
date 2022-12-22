@@ -214,7 +214,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit opa.Audit() results", "violations", len(res))
+		am.log.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
