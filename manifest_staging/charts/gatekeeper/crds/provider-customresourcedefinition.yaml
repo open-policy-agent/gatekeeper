@@ -17,17 +17,22 @@ spec:
   scope: Cluster
   versions:
   - deprecated: true
-    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1 instead.
+    deprecationWarning: externaldata.gatekeeper.sh/v1alpha1 is deprecated. Use externaldata.gatekeeper.sh/v1beta1
+      instead.
     name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Provider is the Schema for the Provider API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -35,13 +40,16 @@ spec:
             description: Spec defines the Provider specifications.
             properties:
               caBundle:
-                description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
+                description: CABundle is a base64-encoded string that contains the
+                  TLS CA bundle in PEM format. It is used to verify the signature
+                  of the provider's certificate.
                 type: string
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with http:// or https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  http:// or https://.
                 type: string
             type: object
         type: object
@@ -53,10 +61,14 @@ spec:
         description: Provider is the Schema for the providers API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -64,13 +76,16 @@ spec:
             description: Spec defines the Provider specifications.
             properties:
               caBundle:
-                description: CABundle is a base64-encoded string that contains the TLS CA bundle in PEM format. It is used to verify the signature of the provider's certificate.
+                description: CABundle is a base64-encoded string that contains the
+                  TLS CA bundle in PEM format. It is used to verify the signature
+                  of the provider's certificate.
                 type: string
               timeout:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with http:// or https://.
+                description: URL is the url for the provider. URL is prefixed with
+                  http:// or https://.
                 type: string
             type: object
         type: object

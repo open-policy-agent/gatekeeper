@@ -15,13 +15,14 @@ VERSION := v3.11.0-rc.1
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
-KUSTOMIZE_VERSION ?= 3.8.9
+KUBEBUILDER_VERSION ?= 3.8.0
+KUSTOMIZE_VERSION ?= 4.5.7
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
-YQ_VERSION ?= 4.2.0
+YQ_VERSION ?= 4.30.6
 FRAMEWORKS_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/frameworks/constraint)
 OPA_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/opa)
 
@@ -264,7 +265,7 @@ manifests: __controller-gen
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
 		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
-		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
+		--load-restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
 # across systems.
@@ -447,7 +448,9 @@ __test-image:
 		-t gatekeeper-test \
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
-		--build-arg ORAS_VERSION=$(ORAS_VERSION)
+		--build-arg ORAS_VERSION=$(ORAS_VERSION) \
+		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION) \
+		--build-arg KUBEBUILDER_VERSION=$(KUBEBUILDER_VERSION)
 
 .PHONY: vendor
 vendor:

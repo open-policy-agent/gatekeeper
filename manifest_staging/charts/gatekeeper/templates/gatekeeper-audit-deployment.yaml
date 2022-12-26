@@ -49,7 +49,8 @@ spec:
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
-        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
+        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel
+          .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --audit-chunk-size={{ .Values.auditChunkSize }}
@@ -62,12 +63,14 @@ spec:
         - --health-addr=:{{ .Values.audit.healthPort }}
         - --prometheus-port={{ .Values.audit.metricsPort }}
         - --enable-external-data={{ .Values.enableExternalData }}
-        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
+          }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
-        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
+        - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled
+          }}
         command:
         - /manager
         env:
@@ -99,6 +102,12 @@ spec:
           name: metrics
           protocol: TCP
         - containerPort: {{ .Values.audit.healthPort }}
+          name: healthz
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
           name: healthz
           protocol: TCP
         readinessProbe:
