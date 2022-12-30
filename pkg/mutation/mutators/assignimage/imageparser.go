@@ -123,8 +123,10 @@ func validateTag(tag string) error {
 		return newInvalidTagError(tag)
 	}
 
-	// This error should never happen, but the check is included to prevent drift.
-	if _, t := splitTag(tag); t != tag {
+	// This error should never happen because the regex above prevents it, but the
+	// check is included to prevent drift. Splitting the tag should return itself,
+	// and splitting a valid tag should never return a path.
+	if p, t := splitTag(tag); t != tag || p != "" {
 		return fmt.Errorf("tag %q could not be recognized as a valid tag or digest", tag)
 	}
 
