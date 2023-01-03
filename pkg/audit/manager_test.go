@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -219,5 +220,114 @@ func Test_getViolationRef(t *testing.T) {
 				t.Errorf("getViolationRef() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_getFilesFromDir(t *testing.T) {
+	// Test case 1: directory does not exist
+	am := Manager{}
+	_, err := am.getFilesFromDir("/does/not/exist", 10)
+	if err == nil {
+		t.Errorf("Expected error when directory does not exist, got nil")
+	}
+
+	// Test case 2: directory exists and is empty
+	emptyDir, err := os.MkdirTemp("", "empty-dir")
+	if err != nil {
+		t.Errorf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(emptyDir)
+	files, err := am.getFilesFromDir(emptyDir, 10)
+	if err != nil {
+		t.Errorf("Unexpected error when directory is empty: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("Expected 0 files when directory is empty, got %d", len(files))
+	}
+
+	// Test case 3: directory exists and has some files
+	tempDir, err := os.MkdirTemp("", "temp-dir")
+	if err != nil {
+		t.Errorf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	for i := 0; i < 15; i++ {
+		file, err := os.CreateTemp(tempDir, "test-file-*.txt")
+		if err != nil {
+			t.Errorf("Failed to create temporary file: %v", err)
+		}
+		file.Close()
+	}
+	files, err = am.getFilesFromDir(tempDir, 10)
+	if err != nil {
+		t.Errorf("Unexpected error when directory has files: %v", err)
+	}
+	if len(files) != 15 {
+		t.Errorf("Expected 15 files when directory has 15 files, got %d", len(files))
+	}
+}
+
+func Test_removeAllFromDir(t *testing.T) {
+	// Test case 1: directory does not exist
+	am := Manager{}
+	err := am.removeAllFromDir("/does/not/exist", 10)
+	if err == nil {
+		t.Errorf("Expected error when directory does not exist, got nil")
+	}
+
+	// Test case 2: directory exists and is empty
+	emptyDir, err := os.MkdirTemp("", "empty-dir")
+	if err != nil {
+		t.Errorf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(emptyDir)
+	err = am.removeAllFromDir(emptyDir, 10)
+	if err != nil {
+		t.Errorf("Unexpected error when directory is empty: %v", err)
+	}
+
+	// Test case 3: directory exists and has some files
+	tempDir, err := os.MkdirTemp("", "temp-dir")
+	if err != nil {
+		t.Errorf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	for i := 0; i < 15; i++ {
+		file, err := os.CreateTemp(tempDir, "test-file-*.txt")
+		if err != nil {
+			t.Errorf("Failed to create temporary file: %v", err)
+		}
+		file.Close()
+	}
+	err = am.removeAllFromDir(tempDir, 10)
+	if err != nil {
+		t.Errorf("Unexpected error when removing files from directory: %v", err)
+	}
+	files, err := am.getFilesFromDir(tempDir, 10)
+	if err != nil {
+		t.Errorf("Unexpected error when checking if directory is empty: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("Expected 0 files when all files have been removed, got %d", len(files))
+	}
+}
+
+func Test_readUnstructured(t *testing.T) {
+	// Test case 1: invalid JSON
+	am := Manager{}
+	_, err := am.readUnstructured([]byte("invalid json"))
+	if err == nil {
+		t.Errorf("Expected error when input is invalid JSON, got nil")
+	}
+
+	// Test case 2: valid JSON
+	jsonBytes := []byte(`{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"my-namespace"}}
+	`)
+	u, err := am.readUnstructured(jsonBytes)
+	if err != nil {
+		t.Errorf("Unexpected error when input is valid JSON: %v", err)
+	}
+	if u.GetName() != "my-namespace" {
+		t.Errorf("Expected name to be 'my-namespace', got %s", u.GetName())
 	}
 }
