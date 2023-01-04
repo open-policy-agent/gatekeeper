@@ -2,6 +2,7 @@ package reader
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -188,7 +189,7 @@ func ReadK8sResources(r io.Reader) ([]*unstructured.Unstructured, error) {
 			Object: make(map[string]interface{}),
 		}
 		err := decoder.Decode(&u.Object)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
