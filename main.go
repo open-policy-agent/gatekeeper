@@ -149,6 +149,7 @@ func innerMain() int {
 		handle, err := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			setupLog.Error(fmt.Errorf("unable to open log file %s: %w", *logFile, err), "error initializing logging")
+			return 1
 		}
 		defer handle.Close()
 		logStream = handle
@@ -295,7 +296,8 @@ func innerMain() int {
 		}
 	}()
 
-	// block until either setupControllers or mgr has an error, or mgr exits
+	// block until either setupControllers or mgr has an error, or mgr exits.
+	// end after two events (one per goroutine) to guard against deadlock.
 	hadError := false
 blockingLoop:
 	for i := 0; i < 2; i++ {
