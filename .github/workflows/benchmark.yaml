@@ -40,14 +40,13 @@ jobs:
           ref: ${{ github.base_ref }}
 
       - name: Run benchmarks on base ref
-        run: GOMAXPROCS=1 go test ./pkg/... -bench . -run="^#" -count 10 > ../base_benchmarks.txt
+        run: make benchmark-test BENCHMARK_FILE_NAME="../base_benchmarks.txt"
       
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
       - name: Run benchmark with incoming changes
-        run: |
-          GOMAXPROCS=1 go test ./pkg/... -bench . -run="^#" -count 10 > pr_benchmarks.txt
+        run: make benchmark-test BENCHMARK_FILE_NAME="pr_benchmarks.txt"
 
       - name: Compare benchmarks
         id: get-comment-body
