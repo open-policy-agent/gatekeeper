@@ -21,6 +21,4 @@ jobs:
         run: |
           export GOPATH="$HOME/go"
           PATH="$GOPATH/bin:$PATH"
-          go install istio.io/tools/cmd/license-lint@1.16.0
-
-          license-lint --config ./.github/license-lint-config.yml 2>&1
+          ./third_party/k8s.io/kubernetes/hack/verify-licenses.sh
