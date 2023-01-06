@@ -35,6 +35,8 @@ GOLANGCI_LINT_VERSION := v1.45.2
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
+BENCHMARK_FILE_NAME ?= benchmarks.txt
+
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 
@@ -102,6 +104,10 @@ all: lint test manager
 # Run tests
 native-test:
 	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+
+.PHONY: benchmark-test
+benchmark-test:
+	GOMAXPROCS=1 go test ./pkg/... -bench . -run="^#" -count 10 > ${BENCHMARK_FILE_NAME}
 
 # Hook to run docker tests
 .PHONY: test
