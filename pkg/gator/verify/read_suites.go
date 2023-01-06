@@ -100,11 +100,14 @@ func readSuites(f fs.FS, files []string, originalPath string) ([]*Suite, error) 
 		if suite != nil {
 			suite.AbsolutePath = file
 
-			// trim any prefixes like "/" or "./" in order for the
+			// trim any prefixes like "/", "./" or "../" in order for the
 			// .Cut call below to actually work with the absolute path
 			// contained in the file var.
 			cutPath := strings.TrimPrefix(originalPath, "/")
 			cutPath = strings.TrimPrefix(cutPath, "./")
+			for strings.HasPrefix(cutPath, "../") {
+				cutPath = strings.TrimPrefix(cutPath, "../")
+			}
 
 			_, after, found := strings.Cut(file, cutPath)
 			if !found {
