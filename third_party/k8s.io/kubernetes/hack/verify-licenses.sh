@@ -33,8 +33,8 @@ kube::util::ensure-temp-dir
 
 # Creating a new repository tree 
 # Deleting vendor directory to make go-licenses fetch license URLs from go-packages source repository
-git worktree add -f "${KUBE_TEMP}"/tmp_test_licenses/kubernetes HEAD >/dev/null 2>&1 || true
-cd "${KUBE_TEMP}"/tmp_test_licenses/kubernetes && rm -rf vendor
+git worktree add -f "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper HEAD >/dev/null 2>&1 || true
+cd "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper && rm -rf vendor
 
 
 # Ensure that we find the binaries we build before anything else.
