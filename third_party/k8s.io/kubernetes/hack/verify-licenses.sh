@@ -76,7 +76,7 @@ done
 
 # Scanning go-packages under the project & verifying against the CNCF approved list of licenses
 echo '[INFO] Starting license scan on go-packages...'
-go-licenses report ./... >> "${KUBE_TEMP}"/licenses.csv
+go-licenses report ./... --include_tests >> "${KUBE_TEMP}"/licenses.csv
 
 echo -e 'PACKAGE_NAME  LICENSE_NAME  LICENSE_URL\n' >> "${KUBE_TEMP}"/approved_licenses.dump
 while IFS=, read -r GO_PACKAGE LICENSE_URL LICENSE_NAME
@@ -96,6 +96,14 @@ do
 			fi
 		elif curl -Is "${LICENSE_URL}" | head -1 | grep -q 404;
 		then
+            # For gatekeeper, the script won't find the constraint frameworks's license atm.
+            if [[ "${GO_PACKAGE}" == github.com/open-policy-agent/frameworks/* ]];
+            then
+                LICENSE_URL='https://github.com/open-policy-agent/frameworks/blob/master/LICENSE'
+				echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
+                continue
+            fi
+
 			# Check whether the License URL is incorrectly formed
 			# TODO: Remove this workaround check once PR https://github.com/google/go-licenses/pull/110 is merged
 			IFS='/' read -r -a split_license_url <<< ${LICENSE_URL}
@@ -128,8 +136,18 @@ do
 			echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
 		fi
 	else
-		echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/notapproved_licenses.dump
-		packages_flagged+=("${GO_PACKAGE}")
+        # Not all packages at this point should go to the not approved dump.
+        # there are a few exceptions approved by CNCF as per: https://github.com/cncf/foundation/tree/main/license-exceptions
+        # Currently gatekeeper uses just one of those so we are not going to do a general solution.
+
+        if [[ "${GO_PACKAGE}" == "github.com/rcrowley/go-metrics" ]] && [[ "${LICENSE_NAME}" == "BSD-2-Clause-FreeBSD" ]];
+        then
+            # as per https://github.com/cncf/foundation/blob/main/license-exceptions/cncf-exceptions-2019-11-01.json#L723-L726
+            echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/approved_licenses.dump
+        else
+		    echo "${GO_PACKAGE}  ${LICENSE_NAME}  ${LICENSE_URL}" >> "${KUBE_TEMP}"/notapproved_licenses.dump
+		    packages_flagged+=("${GO_PACKAGE}")
+        fi
 	fi
 done < "${KUBE_TEMP}"/licenses.csv
 awk '{ printf "%-100s : %-20s : %s\n", $1, $2, $3 }' "${KUBE_TEMP}"/approved_licenses.dump
