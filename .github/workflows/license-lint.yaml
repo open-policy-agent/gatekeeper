@@ -1,5 +1,15 @@
 name: license-lint
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "vendor/**"
+  pull_request:
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "vendor/**"
 
 jobs:
   license-lint:
