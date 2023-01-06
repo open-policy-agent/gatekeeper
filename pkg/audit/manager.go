@@ -619,7 +619,7 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		if err != nil {
@@ -638,7 +638,7 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		for _, n := range names {

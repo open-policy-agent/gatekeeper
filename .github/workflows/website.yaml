@@ -18,7 +18,7 @@ jobs:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -41,7 +41,7 @@ jobs:
       - run: yarn build
 
       - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3.9.0
+        uses: peaceiris/actions-gh-pages@v3.9.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./website/build
