@@ -76,7 +76,39 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 			wantErr: nil,
 		},
 		{
+			name:         "single target absolute path",
+			target:       "test.yaml",
+			originalPath: "/test.yaml",
+			recursive:    false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+`),
+				},
+			},
+			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "/test.yaml"}},
+			wantErr: nil,
+		},
+		{
 			name:         "single target relative path",
+			target:       "test.yaml",
+			originalPath: "test.yaml",
+			recursive:    false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+`),
+				},
+			},
+			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "test.yaml"}},
+			wantErr: nil,
+		},
+		{
+			name:         "single target relative path ./",
 			target:       "test.yaml",
 			originalPath: "./test.yaml",
 			recursive:    false,
@@ -89,6 +121,38 @@ apiVersion: test.gatekeeper.sh/v1alpha1
 				},
 			},
 			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "./test.yaml"}},
+			wantErr: nil,
+		},
+		{
+			name:         "single target relative path ../",
+			target:       "test.yaml",
+			originalPath: "../test.yaml",
+			recursive:    false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+`),
+				},
+			},
+			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "../test.yaml"}},
+			wantErr: nil,
+		},
+		{
+			name:         "single target relative path ../../",
+			target:       "test.yaml",
+			originalPath: "../../test.yaml",
+			recursive:    false,
+			fileSystem: fstest.MapFS{
+				"test.yaml": &fstest.MapFile{
+					Data: []byte(`
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+`),
+				},
+			},
+			want:    []*Suite{{AbsolutePath: "test.yaml", InputPath: "../../test.yaml"}},
 			wantErr: nil,
 		},
 		{

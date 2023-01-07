@@ -76,7 +76,7 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-            - --log-level={{ .Values.logLevel }}
+            - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
@@ -150,7 +150,7 @@ spec:
         - name: manager
           args:
             - --audit-interval={{ .Values.auditInterval }}
-            - --log-level={{ .Values.logLevel }}
+            - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - --audit-chunk-size={{ .Values.auditChunkSize }}

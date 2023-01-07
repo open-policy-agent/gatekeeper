@@ -214,7 +214,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit opa.Audit() results", "violations", len(res))
+		am.log.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
@@ -619,7 +619,7 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		if err != nil {
@@ -638,7 +638,7 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		for _, n := range names {
@@ -1078,8 +1078,8 @@ func mergeErrors(errs []error) error {
 	for i, err := range errs {
 		if i != 0 {
 			sb.WriteString("\n")
-			sb.WriteString(err.Error())
 		}
+		sb.WriteString(err.Error())
 	}
 	return errors.New(sb.String())
 }

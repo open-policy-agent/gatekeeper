@@ -137,7 +137,7 @@ func innerMain() int {
 	}
 
 	if *enableProfile {
-		setupLog.Info("Starting profiling on port %s", *profilePort)
+		setupLog.Info(fmt.Sprintf("Starting profiling on port %d", *profilePort))
 		go func() {
 			addr := fmt.Sprintf("%s:%d", "localhost", *profilePort)
 			setupLog.Error(http.ListenAndServe(addr, nil), "unable to start profiling server")

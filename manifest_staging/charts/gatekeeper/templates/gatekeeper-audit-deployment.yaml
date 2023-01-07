@@ -49,7 +49,7 @@ spec:
         {{- end }}
         args:
         - --audit-interval={{ .Values.auditInterval }}
-        - --log-level={{ .Values.logLevel }}
+        - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --audit-chunk-size={{ .Values.auditChunkSize }}

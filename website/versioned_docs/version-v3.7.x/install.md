@@ -7,7 +7,9 @@ title: Installation
 
 ### Minimum Kubernetes Version
 
-The minimum supported Kubernetes version of Gatekeeper is **n-4 of the latest stable Kubernetes release** per [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). NOTE: Gatekeeper requires Kubernetes resources introduced in v1.16.
+The minimum supported Kubernetes version for Gatekeeper is aligned with the Kubernetes releases listed in the [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). For more information, please see [supported Kubernetes versions](https://github.com/open-policy-agent/gatekeeper/blob/master/docs/Release_Management.md#supported-kubernetes-versions).
+
+**Note:** Gatekeeper requires resources introduced in Kubernetes v1.16.
 
 ### RBAC Permissions
 
