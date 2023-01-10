@@ -21,6 +21,15 @@ func TestNewImage(t *testing.T) {
 			},
 		},
 		{
+			name:     "all empty components",
+			imageRef: "",
+			want: image{
+				domain: "",
+				path:   "",
+				tag:    "",
+			},
+		},
+		{
 			name:     "full image with hash",
 			imageRef: "some-image/hello@sha256:abcde",
 			want: image{

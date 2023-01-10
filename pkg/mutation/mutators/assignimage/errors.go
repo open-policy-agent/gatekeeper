@@ -27,7 +27,7 @@ type metadataRootError struct{ baseError }
 func newInvalidDomainError(domain string) invalidDomainError {
 	return invalidDomainError{
 		baseError{
-			fmt.Sprintf("assignDomain %q does not match pattern %s", domain, domainRegexp.String()),
+			fmt.Sprintf("assignDomain %q must be a fully-qualified domain name or localhost", domain),
 		},
 	}
 }
@@ -35,7 +35,7 @@ func newInvalidDomainError(domain string) invalidDomainError {
 func newInvalidPathError(path string) invalidPathError {
 	return invalidPathError{
 		baseError{
-			fmt.Sprintf("assignPath %q does not match pattern %s", path, pathRegexp.String()),
+			fmt.Sprintf("assignPath %q must be a valid docker image path", path),
 		},
 	}
 }
@@ -43,7 +43,7 @@ func newInvalidPathError(path string) invalidPathError {
 func newInvalidTagError(tag string) invalidTagError {
 	return invalidTagError{
 		baseError{
-			fmt.Sprintf("assignTag %q does not match pattern %s", tag, tagRegexp.String()),
+			fmt.Sprintf("assignTag %q must be a valid docker image tag", tag),
 		},
 	}
 }

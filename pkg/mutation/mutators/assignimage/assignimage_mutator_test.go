@@ -25,8 +25,8 @@ type aiTestConfig struct {
 	applyTo   []match.ApplyTo
 }
 
-func newAiMutator(cfg *aiTestConfig) *Mutator {
-	m := newAi(cfg)
+func newAIMutator(cfg *aiTestConfig) *Mutator {
+	m := newAI(cfg)
 	m2, err := MutatorForAssignImage(m)
 	if err != nil {
 		panic(err)
@@ -34,7 +34,7 @@ func newAiMutator(cfg *aiTestConfig) *Mutator {
 	return m2
 }
 
-func newAi(cfg *aiTestConfig) *mutationsunversioned.AssignImage {
+func newAI(cfg *aiTestConfig) *mutationsunversioned.AssignImage {
 	m := &mutationsunversioned.AssignImage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Foo",
@@ -108,6 +108,17 @@ func TestMutate(t *testing.T) {
 				tag:      ":new",
 			},
 			obj: newPod("library/busybox:v1", "foo"),
+			fn:  podTest("library/busybox:new"),
+		},
+		{
+			name: "mutate path and tag with empty image",
+			cfg: &aiTestConfig{
+				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				location: `spec.containers[name:foo].image`,
+				path:     "library/busybox",
+				tag:      ":new",
+			},
+			obj: newPod("", "foo"),
 			fn:  podTest("library/busybox:new"),
 		},
 		{
@@ -249,7 +260,7 @@ func TestMutate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mutator := newAiMutator(test.cfg)
+			mutator := newAIMutator(test.cfg)
 			obj := test.obj.DeepCopy()
 			_, err := mutator.Mutate(&types.Mutable{Object: obj})
 			if err != nil {
@@ -337,7 +348,7 @@ func TestMutatorForAssignImage(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			mut, err := MutatorForAssignImage(newAi(tc.cfg))
+			mut, err := MutatorForAssignImage(newAI(tc.cfg))
 			if err != nil && mut != nil {
 				t.Errorf("returned non-nil mutator but got err: %s", err)
 			}
