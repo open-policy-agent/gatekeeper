@@ -231,4 +231,14 @@ var replacements = map[string]string{
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
         {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE": `
+        {{- if .Values.controllerManager.logFile}}
+        - --log-file={{ .Values.controllerManager.logFile }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE": `
+        {{- if .Values.audit.logFile}}
+        - --log-file={{ .Values.audit.logFile }}
+        {{- end }}`,
 }

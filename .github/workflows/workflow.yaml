@@ -43,7 +43,7 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       # source: https://github.com/golangci/golangci-lint-action
       - name: golangci-lint
@@ -65,7 +65,7 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Unit test
         run: |
@@ -96,7 +96,7 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Download e2e dependencies
         run: |
@@ -118,7 +118,7 @@ jobs:
         KUBERNETES_VERSION: ["1.23.13", "1.24.7", "1.25.3", "1.26.0"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -166,7 +166,7 @@ jobs:
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Bootstrap e2e
         run: |
@@ -203,7 +203,7 @@ jobs:
       contents: read
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
     - name: Set up Go 1.19
       uses: actions/setup-go@v3
@@ -247,7 +247,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Download trivy
         run: |
@@ -283,7 +283,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: make docker-push-dev
         run: |
@@ -330,7 +330,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
