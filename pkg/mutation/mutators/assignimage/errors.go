@@ -43,7 +43,7 @@ func newInvalidPathError(path string) invalidPathError {
 func newInvalidTagError(tag string) invalidTagError {
 	return invalidTagError{
 		baseError{
-			fmt.Sprintf("assignTag %q must be a valid docker image tag or digest", tag),
+			fmt.Sprintf("assignTag %q must be a valid docker image tag or digest starting with ':' or '@'", tag),
 		},
 	}
 }
