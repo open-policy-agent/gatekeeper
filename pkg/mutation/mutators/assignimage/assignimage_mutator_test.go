@@ -72,6 +72,28 @@ func newPod(imageVal, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: u}
 }
 
+func newPodNoImage() *unstructured.Unstructured {
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: "foo",
+				},
+			},
+		},
+	}
+
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+	if err != nil {
+		panic(fmt.Sprintf("converting pod to unstructured: %v", err))
+	}
+	return &unstructured.Unstructured{Object: u}
+}
+
 func podTest(wantImage string) func(*unstructured.Unstructured) error {
 	return func(u *unstructured.Unstructured) error {
 		var pod corev1.Pod
@@ -119,6 +141,17 @@ func TestMutate(t *testing.T) {
 				tag:      ":new",
 			},
 			obj: newPod("", "foo"),
+			fn:  podTest("library/busybox:new"),
+		},
+		{
+			name: "mutate path and tag with missing image",
+			cfg: &aiTestConfig{
+				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
+				location: `spec.containers[name:foo].image`,
+				path:     "library/busybox",
+				tag:      ":new",
+			},
+			obj: newPodNoImage(),
 			fn:  podTest("library/busybox:new"),
 		},
 		{
