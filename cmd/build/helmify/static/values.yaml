@@ -183,6 +183,12 @@ controllerManager:
     supplementalGroups:
       - 999
   extraRules: []
+  networkPolicy:
+    enabled: false
+    ingress: { }
+      # - from:
+      #   - ipBlock:
+      #       cidr: 0.0.0.0/0
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst
