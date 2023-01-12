@@ -1077,6 +1077,23 @@ func TestRunner_Run(t *testing.T) {
 							},
 						},
 					},
+					{
+						Name:       "invalid admission review request usage", // this test covers error handling for invalid admission review objects
+						Template:   "template.yaml",
+						Constraint: "constraint-with-match.yaml",
+						Cases: []*Case{
+							{
+								Name:       "no kind on object", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-kind-object-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "no kind on old object", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-kind-oldObject-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+						},
+					},
 				},
 			},
 			f: fstest.MapFS{
@@ -1085,6 +1102,9 @@ func TestRunner_Run(t *testing.T) {
 				},
 				"constraint.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfo),
+				},
+				"constraint-with-match.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfoWithMatch),
 				},
 				"no-objects-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.AdmissionReviewMissingObjectAndOldObject),
@@ -1106,6 +1126,12 @@ func TestRunner_Run(t *testing.T) {
 				},
 				"no-oldObject-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.DeleteAdmissionReviewWithNoOldObject),
+				},
+				"no-kind-object-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.SystemAdmissionReviewMissingKind),
+				},
+				"no-kind-oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.DeleteAdmissionReviewWithOldObjectMissingKind),
 				},
 			},
 			want: SuiteResult{
@@ -1130,6 +1156,13 @@ func TestRunner_Run(t *testing.T) {
 							{Name: "missing admission request object", Error: gator.ErrMissingK8sAdmissionRequest},
 							{Name: "no objects to review", Error: gator.ErrNoObjectForReview},
 							{Name: "no oldObject on delete", Error: gator.ErrNilOldObject},
+						},
+					},
+					{
+						Name: "invalid admission review request usage",
+						CaseResults: []CaseResult{
+							{Name: "no kind on object", Error: gator.ErrUnmarshallObject},
+							{Name: "no kind on old object", Error: gator.ErrUnmarshallObject},
 						},
 					},
 				},
