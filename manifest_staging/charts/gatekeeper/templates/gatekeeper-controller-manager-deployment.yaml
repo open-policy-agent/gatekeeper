@@ -54,14 +54,17 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
+        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary
+          .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
-        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion
+          }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
-        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation
+          }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
         {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
@@ -121,6 +124,15 @@ spec:
           name: metrics
           protocol: TCP
         - containerPort: {{ .Values.controllerManager.healthPort }}
+          name: healthz
+          protocol: TCP
+        - containerPort: 8443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
           name: healthz
           protocol: TCP
         readinessProbe:
