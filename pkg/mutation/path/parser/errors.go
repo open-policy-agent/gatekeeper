@@ -38,6 +38,5 @@ func (e invalidIntegerError) Error() string {
 }
 
 func (e invalidIntegerError) Is(target error) bool {
-	_, ok := target.(invalidIntegerError)
-	return ok
+	return errors.As(target, &invalidIntegerError{})
 }
