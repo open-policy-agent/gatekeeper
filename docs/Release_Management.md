@@ -7,8 +7,8 @@ This document describes Gatekeeper project release management, which includes re
 ## Legend
 
 - **X.Y.Z** refers to the version (git tag) of Gatekeeper that is released. This is the version of the Gatekeeper image and the Chart version.
-- **Breaking changes** refer to schema changes, flag changes, and behavior changes of Gatekeeper that may require a clean install during upgrade and it may introduce changes that could break backward compatibility.
-- **Milestone** should be designed to include feature sets to accommodate 2 months release cycles including test gates. GitHub milestones are used by maintainers to manage each release. PRs and Issues for each release should be created as part of a corresponding milestone.
+- **Breaking changes** refer to schema changes, flag changes, and behavior changes of Gatekeeper that may require a clean installation during upgrade, and it may introduce changes that could break backward compatibility.
+- **Milestone** should be designed to include feature sets to accommodate 2 months release cycles including test gates. GitHub's milestones are used by maintainers to manage each release. PRs and Issues for each release should be created as part of a corresponding milestone.
 - **Patch releases** refer to applicable fixes, including security fixes, may be backported to support releases, depending on severity and feasibility.
 - **Test gates** should include soak tests and upgrade tests from the last minor version.
 
@@ -52,7 +52,7 @@ Applicable fixes, including security fixes, may be cherry-picked into the releas
 
 We expect users to stay reasonably up-to-date with the versions of Gatekeeper they use in production, but understand that it may take time to upgrade. We expect users to be running approximately the latest patch release of a given minor release and encourage users to upgrade as soon as possible.
 
-We expect to "support" n (current) and n-1 major.minor releases. "Support" means we expect users to be running that version in production. For example, when v3.3.0 comes out, v3.1.x will no longer be supported for patches and we encourage users to upgrade to a supported version as soon as possible.
+We expect to "support" n (current) and n-1 major.minor releases. "Support" means we expect users to be running that version in production. For example, when v3.3.0 comes out, v3.1.x will no longer be supported for patches, and we encourage users to upgrade to a supported version as soon as possible.
 
 ## Supported Kubernetes Versions
 
