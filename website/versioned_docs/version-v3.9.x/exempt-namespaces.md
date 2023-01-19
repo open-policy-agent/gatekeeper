@@ -60,6 +60,8 @@ If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (
       in that namespace from policy checks. This way a user must explicitly have permissions
       to configure the Gatekeeper pod before they can add exemptions.
 
+      > In order to add the `admission.gatekeeper.sh/ignore` label to a namespace, that namespace must be listed under the gatekeeper `controllerManager.exemptNamespaces` parameter when installing via Helm.
+
    3. Add the `admission.gatekeeper.sh/ignore` label to the namespace. The value attached
       to the label is ignored, so it can be used to annotate the reason for the exemption.
 
