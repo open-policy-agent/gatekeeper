@@ -71,5 +71,4 @@ The difference is at what point in the admission process an exemption occurs.
 
 If you use `--exempt-namespace` flag and `admission.gatekeeper.sh/ignore` label, Gatekeeper's webhook will not be called by the API server for any resource in that namespace. That means that Gatekeeper being down should have no effect on requests for that namespace.
 
-
 If you use the config method, Gatekeeper itself evaluates the exemption. The benefit there is that we have more control over the syntax and can be more fine-grained, but it also means that the API server is still calling the webhook, which means downtime can have an impact.
