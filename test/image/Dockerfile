@@ -1,21 +1,14 @@
-# Build the manager binary
 FROM golang:1.19-bullseye as builder
 
 ARG BATS_VERSION
 ARG ORAS_VERSION
 ARG YQ_VERSION
 ARG KUSTOMIZE_VERSION
-ARG KUBEBUILDER_VERSION
+
 ARG TARGETARCH
 
-RUN apt-get update &&\
-    apt-get install -y apt-utils make
-
-# Install kubebuilder
-WORKDIR /scratch
-RUN curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_linux_${TARGETARCH}" &&\
-    mv kubebuilder_linux_${TARGETARCH} /usr/local/kubebuilder
-ENV PATH=$PATH:/usr/local/kubebuilder/bin:/usr/bin
+RUN apt-get update && \
+    apt-get install -y apt-utils make jq
 
 # Install kustomize
 RUN curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${TARGETARCH}.tar.gz" &&\
@@ -36,9 +29,6 @@ RUN curl -SsLO https://github.com/oras-project/oras/releases/download/v${ORAS_VE
 # Install yq
 RUN curl -LsS https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${TARGETARCH} -o /usr/local/bin/yq \
     && chmod +x /usr/local/bin/yq
-
-# Install jq
-RUN apt-get update && yes | apt-get install jq
 
 # Install docker
 RUN curl -fsSL https://get.docker.com | sh
