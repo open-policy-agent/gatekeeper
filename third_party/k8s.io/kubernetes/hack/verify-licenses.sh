@@ -21,25 +21,13 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-
-KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
-source "${KUBE_ROOT}/hack/lib/init.sh"
-source "${KUBE_ROOT}/hack/lib/util.sh"
-
-
-kube::golang::verify_go_version
-kube::util::ensure-temp-dir
+KUBE_TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t kubernetes.XXXXXX)
 
 
 # Creating a new repository tree 
 # Deleting vendor directory to make go-licenses fetch license URLs from go-packages source repository
 git worktree add -f "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper HEAD >/dev/null 2>&1 || true
 cd "${KUBE_TEMP}"/tmp_test_licenses/gatekeeper && rm -rf vendor
-
-
-# Ensure that we find the binaries we build before anything else.
-export GOBIN="${KUBE_OUTPUT_BINPATH}"
-PATH="${GOBIN}:${PATH}"
 
 
 # Explicitly opt into go modules, even though we're inside a GOPATH directory
@@ -161,13 +149,13 @@ fi
 
 
 if [[ ${#packages_flagged[@]} -gt 0 ]]; then
-	kube::log::error "[ERROR] The following go-packages in the project are using non-CNCF approved licenses. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
+	echo "[ERROR] The following go-packages in the project are using non-CNCF approved licenses. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
 	awk '{ printf "%-100s :  %-20s : %s\n", $1, $2, $3 }' "${KUBE_TEMP}"/notapproved_licenses.dump
 	exit_code=1
 elif [[ "${exit_code}" -eq 1 ]]; then
-	kube::log::status "[ERROR] Project is using go-packages with unknown or unreachable license URLs. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
+	echo "[ERROR] Project is using go-packages with unknown or unreachable license URLs. Please refer to the CNCF's approved licence list for further information: https://github.com/cncf/foundation/blob/main/allowed-third-party-license-policy.md"
 else
-	kube::log::status "[SUCCESS] Scan complete! All go-packages under the project are using current CNCF approved licenses!"
+	echo "[SUCCESS] Scan complete! All go-packages under the project are using current CNCF approved licenses!"
 fi
 
 exit "${exit_code}"
