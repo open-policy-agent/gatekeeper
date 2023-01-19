@@ -8,7 +8,7 @@ ARG KUSTOMIZE_VERSION
 ARG TARGETARCH
 
 RUN apt-get update && \
-    apt-get install -y apt-utils make jq
+    apt-get install -y make jq
 
 # Install kustomize
 RUN curl -L -O "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${TARGETARCH}.tar.gz" &&\
