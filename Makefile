@@ -15,13 +15,14 @@ VERSION := v3.12.0-beta.0
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
+KUBEBUILDER_VERSION ?= 3.8.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
-YQ_VERSION ?= 4.2.0
+YQ_VERSION ?= 4.30.6
 FRAMEWORKS_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/frameworks/constraint)
 OPA_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/opa)
 
@@ -34,6 +35,8 @@ GOLANGCI_LINT_VERSION := v1.45.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
+
+BENCHMARK_FILE_NAME ?= benchmarks.txt
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -102,6 +105,10 @@ all: lint test manager
 # Run tests
 native-test:
 	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+
+.PHONY: benchmark-test
+benchmark-test:
+	GOMAXPROCS=1 go test ./pkg/... -bench . -run="^#" -count 10 > ${BENCHMARK_FILE_NAME}
 
 # Hook to run docker tests
 .PHONY: test
@@ -443,11 +450,14 @@ __tooling-image:
 		-t gatekeeper-tooling
 
 __test-image:
-	docker build test/image \
+	docker buildx build test/image \
 		-t gatekeeper-test \
+		--load \
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
-		--build-arg ORAS_VERSION=$(ORAS_VERSION)
+		--build-arg ORAS_VERSION=$(ORAS_VERSION) \
+		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION) \
+		--build-arg KUBEBUILDER_VERSION=$(KUBEBUILDER_VERSION)
 
 .PHONY: vendor
 vendor:

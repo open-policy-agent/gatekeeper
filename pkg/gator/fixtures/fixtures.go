@@ -489,6 +489,7 @@ kind: AdmissionReview
 apiVersion: admission.k8s.io/v1beta1
 request:
   oldObject:
+    kind: Pod
     labels: 
       - app: "bar"
 `
@@ -500,11 +501,38 @@ apiVersion: admission.k8s.io/v1beta1
 request:
   operation: "DELETE"
   object:
+    kind: Pod
+    labels:
+      - app: "bar"
+`
+
+	DeleteAdmissionReviewWithOldObjectMissingKind = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  operation: "DELETE"
+  object:
+    kind: Pod
+    labels:
+      - app: "bar"
+  oldObject:
     labels:
       - app: "bar"
 `
 	// SystemAdmissionReview holds a request coming from a system user name.
 	SystemAdmissionReview = `
+kind: AdmissionReview
+apiVersion: admission.k8s.io/v1beta1
+request:
+  userInfo:
+    username: "system:foo"
+  object:
+    kind: Pod
+    labels:
+      - app: "bar"
+`
+
+	SystemAdmissionReviewMissingKind = `
 kind: AdmissionReview
 apiVersion: admission.k8s.io/v1beta1
 request:
@@ -523,6 +551,7 @@ request:
   userInfo:
     username: "foo"
   object:
+    kind: Pod
     labels: 
       - app: "bar"
 `
@@ -540,5 +569,17 @@ kind: ValidateUserInfo
 apiVersion: constraints.gatekeeper.sh/v1beta1
 metadata:
   name: always-pass
+`
+
+	ConstraintAlwaysValidateUserInfoWithMatch = `
+kind: ValidateUserInfo
+apiVersion: constraints.gatekeeper.sh/v1beta1
+metadata:
+  name: always-pass
+spec:
+  match:
+    kinds:
+      - apiGroups: ["*"]
+        kinds: ["*"]
 `
 )
