@@ -460,7 +460,7 @@ __test-image:
 		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION)
 
 ## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
+LOCALBIN ?= $(shell pwd)/.tmp/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
