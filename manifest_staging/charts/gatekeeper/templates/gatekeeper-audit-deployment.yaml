@@ -67,6 +67,10 @@ spec:
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
         {{- end }}
+        
+        {{- if .Values.audit.logFile}}
+        - --log-file={{ .Values.audit.logFile }}
+        {{- end }}
         - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
         command:
         - /manager
