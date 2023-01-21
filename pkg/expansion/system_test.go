@@ -894,7 +894,7 @@ func loadAssignImage(f string, t *testing.T) types.Mutator {
 	a := &mutationsunversioned.AssignImage{}
 	err := convertUnstructuredToTyped(u, a)
 	if err != nil {
-		t.Fatalf("error converting assign: %s", err)
+		t.Fatalf("error converting assignImage: %s", err)
 	}
 	mut, err := assignimage.MutatorForAssignImage(a)
 	if err != nil {
