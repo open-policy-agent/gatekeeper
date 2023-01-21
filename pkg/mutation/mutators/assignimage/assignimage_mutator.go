@@ -37,7 +37,7 @@ var _ schema.MutatorWithSchema = &Mutator{}
 func (m *Mutator) Matches(mutable *types.Mutable) bool {
 	res, err := core.MatchWithApplyTo(mutable, m.assignImage.Spec.ApplyTo, &m.assignImage.Spec.Match)
 	if err != nil {
-		log.Error(err, "Matches failed for modify set", "modifyset", m.assignImage.Name)
+		log.Error(err, "Matches failed for assign image", "assignImage", m.assignImage.Name)
 	}
 	return res
 }
