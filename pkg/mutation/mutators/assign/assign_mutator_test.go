@@ -91,7 +91,7 @@ func newPod(pod *corev1.Pod) *unstructured.Unstructured {
 func ensureObj(u *unstructured.Unstructured, expected interface{}, path ...string) error {
 	v, exists, err := unstructured.NestedFieldNoCopy(u.Object, path...)
 	if err != nil {
-		return fmt.Errorf("could not retrieve value: %v", err)
+		return fmt.Errorf("could not retrieve value: %w", err)
 	}
 	if !exists {
 		return fmt.Errorf("value does not exist at %+v: %s", path, spew.Sdump(u.Object))
@@ -105,7 +105,7 @@ func ensureObj(u *unstructured.Unstructured, expected interface{}, path ...strin
 func ensureMissing(u *unstructured.Unstructured, path ...string) error {
 	v, exists, err := unstructured.NestedFieldNoCopy(u.Object, path...)
 	if err != nil {
-		return fmt.Errorf("could not retrieve value: %v", err)
+		return fmt.Errorf("could not retrieve value: %w", err)
 	}
 	if exists {
 		return fmt.Errorf("value exists at %+v as %v, expected missing: %s", path, v, spew.Sdump(u.Object))

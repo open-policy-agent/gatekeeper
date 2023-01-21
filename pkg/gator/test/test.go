@@ -82,7 +82,7 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 	// create the expander
 	er, err := expand.NewExpander(objs)
 	if err != nil {
-		return nil, fmt.Errorf("error creating expander: %s", err)
+		return nil, fmt.Errorf("error creating expander: %w", err)
 	}
 
 	// now audit all objects
@@ -100,14 +100,14 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 
 		review, err := client.Review(ctx, au)
 		if err != nil {
-			return nil, fmt.Errorf("reviewing %v %s/%s: %v",
+			return nil, fmt.Errorf("reviewing %v %s/%s: %w",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 
 		// Attempt to expand the obj and review resultant resources (if any)
 		resultants, err := er.Expand(obj)
 		if err != nil {
-			return nil, fmt.Errorf("expanding resource %s: %s", obj.GetName(), err)
+			return nil, fmt.Errorf("expanding resource %s: %w", obj.GetName(), err)
 		}
 		for _, resultant := range resultants {
 			au := target.AugmentedUnstructured{
@@ -117,7 +117,7 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 			}
 			resultantReview, err := client.Review(ctx, au)
 			if err != nil {
-				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %v",
+				return nil, fmt.Errorf("reviewing expanded resource %v %s/%s: %w",
 					resultant.Obj.GroupVersionKind(), resultant.Obj.GetNamespace(), resultant.Obj.GetName(), err)
 			}
 			expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantReview)
