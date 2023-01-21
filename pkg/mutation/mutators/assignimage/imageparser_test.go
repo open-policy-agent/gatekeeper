@@ -1,6 +1,7 @@
 package assignimage
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -169,36 +170,31 @@ func TestNewImage(t *testing.T) {
 
 func isDomainError(domain string) func(error) bool {
 	return func(err error) bool {
-		_, ok := err.(invalidDomainError)
-		return ok && strings.Contains(err.Error(), domain)
+		return errors.As(err, &invalidDomainError{}) && strings.Contains(err.Error(), domain)
 	}
 }
 
 func isPathError(path string) func(error) bool {
 	return func(err error) bool {
-		_, ok := err.(invalidPathError)
-		return ok && strings.Contains(err.Error(), path)
+		return errors.As(err, &invalidPathError{}) && strings.Contains(err.Error(), path)
 	}
 }
 
 func isTagError(tag string) func(error) bool {
 	return func(err error) bool {
-		_, ok := err.(invalidTagError)
-		return ok && strings.Contains(err.Error(), tag)
+		return errors.As(err, &invalidTagError{}) && strings.Contains(err.Error(), tag)
 	}
 }
 
 func isEmptyArgsError() func(error) bool {
 	return func(err error) bool {
-		_, ok := err.(missingComponentsError)
-		return ok
+		return errors.As(err, &missingComponentsError{})
 	}
 }
 
 func isPathlikeDomainError() func(error) bool {
 	return func(err error) bool {
-		_, ok := err.(domainLikePathError)
-		return ok
+		return errors.As(err, &domainLikePathError{})
 	}
 }
 
