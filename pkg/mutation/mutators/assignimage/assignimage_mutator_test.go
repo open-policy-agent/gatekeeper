@@ -332,8 +332,8 @@ func TestMutatorForAssignImage(t *testing.T) {
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
 			errFn: func(err error) bool {
-				_, ok := err.(metadataRootError)
-				return ok
+				var tarErr *metadataRootError
+				return errors.As(err, &tarErr)
 			},
 		},
 		{
@@ -346,8 +346,8 @@ func TestMutatorForAssignImage(t *testing.T) {
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
 			errFn: func(err error) bool {
-				_, ok := err.(listTerminalError)
-				return ok
+				var tarErr *listTerminalError
+				return errors.As(err, &tarErr)
 			},
 		},
 		{
@@ -373,8 +373,8 @@ func TestMutatorForAssignImage(t *testing.T) {
 				applyTo:  []match.ApplyTo{{Groups: []string{""}, Versions: []string{"v1"}, Kinds: []string{"Foo"}}},
 			},
 			errFn: func(err error) bool {
-				_, ok := errors.Unwrap(err).(domainLikePathError)
-				return ok
+				var tarErr *domainLikePathError
+				return errors.As(err, &tarErr)
 			},
 		},
 	}
