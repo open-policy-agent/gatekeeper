@@ -176,8 +176,25 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 	resource.SetUnstructuredContent(src)
 	resource.SetGroupVersionKind(resultantGVK)
 	resource.SetNamespace(ns.Name)
+	resource.SetName(mockNameForResource(obj, resultantGVK))
 
 	return resource, nil
+}
+
+// mockNameForResource returns a mock name for a resultant resource created
+// from expanding `gen`. The name will be of the form:
+// "mock-<resultant kind>-<generator name>". For example, a deployment named
+// `nginx-deployment` will produce a resultant named `mock-pod-nginx-deployment`.
+func mockNameForResource(gen *unstructured.Unstructured, gvk schema.GroupVersionKind) string {
+	name := "mock"
+	if gvk.Kind != "" {
+		name += "-" + gvk.Kind
+	}
+	if gen.GetName() != "" {
+		name += "-" + gen.GetName()
+	}
+
+	return strings.ToLower(name)
 }
 
 func NewSystem(mutationSystem *mutation.System) *System {

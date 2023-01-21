@@ -3,6 +3,7 @@ kind: Purr
 metadata:
   annotations:
     shouldPet: manytimes
+  name: mock-purr-big-chungus
 spec:
   loud: very
 ---
@@ -13,6 +14,7 @@ metadata:
     sound: meow
   labels:
     fluffy: extremely
+  name: mock-kitten-big-chungus
 spec:
   age: 10
   breed: calico
