@@ -101,7 +101,7 @@ func newConsoleEncoder(opts ...EncoderConfigOption) zapcore.Encoder {
 	return zapcore.NewConsoleEncoder(encoderConfig)
 }
 
-// Level sets Options.Level, which configures the the minimum enabled logging level e.g Debug, Info.
+// Level sets Options.Level, which configures the minimum enabled logging level e.g Debug, Info.
 // A zap log level should be multiplied by -1 to get the logr verbosity.
 // For example, to get logr verbosity of 3, pass zapcore.Level(-3) to this Opts.
 // See https://pkg.go.dev/github.com/go-logr/zapr for how zap level relates to logr verbosity.
@@ -168,7 +168,7 @@ type Options struct {
 	// underlying Zap logger.
 	ZapOpts []zap.Option
 	// TimeEncoder specifies the encoder for the timestamps in log messages.
-	// Defaults to EpochTimeEncoder as this is the default in Zap currently.
+	// Defaults to RFC3339TimeEncoder.
 	TimeEncoder zapcore.TimeEncoder
 }
 
@@ -217,7 +217,7 @@ func (o *Options) addDefaults() {
 	}
 
 	if o.TimeEncoder == nil {
-		o.TimeEncoder = zapcore.EpochTimeEncoder
+		o.TimeEncoder = zapcore.RFC3339TimeEncoder
 	}
 	f := func(ecfg *zapcore.EncoderConfig) {
 		ecfg.EncodeTime = o.TimeEncoder
@@ -244,21 +244,22 @@ func NewRaw(opts ...Opts) *zap.Logger {
 	// this basically mimics New<type>Config, but with a custom sink
 	sink := zapcore.AddSync(o.DestWriter)
 
-	o.ZapOpts = append(o.ZapOpts, zap.AddCallerSkip(1), zap.ErrorOutput(sink))
+	o.ZapOpts = append(o.ZapOpts, zap.ErrorOutput(sink))
 	log := zap.New(zapcore.NewCore(&KubeAwareEncoder{Encoder: o.Encoder, Verbose: o.Development}, sink, o.Level))
 	log = log.WithOptions(o.ZapOpts...)
 	return log
 }
 
-// BindFlags will parse the given flagset for zap option flags and set the log options accordingly
-//  zap-devel: Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn)
-//			  Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error)
-//  zap-encoder: Zap log encoding (one of 'json' or 'console')
-//  zap-log-level:  Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error',
-//			       or any integer value > 0 which corresponds to custom debug levels of increasing verbosity")
-//  zap-stacktrace-level: Zap Level at and above which stacktraces are captured (one of 'info', 'error' or 'panic')
-//  zap-time-encoding: Zap time encoding (one of 'epoch', 'millis', 'nano', 'iso8601', 'rfc3339' or 'rfc3339nano').
-//                    Defaults to 'epoch'.
+// BindFlags will parse the given flagset for zap option flags and set the log options accordingly:
+//   - zap-devel:
+//     Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn)
+//     Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error)
+//   - zap-encoder: Zap log encoding (one of 'json' or 'console')
+//   - zap-log-level: Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error',
+//     or any integer value > 0 which corresponds to custom debug levels of increasing verbosity").
+//   - zap-stacktrace-level: Zap Level at and above which stacktraces are captured (one of 'info', 'error' or 'panic')
+//   - zap-time-encoding: Zap time encoding (one of 'epoch', 'millis', 'nano', 'iso8601', 'rfc3339' or 'rfc3339nano'),
+//     Defaults to 'epoch'.
 func (o *Options) BindFlags(fs *flag.FlagSet) {
 	// Set Development mode value
 	fs.BoolVar(&o.Development, "zap-devel", o.Development,
@@ -298,10 +299,11 @@ func (o *Options) BindFlags(fs *flag.FlagSet) {
 }
 
 // UseFlagOptions configures the logger to use the Options set by parsing zap option flags from the CLI.
-//  opts := zap.Options{}
-//  opts.BindFlags(flag.CommandLine)
-//  flag.Parse()
-//  log := zap.New(zap.UseFlagOptions(&opts))
+//
+//	opts := zap.Options{}
+//	opts.BindFlags(flag.CommandLine)
+//	flag.Parse()
+//	log := zap.New(zap.UseFlagOptions(&opts))
 func UseFlagOptions(in *Options) Opts {
 	return func(o *Options) {
 		*o = *in

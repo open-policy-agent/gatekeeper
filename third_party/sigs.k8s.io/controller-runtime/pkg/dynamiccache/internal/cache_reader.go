@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.14.1/pkg/cache)
 
 package internal
 
@@ -24,13 +24,12 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/internal/field/selector"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,10 +48,15 @@ type CacheReader struct {
 
 	// scopeName is the scope of the resource (namespaced or cluster-scoped).
 	scopeName apimeta.RESTScopeName
+
+	// disableDeepCopy indicates not to deep copy objects during get or list objects.
+	// Be very careful with this, when enabled you must DeepCopy any object before mutating it,
+	// otherwise you will mutate the object in the cache.
+	disableDeepCopy bool
 }
 
 // Get checks the indexer for the object and writes a copy of it if found.
-func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out client.Object) error {
+func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out client.Object, opts ...client.GetOption) error {
 	if c.scopeName == apimeta.RESTScopeNameRoot {
 		key.Namespace = ""
 	}
@@ -79,9 +83,13 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out client.Ob
 		return fmt.Errorf("cache contained %T, which is not an Object", obj)
 	}
 
-	// deep copy to avoid mutating cache
-	// TODO(directxman12): revisit the decision to always deepcopy
-	obj = obj.(runtime.Object).DeepCopyObject()
+	if c.disableDeepCopy {
+		// skip deep copy which might be unsafe
+		// you must DeepCopy any object before mutating it outside
+	} else {
+		// deep copy to avoid mutating cache
+		obj = obj.(runtime.Object).DeepCopyObject()
+	}
 
 	// Copy the value of the item in the cache to the returned value
 	// TODO(directxman12): this is a terrible hack, pls fix (we should have deepcopyinto)
@@ -91,7 +99,9 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out client.Ob
 		return fmt.Errorf("cache had type %s, but %s was asked for", objVal.Type(), outVal.Type())
 	}
 	reflect.Indirect(outVal).Set(reflect.Indirect(objVal))
-	out.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+	if !c.disableDeepCopy {
+		out.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+	}
 
 	return nil
 }
@@ -108,7 +118,7 @@ func (c *CacheReader) List(_ context.Context, out client.ObjectList, opts ...cli
 	case listOpts.FieldSelector != nil:
 		// TODO(directxman12): support more complicated field selectors by
 		// combining multiple indices, GetIndexers, etc
-		field, val, requiresExact := requiresExactMatch(listOpts.FieldSelector)
+		field, val, requiresExact := selector.RequiresExactMatch(listOpts.FieldSelector)
 		if !requiresExact {
 			return fmt.Errorf("non-exact field matches are not supported by the cache")
 		}
@@ -132,10 +142,10 @@ func (c *CacheReader) List(_ context.Context, out client.ObjectList, opts ...cli
 	limitSet := listOpts.Limit > 0
 
 	runtimeObjs := make([]runtime.Object, 0, len(objs))
-	for i, item := range objs {
+	for _, item := range objs {
 		// if the Limit option is set and the number of items
 		// listed exceeds this limit, then stop reading.
-		if limitSet && int64(i) >= listOpts.Limit {
+		if limitSet && int64(len(runtimeObjs)) >= listOpts.Limit {
 			break
 		}
 		obj, isObj := item.(runtime.Object)
@@ -153,8 +163,15 @@ func (c *CacheReader) List(_ context.Context, out client.ObjectList, opts ...cli
 			}
 		}
 
-		outObj := obj.DeepCopyObject()
-		outObj.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+		var outObj runtime.Object
+		if c.disableDeepCopy || (listOpts.UnsafeDisableDeepCopy != nil && *listOpts.UnsafeDisableDeepCopy) {
+			// skip deep copy which might be unsafe
+			// you must DeepCopy any object before mutating it outside
+			outObj = obj
+		} else {
+			outObj = obj.DeepCopyObject()
+			outObj.GetObjectKind().SetGroupVersionKind(c.groupVersionKind)
+		}
 		runtimeObjs = append(runtimeObjs, outObj)
 	}
 	return apimeta.SetList(out, runtimeObjs)
@@ -169,19 +186,6 @@ func objectKeyToStoreKey(k client.ObjectKey) string {
 		return k.Name
 	}
 	return k.Namespace + "/" + k.Name
-}
-
-// requiresExactMatch checks if the given field selector is of the form `k=v` or `k==v`.
-func requiresExactMatch(sel fields.Selector) (field, val string, required bool) {
-	reqs := sel.Requirements()
-	if len(reqs) != 1 {
-		return "", "", false
-	}
-	req := reqs[0]
-	if req.Operator != selection.Equals && req.Operator != selection.DoubleEquals {
-		return "", "", false
-	}
-	return req.Field, req.Value, true
 }
 
 // FieldIndexName constructs the name of the index over the given field,
