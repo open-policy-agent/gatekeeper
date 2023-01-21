@@ -1,6 +1,8 @@
 package core
 
 import (
+	"errors"
+
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/schema"
 	apiTypes "k8s.io/apimachinery/pkg/types"
@@ -23,15 +25,16 @@ func setGeneration(generation int64) statusUpdate {
 func setErrors(err error) statusUpdate {
 	return func(status *statusv1beta1.MutatorPodStatus) {
 		// Replaces any existing errors, if there was one.
-		switch err.(type) {
-		case nil:
+		if err == nil {
 			status.Status.Errors = nil
-		case schema.ErrConflictingSchema:
+			return
+		}
+		if errors.As(err, &schema.ErrConflictingSchema{}) {
 			status.Status.Errors = []statusv1beta1.MutatorError{{
 				Type:    schema.ErrConflictingSchemaType,
 				Message: err.Error(),
 			}}
-		default:
+		} else {
 			status.Status.Errors = []statusv1beta1.MutatorError{{Message: err.Error()}}
 		}
 	}
