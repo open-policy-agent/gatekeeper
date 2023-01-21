@@ -263,7 +263,8 @@ type errSome struct{ id int }
 func newErrSome(id int) error { return &errSome{id: id} }
 
 func (e *errSome) Is(target error) bool {
-	if t, ok := target.(*errSome); ok {
+	var t *errSome
+	if errors.As(target, &t) {
 		return t.id == e.id
 	}
 

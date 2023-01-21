@@ -65,18 +65,18 @@ func NewExpander(resources []*unstructured.Unstructured) (*Expander, error) {
 	}
 
 	if err := er.addResources(resources); err != nil {
-		return nil, fmt.Errorf("error parsing resources: %s", err)
+		return nil, fmt.Errorf("error parsing resources: %w", err)
 	}
 
 	for _, te := range er.templateExpansions {
 		if err := er.expSystem.UpsertTemplate(te); err != nil {
-			return nil, fmt.Errorf("error upserting template %s: %s", te.Name, err)
+			return nil, fmt.Errorf("error upserting template %s: %w", te.Name, err)
 		}
 	}
 
 	for _, m := range er.mutators {
 		if err := er.mutSystem.Upsert(m); err != nil {
-			return nil, fmt.Errorf("error upserting mutator: %s", err)
+			return nil, fmt.Errorf("error upserting mutator: %w", err)
 		}
 	}
 
@@ -94,12 +94,12 @@ func (er *Expander) Expand(resource *unstructured.Unstructured) ([]*expansion.Re
 		Source:    types.SourceTypeOriginal,
 	}
 	if _, err := er.mutSystem.Mutate(base); err != nil {
-		return nil, fmt.Errorf("error mutating base resource %s: %s", resource.GetName(), err)
+		return nil, fmt.Errorf("error mutating base resource %s: %w", resource.GetName(), err)
 	}
 
 	resultants, err := er.expSystem.Expand(base)
 	if err != nil {
-		return nil, fmt.Errorf("error expanding resource %s: %s", resource.GetName(), err)
+		return nil, fmt.Errorf("error expanding resource %s: %w", resource.GetName(), err)
 	}
 
 	return resultants, nil

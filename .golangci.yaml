@@ -27,6 +27,7 @@ linters:
   enable:
     - deadcode
     - errcheck
+    - errorlint
     - exportloopref
     - forcetypeassert
     - gocritic
