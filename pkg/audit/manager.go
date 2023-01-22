@@ -53,14 +53,15 @@ const (
 )
 
 var (
-	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
-	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
-	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from audit cache when auditing")
-	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
-	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
-	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	emptyAuditResults         []updateListEntry
+	auditInterval                = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	constraintViolationsLimit    = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
+	auditChunkSize               = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
+	auditFromCache               = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	emitAuditEvents              = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events with detailed info for each violation from an audit")
+	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit admission events for each violation in the involved objects namespace, the default (false) generates events in the namespace gatekeeper is installed in")
+	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
+	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
+	emptyAuditResults            []updateListEntry
 )
 
 // Manager allows us to audit resources periodically.
@@ -737,6 +738,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		gvk := r.obj.GroupVersionKind()
 		namespace := r.obj.GetNamespace()
 		name := r.obj.GetName()
+		uid := r.obj.GetUID()
+		rv := r.obj.GetResourceVersion()
 		ea := util.EnforcementAction(r.EnforcementAction)
 
 		// append audit results only if it is below violations limit
@@ -760,7 +763,7 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		totalViolationsPerEnforcementAction[ea]++
 		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
 		if *emitAuditEvents {
-			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, r.Msg, am.gkNamespace, am.eventRecorder)
+			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, rv, r.Msg, am.gkNamespace, uid, am.eventRecorder)
 		}
 	}
 	return nil
@@ -1042,7 +1045,7 @@ func logViolation(l logr.Logger,
 }
 
 func emitEvent(constraint *unstructured.Unstructured,
-	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
+	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, rrv, message, gkNamespace string, ruid types.UID,
 	eventRecorder record.EventRecorder,
 ) {
 	annotations := map[string]string{
@@ -1061,19 +1064,33 @@ func emitEvent(constraint *unstructured.Unstructured,
 		logging.ResourceNamespace:    rnamespace,
 		logging.ResourceName:         rname,
 	}
-	reason := "AuditViolation"
-	ref := getViolationRef(gkNamespace, resourceGroupVersionKind.Kind, rname, rnamespace, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace())
 
-	eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Timestamp: %s, Resource Namespace: %s, Constraint: %s, Message: %s", timestamp, rnamespace, constraint.GetName(), message)
+	reason := "AuditViolation"
+	enamespace := gkNamespace
+	if *auditEventsInvolvedNamespace && len(rnamespace) > 0 {
+		enamespace = rnamespace
+	}
+
+	ref := getViolationRef(enamespace, resourceGroupVersionKind.Kind, rname, rrv, ruid)
+
+	if *auditEventsInvolvedNamespace || len(rnamespace) == 0 {
+		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Constraint: %s, Message: %s", constraint.GetName(), message)
+	} else {
+		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Resource Namespace: %s, Constraint: %s, Message: %s", rnamespace, constraint.GetName(), message)
+	}
 }
 
-func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
-	return &corev1.ObjectReference{
+func getViolationRef(enamespace, rkind, rname, rrv string, ruid types.UID) *corev1.ObjectReference {
+	ref := &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
-		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
-		Namespace: gkNamespace,
+		Namespace: enamespace,
 	}
+	if len(ruid) > 0 && len(rrv) > 0 {
+		ref.UID = ruid
+		ref.ResourceVersion = rrv
+	}
+	return ref
 }
 
 // mergeErrors concatenates errs into a single error. None of the original errors

@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func Test_newNSCache(t *testing.T) {
@@ -183,13 +184,11 @@ func Test_nsMapFromObjs(t *testing.T) {
 
 func Test_getViolationRef(t *testing.T) {
 	type args struct {
-		gkNamespace string
+		enamespace string
 		rkind       string
 		rname       string
-		rnamespace  string
-		ckind       string
-		cname       string
-		cnamespace  string
+		rrv 		string
+		ruid	    types.UID
 	}
 	tests := []struct {
 		name string
@@ -199,43 +198,41 @@ func Test_getViolationRef(t *testing.T) {
 		{
 			name: "Test case 1",
 			args: args{
-				gkNamespace: "default",
 				rkind:       "Pod",
 				rname:       "my-pod",
-				rnamespace:  "default",
-				ckind:       "LimitRange",
-				cname:       "my-limit-range",
-				cnamespace:  "default",
+				enamespace:  "default",
+				rrv:       	 "123456",
+				ruid:  		 "abcde-123456",
 			},
 			want: &corev1.ObjectReference{
-				Kind:      "Pod",
-				Name:      "my-pod",
-				UID:       "Pod/default/my-pod/LimitRange/default/my-limit-range",
-				Namespace: "default",
+				Kind:      		 "Pod",
+				Name:      		 "my-pod",
+				Namespace: 	 	 "default",
+				ResourceVersion: "123456",
+				UID:       		 "abcde-123456",
 			},
 		},
 		{
 			name: "Test case 2",
 			args: args{
-				gkNamespace: "kube-system",
 				rkind:       "Service",
+				enamespace:  "kube-system",
 				rname:       "my-service",
-				rnamespace:  "default",
-				ckind:       "PodSecurityPolicy",
-				cname:       "my-pod-security-policy",
-				cnamespace:  "kube-system",
+				rrv:       	 "123456",
+				ruid:  		 "abcde-123456",
 			},
 			want: &corev1.ObjectReference{
-				Kind:      "Service",
-				Name:      "my-service",
-				UID:       "Service/default/my-service/PodSecurityPolicy/kube-system/my-pod-security-policy",
-				Namespace: "kube-system",
+				Kind:      		 "Service",
+				Name:     		 "my-service",
+				Namespace: 		 "kube-system",
+				ResourceVersion: "123456",
+				UID:       		 "abcde-123456",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getViolationRef(tt.args.gkNamespace, tt.args.rkind, tt.args.rname, tt.args.rnamespace, tt.args.ckind, tt.args.cname, tt.args.cnamespace); !reflect.DeepEqual(got, tt.want) {
+			if got := getViolationRef(tt.args.enamespace, tt.args.rkind, tt.args.rname, tt.args.rrv, tt.args.ruid); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getViolationRef() = %v, want %v", got, tt.want)
 			}
 		})

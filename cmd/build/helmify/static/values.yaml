@@ -32,6 +32,8 @@ logDenies: false
 logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
+admissionEventsInvolvedNamespace: false
+auditEventsInvolvedNamespace: false
 resourceQuota: true
 postUpgrade:
   labelNamespace:

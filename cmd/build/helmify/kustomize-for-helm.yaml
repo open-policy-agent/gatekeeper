@@ -76,6 +76,7 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+            - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
@@ -156,6 +157,7 @@ spec:
             - --audit-chunk-size={{ .Values.auditChunkSize }}
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - --emit-audit-events={{ .Values.emitAuditEvents }}
+            - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG

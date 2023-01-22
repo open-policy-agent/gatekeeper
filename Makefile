@@ -67,6 +67,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
+\n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n        - --operation=mutation-webhook\
@@ -87,6 +88,7 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        name: manager\
 \n        args:\
 \n        - --emit-audit-events\
+\n        - --audit-events-involved-namespace\
 \n        - --operation=audit\
 \n        - --operation=status\
 \n        - --operation=mutation-status\
@@ -190,6 +192,8 @@ e2e-helm-deploy: e2e-helm-install
 		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set admissionEventsInvolvedNamespace=true \
+		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set mutationAnnotations=true;\
@@ -201,6 +205,8 @@ e2e-helm-upgrade-init: e2e-helm-install
 		--debug --wait \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set admissionEventsInvolvedNamespace=true \
+		--set auditEventsInvolvedNamespace=true \
 		--set postInstall.labelNamespace.enabled=true \
 		--set postInstall.probeWebhook.enabled=true \
 		--set disabledBuiltins={http.send} \
@@ -222,6 +228,8 @@ e2e-helm-upgrade:
 		--set postInstall.probeWebhook.enabled=true \
 		--set emitAdmissionEvents=true \
 		--set emitAuditEvents=true \
+		--set admissionEventsInvolvedNamespace=true \
+		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set mutationAnnotations=true;\
