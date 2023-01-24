@@ -1,0 +1,19 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: add-domain-digest
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "foocorp.org"
+    assignTag: "@sha256:abcde67890123456789abc345678901a"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]

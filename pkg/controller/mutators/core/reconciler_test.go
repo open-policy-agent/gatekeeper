@@ -254,7 +254,7 @@ func (m *fakeMutator) HasDiff(right mutationtypes.Mutator) bool {
 		m.path.String() != other.path.String()
 }
 
-func (m *fakeMutator) UsesExternalData() bool {
+func (m *fakeMutator) MustTerminate() bool {
 	return false
 }
 

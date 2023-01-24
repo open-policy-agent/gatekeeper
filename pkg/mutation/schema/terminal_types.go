@@ -8,3 +8,6 @@ const Unknown = parser.NodeType("Unknown")
 
 // Set represents a list populated by unique values.
 const Set = parser.NodeType("Set")
+
+// String represents a string element.
+const String = parser.NodeType("String")

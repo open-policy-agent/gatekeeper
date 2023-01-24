@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-test-pod
+  labels:
+    role: myrole
+spec:
+  containers:
+  - name: test
+    image: nginx:latest

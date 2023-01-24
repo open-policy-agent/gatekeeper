@@ -12,9 +12,9 @@ match_yaml_in_dir () {
 
   want=$(cat "${BATS_TEST_DIRNAME}"/fixtures/"${match_dir}"/output/output.yaml)
     if [[ ${yaml_output} != *"$want"* ]]; then
-      printf "ERROR: resource not found in output\n"
-      printf "WANT:\n%s\n\n" "$want"
-      printf "GOT:\n%s\n" "$yaml_output"
+      echo "ERROR: resource not found in output"
+      echo "WANT: ${want}"
+      echo "GOT: ${yaml_output}"
       echo "DIFF: "
       diff <( echo "$want" ) <( echo "$yaml_output" )
       exit 1
