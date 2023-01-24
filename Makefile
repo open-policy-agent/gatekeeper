@@ -15,7 +15,6 @@ VERSION := v3.12.0-beta.0
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
-KUBEBUILDER_VERSION ?= 3.8.0
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
@@ -103,8 +102,10 @@ endif
 all: lint test manager
 
 # Run tests
-native-test:
-	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+native-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -456,8 +457,19 @@ __test-image:
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
 		--build-arg ORAS_VERSION=$(ORAS_VERSION) \
-		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION) \
-		--build-arg KUBEBUILDER_VERSION=$(KUBEBUILDER_VERSION)
+		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION)
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/.tmp/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20230118154835-9241bceb3098
 
 .PHONY: vendor
 vendor:
