@@ -184,7 +184,9 @@ func (wm *Manager) doAddWatch(r *Registrar, gvk schema.GroupVersionKind) error {
 		}
 
 		// First watcher gets a fresh informer, register for events.
-		informer.AddEventHandler(wm)
+		if _, err := informer.AddEventHandler(wm); err != nil {
+			return err
+		}
 	}
 
 	// Mark it as watched.
