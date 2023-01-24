@@ -272,6 +272,7 @@ func (ip *specificInformersMap) addInformerToMap(gvk schema.GroupVersionKind, ob
 			scopeName:        rm.Scope.Name(),
 			disableDeepCopy:  ip.disableDeepCopy.IsDisabled(gvk),
 		},
+		stop: make(chan struct{}),
 	}
 	ip.informersByGVK[gvk] = i
 
