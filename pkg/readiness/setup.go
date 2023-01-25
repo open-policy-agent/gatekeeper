@@ -38,7 +38,7 @@ func SetupTracker(mgr manager.Manager, mutationEnabled bool, externalDataEnabled
 	return tracker, nil
 }
 
-// SetupTracker sets up a readiness tracker and registers it to run under control of the
+// SetupTrackerNoReadyz sets up a readiness tracker and registers it to run under control of the
 // provided Manager object without instantiating /readyz (used for testing).
 func SetupTrackerNoReadyz(mgr manager.Manager, mutationEnabled bool, externalDataEnabled bool) (*Tracker, error) {
 	tracker := NewTracker(mgr.GetAPIReader(), mutationEnabled, externalDataEnabled)
