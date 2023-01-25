@@ -50,6 +50,12 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
+      name: assignimage.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
       name: assign.mutations.gatekeeper.sh
     path: labels_patch.yaml
   - target:

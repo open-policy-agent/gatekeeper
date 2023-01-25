@@ -224,6 +224,47 @@ func Test_ModifySet(t *testing.T) {
 	}
 }
 
+func Test_AssignImage(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
+	// Apply fixtures *before* the controllers are set up.
+	err := applyFixtures("testdata")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the AssignImage is present in the cache
+	for _, am := range testAssignImage {
+		id := mutationtypes.MakeID(am)
+		expectedMutator := mutationSystem.Get(id)
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
+	}
+}
+
 func Test_Assign(t *testing.T) {
 	g := gomega.NewWithT(t)
 

@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -23,6 +24,7 @@ var mutatorKinds = map[string]bool{
 	"Assign":         true,
 	"AssignMetadata": true,
 	"ModifySet":      true,
+	"AssignImage":    true,
 }
 
 type Expander struct {
@@ -151,6 +153,12 @@ func (er *Expander) addMutator(mut *unstructured.Unstructured) error {
 			return err
 		}
 		m, mutErr = modifyset.MutatorForModifySet(ms)
+	case "AssignImage":
+		a, err := convertAssignImage(mut)
+		if err != nil {
+			return err
+		}
+		m, mutErr = assignimage.MutatorForAssignImage(a)
 	default:
 		return fmt.Errorf("cannot convert mutator of kind %q", mut.GetKind())
 	}
@@ -244,6 +252,12 @@ func convertModifySet(u *unstructured.Unstructured) (*mutationsunversioned.Modif
 	ms := &mutationsunversioned.ModifySet{}
 	err := convertUnstructuredToTyped(u, ms)
 	return ms, err
+}
+
+func convertAssignImage(u *unstructured.Unstructured) (*mutationsunversioned.AssignImage, error) {
+	ai := &mutationsunversioned.AssignImage{}
+	err := convertUnstructuredToTyped(u, ai)
+	return ai, err
 }
 
 func convertNamespace(u *unstructured.Unstructured) (*corev1.Namespace, error) {

@@ -120,6 +120,23 @@ spec:
     - containerPort: '80'
 `
 
+	PodMutateImage = `
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: nginx
+  namespace: default
+spec:
+  containers:
+  - args:
+    - "/bin/sh"
+    image: nginx:v2
+    name: nginx
+    ports:
+    - containerPort: '80'
+`
+
 	PodImagePullMutateAnnotated = `
 apiVersion: v1
 kind: Pod
@@ -203,6 +220,21 @@ spec:
     kinds:
       - apiGroups: []
         kinds: []
+`
+
+	AssignImage = `
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: tag-v2
+spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
+  location: "spec.containers[name:nginx].image"
+  parameters:
+    assignTag: ":v2"
 `
 
 	AssignHostnameSourceOriginal = `
