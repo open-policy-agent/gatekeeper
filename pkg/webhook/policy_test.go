@@ -275,7 +275,11 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) Get(_ context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object) error {
+func (f *nsGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+	return nil
+}
+
+func (f *nsGetter) Get(_ context.Context, key ctrlclient.ObjectKey, obj ctrlclient.Object, _ ...ctrlclient.GetOption) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -290,7 +294,11 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) Get(_ context.Context, key ctrlclient.ObjectKey, _ ctrlclient.Object) error {
+func (f *errorNSGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+	return nil
+}
+
+func (f *errorNSGetter) Get(_ context.Context, key ctrlclient.ObjectKey, _ ctrlclient.Object, _ ...ctrlclient.GetOption) error {
 	return k8serrors.NewNotFound(k8schema.GroupResource{Resource: "namespaces"}, key.Name)
 }
 

@@ -271,7 +271,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, 
 
 	results := review.Results()
 	if r.includeTrace {
-		trace = pointer.StringPtr(review.TraceDump())
+		trace = pointer.String(review.TraceDump())
 	}
 	for i := range tc.Assertions {
 		err = tc.Assertions[i].Run(results)

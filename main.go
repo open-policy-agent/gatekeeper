@@ -140,7 +140,11 @@ func innerMain() int {
 		setupLog.Info(fmt.Sprintf("Starting profiling on port %d", *profilePort))
 		go func() {
 			addr := fmt.Sprintf("%s:%d", "localhost", *profilePort)
-			setupLog.Error(http.ListenAndServe(addr, nil), "unable to start profiling server")
+			server := http.Server{
+				Addr:        addr,
+				ReadTimeout: 5 * time.Second,
+			}
+			setupLog.Error(server.ListenAndServe(), "unable to start profiling server")
 		}()
 	}
 

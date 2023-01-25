@@ -32,7 +32,6 @@
 package apierror
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -216,8 +215,7 @@ func FromError(err error) (*APIError, bool) {
 
 	ae := APIError{err: err}
 	st, isStatus := status.FromError(err)
-	var herr *googleapi.Error
-	isHTTPErr := errors.As(err, &herr)
+	herr, isHTTPErr := err.(*googleapi.Error)
 
 	switch {
 	case isStatus:

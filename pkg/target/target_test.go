@@ -90,7 +90,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "NotIn",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},
@@ -130,7 +130,7 @@ func TestValidateConstraint(t *testing.T) {
 			ErrorExpected: true,
 		},
 		{
-			Name: "Invalid LabelSelector MatchLels",
+			Name: "Invalid LabelSelector MatchLabels",
 			Constraint: `
 {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
@@ -212,7 +212,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "In",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},
@@ -245,7 +245,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "In",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},

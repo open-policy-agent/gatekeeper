@@ -38,7 +38,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "violation with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromInt(1),
-			Message:    pointer.StringPtr("message"),
+			Message:    pointer.String("message"),
 		},
 		results: nil,
 		wantErr: gator.ErrNumViolations,
@@ -46,7 +46,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "no violations with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromStr("no"),
-			Message:    pointer.StringPtr("message"),
+			Message:    pointer.String("message"),
 		},
 		results: nil,
 		wantErr: nil,
@@ -54,7 +54,7 @@ func TestAssertion_Run(t *testing.T) {
 		name: "fail no violations with message",
 		assertion: &Assertion{
 			Violations: gator.IntStrFromStr("no"),
-			Message:    pointer.StringPtr("message"),
+			Message:    pointer.String("message"),
 		},
 		results: []*types.Result{{
 			Msg: "message",
