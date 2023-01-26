@@ -108,7 +108,8 @@ spec:
       versions: ["v1"]
     - groups: ["batch"]
       kinds: ["Job"]
-      versions: ["v1"]  templateSource: "spec.template"
+      versions: ["v1"]
+  templateSource: "spec.template"
   enforcementAction: "warn"
   generatedGVK:
     kind: "Pod"
