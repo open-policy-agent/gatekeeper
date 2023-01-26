@@ -16,10 +16,10 @@ type Operation string
 // All defined Operations.
 const (
 	Audit              = Operation("audit")
-	Status             = Operation("status")
 	MutationController = Operation("mutation-controller")
 	MutationStatus     = Operation("mutation-status")
 	MutationWebhook    = Operation("mutation-webhook")
+	Status             = Operation("status")
 	Webhook            = Operation("webhook")
 )
 
