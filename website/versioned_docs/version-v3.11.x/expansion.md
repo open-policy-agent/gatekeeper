@@ -101,9 +101,14 @@ metadata:
 spec:
   applyTo:
     - groups: ["apps"]
-      kinds: ["DaemonSet", "Deployment", "Job", "ReplicaSet", "ReplicationController", "StatefulSet"]
+      kinds: ["DaemonSet", "Deployment", "ReplicaSet", "StatefulSet"]
       versions: ["v1"]
-  templateSource: "spec.template"
+    - groups: [""]
+      kinds: ["ReplicationController"]
+      versions: ["v1"]
+    - groups: ["batch"]
+      kinds: ["Job"]
+      versions: ["v1"]  templateSource: "spec.template"
   enforcementAction: "warn"
   generatedGVK:
     kind: "Pod"
