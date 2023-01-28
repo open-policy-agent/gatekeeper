@@ -40,14 +40,7 @@ BENCHMARK_FILE_NAME ?= benchmarks.txt
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 
-BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
-BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
-BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
-
 LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VERSION) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Vcs=$(BUILD_COMMIT) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Timestamp=$(BUILD_TIMESTAMP) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME) \
 	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
 	-X main.opaVersion=$(OPA_VERSION)"
 
