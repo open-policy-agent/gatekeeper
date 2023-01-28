@@ -10,6 +10,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -168,9 +169,7 @@ func TestTest(t *testing.T) {
 			var objs []*unstructured.Unstructured
 			for _, input := range tc.inputs {
 				u, err := readUnstructured([]byte(input))
-				if err != nil {
-					t.Fatalf("readUnstructured for input %q: %v", input, err)
-				}
+				require.NoError(t, err)
 				objs = append(objs, u)
 			}
 
@@ -183,16 +182,27 @@ func TestTest(t *testing.T) {
 					t.Errorf("got err %q, want %q", err, tc.err)
 				}
 			} else if err != nil {
-				t.Errorf("got err '%v', want nil", err)
+				require.NoError(t, err)
 			}
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(GatorResult{}, "Metadata", "EvaluationMeta", "EnforcementAction", "ViolatingObject"))
-			if diff != "" {
-				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
-			}
+			compareGatorResults(t, tc.want, got)
 		})
+	}
+}
+
+func compareGatorResults(t *testing.T, want, got []*GatorResult) {
+	t.Helper()
+
+	require.Equal(t, len(want), len(got))
+	for index, wantResult := range want {
+		gotResult := got[index]
+
+		require.Equal(t, wantResult.Constraint, gotResult.Constraint)
+		require.Equal(t, wantResult.Msg, gotResult.Msg)
+		require.Equal(t, wantResult.Target, gotResult.Target)
+		require.Equal(t, wantResult.Trace, gotResult.Trace)
 	}
 }
 
