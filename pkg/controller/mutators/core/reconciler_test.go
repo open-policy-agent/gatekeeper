@@ -92,7 +92,7 @@ func newFakeClient() *fakeClient {
 
 var _ client.Client = &fakeClient{}
 
-func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+func (c *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	got, found := c.objects[key]
 	if !found {
 		return apierrors.NewNotFound(schema.GroupResource{}, key.Name)

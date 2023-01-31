@@ -369,7 +369,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.StringPtr("some message"),
+							Message:    pointer.String("some message"),
 						}},
 					}},
 				}},
@@ -410,7 +410,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.StringPtr("some message"),
+							Message:    pointer.String("some message"),
 						}},
 					}},
 				}},
@@ -451,7 +451,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.StringPtr("some message"),
+							Message:    pointer.String("some message"),
 						}},
 					}},
 				}},
@@ -492,7 +492,7 @@ tests:
 						Object: "deny.yaml",
 						Assertions: []Assertion{{
 							Violations: gator.IntStrFromInt(2),
-							Message:    pointer.StringPtr("some message"),
+							Message:    pointer.String("some message"),
 						}},
 					}},
 				}},

@@ -1,7 +1,7 @@
 module.exports = {
   title: 'Gatekeeper',
   tagline: 'Policy Controller for Kubernetes',
-  url: 'https://open-policy-agent.github.io/gatekeeper/website/docs/',
+  url: 'https://open-policy-agent.github.io',
   baseUrl: '/gatekeeper/website/',
   onBrokenLinks: 'throw',
   favicon: 'img/favicon.ico',

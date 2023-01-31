@@ -21,8 +21,10 @@ type (
 )
 
 // Location field errors.
-type listTerminalError struct{ baseError }
-type metadataRootError struct{ baseError }
+type (
+	listTerminalError struct{ baseError }
+	metadataRootError struct{ baseError }
+)
 
 func newInvalidDomainError(domain string) invalidDomainError {
 	return invalidDomainError{
