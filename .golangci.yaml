@@ -29,6 +29,7 @@ linters:
     - errorlint
     - exportloopref
     - forcetypeassert
+    - gci
     - gocritic
     - goconst
     - godot
