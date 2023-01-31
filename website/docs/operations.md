@@ -153,6 +153,29 @@ At a high level, this requires:
 * The ability to write to all objects in the group `mutations.gatekeeper.sh` (mutators)
 * The ability to read `MutatorPodStatus` objects in Gatekeeper's namespace
 
+## Mutation Controller
+
+__--operation key:__ `mutation-controller`
+
+This operation runs the process responsible for ingesting and registering
+mutators. `mutation-controller` is run implicitly with the `mutation-webhook`
+and `mutation-status` operations, and is redundant if any of the 2
+aforementioned operations are already specified. 
+
+If the `webhook` or `audit` operation is used in isolation without the `mutation-webhook`
+or `mutation-status` operations, then the `mutation-controller` operation is
+required for mutation to work with [workload expansion](workload-resources.md).
+
+### Required Behaviors:
+
+At a high level, this requires:
+
+* Ingesting Mutator objects
+
+### Permissions Required
+
+* The ability to read all objects in the group `mutations.gatekeeper.sh` (mutators)
+
 # A Note on Permissions
 
 "Create" implies the `create` and `delete` permissions in addition to the permissions implied by "Read" and "Write".
