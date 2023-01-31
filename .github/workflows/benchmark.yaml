@@ -3,7 +3,7 @@ on:
   issue_comment:
     types: [created]
 
-jobs:  
+jobs:
   benchmark:
     name: "Benchmark"
     if: github.event.issue.pull_request && github.event.comment.body == '/benchmark'
@@ -14,18 +14,10 @@ jobs:
       pull-requests: write
     steps:
       - uses: izhangzhihao/delete-comment@98aa1ea5c6304048edf951c20b3114e03c785c79
-        with: 
+        with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           delete_user_name: github-actions[bot]
           issue_number: ${{ github.event.issue.number }}
-
-      - name: install kubebuilder
-        run: |
-          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz" &&\
-            tar -zxvf kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz &&\
-            sudo mv kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64 /usr/local/kubebuilder
-        env:
-          KUBEBUILDER_VERSION: 2.3.1
 
       - name: Update status
         uses: peter-evans/create-or-update-comment@v2
@@ -41,7 +33,7 @@ jobs:
 
       - name: Run benchmarks on base ref
         run: make benchmark-test BENCHMARK_FILE_NAME="../base_benchmarks.txt"
-      
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
@@ -66,6 +58,6 @@ jobs:
           issue-number: ${{ github.event.issue.number }}
           body: |
             This PR compares its performance to the latest released version. If it performs significantly lower, consider optimizing your changes to improve the performance.
-            ```  
+            ```
             ${{ steps.get-comment-body.outputs.msg }}
             ```

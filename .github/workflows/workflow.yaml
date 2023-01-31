@@ -50,7 +50,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.48.0
+          version: v1.50.1
 
   test:
     name: "Unit test"
@@ -68,13 +68,7 @@ jobs:
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Unit test
-        run: |
-          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz" &&\
-            tar -zxvf kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz &&\
-            sudo mv kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64 /usr/local/kubebuilder
-          make native-test
-        env:
-          KUBEBUILDER_VERSION: 2.3.1
+        run: make native-test
 
       - name: Codecov Upload
         uses: codecov/codecov-action@v3

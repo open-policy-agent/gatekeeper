@@ -1,0 +1,18 @@
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: add-tag-latest
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignTag: ":latest"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]

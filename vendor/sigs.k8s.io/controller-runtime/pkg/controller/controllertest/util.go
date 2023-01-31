@@ -56,9 +56,10 @@ func (f *FakeInformer) HasSynced() bool {
 	return f.Synced
 }
 
-// AddEventHandler implements the Informer interface.  Adds an EventHandler to the fake Informers.
-func (f *FakeInformer) AddEventHandler(handler cache.ResourceEventHandler) {
+// AddEventHandler implements the Informer interface.  Adds an EventHandler to the fake Informers. TODO(community): Implement Registration.
+func (f *FakeInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
 	f.handlers = append(f.handlers, handler)
+	return nil, nil
 }
 
 // Run implements the Informer interface.  Increments f.RunCount.
@@ -88,8 +89,13 @@ func (f *FakeInformer) Delete(obj metav1.Object) {
 }
 
 // AddEventHandlerWithResyncPeriod does nothing.  TODO(community): Implement this.
-func (f *FakeInformer) AddEventHandlerWithResyncPeriod(handler cache.ResourceEventHandler, resyncPeriod time.Duration) {
+func (f *FakeInformer) AddEventHandlerWithResyncPeriod(handler cache.ResourceEventHandler, resyncPeriod time.Duration) (cache.ResourceEventHandlerRegistration, error) {
+	return nil, nil
+}
 
+// RemoveEventHandler does nothing.  TODO(community): Implement this.
+func (f *FakeInformer) RemoveEventHandler(handle cache.ResourceEventHandlerRegistration) error {
+	return nil
 }
 
 // GetStore does nothing.  TODO(community): Implement this.
@@ -115,4 +121,9 @@ func (f *FakeInformer) SetWatchErrorHandler(cache.WatchErrorHandler) error {
 // SetTransform does nothing.  TODO(community): Implement this.
 func (f *FakeInformer) SetTransform(t cache.TransformFunc) error {
 	return nil
+}
+
+// IsStopped does nothing.  TODO(community): Implement this.
+func (f *FakeInformer) IsStopped() bool {
+	return false
 }

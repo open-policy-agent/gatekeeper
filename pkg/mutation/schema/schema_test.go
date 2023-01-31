@@ -42,7 +42,7 @@ func (m *fakeMutator) Mutate(*types.Mutable) (bool, error) {
 	panic("should not be called")
 }
 
-func (m *fakeMutator) UsesExternalData() bool {
+func (m *fakeMutator) MustTerminate() bool {
 	return m.usesExternalData
 }
 

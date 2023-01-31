@@ -102,7 +102,7 @@ is that unlike enums, which have a bounded set of allowed values, the set of
 valid enforcement actions is unbounded. This makes it more akin to a
 [union set](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#unions).
 
-Currently Gatekeeper is deviating slightly from the `enforcementAction` spec by
+Current Gatekeeper is deviating slightly from the `enforcementAction` spec by
 defaulting to rejecting constraints with an unknown enforcement action (this
 behavior can be disabled via the `--disable-enforcementaction-validation` flag).
 This should be a non-issue as a missing constraint and an ignored constraint are

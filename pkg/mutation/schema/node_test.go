@@ -133,6 +133,28 @@ func TestNode_Add(t *testing.T) {
 			},
 		},
 		{
+			name: "string vs. set conflict",
+			before: []idPath{
+				ipt("set", "spec.containers[name: foo].images", Set),
+			},
+			add: ipt("string", "spec.containers[name: foo].images", String),
+			want: IDSet{
+				id("set"):    true,
+				id("string"): true,
+			},
+		},
+		{
+			name: "string vs. set conflict at nonterminal node",
+			before: []idPath{
+				ipt("string", "spec.containers.image", String),
+			},
+			add: ipt("set", "spec.containers", Set),
+			want: IDSet{
+				id("set"):    true,
+				id("string"): true,
+			},
+		},
+		{
 			name: "obj vs. set conflict",
 			before: []idPath{
 				ip("object", "spec.containers.name"),

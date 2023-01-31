@@ -80,7 +80,7 @@ func (m *Mutator) Mutate(mutable *types.Mutable) (bool, error) {
 	return core.Mutate(m.path, m.tester, core.NewDefaultSetter(value), mutable.Object)
 }
 
-func (m *Mutator) UsesExternalData() bool {
+func (m *Mutator) MustTerminate() bool {
 	return m.assignMetadata.Spec.Parameters.Assign.ExternalData != nil
 }
 
@@ -123,7 +123,7 @@ func (m *Mutator) String() string {
 	return fmt.Sprintf("%s/%s/%s:%d", m.id.Kind, m.id.Namespace, m.id.Name, m.assignMetadata.GetGeneration())
 }
 
-// MutatorForAssignMetadata builds an Mutator from the given AssignMetadata object.
+// MutatorForAssignMetadata builds a Mutator from the given AssignMetadata object.
 func MutatorForAssignMetadata(assignMeta *mutationsunversioned.AssignMetadata) (*Mutator, error) {
 	// This is not always set by the kubernetes API server
 	assignMeta.SetGroupVersionKind(runtimeschema.GroupVersionKind{Group: mutationsv1beta1.GroupVersion.Group, Kind: "AssignMetadata"})

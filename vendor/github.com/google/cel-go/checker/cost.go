@@ -88,9 +88,9 @@ func (e astNode) ComputedSize() *SizeEstimate {
 		return e.derivedSize
 	}
 	var v uint64
-	switch ek := e.expr.ExprKind.(type) {
+	switch ek := e.expr.GetExprKind().(type) {
 	case *exprpb.Expr_ConstExpr:
-		switch ck := ek.ConstExpr.ConstantKind.(type) {
+		switch ck := ek.ConstExpr.GetConstantKind().(type) {
 		case *exprpb.Constant_StringValue:
 			v = uint64(len(ck.StringValue))
 		case *exprpb.Constant_BytesValue:
@@ -103,10 +103,10 @@ func (e astNode) ComputedSize() *SizeEstimate {
 			return nil
 		}
 	case *exprpb.Expr_ListExpr:
-		v = uint64(len(ek.ListExpr.Elements))
+		v = uint64(len(ek.ListExpr.GetElements()))
 	case *exprpb.Expr_StructExpr:
-		if ek.StructExpr.MessageName == "" {
-			v = uint64(len(ek.StructExpr.Entries))
+		if ek.StructExpr.GetMessageName() == "" {
+			v = uint64(len(ek.StructExpr.GetEntries()))
 		}
 	default:
 		return nil
@@ -121,7 +121,7 @@ type SizeEstimate struct {
 }
 
 // Add adds to another SizeEstimate and returns the sum.
-// If add would result in an uint64 overflow, the result is Maxuint64.
+// If add would result in an uint64 overflow, the result is math.MaxUint64.
 func (se SizeEstimate) Add(sizeEstimate SizeEstimate) SizeEstimate {
 	return SizeEstimate{
 		addUint64NoOverflow(se.Min, sizeEstimate.Min),
@@ -130,7 +130,7 @@ func (se SizeEstimate) Add(sizeEstimate SizeEstimate) SizeEstimate {
 }
 
 // Multiply multiplies by another SizeEstimate and returns the product.
-// If multiply would result in an uint64 overflow, the result is Maxuint64.
+// If multiply would result in an uint64 overflow, the result is math.MaxUint64.
 func (se SizeEstimate) Multiply(sizeEstimate SizeEstimate) SizeEstimate {
 	return SizeEstimate{
 		multiplyUint64NoOverflow(se.Min, sizeEstimate.Min),
@@ -148,7 +148,7 @@ func (se SizeEstimate) MultiplyByCostFactor(costPerUnit float64) CostEstimate {
 }
 
 // MultiplyByCost multiplies by the cost and returns the product.
-// If multiply would result in an uint64 overflow, the result is Maxuint64.
+// If multiply would result in an uint64 overflow, the result is math.MaxUint64.
 func (se SizeEstimate) MultiplyByCost(cost CostEstimate) CostEstimate {
 	return CostEstimate{
 		multiplyUint64NoOverflow(se.Min, cost.Min),
@@ -175,7 +175,7 @@ type CostEstimate struct {
 }
 
 // Add adds the costs and returns the sum.
-// If add would result in an uint64 overflow for the min or max, the value is set to Maxuint64.
+// If add would result in an uint64 overflow for the min or max, the value is set to math.MaxUint64.
 func (ce CostEstimate) Add(cost CostEstimate) CostEstimate {
 	return CostEstimate{
 		addUint64NoOverflow(ce.Min, cost.Min),
@@ -184,7 +184,7 @@ func (ce CostEstimate) Add(cost CostEstimate) CostEstimate {
 }
 
 // Multiply multiplies by the cost and returns the product.
-// If multiply would result in an uint64 overflow, the result is Maxuint64.
+// If multiply would result in an uint64 overflow, the result is math.MaxUint64.
 func (ce CostEstimate) Multiply(cost CostEstimate) CostEstimate {
 	return CostEstimate{
 		multiplyUint64NoOverflow(ce.Min, cost.Min),
@@ -297,7 +297,7 @@ func (c *coster) cost(e *exprpb.Expr) CostEstimate {
 		return CostEstimate{}
 	}
 	var cost CostEstimate
-	switch e.ExprKind.(type) {
+	switch e.GetExprKind().(type) {
 	case *exprpb.Expr_ConstExpr:
 		cost = constCost
 	case *exprpb.Expr_IdentExpr:
@@ -323,7 +323,7 @@ func (c *coster) costIdent(e *exprpb.Expr) CostEstimate {
 
 	// build and track the field path
 	if iterRange, ok := c.iterRanges.peek(identExpr.GetName()); ok {
-		switch c.checkedExpr.TypeMap[iterRange].TypeKind.(type) {
+		switch c.checkedExpr.TypeMap[iterRange].GetTypeKind().(type) {
 		case *exprpb.Type_ListType_:
 			c.addPath(e, append(c.exprPath[iterRange], "@items"))
 		case *exprpb.Type_MapType_:
@@ -350,7 +350,7 @@ func (c *coster) costSelect(e *exprpb.Expr) CostEstimate {
 	}
 
 	// build and track the field path
-	c.addPath(e, append(c.getPath(sel.GetOperand()), sel.Field))
+	c.addPath(e, append(c.getPath(sel.GetOperand()), sel.GetField()))
 
 	return sum
 }

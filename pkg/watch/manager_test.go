@@ -40,17 +40,22 @@ type fakeCacheInformer struct {
 	handlers map[kcache.ResourceEventHandler]int
 }
 
-func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) {
+func (f *fakeCacheInformer) AddEventHandler(h kcache.ResourceEventHandler) (kcache.ResourceEventHandlerRegistration, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.handlers == nil {
 		f.handlers = make(map[kcache.ResourceEventHandler]int)
 	}
 	f.handlers[h]++
+	return nil, nil
 }
 
-func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEventHandler, resyncPeriod time.Duration) {
-	f.AddEventHandler(h)
+func (f *fakeCacheInformer) RemoveEventHandler(handle kcache.ResourceEventHandlerRegistration) error {
+	return nil
+}
+
+func (f *fakeCacheInformer) AddEventHandlerWithResyncPeriod(h kcache.ResourceEventHandler, resyncPeriod time.Duration) (kcache.ResourceEventHandlerRegistration, error) {
+	return f.AddEventHandler(h)
 }
 
 func (f *fakeCacheInformer) AddIndexers(indexers kcache.Indexers) error {
