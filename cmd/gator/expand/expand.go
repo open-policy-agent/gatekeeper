@@ -10,10 +10,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/expand"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/spf13/cobra"
-
-	// yaml.v3 inserts a space before '-', which is inconsistent with standard
-	// kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2" // yaml.v3 inserts a space before '-', which is inconsistent with standard, kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
