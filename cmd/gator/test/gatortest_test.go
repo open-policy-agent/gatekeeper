@@ -1,21 +1,16 @@
 package test
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/test"
-	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Test_formatOutput makes sure that the formatted output of `gator test`
-// is consitent as we iterate over the tool. The test IS NOT
+// is consitent as we iterate over the tool. The purpose of this test IS NOT
 // testing the `gator test` results themselves.
 func Test_formatOutput(t *testing.T) {
 	constraintObj := &unstructured.Unstructured{}
@@ -27,8 +22,7 @@ func Test_formatOutput(t *testing.T) {
 	}
 	barObject := &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"bar":  "xyz",
-			"kind": "kind",
+			"bar": "xyz",
 		},
 	}
 	xyzTrace := "xyz"
@@ -41,7 +35,7 @@ func Test_formatOutput(t *testing.T) {
 	}{
 		{
 			name: "default output",
-			// inputFormat: "default", // note that the inputFormat defaults to "default"/ human friendly
+			// inputFormat: "default", // note that the inputFormat defaults to "default"
 			input: []*test.GatorResult{{
 				Result:          fooRes,
 				ViolatingObject: barObject,
@@ -66,6 +60,7 @@ func Test_formatOutput(t *testing.T) {
         object:
             kind: kind
     enforcementaction: ""
+    evaluationmeta: null
   violatingObject:
     bar: xyz
   trace: xyz
@@ -86,8 +81,7 @@ func Test_formatOutput(t *testing.T) {
             "kind": "kind"
         },
         "violatingObject": {
-            "bar": "xyz",
-            "kind": "kind"
+            "bar": "xyz"
         },
         "trace": "xyz"
     }
@@ -96,27 +90,9 @@ func Test_formatOutput(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.NotEmpty(t, formatOutput(tc.inputFormat, tc.input))
-
-			switch strings.ToLower(tc.inputFormat) {
-			case stringJSON:
-				var gatorResult []*test.GatorResult
-				require.NoError(t, json.Unmarshal([]byte(tc.expectedOutput), &gatorResult))
-
-				if diff := cmp.Diff(tc.input, gatorResult, cmpopts.IgnoreFields(test.GatorResult{}, "Metadata")); diff != "" {
-					t.Fatal(diff)
-				}
-			case stringYAML:
-				var gatorResult []*test.GatorResult
-				require.NoError(t, yaml.Unmarshal([]byte(tc.expectedOutput), &gatorResult))
-
-				if diff := cmp.Diff(tc.input, gatorResult, cmpopts.IgnoreFields(test.GatorResult{}, "Metadata", "ViolatingObject")); diff != "" {
-					t.Fatal(diff)
-				}
-
-			case stringHumanFriendly:
-			default:
-				require.Equal(t, tc.expectedOutput, formatOutput(tc.inputFormat, tc.input))
+			output := formatOutput(tc.inputFormat, tc.input)
+			if diff := cmp.Diff(tc.expectedOutput, output); diff != "" {
+				t.Fatal(diff)
 			}
 		})
 	}
