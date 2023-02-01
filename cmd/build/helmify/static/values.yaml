@@ -6,6 +6,7 @@ constraintViolationsLimit: 20
 auditFromCache: false
 disableMutation: false
 disableValidatingWebhook: false
+validatingWebhookName: gatekeeper-validating-webhook-configuration
 validatingWebhookTimeoutSeconds: 3
 validatingWebhookFailurePolicy: Ignore
 validatingWebhookAnnotations: {}
@@ -18,6 +19,7 @@ enableExternalData: true
 enableGeneratorResourceExpansion: false
 enableTLSHealthcheck: false
 maxServingThreads: -1
+mutatingWebhookName: gatekeeper-mutating-webhook-configuration
 mutatingWebhookFailurePolicy: Ignore
 mutatingWebhookReinvocationPolicy: Never
 mutatingWebhookAnnotations: {}
@@ -33,6 +35,11 @@ logMutations: false
 emitAdmissionEvents: false
 emitAuditEvents: false
 resourceQuota: true
+preInstall:
+  crdRepository:
+    image:
+      repository: openpolicyagent/gatekeeper-crds
+      tag: v3.12.0-beta.0
 postUpgrade:
   labelNamespace:
     enabled: false

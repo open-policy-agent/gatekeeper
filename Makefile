@@ -210,6 +210,8 @@ e2e-helm-upgrade:
 		--set image.repository=${HELM_REPO} \
 		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
+		--set preInstall.crdRepository.image.repository=${HELM_CRD_REPO} \
+		--set preInstall.crdRepository.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.enabled=true \
