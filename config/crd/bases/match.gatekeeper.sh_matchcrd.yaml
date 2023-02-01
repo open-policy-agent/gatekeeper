@@ -9,20 +9,20 @@ metadata:
 spec:
   group: match.gatekeeper.sh
   names:
-    kind: MatchDummyCRD
-    listKind: MatchDummyCRDList
+    kind: DummyCRD
+    listKind: DummyCRDList
     plural: matchcrd
-    singular: matchdummycrd
+    singular: dummycrd
   scope: Namespaced
   versions:
   - name: match
     schema:
       openAPIV3Schema:
-        description: MatchDummyCRD is a "dummy" CRD to hold the Match object, which
-          we ultimately need to generate JSONSchemaProps. The TypeMeta and ObjectMeta
+        description: DummyCRD is a "dummy" CRD to hold the Match object, which we
+          ultimately need to generate JSONSchemaProps. The TypeMeta and ObjectMeta
           fields are required for controller-gen to generate the CRD. DO NOT CHANGE
-          THE START OF THIS COMMENT. It is used for regex matching to extract the
-          embedded match CRD.
+          THE FIRST WORD OF THIS COMMENT. It is used for regex matching to extract
+          the embedded match CRD.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

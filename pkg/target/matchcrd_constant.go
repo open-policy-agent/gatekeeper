@@ -1,7 +1,7 @@
 package target
 
-// This file is generated from ./pkg/mutation/match/match_types.go via "make manifests".
 // DO NOT MODIFY THIS FILE DIRECTLY!
+// This file is generated from ./pkg/mutation/match/match_types.go via "make manifests".
 
 const matchYAML = `
 ---
@@ -15,10 +15,10 @@ metadata:
 spec:
   group: match.gatekeeper.sh
   names:
-    kind: MatchDummyCRD
-    listKind: MatchDummyCRDList
+    kind: DummyCRD
+    listKind: DummyCRDList
     plural: matchcrd
-    singular: matchdummycrd
+    singular: dummycrd
   scope: Namespaced
   versions:
   - name: match

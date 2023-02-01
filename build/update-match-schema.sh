@@ -8,19 +8,17 @@ GO_FILE="./pkg/target/matchcrd_constant.go"
 SRC_FILE="./pkg/mutation/match/match_types.go"
 CRD_FILE="./config/crd/bases/match.gatekeeper.sh_matchcrd.yaml"
 
-# Prepare file
 cat << EOF > ${GO_FILE}
 package target
 
 // DO NOT MODIFY THIS FILE DIRECTLY!
 // This file is generated from $SRC_FILE via "make manifests".
-// If there are changes, you may have to gofmt this file afterwards.
 
 const matchYAML = \`
 EOF
 
 # Delete apiVersion block, adjust indentation to un-embed the match field, escape backticks
-start=$(cat ${CRD_FILE} | grep -n "description: MatchDummyCRD" | cut -d: -f1)
+start=$(cat ${CRD_FILE} | grep -n "description: DummyCRD" | cut -d: -f1)
 end=$(cat ${CRD_FILE} | grep -n "embeddedMatch:" | cut -d: -f1)
 cat ${CRD_FILE} | sed "${end},$ s/  //" | sed "${start},${end}d" | sed "s/\`/\`+\"\`\"+\`/g" >> ${GO_FILE}
 
@@ -33,6 +31,8 @@ end=$((end+1))
 sed -i "${start},${end}d" ${GO_FILE}
 
 echo "\`" >> ${GO_FILE}
+
+gofmt -w -l ${GO_FILE}
 
 
 
