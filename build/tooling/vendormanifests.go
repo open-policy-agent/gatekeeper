@@ -1,7 +1,6 @@
 // This is used for vendoring frameworks to Gatekeeper.
 
 //go:build tools
-// +build tools
 
 package build
 
