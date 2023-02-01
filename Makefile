@@ -262,6 +262,7 @@ manifests: __controller-gen
 		paths="./apis/..." \
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
+	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
