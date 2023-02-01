@@ -33,25 +33,25 @@ spec:
       {{- end }}
       serviceAccount: gatekeeper-delete-webhook-configs
       containers:
-        - name: kubectl-delete
-          image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
-          imagePullPolicy: {{ .Values.preUninstall.deleteWebhookConfigurations.image.pullPolicy }}
-          args:
-            - delete
-            {{- if not .Values.disableValidatingWebhook }}
-            - validatingwebhookconfiguration/gatekeeper-validating-webhook-configuration
-            {{- end }}
-            {{- if not .Values.disableMutation }}
-            - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
-            {{- end }}
-          resources:
-            {{- toYaml .Values.preUninstall.resources | nindent 10 }}
-          securityContext:
-            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
-            seccompProfile:
-              type: RuntimeDefault
-            {{- end }}
-            {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
+      - name: kubectl-delete
+        image: "{{ .Values.preUninstall.deleteWebhookConfigurations.image.repository }}:{{ .Values.preUninstall.deleteWebhookConfigurations.image.tag }}"
+        imagePullPolicy: {{ .Values.preUninstall.deleteWebhookConfigurations.image.pullPolicy }}
+        args:
+          - delete
+          {{- if not .Values.disableValidatingWebhook }}
+          - validatingwebhookconfiguration/gatekeeper-validating-webhook-configuration
+          {{- end }}
+          {{- if not .Values.disableMutation }}
+          - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
+          {{- end }}
+        resources:
+          {{- toYaml .Values.preUninstall.resources | nindent 10 }}
+        securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
+          {{- toYaml .Values.preUninstall.securityContext | nindent 10 }}
       {{- with .Values.preUninstall }}
       nodeSelector:
         {{- toYaml .nodeSelector | nindent 8 }}
