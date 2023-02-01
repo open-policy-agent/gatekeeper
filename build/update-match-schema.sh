@@ -1,8 +1,11 @@
-# This script parses the YAML for the Match CRD, found in $CRD_FILE, and outputs
-# it as a go constant in $GO_FILE. For controller-gen to generate the CRD, we
-# must include the metadata and typemeta fields. Since we don't want these fields
-# to exist on the real Match CRD, we embed the Match type in a dummy type that
-# has the metadata/typemeta fields. We then parse out these added fields.
+# The purpose of the script is to build a golang string constant containing the
+# YAML code for the Match CRD. This is needed to auto generate the
+# JSONSchemaProps for Match.
+# It will parse the YAML for the Match CRD, found in $CRD_FILE, and output to
+# $GO_FILE. For controller-gen to generate the CRD, we must include the metadata
+# and typemeta fields. Since we don't want these fields to exist on the real
+# Match CRD, we embed the Match type in a dummy type that has the
+# metadata/typemeta fields, and then parse out these unwanted fields.
 
 GO_FILE="./pkg/target/matchcrd_constant.go"
 SRC_FILE="./pkg/mutation/match/match_types.go"
@@ -33,8 +36,3 @@ sed -i "${start},${end}d" ${GO_FILE}
 echo "\`" >> ${GO_FILE}
 
 gofmt -w -l ${GO_FILE}
-
-
-
-
-
