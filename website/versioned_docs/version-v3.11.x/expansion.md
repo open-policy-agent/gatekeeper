@@ -93,7 +93,7 @@ Here is an example of a `ExpansionTemplate` that specifies that `DaemonSet`,
 `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet`
 should be expanded into a `Pod`.
 
-```
+```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: ExpansionTemplate
 metadata:
@@ -189,7 +189,7 @@ them to only be applied when expanding resources specified
 by `ExpansionTemplates`. These Mutators will not affect any real resources on
 the cluster.**
 
-```
+```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: ExpansionTemplate
 metadata:
@@ -210,14 +210,13 @@ kind: Assign
 metadata:
   name: add-sidecar
 spec:
-  source: Generated
   applyTo:
     - groups: [""]
       kinds: ["Pod"]
       versions: ["v1"]
   match:
     scope: Namespaced
-    origin: "Generated"
+    source: All
     kinds:
       - apiGroups: ["*"]
         kinds: ["Pod"]
@@ -243,11 +242,12 @@ kind: ModifySet
 metadata:
   name: add-istio-args
 spec:
-  source: Generated
   applyTo:
     - groups: [""]
       kinds: ["Pod"]
       versions: ["v1"]
+  match:
+    source: All
   location: "spec.containers[name:istio-proxy].args"
   parameters:
     operation: merge
@@ -283,7 +283,7 @@ spec:
 
 When expanded, the above configs will produce the following `Pod`:
 
-```
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
