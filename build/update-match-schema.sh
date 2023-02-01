@@ -12,8 +12,9 @@ CRD_FILE="./config/crd/bases/match.gatekeeper.sh_matchcrd.yaml"
 cat << EOF > ${GO_FILE}
 package target
 
-// This file is generated from $SRC_FILE via "make manifests".
 // DO NOT MODIFY THIS FILE DIRECTLY!
+// This file is generated from $SRC_FILE via "make manifests".
+// If there are changes, you may have to gofmt this file afterwards.
 
 const matchYAML = \`
 EOF

@@ -21,8 +21,8 @@ spec:
         description: MatchDummyCRD is a "dummy" CRD to hold the Match object, which
           we ultimately need to generate JSONSchemaProps. The TypeMeta and ObjectMeta
           fields are required for controller-gen to generate the CRD. DO NOT CHANGE
-          THIS COMMENT. It is used for regex matching to extract the embedded match
-          CRD.
+          THE START OF THIS COMMENT. It is used for regex matching to extract the
+          embedded match CRD.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
