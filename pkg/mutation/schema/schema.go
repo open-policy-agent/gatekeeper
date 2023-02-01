@@ -106,7 +106,7 @@ func (db *DB) upsert(mutator MutatorWithSchema) error {
 			s = &node{}
 			db.schemas[gvk] = s
 		}
-		newConflicts := s.Add(id, path.Nodes, mutator.TerminalType(), mutator.UsesExternalData())
+		newConflicts := s.Add(id, path.Nodes, mutator.TerminalType(), mutator.MustTerminate())
 		conflicts = merge(conflicts, newConflicts)
 	}
 
@@ -143,7 +143,7 @@ func (db *DB) remove(id types.ID) {
 			log.Error(nil, "mutator associated with missing schema", "mutator", id, "schema", gvk)
 			panic(fmt.Sprintf("mutator %v associated with missing schema %v", id, gvk))
 		}
-		s.Remove(id, cachedMutator.Path().Nodes, cachedMutator.TerminalType(), cachedMutator.UsesExternalData())
+		s.Remove(id, cachedMutator.Path().Nodes, cachedMutator.TerminalType(), cachedMutator.MustTerminate())
 		db.schemas[gvk] = s
 
 		if len(s.ReferencedBy) == 0 {

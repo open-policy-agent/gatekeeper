@@ -1,0 +1,30 @@
+{{- if .Values.controllerManager.networkPolicy.enabled -}}
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  labels:
+    app: '{{ template "gatekeeper.name" . }}'
+    chart: '{{ template "gatekeeper.name" . }}'
+    heritage: '{{ .Release.Service }}'
+    release: '{{ .Release.Name }}'
+  name: gatekeeper-controller-manager
+spec:
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: '{{ template "gatekeeper.name" . }}'
+              release: '{{ .Release.Name }}'
+    {{- with .Values.controllerManager.networkPolicy.ingress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  podSelector:
+    matchLabels:
+      app: '{{ template "gatekeeper.name" . }}'
+      chart: '{{ template "gatekeeper.name" . }}'
+      control-plane: controller-manager
+      gatekeeper.sh/operation: webhook
+      gatekeeper.sh/system: "yes"
+      heritage: '{{ .Release.Service }}'
+      release: '{{ .Release.Name }}'
+{{- end -}}

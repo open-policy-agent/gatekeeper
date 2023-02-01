@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -28,8 +29,8 @@ func (e ErrConflictingSchema) Error() string {
 }
 
 func (e ErrConflictingSchema) Is(other error) bool {
-	o, ok := other.(ErrConflictingSchema)
-	if !ok {
+	var o ErrConflictingSchema
+	if !errors.As(other, &o) {
 		return false
 	}
 

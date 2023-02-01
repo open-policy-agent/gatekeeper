@@ -21,7 +21,7 @@ ORAS_VERSION ?= 0.16.0
 BATS_TESTS_FILE ?= test/bats/test.bats
 HELM_VERSION ?= 3.7.2
 NODE_VERSION ?= 16-bullseye-slim
-YQ_VERSION ?= 4.2.0
+YQ_VERSION ?= 4.30.6
 FRAMEWORKS_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/frameworks/constraint)
 OPA_VERSION ?= $(shell go list -f '{{ .Version }}' -m github.com/open-policy-agent/opa)
 
@@ -30,7 +30,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.45.2
+GOLANGCI_LINT_VERSION := v1.50.1
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -40,14 +40,7 @@ BENCHMARK_FILE_NAME ?= benchmarks.txt
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
 
-BUILD_COMMIT := $(shell ./build/get-build-commit.sh)
-BUILD_TIMESTAMP := $(shell ./build/get-build-timestamp.sh)
-BUILD_HOSTNAME := $(shell ./build/get-build-hostname.sh)
-
 LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VERSION) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Vcs=$(BUILD_COMMIT) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Timestamp=$(BUILD_TIMESTAMP) \
-	-X github.com/open-policy-agent/gatekeeper/pkg/version.Hostname=$(BUILD_HOSTNAME) \
 	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
 	-X main.opaVersion=$(OPA_VERSION)"
 
@@ -102,8 +95,10 @@ endif
 all: lint test manager
 
 # Run tests
-native-test:
-	GO111MODULE=on go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
+native-test: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(KUBERNETES_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+	GO111MODULE=on \
+	go test -mod vendor ./pkg/... ./apis/... ./cmd/gator/... -race -bench . -coverprofile cover.out
 
 .PHONY: benchmark-test
 benchmark-test:
@@ -450,11 +445,25 @@ __tooling-image:
 		-t gatekeeper-tooling
 
 __test-image:
-	docker build test/image \
+	docker buildx build test/image \
 		-t gatekeeper-test \
+		--load \
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
-		--build-arg ORAS_VERSION=$(ORAS_VERSION)
+		--build-arg ORAS_VERSION=$(ORAS_VERSION) \
+		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION)
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/.tmp/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20230118154835-9241bceb3098
 
 .PHONY: vendor
 vendor:

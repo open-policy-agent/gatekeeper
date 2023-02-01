@@ -27,10 +27,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
-	// set GOMAXPROCS to the number of container cores, if known.
-	_ "go.uber.org/automaxprocs"
-
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
@@ -44,6 +40,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -56,6 +53,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -140,7 +138,11 @@ func innerMain() int {
 		setupLog.Info(fmt.Sprintf("Starting profiling on port %d", *profilePort))
 		go func() {
 			addr := fmt.Sprintf("%s:%d", "localhost", *profilePort)
-			setupLog.Error(http.ListenAndServe(addr, nil), "unable to start profiling server")
+			server := http.Server{
+				Addr:        addr,
+				ReadTimeout: 5 * time.Second,
+			}
+			setupLog.Error(server.ListenAndServe(), "unable to start profiling server")
 		}()
 	}
 

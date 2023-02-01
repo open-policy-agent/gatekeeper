@@ -9,7 +9,7 @@ spec:
   containers:
   - args:
     - /bin/sh
-    image: nginx:1.14.2
+    image: nginx:latest
     imagePullPolicy: Always
     name: nginx
     ports:

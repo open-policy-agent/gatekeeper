@@ -368,6 +368,7 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
+			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
 			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 			if err != nil {
@@ -436,15 +437,19 @@ func (am *Manager) auditResources(
 				resourceVersion = objList.GetResourceVersion()
 				opts.Continue = objList.GetContinue()
 				if opts.Continue == "" {
+					am.log.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 					break
 				}
+				am.log.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			}
 			// Loop through all subDirs to review all files for this kind.
+			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", gv.Group, "version", gv.Version, "kind", kind)
 			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
+			am.log.V(logging.DebugLevel).Info("Review complete for GVK", gv.Group, "version", gv.Version, "kind", kind)
 		}
 	}
 

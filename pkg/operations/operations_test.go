@@ -15,7 +15,7 @@ func Test_Flags(t *testing.T) {
 	}{
 		"default": {
 			input:    []string{},
-			expected: map[Operation]bool{Audit: true, Webhook: true, Status: true, MutationStatus: true, MutationWebhook: true},
+			expected: map[Operation]bool{Audit: true, Webhook: true, Status: true, MutationStatus: true, MutationWebhook: true, MutationController: true},
 		},
 		"multiple": {
 			input:    []string{"-operation", "audit", "-operation", "webhook"},

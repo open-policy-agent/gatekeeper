@@ -25,6 +25,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
@@ -124,7 +125,12 @@ func PodStatusToMutatorMapper(selfOnly bool, kindMatch string, packerMap handler
 			}
 		}
 		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: kind})
+		// AssignImage is the only mutator in v1alpha1 still
+		v := "v1"
+		if kind == "AssignImage" {
+			v = "v1alpha1"
+		}
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: v, Kind: kind})
 		u.SetName(name)
 		return packerMap(u)
 	}
@@ -158,6 +164,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(
 		&source.Kind{Type: &mutationsv1.AssignMetadata{}},
 		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1", Kind: "AssignMetadata"})),
+	)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &mutationsv1alpha1.AssignImage{}},
+		handler.EnqueueRequestsFromMapFunc(util.EventPackerMapFuncHardcodeGVK(schema.GroupVersionKind{Group: v1beta1.MutationsGroup, Version: "v1alpha1", Kind: "AssignImage"})),
 	)
 	if err != nil {
 		return err

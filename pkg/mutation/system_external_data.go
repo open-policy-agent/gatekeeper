@@ -18,7 +18,7 @@ import (
 
 // resolvePlaceholders resolves all external data placeholders in the given object.
 func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
-	providerKeys := make(map[string]sets.String)
+	providerKeys := make(map[string]sets.Set[string])
 
 	// recurse object to find all existing external data placeholders
 	var recurse func(object interface{})
@@ -26,7 +26,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		switch obj := object.(type) {
 		case *unversioned.ExternalDataPlaceholder:
 			if _, ok := providerKeys[obj.Ref.Provider]; !ok {
-				providerKeys[obj.Ref.Provider] = sets.NewString()
+				providerKeys[obj.Ref.Provider] = sets.New[string]()
 			}
 			// gather and de-duplicate all keys for this
 			// provider so we can resolve them in batch
@@ -62,7 +62,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 }
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(providerKeys map[string]sets.String, clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -108,7 +108,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String, clientCert *t
 				item := item // for scoping
 				responses[provider.Name][item.Key] = &item
 			}
-		}(&provider, keys.List())
+		}(&provider, keys.UnsortedList())
 		wg.Wait()
 	}
 

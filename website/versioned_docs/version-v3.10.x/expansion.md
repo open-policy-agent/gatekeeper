@@ -89,7 +89,7 @@ The `ExpansionTemplate` custom resource specifies:
   the `ExpansionTemplate`, the enforcement action set by the Constraint in
   violation will be used.
 
-Here is an example of a `ExpansionTemplate` that specifies that `DeamonSet`,
+Here is an example of a `ExpansionTemplate` that specifies that `DaemonSet`,
 `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet`
 should be expanded into a `Pod`.
 
@@ -101,7 +101,13 @@ metadata:
 spec:
   applyTo:
     - groups: ["apps"]
-      kinds: ["DeamonSet", "Deployment", "Job", "ReplicaSet", "ReplicationController", "StatefulSet"]
+      kinds: ["DaemonSet", "Deployment", "ReplicaSet", "StatefulSet"]
+      versions: ["v1"]
+    - groups: [""]
+      kinds: ["ReplicationController"]
+      versions: ["v1"]
+    - groups: ["batch"]
+      kinds: ["Job"]
       versions: ["v1"]
   templateSource: "spec.template"
   enforcementAction: "warn"

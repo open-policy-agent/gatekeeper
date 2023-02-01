@@ -384,7 +384,7 @@ func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.
 	// initialize OPA
 	driver, err := local.New(local.Tracing(true))
 	if err != nil {
-		return fmt.Errorf("unable to set up Driver: %v", err)
+		return fmt.Errorf("unable to set up Driver: %w", err)
 	}
 
 	opaClient, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
@@ -802,7 +802,7 @@ func ensureCreated(ctx context.Context, c client.Client, toCreate client.Object)
 			return fmt.Errorf("a copy of %v %v already exists - run ensureDeleted to ensure a fresh copy exists for testing",
 				gvk, key)
 		} else if err != nil {
-			return fmt.Errorf("creating %v %v: %v", gvk, key, err)
+			return fmt.Errorf("creating %v %v: %w", gvk, key, err)
 		}
 
 		return nil

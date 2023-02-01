@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Modified from the original source (available at
-// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.9.2/pkg/cache)
+// https://github.com/kubernetes-sigs/controller-runtime/tree/v0.14.1/pkg/cache)
 
 // Package cache provides object caches that act as caching client.Reader
 // instances and help drive Kubernetes-object-based event handlers.

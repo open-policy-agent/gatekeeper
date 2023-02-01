@@ -177,7 +177,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		if err != nil {
 			return err
 		}
-		errorList := validation.ValidateLabelSelector(labelSelectorObj, field.NewPath("spec", "labelSelector"))
+		errorList := validation.ValidateLabelSelector(labelSelectorObj, validation.LabelSelectorValidationOptions{}, field.NewPath("spec", "labelSelector"))
 		if len(errorList) > 0 {
 			return errorList.ToAggregate()
 		}
@@ -193,7 +193,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		if err != nil {
 			return err
 		}
-		errorList := validation.ValidateLabelSelector(namespaceSelectorObj, field.NewPath("spec", "labelSelector"))
+		errorList := validation.ValidateLabelSelector(namespaceSelectorObj, validation.LabelSelectorValidationOptions{}, field.NewPath("spec", "labelSelector"))
 		if len(errorList) > 0 {
 			return errorList.ToAggregate()
 		}

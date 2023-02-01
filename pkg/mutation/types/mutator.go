@@ -51,8 +51,8 @@ type Mutator interface {
 	Matches(mutable *Mutable) bool
 	// Mutate applies the mutation to the given object
 	Mutate(mutable *Mutable) (bool, error)
-	// UsesExternalData returns true if the mutation uses external data.
-	UsesExternalData() bool
+	// MustTerminate returns true if the mutator requires its path to terminate
+	MustTerminate() bool
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences
