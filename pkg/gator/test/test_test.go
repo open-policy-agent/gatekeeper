@@ -1,7 +1,6 @@
 package test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -55,6 +54,20 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func ignoreGatorResultFields() cmp.Option {
+	return cmp.FilterPath(
+		func(p cmp.Path) bool {
+			switch p.String() {
+			// ignore these fields
+			case "Result.Metadata", "Result.EvaluationMeta", "Result.EnforcementAction", "ViolatingObject":
+				return true
+			default:
+				return false
+			}
+		},
+		cmp.Ignore())
 }
 
 func TestTest(t *testing.T) {
@@ -175,34 +188,18 @@ func TestTest(t *testing.T) {
 
 			resps, err := Test(objs, false)
 			if tc.err != nil {
-				if err == nil {
-					t.Errorf("got nil err, want %v", tc.err)
-				}
-				if !errors.Is(err, tc.err) {
-					t.Errorf("got err %q, want %q", err, tc.err)
-				}
+				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
 				require.NoError(t, err)
 			}
 
 			got := resps.Results()
 
-			compareGatorResults(t, tc.want, got)
+			diff := cmp.Diff(tc.want, got, ignoreGatorResultFields())
+			if diff != "" {
+				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
+			}
 		})
-	}
-}
-
-func compareGatorResults(t *testing.T, want, got []*GatorResult) {
-	t.Helper()
-
-	require.Equal(t, len(want), len(got))
-	for index, wantResult := range want {
-		gotResult := got[index]
-
-		require.Equal(t, wantResult.Constraint, gotResult.Constraint)
-		require.Equal(t, wantResult.Msg, gotResult.Msg)
-		require.Equal(t, wantResult.Target, gotResult.Target)
-		require.Equal(t, wantResult.Trace, gotResult.Trace)
 	}
 }
 
