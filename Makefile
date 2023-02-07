@@ -176,7 +176,6 @@ e2e-helm-deploy: e2e-helm-install
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait \
 		--set image.repository=${HELM_REPO} \
-		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
 		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
@@ -208,7 +207,6 @@ e2e-helm-upgrade:
 		--namespace ${GATEKEEPER_NAMESPACE} \
 		--debug --wait \
 		--set image.repository=${HELM_REPO} \
-		--set image.crdRepository=${HELM_CRD_REPO} \
 		--set image.release=${HELM_RELEASE} \
 		--set preInstall.crdRepository.image.repository=${HELM_CRD_REPO} \
 		--set preInstall.crdRepository.image.tag=${HELM_RELEASE} \
