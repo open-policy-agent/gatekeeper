@@ -33,8 +33,8 @@ func init() {
 	if err := apiextensionsv1.AddToScheme(rt); err != nil {
 		panic(fmt.Errorf("could not add apiextensionsv1 to scheme: %w", err))
 	}
-	matchJSONSchemaProps = apiextensions.JSONSchemaProps{}
-	if err := rt.Convert(matchCRD.Spec.Versions[0].Schema.OpenAPIV3Schema, &matchJSONSchemaProps, nil); err != nil {
+	embedded := matchCRD.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["embeddedMatch"]
+	if err := rt.Convert(&embedded, &matchJSONSchemaProps, nil); err != nil {
 		panic(fmt.Errorf("could not convert match JSONSchemaProps from v1 to versionless: %w", err))
 	}
 }

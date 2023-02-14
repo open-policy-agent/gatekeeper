@@ -66,8 +66,6 @@ type Kinds struct {
 // DummyCRD is a "dummy" CRD to hold the Match object, which we ultimately
 // need to generate JSONSchemaProps. The TypeMeta and ObjectMeta fields are
 // required for controller-gen to generate the CRD.
-// DO NOT CHANGE THE FIRST WORD OF THIS COMMENT.
-// It is used for regex matching to extract the embedded match CRD.
 // +kubebuilder:resource:path="matchcrd"
 type DummyCRD struct {
 	metav1.TypeMeta   `json:",inline"`
