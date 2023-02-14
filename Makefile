@@ -235,7 +235,7 @@ run: generate manifests
 # Install CRDs into a cluster
 install: manifests
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/crd | kubectl apply -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
@@ -245,7 +245,7 @@ ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -262,10 +262,10 @@ manifests: __controller-gen
 	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
 	docker run --rm -v $(shell pwd):/gatekeeper \
-		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 	docker run --rm -v $(shell pwd):/gatekeeper \
-		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		--load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 
 # lint runs a dockerized golangci-lint, and should give consistent results
@@ -431,7 +431,7 @@ promote-staging-manifest:
 # Delete gatekeeper from a cluster. Note this is not a complete uninstall, just a dev convenience
 uninstall:
 	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
-		k8s.gcr.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
+		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl delete -f -
 
 __controller-gen: __tooling-image

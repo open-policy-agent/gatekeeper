@@ -29,7 +29,6 @@ import (
 	k8schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 const (
@@ -245,7 +244,7 @@ func TestTemplateValidation(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 
-			review := &atypes.Request{
+			review := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "templates.gatekeeper.sh",
@@ -359,7 +358,7 @@ func TestReviewRequest(t *testing.T) {
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
-			review := &atypes.Request{
+			review := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
@@ -523,7 +522,7 @@ func TestConstraintValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
-			review := &atypes.Request{
+			review := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "constraints.gatekeeper.sh",
@@ -650,7 +649,7 @@ func TestTracing(t *testing.T) {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
 
-			review := &atypes.Request{
+			review := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
@@ -825,7 +824,7 @@ func TestGetValidationMessages(t *testing.T) {
 			if maxThreads > 0 {
 				handler.semaphore = make(chan struct{}, maxThreads)
 			}
-			review := &atypes.Request{
+			review := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Kind: metav1.GroupVersionKind{
 						Group:   "",
@@ -872,7 +871,7 @@ func TestValidateConfigResource(t *testing.T) {
 	for _, tt := range tc {
 		t.Run(tt.TestName, func(t *testing.T) {
 			handler := validationHandler{}
-			req := &atypes.Request{
+			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Name: tt.Name,
 				},
@@ -924,7 +923,7 @@ func TestValidateProvider(t *testing.T) {
 				t.Fatalf("Error parsing yaml: %s", err)
 			}
 
-			req := &atypes.Request{
+			req := &admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					Object: runtime.RawExtension{
 						Raw: b,

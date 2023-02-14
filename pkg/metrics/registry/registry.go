@@ -60,7 +60,7 @@ func newExporterSet(exporters map[string]StartExporter) *exporterSet {
 func (es *exporterSet) String() string {
 	contents := make([]string, 0)
 	for k := range es.assignedExporters {
-		contents = append(contents, string(k))
+		contents = append(contents, k)
 	}
 	return fmt.Sprintf("%s", contents)
 }
