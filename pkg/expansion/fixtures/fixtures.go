@@ -91,7 +91,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
-  name: mock-pod-nginx-deployment
+  name: nginx-deployment-pod
   namespace: default
 spec:
   containers:
@@ -109,7 +109,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
-  name: mock-pod-nginx-deployment
+  name: nginx-deployment-pod
   namespace: default
 spec:
   containers:
@@ -147,7 +147,7 @@ metadata:
     app: nginx
   annotations:
     owner: admin
-  name: mock-pod-nginx-deployment
+  name: nginx-deployment-pod
   namespace: default
 spec:
   containers:
@@ -399,7 +399,7 @@ metadata:
     sound: meow
   labels:
     fluffy: extremely
-  name: mock-kitten-big-chungus
+  name: big-chungus-kitten
   namespace: default
 spec:
   breed: calico
@@ -413,7 +413,7 @@ kind: Purr
 metadata:
   annotations:
     shouldPet: manytimes
-  name: mock-purr-big-chungus
+  name: big-chungus-purr
   namespace: default
 spec:
   loud: very

@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
-  name: mock-pod-nginx-deployment
+  name: nginx-deployment-pod
   namespace: my-ns
 spec:
   containers:

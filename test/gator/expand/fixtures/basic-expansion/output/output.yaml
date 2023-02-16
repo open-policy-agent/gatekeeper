@@ -5,7 +5,7 @@ metadata:
     owner: admin
   labels:
     app: nginx
-  name: mock-pod-nginx-deployment
+  name: nginx-deployment-pod
 spec:
   containers:
   - args:
