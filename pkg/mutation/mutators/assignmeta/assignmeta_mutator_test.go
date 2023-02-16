@@ -7,6 +7,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -106,4 +107,13 @@ func TestAssignMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Tests the AssignMeta mutator MutatorForAssignMetadata call with an empty spec for graceful handling.
+func Test_AssignMeta_emptySpec(t *testing.T) {
+	assignMeta := &unversioned.AssignMetadata{}
+	mutator, err := MutatorForAssignMetadata(assignMeta)
+
+	require.ErrorContains(t, err, "invalid location for assignmetadat")
+	require.Nil(t, mutator)
 }

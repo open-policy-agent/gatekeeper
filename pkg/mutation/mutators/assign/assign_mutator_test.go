@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -1069,4 +1070,13 @@ func nestedMapSlice(u map[string]interface{}, fields ...string) ([]map[string]in
 		out[i] = v
 	}
 	return out, nil
+}
+
+// Tests the Assign mutator MutatorForAssign call with an empty spec for graceful handling.
+func Test_Assign_emptySpec(t *testing.T) {
+	assign := &mutationsunversioned.Assign{}
+	mutator, err := MutatorForAssign(assign)
+
+	require.ErrorContains(t, err, "empty path")
+	require.Nil(t, mutator)
 }

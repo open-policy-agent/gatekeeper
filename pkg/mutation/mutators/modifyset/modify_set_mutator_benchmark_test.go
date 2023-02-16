@@ -13,7 +13,7 @@ import (
 )
 
 func modifyset(value interface{}, location string) *unversioned.ModifySet {
-	result := &unversioned.ModifySet{
+	return &unversioned.ModifySet{
 		Spec: unversioned.ModifySetSpec{
 			ApplyTo: []match.ApplyTo{{
 				Groups:   []string{"*"},
@@ -29,8 +29,6 @@ func modifyset(value interface{}, location string) *unversioned.ModifySet {
 			},
 		},
 	}
-
-	return result
 }
 
 func benchmarkModifySetMutator(b *testing.B, n int) {
