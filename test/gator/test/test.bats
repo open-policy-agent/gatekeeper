@@ -54,8 +54,18 @@ match_yaml_msg () {
   fi
 }
 
-@test "manifest with violations piped to stdin returns 1 exit status" {
+@test "manifest with violations redirected to stdin returns 1 exit status" {
   ! bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
+}
+
+@test "manifest with violations piped to stdin returns 1 exit status" {
+  # first test that we fail the command
+  ! cat "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" | bin/gator test
+
+  output=$(! cat "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" | bin/gator test)
+
+  # now test that the failure reason is a violation
+  match_substring "${output[*]}" "Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>"
 }
 
 @test "manifest with no violations included as flag returns 0 exit status" {
