@@ -54,4 +54,8 @@ var (
 	// ErrNilOldObject indicates that the AdmissionRequest did not provide an oldObject.
 	// Gatekeeper expects oldObject to be non nil on DELETE operations.
 	ErrNilOldObject = errors.New("oldObject is nil")
+	// ErrInvalidYAML indicates that a .yaml/.yml file was not parseable.
+	ErrInvalidYAML = errors.New("invalid yaml")
+	// ErrUnmarshallObject happens when the yaml defines an invalid object or oldObject.
+	ErrUnmarshallObject = errors.New("object or oldObject cannot be unmarshalled")
 )

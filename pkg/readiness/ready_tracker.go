@@ -22,11 +22,12 @@ import (
 	"sync"
 	"time"
 
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	mutationv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
+	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/syncutil"
@@ -64,6 +65,7 @@ type Tracker struct {
 	assignMetadata       *objectTracker
 	assign               *objectTracker
 	modifySet            *objectTracker
+	assignImage          *objectTracker
 	externalDataProvider *objectTracker
 	constraints          *trackerMap
 	data                 *trackerMap
@@ -97,9 +99,10 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 		tracker.assignMetadata = newObjTracker(mutationv1.GroupVersion.WithKind("AssignMetadata"), fn)
 		tracker.assign = newObjTracker(mutationv1.GroupVersion.WithKind("Assign"), fn)
 		tracker.modifySet = newObjTracker(mutationv1.GroupVersion.WithKind("ModifySet"), fn)
+		tracker.assignImage = newObjTracker(mutationsv1alpha1.GroupVersion.WithKind("AssignImage"), fn)
 	}
 	if externalDataEnabled {
-		tracker.externalDataProvider = newObjTracker(externaldatav1alpha1.SchemeGroupVersion.WithKind("Provider"), fn)
+		tracker.externalDataProvider = newObjTracker(externaldatav1beta1.SchemeGroupVersion.WithKind("Provider"), fn)
 	}
 	return &tracker
 }
@@ -127,7 +130,7 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return noopExpectations{}
 	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
 		return t.config
-	case gvk.GroupVersion() == externaldatav1alpha1.SchemeGroupVersion && gvk.Kind == "Provider":
+	case gvk.GroupVersion() == externaldatav1beta1.SchemeGroupVersion && gvk.Kind == "Provider":
 		return t.externalDataProvider
 	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
@@ -142,6 +145,11 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "ModifySet":
 		if t.mutationEnabled {
 			return t.modifySet
+		}
+		return noopExpectations{}
+	case gvk.GroupVersion() == mutationsv1alpha1.GroupVersion && gvk.Kind == "AssignImage":
+		if t.mutationEnabled {
+			return t.assignImage
 		}
 		return noopExpectations{}
 	}
@@ -207,12 +215,13 @@ func (t *Tracker) Satisfied() bool {
 	}
 
 	if t.mutationEnabled {
-		if !t.assignMetadata.Satisfied() || !t.assign.Satisfied() || !t.modifySet.Satisfied() {
+		if !t.assignMetadata.Satisfied() || !t.assign.Satisfied() || !t.modifySet.Satisfied() || !t.assignImage.Satisfied() {
 			return false
 		}
 		log.V(1).Info("all expectations satisfied", "tracker", "assignMetadata")
 		log.V(1).Info("all expectations satisfied", "tracker", "assign")
 		log.V(1).Info("all expectations satisfied", "tracker", "modifySet")
+		log.V(1).Info("all expectations satisfied", "tracker", "assignImage")
 	}
 
 	if t.externalDataEnabled {
@@ -275,6 +284,9 @@ func (t *Tracker) Run(ctx context.Context) error {
 		grp.Go(func() error {
 			return t.trackModifySet(gctx)
 		})
+		grp.Go(func() error {
+			return t.trackAssignImage(gctx)
+		})
 	}
 	if t.externalDataEnabled {
 		grp.Go(func() error {
@@ -331,7 +343,7 @@ func (t *Tracker) Populated() bool {
 	mutationPopulated := true
 	if t.mutationEnabled {
 		// If !t.mutationEnabled and we call this, it yields a null pointer exception
-		mutationPopulated = t.assignMetadata.Populated() && t.assign.Populated() && t.modifySet.Populated()
+		mutationPopulated = t.assignMetadata.Populated() && t.assign.Populated() && t.modifySet.Populated() && t.assignImage.Populated()
 	}
 	externalDataProviderPopulated := true
 	if t.externalDataEnabled {
@@ -529,6 +541,31 @@ func (t *Tracker) trackModifySet(ctx context.Context) error {
 	return nil
 }
 
+func (t *Tracker) trackAssignImage(ctx context.Context) error {
+	defer func() {
+		t.assignImage.ExpectationsDone()
+		log.V(1).Info("AssignImage expectations populated")
+		_ = t.constraintTrackers.Wait()
+	}()
+
+	if !t.mutationEnabled {
+		return nil
+	}
+
+	assignImageList := &mutationsv1alpha1.AssignImageList{}
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, assignImageList); err != nil {
+		return fmt.Errorf("listing AssignImage: %w", err)
+	}
+	log.V(1).Info("setting expectations for AssignImage", "AssignImage Count", len(assignImageList.Items))
+
+	for index := range assignImageList.Items {
+		log.V(1).Info("expecting AssignImage", "name", assignImageList.Items[index].GetName())
+		t.assignImage.Expect(&assignImageList.Items[index])
+	}
+	return nil
+}
+
 func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 	defer func() {
 		t.externalDataProvider.ExpectationsDone()
@@ -540,7 +577,7 @@ func (t *Tracker) trackExternalDataProvider(ctx context.Context) error {
 		return nil
 	}
 
-	providerList := &externaldatav1alpha1.ProviderList{}
+	providerList := &externaldatav1beta1.ProviderList{}
 	lister := retryLister(t.lister, retryAll)
 	if err := lister.List(ctx, providerList); err != nil {
 		return fmt.Errorf("listing Provider: %w", err)
@@ -815,6 +852,7 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 			logUnsatisfiedAssignMetadata(t)
 			logUnsatisfiedAssign(t)
 			logUnsatisfiedModifySet(t)
+			logUnsatisfiedAssignImage(t)
 		}
 		if t.externalDataEnabled {
 			logUnsatisfiedExternalDataProvider(t)
@@ -837,6 +875,12 @@ func logUnsatisfiedAssign(t *Tracker) {
 func logUnsatisfiedModifySet(t *Tracker) {
 	for _, amKey := range t.modifySet.unsatisfied() {
 		log.Info("unsatisfied ModifySet", "name", amKey.namespacedName)
+	}
+}
+
+func logUnsatisfiedAssignImage(t *Tracker) {
+	for _, amKey := range t.assignImage.unsatisfied() {
+		log.Info("unsatisfied AssignImage", "name", amKey.namespacedName)
 	}
 }
 

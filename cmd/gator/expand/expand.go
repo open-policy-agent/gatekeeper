@@ -7,12 +7,10 @@ import (
 	"os"
 	"sort"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/expand"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/reader"
 	"github.com/spf13/cobra"
-
-	// yaml.v3 inserts a space before '-', which is inconsistent with standard
-	// kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2" // yaml.v3 inserts a space before '-', which is inconsistent with standard, kubernetes and kubebuilder format. yaml.v2 does not insert these spaces.
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -42,12 +40,16 @@ var (
 	flagFilenames []string
 	flagFormat    string
 	flagOutput    string
+	flagImages    []string
+	flagTempDir   string
 )
 
 const (
 	flagNameFilename = "filename"
 	flagNameFormat   = "format"
 	flagNameOutput   = "outputfile"
+	flagNameImage    = "image"
+	flagNameTempDir  = "tempdir"
 
 	stringJSON = "json"
 	stringYAML = "yaml"
@@ -59,10 +61,12 @@ func init() {
 	Cmd.Flags().StringArrayVarP(&flagFilenames, flagNameFilename, "n", []string{}, "a file or directory containing Kubernetes resources.  Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagFormat, flagNameFormat, "f", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", "Output file path. If the file already exists, it will be overwritten.")
+	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
+	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
 
 func run(cmd *cobra.Command, args []string) {
-	unstrucs, err := gator.ReadSources(flagFilenames)
+	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
 		errFatalf("reading: %v\n", err)
 	}
@@ -70,7 +74,7 @@ func run(cmd *cobra.Command, args []string) {
 		errFatalf("no input data identified\n")
 	}
 
-	resultants, err := gator.Expand(unstrucs)
+	resultants, err := expand.Expand(unstrucs)
 	if err != nil {
 		errFatalf("error expanding resources: %v", err)
 	}

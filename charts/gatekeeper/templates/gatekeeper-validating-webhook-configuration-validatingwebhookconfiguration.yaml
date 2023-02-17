@@ -26,6 +26,10 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
     
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
@@ -84,6 +88,12 @@ webhooks:
   failurePolicy: {{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}
   matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
   rules:
   - apiGroups:
     - ""

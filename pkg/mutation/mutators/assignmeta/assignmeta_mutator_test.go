@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,8 +25,8 @@ func newFoo(spec map[string]interface{}) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: data}
 }
 
-func newAssignMetadataMutator(t *testing.T, path string, value mutationsunversioned.AssignField) *Mutator {
-	m := &mutationsunversioned.AssignMetadata{
+func newAssignMetadataMutator(t *testing.T, path string, value unversioned.AssignField) *Mutator {
+	m := &unversioned.AssignMetadata{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Foo",
 		},
@@ -47,13 +46,13 @@ func TestAssignMetadata(t *testing.T) {
 		name     string
 		obj      *unstructured.Unstructured
 		path     string
-		value    mutationsunversioned.AssignField
+		value    unversioned.AssignField
 		expected interface{}
 	}{
 		{
 			name:  "metadata value",
 			path:  "metadata.labels.foo",
-			value: mutationsunversioned.AssignField{FromMetadata: &mutationsunversioned.FromMetadata{Field: mutationsunversioned.ObjName}},
+			value: unversioned.AssignField{FromMetadata: &unversioned.FromMetadata{Field: unversioned.ObjName}},
 			obj:   newFoo(map[string]interface{}{}),
 			expected: map[string]interface{}{
 				"name": "my-foo",
@@ -65,7 +64,7 @@ func TestAssignMetadata(t *testing.T) {
 		{
 			name: "external data placeholder",
 			path: "metadata.labels.foo",
-			value: mutationsunversioned.AssignField{
+			value: unversioned.AssignField{
 				ExternalData: &unversioned.ExternalData{
 					Provider:   "some-provider",
 					DataSource: types.DataSourceUsername,

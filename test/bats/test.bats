@@ -52,6 +52,8 @@ teardown_file() {
 @test "mutation crds are established" {
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assign.mutations.gatekeeper.sh"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignmetadata.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/modifyset.mutations.gatekeeper.sh"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/assignimage.mutations.gatekeeper.sh"
 }
 
 @test "waiting for validating webhook" {
@@ -82,9 +84,25 @@ teardown_file() {
   run kubectl get svc mutate-svc -o jsonpath="{.metadata.annotations.gatekeeper\.sh\/mutations}"
   assert_equal 'Assign//k8sexternalip:1' "${output}"
 
+  # Test AssignImage
+  kubectl apply -f ${BATS_TESTS_DIR}/mutations/assign_image.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignImage add-domain-digest"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
+  run kubectl get pod nginx-test-pod -o jsonpath="{.spec.containers[0].image}"
+  assert_equal "foocorp.org/nginx@sha256:abcde67890123456789abc345678901a" "${output}"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete pod nginx-test-pod"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl delete assignimage add-domain-digest"
+
+  # Test removing the AssignImage does not apply mutation
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f ${BATS_TESTS_DIR}/mutations/nginx_pod.yaml"
+  run kubectl get pod nginx-test-pod -o jsonpath="{.spec.containers[0].image}"
+  assert_equal "nginx:latest" "${output}"
+
   kubectl delete --ignore-not-found svc mutate-svc
   kubectl delete --ignore-not-found assignmetadata k8sownerlabel
   kubectl delete --ignore-not-found assign k8sexternalip
+  kubectl delete --ignore-not-found assignimage add-domain-digest
+  kubectl delete --ignore-not-found pod nginx-test-pod
 }
 
 @test "applying sync config" {
@@ -267,17 +285,10 @@ __namespace_exclusion_test() {
 }
 
 @test "external data provider crd is established" {
-  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
-    skip "skipping external data tests"
-  fi
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for condition=established --timeout=60s crd/providers.externaldata.gatekeeper.sh"
 }
 
 @test "gatekeeper external data validation and mutation test" {
-  if [ -z $ENABLE_EXTERNAL_DATA_TESTS ]; then
-    skip "skipping external data tests"
-  fi
-
   if [ ! -f test/externaldata/dummy-provider/certs/ca.crt ]; then
     echo "Missing dummy-provider's CA cert. Please run test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh to generate it."
     exit 1
@@ -290,16 +301,19 @@ __namespace_exclusion_test() {
 $(cat test/externaldata/dummy-provider/manifest/provider.yaml)
   caBundle: $(cat test/externaldata/dummy-provider/certs/ca.crt | base64 | tr -d '\n')
 EOF
+  # substitute namespace in the provider YAML for Helm custom namespace test
+  sed -i "s/gatekeeper-system/${GATEKEEPER_NAMESPACE}/g" ${tmp}/provider.yaml
 
   run kubectl apply -f ${tmp}/provider.yaml
   assert_success
-  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml
+  kubectl apply -f test/externaldata/dummy-provider/manifest/deployment.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
-  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml
+  kubectl apply -f test/externaldata/dummy-provider/manifest/service.yaml -n ${GATEKEEPER_NAMESPACE}
   assert_success
-  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n gatekeeper-system"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl wait --for=condition=Ready --timeout=60s pod -l run=dummy-provider -n ${GATEKEEPER_NAMESPACE}"
 
   # validation test
+  echo '# external data - validation test' >&3
   kubectl apply -f test/externaldata/dummy-provider/policy/template.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl apply -f test/externaldata/dummy-provider/policy/constraint.yaml"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8sexternaldata dummy"
@@ -318,6 +332,7 @@ EOF
   assert_success
 
   # mutation test
+  echo '# external data - mutation test' >&3
   run kubectl apply -f test/externaldata/dummy-provider/mutation/valid.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced AssignMetadata annotate-owner"
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "mutator_enforced Assign a-sidecar-injection"

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/gator"
+	"github.com/open-policy-agent/gatekeeper/pkg/gator/verify"
 	"github.com/spf13/cobra"
 )
 
@@ -33,8 +34,9 @@ const (
 )
 
 var (
-	run     string
-	verbose bool
+	run          string
+	verbose      bool
+	includeTrace bool
 )
 
 func init() {
@@ -42,6 +44,8 @@ func init() {
 		`regular expression which filters tests to run by name`)
 	Cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		`print extended test output`)
+	Cmd.Flags().BoolVarP(&includeTrace, "trace", "t", false,
+		`include a trace for the underlying constraint framework evaluation`)
 }
 
 // Cmd is the gator verify subcommand.
@@ -86,14 +90,15 @@ func runE(cmd *cobra.Command, args []string) error {
 	if strings.HasSuffix(originalPath, "/...") {
 		recursive = true
 		targetPath = strings.TrimSuffix(targetPath, "...")
+		originalPath = strings.TrimSuffix(originalPath, "...")
 	}
 	targetPath = strings.Trim(targetPath, "/")
 
-	suites, err := gator.ReadSuites(fileSystem, targetPath, recursive)
+	suites, err := verify.ReadSuites(fileSystem, targetPath, originalPath, recursive)
 	if err != nil {
 		return fmt.Errorf("listing test files: %w", err)
 	}
-	filter, err := gator.NewFilter(run)
+	filter, err := verify.NewFilter(run)
 	if err != nil {
 		return fmt.Errorf("compiling filter: %w", err)
 	}
@@ -101,15 +106,15 @@ func runE(cmd *cobra.Command, args []string) error {
 	return runSuites(cmd.Context(), fileSystem, suites, filter)
 }
 
-func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, filter gator.Filter) error {
+func runSuites(ctx context.Context, fileSystem fs.FS, suites []*verify.Suite, filter verify.Filter) error {
 	isFailure := false
 
-	runner, err := gator.NewRunner(fileSystem, gator.NewOPAClient)
+	runner, err := verify.NewRunner(fileSystem, gator.NewOPAClient, verify.IncludeTrace(includeTrace))
 	if err != nil {
 		return err
 	}
 
-	results := make([]gator.SuiteResult, len(suites))
+	results := make([]verify.SuiteResult, len(suites))
 	i := 0
 
 	for _, suite := range suites {
@@ -129,7 +134,7 @@ func runSuites(ctx context.Context, fileSystem fs.FS, suites []*gator.Suite, fil
 		i++
 	}
 	w := &strings.Builder{}
-	printer := gator.PrinterGo{}
+	printer := verify.PrinterGo{}
 	err = printer.Print(w, results, verbose)
 	if err != nil {
 		return err

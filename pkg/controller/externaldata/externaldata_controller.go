@@ -3,7 +3,8 @@ package externaldata
 import (
 	"context"
 
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
@@ -14,6 +15,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +32,7 @@ var (
 
 	gvkExternalData = schema.GroupVersionKind{
 		Group:   "externaldata.gatekeeper.sh",
-		Version: "v1alpha1",
+		Version: "v1beta1",
 		Kind:    "Provider",
 	}
 )
@@ -74,11 +76,18 @@ type Reconciler struct {
 	opa           *constraintclient.Client
 	providerCache *frameworksexternaldata.ProviderCache
 	tracker       *readiness.Tracker
+	scheme        *runtime.Scheme
 }
 
 // newReconciler returns a new reconcile.Reconciler.
 func newReconciler(mgr manager.Manager, opa *constraintclient.Client, providerCache *frameworksexternaldata.ProviderCache, tracker *readiness.Tracker) *Reconciler {
-	r := &Reconciler{opa: opa, providerCache: providerCache, Client: mgr.GetClient(), tracker: tracker}
+	r := &Reconciler{
+		opa:           opa,
+		providerCache: providerCache,
+		Client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		tracker:       tracker,
+	}
 	return r
 }
 
@@ -96,7 +105,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Provider
 	return c.Watch(
-		&source.Kind{Type: &externaldatav1alpha1.Provider{}},
+		&source.Kind{Type: &externaldatav1beta1.Provider{}},
 		&handler.EnqueueRequestForObject{})
 }
 
@@ -104,20 +113,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	log.Info("Reconcile", "request", request)
 
 	deleted := false
-	provider := &externaldatav1alpha1.Provider{}
+	provider := &externaldatav1beta1.Provider{}
 	err := r.Get(ctx, request.NamespacedName, provider)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
 		deleted = true
-		provider = &externaldatav1alpha1.Provider{
+		provider = &externaldatav1beta1.Provider{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: request.NamespacedName.Name,
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Provider",
-				APIVersion: "v1alpha1",
+				APIVersion: "v1beta1",
 			},
 		}
 	}
@@ -125,8 +134,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	deleted = deleted || !provider.GetDeletionTimestamp().IsZero()
 	tracker := r.tracker.For(gvkExternalData)
 
+	unversionedProvider := &externaldataUnversioned.Provider{}
+	if err := r.scheme.Convert(provider, unversionedProvider, nil); err != nil {
+		log.Error(err, "conversion error")
+		return reconcile.Result{}, err
+	}
+
 	if !deleted {
-		if err := r.providerCache.Upsert(provider); err != nil {
+		if err := r.providerCache.Upsert(unversionedProvider); err != nil {
 			log.Error(err, "Upsert failed", "resource", request.NamespacedName)
 			tracker.TryCancelExpect(provider)
 			return reconcile.Result{}, err

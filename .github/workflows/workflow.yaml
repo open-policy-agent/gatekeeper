@@ -43,14 +43,14 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       # source: https://github.com/golangci/golangci-lint-action
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
           # version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
-          version: v1.48.0
+          version: v1.50.1
 
   test:
     name: "Unit test"
@@ -65,16 +65,10 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Unit test
-        run: |
-          curl -L -O "https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz" &&\
-            tar -zxvf kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz &&\
-            sudo mv kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64 /usr/local/kubebuilder
-          make native-test
-        env:
-          KUBEBUILDER_VERSION: 2.3.1
+        run: make native-test
 
       - name: Codecov Upload
         uses: codecov/codecov-action@v3
@@ -96,7 +90,7 @@ jobs:
           go-version: 1.19
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Download e2e dependencies
         run: |
@@ -105,7 +99,7 @@ jobs:
           make e2e-dependencies KUBERNETES_VERSION=${{ matrix.KUBERNETES_VERSION }}
 
       - name: gator test
-        run: make test-gator
+        run: make test-gator-containerized
 
   build_test:
     name: "Build and Test"
@@ -115,10 +109,10 @@ jobs:
       contents: read
     strategy:
       matrix:
-        KUBERNETES_VERSION: ["1.23.10", "1.24.4", "1.25.0"]
+        KUBERNETES_VERSION: ["1.23.13", "1.24.7", "1.25.3", "1.26.0"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -166,7 +160,7 @@ jobs:
         GATEKEEPER_NAMESPACE: ["gatekeeper-system", "custom-namespace"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Bootstrap e2e
         run: |
@@ -176,7 +170,7 @@ jobs:
 
       - name: Run e2e
         run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest
+          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
           make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
 
@@ -185,57 +179,13 @@ jobs:
         run: |
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=controller-manager --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-controller.json
           kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l control-plane=audit-controller --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-audit.json
+          kubectl logs -n ${{ matrix.GATEKEEPER_NAMESPACE }} -l run=dummy-provider --tail=-1 > logs-helm-${{ matrix.HELM_VERSION }}-${{ matrix.GATEKEEPER_NAMESPACE }}-dummy-provider.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: helm-logs
-          path: |
-            logs-*.json
-
-  build_test_externaldata:
-    name: "[External Data] Build and Test"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
-
-      - name: Set up Go 1.19
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
-
-      - name: Bootstrap e2e
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
-
-      - name: Run e2e
-        run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
-          make e2e-build-load-externaldata-image
-          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true ENABLE_EXTERNAL_DATA=true
-          go mod tidy
-          # there should be no additional manifest or go.mod changes
-          git diff --exit-code
-          make test-e2e ENABLE_EXTERNAL_DATA_TESTS=1
-
-      - name: Save logs
-        if: ${{ always() }}
-        run: |
-          kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-externaldata-controller.json
-          kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-externaldata-audit.json
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        if: ${{ always() }}
-        with:
-          name: externaldata-logs
           path: |
             logs-*.json
 
@@ -247,7 +197,7 @@ jobs:
       contents: read
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
     - name: Set up Go 1.19
       uses: actions/setup-go@v3
@@ -291,7 +241,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Download trivy
         run: |
@@ -327,7 +277,7 @@ jobs:
       contents: read
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: make docker-push-dev
         run: |
@@ -371,10 +321,10 @@ jobs:
       contents: write
     if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
     needs: [lint, test, build_test, helm_build_test, scan_vulnerabilities]
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -468,7 +418,7 @@ jobs:
             _dist/*.tar.gz
 
       - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@v1.6.0
+        uses: stefanprodan/helm-gh-pages@v1.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: charts

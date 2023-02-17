@@ -1,8 +1,9 @@
 package fakes
 
 import (
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -15,14 +16,14 @@ const (
 var ExternalDataProviderCache = frameworksexternaldata.NewCache()
 
 func init() {
-	_ = ExternalDataProviderCache.Upsert(&v1alpha1.Provider{
+	_ = ExternalDataProviderCache.Upsert(&externaldataUnversioned.Provider{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ExternalDataProviderName,
 		},
-		Spec: v1alpha1.ProviderSpec{
-			URL:                   "http://localhost:8080/validate",
-			Timeout:               1,
-			InsecureTLSSkipVerify: true,
+		Spec: externaldataUnversioned.ProviderSpec{
+			URL:      "https://localhost:8080/validate",
+			Timeout:  1,
+			CABundle: util.ValidCABundle,
 		},
 	})
 }

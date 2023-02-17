@@ -77,7 +77,11 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+func (f *fakeNsGetter) SubResource(subResource string) client.SubResourceClient {
+	return nil
+}
+
+func (f *fakeNsGetter) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,

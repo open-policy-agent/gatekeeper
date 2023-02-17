@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const state = "alpha"
+const state = "beta"
 
 var (
 	frameworksVersion string

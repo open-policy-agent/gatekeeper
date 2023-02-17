@@ -27,7 +27,6 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
-	podstatus "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -343,7 +342,7 @@ func TestReconcile(t *testing.T) {
 		err = retry.OnError(constantRetry, func(err error) bool {
 			return true
 		}, func() error {
-			sList := &podstatus.ConstraintPodStatusList{}
+			sList := &statusv1beta1.ConstraintPodStatusList{}
 			if err := c.List(ctx, sList); err != nil {
 				return err
 			}
@@ -580,7 +579,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Set up tracker
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

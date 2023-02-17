@@ -181,7 +181,7 @@ func getRow(rows []*view.Row, tagValue string) (*view.Row, error) {
 func checkData(name string, rowLength int) ([]*view.Row, error) {
 	rows, err := view.RetrieveData(name)
 	if err != nil {
-		return nil, fmt.Errorf("got RetrieveData error %v from %v, want nil", err, name)
+		return nil, fmt.Errorf("got RetrieveData error %w from %v, want nil", err, name)
 	}
 	if len(rows) != rowLength {
 		return nil, fmt.Errorf("got %q row length %v, want %v", name, len(rows), rowLength)

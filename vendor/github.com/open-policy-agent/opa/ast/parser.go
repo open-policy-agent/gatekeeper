@@ -99,6 +99,7 @@ type ParserOptions struct {
 	ProcessAnnotation  bool
 	AllFutureKeywords  bool
 	FutureKeywords     []string
+	SkipRules          bool
 	unreleasedKeywords bool // TODO(sr): cleanup
 }
 
@@ -135,12 +136,12 @@ func (p *Parser) WithProcessAnnotation(processAnnotation bool) *Parser {
 // WithFutureKeywords enables "future" keywords, i.e., keywords that can
 // be imported via
 //
-//     import future.keywords.kw
-//     import future.keywords.other
+//	import future.keywords.kw
+//	import future.keywords.other
 //
 // but in a more direct way. The equivalent of this import would be
 //
-//     WithFutureKeywords("kw", "other")
+//	WithFutureKeywords("kw", "other")
 func (p *Parser) WithFutureKeywords(kws ...string) *Parser {
 	p.po.FutureKeywords = kws
 	return p
@@ -149,7 +150,7 @@ func (p *Parser) WithFutureKeywords(kws ...string) *Parser {
 // WithAllFutureKeywords enables all "future" keywords, i.e., the
 // ParserOption equivalent of
 //
-//     import future.keywords
+//	import future.keywords
 func (p *Parser) WithAllFutureKeywords(yes bool) *Parser {
 	p.po.AllFutureKeywords = yes
 	return p
@@ -166,6 +167,12 @@ func (p *Parser) withUnreleasedKeywords(yes bool) *Parser {
 // WithCapabilities sets the capabilities structure on the parser.
 func (p *Parser) WithCapabilities(c *Capabilities) *Parser {
 	p.po.Capabilities = c
+	return p
+}
+
+// WithSkipRules instructs the parser not to attempt to parse Rule statements.
+func (p *Parser) WithSkipRules(skip bool) *Parser {
+	p.po.SkipRules = skip
 	return p
 }
 
@@ -212,7 +219,7 @@ func (p *Parser) futureParser() *Parser {
 // cache, and a scanner that knows none of the future keywords.
 // It is used to successfully parse keyword imports, like
 //
-//  import future.keywords.in
+//	import future.keywords.in
 //
 // even when the parser has already been informed about the
 // future keyword "in". This parser won't error out because
@@ -321,18 +328,21 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		}
 
 		p.restore(s)
-		s = p.save()
 
-		if rules := p.parseRules(); rules != nil {
-			for i := range rules {
-				stmts = append(stmts, rules[i])
+		if !p.po.SkipRules {
+			s = p.save()
+
+			if rules := p.parseRules(); rules != nil {
+				for i := range rules {
+					stmts = append(stmts, rules[i])
+				}
+				continue
+			} else if len(p.s.errors) > 0 {
+				break
 			}
-			continue
-		} else if len(p.s.errors) > 0 {
-			break
-		}
 
-		p.restore(s)
+			p.restore(s)
+		}
 
 		if body := p.parseQuery(true, tokens.EOF); body != nil {
 			stmts = append(stmts, body)
@@ -557,14 +567,41 @@ func (p *Parser) parseRules() []*Rule {
 		return []*Rule{&rule}
 	}
 
-	hasIf := false
-	if p.s.tok == tokens.If {
-		hasIf = true
+	if usesContains && !rule.Head.Reference.IsGround() {
+		p.error(p.s.Loc(), "multi-value rules need ground refs")
+		return nil
 	}
 
-	if hasIf && !usesContains && rule.Head.Key != nil && rule.Head.Value == nil {
-		p.illegal("invalid for partial set rule %s (use `contains`)", rule.Head.Name)
-		return nil
+	// back-compat with `p[x] { ... }``
+	hasIf := p.s.tok == tokens.If
+
+	// p[x] if ...  becomes a single-value rule p[x]
+	if hasIf && !usesContains && len(rule.Head.Ref()) == 2 {
+		if rule.Head.Value == nil {
+			rule.Head.Value = BooleanTerm(true).SetLocation(rule.Head.Location)
+		} else {
+			// p[x] = y if  becomes a single-value rule p[x] with value y, but needs name for compat
+			v, ok := rule.Head.Ref()[0].Value.(Var)
+			if !ok {
+				return nil
+			}
+			rule.Head.Name = v
+		}
+	}
+
+	// p[x]         becomes a multi-value rule p
+	if !hasIf && !usesContains &&
+		len(rule.Head.Args) == 0 && // not a function
+		len(rule.Head.Ref()) == 2 { // ref like 'p[x]'
+		v, ok := rule.Head.Ref()[0].Value.(Var)
+		if !ok {
+			return nil
+		}
+		rule.Head.Name = v
+		rule.Head.Key = rule.Head.Ref()[1]
+		if rule.Head.Value == nil {
+			rule.Head.SetRef(rule.Head.Ref()[:len(rule.Head.Ref())-1])
+		}
 	}
 
 	switch {
@@ -607,9 +644,12 @@ func (p *Parser) parseRules() []*Rule {
 	}
 
 	if p.s.tok == tokens.Else {
-
+		if r := rule.Head.Ref(); len(r) > 1 && !r[len(r)-1].Value.IsGround() {
+			p.error(p.s.Loc(), "else keyword cannot be used on rules with variables in head")
+			return nil
+		}
 		if rule.Head.Key != nil {
-			p.error(p.s.Loc(), "else keyword cannot be used on partial rules")
+			p.error(p.s.Loc(), "else keyword cannot be used on multi-value rules")
 			return nil
 		}
 
@@ -620,9 +660,7 @@ func (p *Parser) parseRules() []*Rule {
 
 	rule.Location.Text = p.s.Text(rule.Location.Offset, p.s.lastEnd)
 
-	var rules []*Rule
-
-	rules = append(rules, &rule)
+	rules := []*Rule{&rule}
 
 	for p.s.tok == tokens.LBrace {
 
@@ -648,6 +686,11 @@ func (p *Parser) parseRules() []*Rule {
 		// rule's head AST but have their location
 		// set to the rule body.
 		next.Head = rule.Head.Copy()
+		for i := range next.Head.Args {
+			if v, ok := next.Head.Args[i].Value.(Var); ok && v.IsWildcard() {
+				next.Head.Args[i].Value = Var(p.genwildcard())
+			}
+		}
 		setLocRecursive(next.Head, loc)
 
 		rules = append(rules, &next)
@@ -662,6 +705,11 @@ func (p *Parser) parseElse(head *Head) *Rule {
 	rule.SetLoc(p.s.Loc())
 
 	rule.Head = head.Copy()
+	for i := range rule.Head.Args {
+		if v, ok := rule.Head.Args[i].Value.(Var); ok && v.IsWildcard() {
+			rule.Head.Args[i].Value = Var(p.genwildcard())
+		}
+	}
 	rule.Head.SetLoc(p.s.Loc())
 
 	defer func() {
@@ -671,9 +719,10 @@ func (p *Parser) parseElse(head *Head) *Rule {
 	p.scan()
 
 	switch p.s.tok {
-	case tokens.LBrace:
+	case tokens.LBrace, tokens.If: // no value, but a body follows directly
 		rule.Head.Value = BooleanTerm(true)
 	case tokens.Assign, tokens.Unify:
+		rule.Head.Assign = tokens.Assign == p.s.tok
 		p.scan()
 		rule.Head.Value = p.parseTermInfixCall()
 		if rule.Head.Value == nil {
@@ -683,6 +732,30 @@ func (p *Parser) parseElse(head *Head) *Rule {
 	default:
 		p.illegal("expected else value term or rule body")
 		return nil
+	}
+
+	hasIf := p.s.tok == tokens.If
+
+	if hasIf {
+		p.scan()
+		s := p.save()
+		if expr := p.parseLiteral(); expr != nil {
+			// NOTE(sr): set literals are never false or undefined, so parsing this as
+			//  p if false else if { true }
+			//                     ^^^^^^^^ set of one element, `true`
+			// isn't valid.
+			isSetLiteral := false
+			if t, ok := expr.Terms.(*Term); ok {
+				_, isSetLiteral = t.Value.(Set)
+			}
+			// expr.Term is []*Term or Every
+			if !isSetLiteral {
+				rule.Body.Append(expr)
+				setLocRecursive(rule.Body, rule.Location)
+				return &rule
+			}
+		}
+		p.restore(s)
 	}
 
 	if p.s.tok != tokens.LBrace {
@@ -709,67 +782,69 @@ func (p *Parser) parseElse(head *Head) *Rule {
 
 func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 
-	var head Head
-	head.SetLoc(p.s.Loc())
-
+	head := &Head{}
+	loc := p.s.Loc()
 	defer func() {
-		head.Location.Text = p.s.Text(head.Location.Offset, p.s.lastEnd)
+		if head != nil {
+			head.SetLoc(loc)
+			head.Location.Text = p.s.Text(head.Location.Offset, p.s.lastEnd)
+		}
 	}()
 
-	if term := p.parseVar(); term != nil {
-		head.Name = term.Value.(Var)
-	} else {
-		p.illegal("expected rule head name")
+	term := p.parseVar()
+	if term == nil {
+		return nil, false
 	}
 
-	p.scan()
+	ref := p.parseTermFinish(term, true)
+	if ref == nil {
+		p.illegal("expected rule head name")
+		return nil, false
+	}
 
-	if p.s.tok == tokens.LParen {
-		p.scan()
-		if p.s.tok != tokens.RParen {
-			head.Args = p.parseTermList(tokens.RParen, nil)
-			if head.Args == nil {
+	switch x := ref.Value.(type) {
+	case Var:
+		head = NewHead(x)
+	case Ref:
+		head = RefHead(x)
+	case Call:
+		op, args := x[0], x[1:]
+		var ref Ref
+		switch y := op.Value.(type) {
+		case Var:
+			ref = Ref{op}
+		case Ref:
+			if _, ok := y[0].Value.(Var); !ok {
+				p.illegal("rule head ref %v invalid", y)
 				return nil, false
 			}
+			ref = y
 		}
-		p.scan()
+		head = RefHead(ref)
+		head.Args = append([]*Term{}, args...)
 
-		if p.s.tok == tokens.LBrack {
-			return nil, false
-		}
+	default:
+		return nil, false
 	}
 
-	if p.s.tok == tokens.LBrack {
-		p.scan()
-		head.Key = p.parseTermInfixCall()
-		if head.Key == nil {
-			p.illegal("expected rule key term (e.g., %s[<VALUE>] { ... })", head.Name)
-		}
-		if p.s.tok != tokens.RBrack {
-			if _, ok := futureKeywords[head.Name.String()]; ok {
-				p.hint("`import future.keywords.%[1]s` for '%[1]s' keyword", head.Name.String())
-			}
-			p.illegal("non-terminated rule key")
-		}
-		p.scan()
-	}
+	name := head.Ref().String()
 
 	switch p.s.tok {
-	case tokens.Contains:
+	case tokens.Contains: // NOTE: no Value for `contains` heads, we return here
 		p.scan()
 		head.Key = p.parseTermInfixCall()
 		if head.Key == nil {
-			p.illegal("expected rule key term (e.g., %s contains <VALUE> { ... })", head.Name)
+			p.illegal("expected rule key term (e.g., %s contains <VALUE> { ... })", name)
 		}
+		return head, true
 
-		return &head, true
 	case tokens.Unify:
 		p.scan()
 		head.Value = p.parseTermInfixCall()
 		if head.Value == nil {
-			p.illegal("expected rule value term (e.g., %s[%s] = <VALUE> { ... })", head.Name, head.Key)
+			// FIX HEAD.String()
+			p.illegal("expected rule value term (e.g., %s[%s] = <VALUE> { ... })", name, head.Key)
 		}
-
 	case tokens.Assign:
 		s := p.save()
 		p.scan()
@@ -779,22 +854,23 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 			p.restore(s)
 			switch {
 			case len(head.Args) > 0:
-				p.illegal("expected function value term (e.g., %s(...) := <VALUE> { ... })", head.Name)
+				p.illegal("expected function value term (e.g., %s(...) := <VALUE> { ... })", name)
 			case head.Key != nil:
-				p.illegal("expected partial rule value term (e.g., %s[...] := <VALUE> { ... })", head.Name)
+				p.illegal("expected partial rule value term (e.g., %s[...] := <VALUE> { ... })", name)
 			case defaultRule:
-				p.illegal("expected default rule value term (e.g., default %s := <VALUE>)", head.Name)
+				p.illegal("expected default rule value term (e.g., default %s := <VALUE>)", name)
 			default:
-				p.illegal("expected rule value term (e.g., %s := <VALUE> { ... })", head.Name)
+				p.illegal("expected rule value term (e.g., %s := <VALUE> { ... })", name)
 			}
 		}
 	}
 
 	if head.Value == nil && head.Key == nil {
-		head.Value = BooleanTerm(true).SetLocation(head.Location)
+		if len(head.Ref()) != 2 || len(head.Args) > 0 {
+			head.Value = BooleanTerm(true).SetLocation(head.Location)
+		}
 	}
-
-	return &head, false
+	return head, false
 }
 
 func (p *Parser) parseBody(end tokens.Token) Body {
@@ -1314,17 +1390,18 @@ func (p *Parser) parseTerm() *Term {
 		p.illegalToken()
 	}
 
-	term = p.parseTermFinish(term)
+	term = p.parseTermFinish(term, false)
 	p.parsedTermCachePush(term, s0)
 	return term
 }
 
-func (p *Parser) parseTermFinish(head *Term) *Term {
+func (p *Parser) parseTermFinish(head *Term, skipws bool) *Term {
 	if head == nil {
 		return nil
 	}
 	offset := p.s.loc.Offset
-	p.scanWS()
+	p.doScan(skipws)
+
 	switch p.s.tok {
 	case tokens.LParen, tokens.Dot, tokens.LBrack:
 		return p.parseRef(head, offset)
@@ -2050,6 +2127,7 @@ func (p *Parser) validateDefaultRuleValue(rule *Rule) bool {
 type rawAnnotation struct {
 	Scope            string                 `yaml:"scope"`
 	Title            string                 `yaml:"title"`
+	Entrypoint       bool                   `yaml:"entrypoint"`
 	Description      string                 `yaml:"description"`
 	Organizations    []string               `yaml:"organizations"`
 	RelatedResources []interface{}          `yaml:"related_resources"`
@@ -2104,6 +2182,7 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 
 	var result Annotations
 	result.Scope = raw.Scope
+	result.Entrypoint = raw.Entrypoint
 	result.Title = raw.Title
 	result.Description = raw.Description
 	result.Organizations = raw.Organizations

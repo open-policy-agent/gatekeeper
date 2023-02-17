@@ -10,6 +10,10 @@ webhooks:
       matchExpressions:
         - key: admission.gatekeeper.sh/ignore
           operator: DoesNotExist
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+          - gatekeeper-system
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -23,6 +27,16 @@ webhooks:
       matchExpressions:
         - key: admission.gatekeeper.sh/ignore
           operator: DoesNotExist
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+          - gatekeeper-system
   - name: check-ignore-label.gatekeeper.sh
     sideEffects: None
     timeoutSeconds: 3
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+          - gatekeeper-system

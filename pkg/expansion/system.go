@@ -143,7 +143,7 @@ func (s *System) Expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 		}
 		_, err := s.mutationSystem.Mutate(mutable)
 		if err != nil {
-			return nil, fmt.Errorf("failed to mutate resultant resource %s: %s", res.Obj.GetName(), err)
+			return nil, fmt.Errorf("failed to mutate resultant resource %s: %w", res.Obj.GetName(), err)
 		}
 	}
 
@@ -166,7 +166,7 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 
 	src, ok, err := unstructured.NestedMap(obj.Object, sourcePath(srcPath)...)
 	if err != nil {
-		return nil, fmt.Errorf("could not extract source field from unstructured: %s", err)
+		return nil, fmt.Errorf("could not extract source field from unstructured: %w", err)
 	}
 	if !ok {
 		return nil, fmt.Errorf("could not find source field %q in Obj", srcPath)
