@@ -25,10 +25,11 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - deadcode
     - errcheck
+    - errorlint
     - exportloopref
     - forcetypeassert
+    - gci
     - gocritic
     - goconst
     - godot
@@ -43,8 +44,7 @@ linters:
     - misspell
     - revive # replacement for golint
     - staticcheck
-    - structcheck
     - typecheck
+    - unconvert
     - unused
-    - varcheck
     - whitespace

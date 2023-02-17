@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -190,19 +191,19 @@ func (wm *Manager) replayEventsLoop(ctx context.Context) func() error {
 
 					err := wait.ExponentialBackoff(retry.DefaultBackoff, func() (bool, error) {
 						err := wm.replayEvents(childCtx, req.r, req.gvk)
-						if err != nil && err != context.Canceled {
+						if err != nil && !errors.Is(err, context.Canceled) {
 							// Log and retry w/ backoff
 							log.Error(err, "replaying events")
 							return false, nil
 						}
-						if err == context.Canceled {
+						if errors.Is(err, context.Canceled) {
 							// Give up
 							return false, err
 						}
 						// Success
 						return true, nil
 					})
-					if err != nil && err != context.Canceled {
+					if err != nil && !errors.Is(err, context.Canceled) {
 						log.Error(err, "replaying events")
 					}
 				}(&wg, childCancel, log)

@@ -25,7 +25,7 @@ jobs:
         HELM_VERSION: ["3.7.2"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Bootstrap e2e
         run: |
@@ -63,10 +63,6 @@ jobs:
         run: |
           make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest
           make e2e-helm-upgrade HELM_VERSION=${{ matrix.HELM_VERSION }}  HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest
-
-      - name: Manually apply the CRDs.  Helm will not update CRDs.
-        run: |
-          kustomize build config/crd | kubectl apply -f -
 
       - name: Run e2e after upgrade
         run: |

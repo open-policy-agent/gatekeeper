@@ -2,14 +2,11 @@ package modifyset
 
 import (
 	"fmt"
-	"reflect"
-	"sort"
 
 	"github.com/google/go-cmp/cmp"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
-	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/core"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
 	patht "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
@@ -40,21 +37,11 @@ type Mutator struct {
 var _ schema.MutatorWithSchema = &Mutator{}
 
 func (m *Mutator) Matches(mutable *types.Mutable) bool {
-	gvk := mutable.Object.GetObjectKind().GroupVersionKind()
-	if !match.AppliesTo(m.modifySet.Spec.ApplyTo, gvk) {
-		return false
-	}
-	target := &match.Matchable{
-		Object:    mutable.Object,
-		Namespace: mutable.Namespace,
-		Source:    mutable.Source,
-	}
-	matches, err := match.Matches(&m.modifySet.Spec.Match, target)
+	res, err := core.MatchWithApplyTo(mutable, m.modifySet.Spec.ApplyTo, &m.modifySet.Spec.Match)
 	if err != nil {
 		log.Error(err, "Matches failed for modify set", "modifyset", m.modifySet.Name)
-		return false
 	}
-	return matches
+	return res
 }
 
 func (m *Mutator) TerminalType() parser.NodeType {
@@ -75,7 +62,7 @@ func (m *Mutator) Mutate(mutable *types.Mutable) (bool, error) {
 	)
 }
 
-func (m *Mutator) UsesExternalData() bool {
+func (m *Mutator) MustTerminate() bool {
 	// modify set doesn't use external data
 	return false
 }
@@ -147,7 +134,7 @@ func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, e
 		return nil, errors.Wrapf(err, "invalid location format `%s` for ModifySet %s", modifySet.Spec.Location, modifySet.GetName())
 	}
 
-	if hasMetadataRoot(path) {
+	if core.HasMetadataRoot(path) {
 		return nil, fmt.Errorf("modifyset %s can't change metadata", modifySet.GetName())
 	}
 
@@ -155,47 +142,22 @@ func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, e
 		return nil, fmt.Errorf("final node in a modifyset location cannot be a keyed list")
 	}
 
-	id := types.MakeID(modifySet)
-
-	pathTests, err := gatherPathTests(modifySet)
+	tester, err := core.NewTester(modifySet.GetName(), "ModifySet", path, modifySet.Spec.Parameters.PathTests)
 	if err != nil {
 		return nil, err
 	}
-	tester, err := patht.New(path, pathTests)
+	gvks, err := core.NewValidatedBindings(modifySet.GetName(), "ModifySet", modifySet.Spec.ApplyTo)
 	if err != nil {
 		return nil, err
-	}
-	for _, applyTo := range modifySet.Spec.ApplyTo {
-		if len(applyTo.Groups) == 0 || len(applyTo.Versions) == 0 || len(applyTo.Kinds) == 0 {
-			return nil, fmt.Errorf("invalid applyTo for ModifySet mutator %s, all of group, version and kind must be specified", modifySet.GetName())
-		}
-	}
-
-	gvks := getSortedGVKs(modifySet.Spec.ApplyTo)
-	if len(gvks) == 0 {
-		return nil, fmt.Errorf("applyTo required for ModifySet mutator %s", modifySet.GetName())
 	}
 
 	return &Mutator{
-		id:        id,
+		id:        types.MakeID(modifySet),
 		modifySet: modifySet.DeepCopy(),
 		bindings:  gvks,
 		path:      path,
 		tester:    tester,
 	}, nil
-}
-
-func gatherPathTests(modifySet *mutationsunversioned.ModifySet) ([]patht.Test, error) {
-	pts := modifySet.Spec.Parameters.PathTests
-	var pathTests []patht.Test
-	for _, pt := range pts {
-		p, err := parser.Parse(pt.SubPath)
-		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("problem parsing sub path `%s` for ModifySet %s", pt.SubPath, modifySet.GetName()))
-		}
-		pathTests = append(pathTests, patht.Test{SubPath: p, Condition: pt.Condition})
-	}
-	return pathTests, nil
 }
 
 // IsValidModifySet returns an error if the given modifyset object is not
@@ -205,38 +167,6 @@ func IsValidModifySet(modifySet *mutationsunversioned.ModifySet) error {
 		return err
 	}
 	return nil
-}
-
-func hasMetadataRoot(path parser.Path) bool {
-	if len(path.Nodes) == 0 {
-		return false
-	}
-
-	if reflect.DeepEqual(path.Nodes[0], &parser.Object{Reference: "metadata"}) {
-		return true
-	}
-	return false
-}
-
-func getSortedGVKs(bindings []match.ApplyTo) []runtimeschema.GroupVersionKind {
-	// deduplicate GVKs
-	gvksMap := map[runtimeschema.GroupVersionKind]struct{}{}
-	for _, binding := range bindings {
-		for _, gvk := range binding.Flatten() {
-			gvksMap[gvk] = struct{}{}
-		}
-	}
-
-	var gvks []runtimeschema.GroupVersionKind
-	for gvk := range gvksMap {
-		gvks = append(gvks, gvk)
-	}
-
-	// we iterate over the map in a stable order so that
-	// unit tests won't be flaky.
-	sort.Slice(gvks, func(i, j int) bool { return gvks[i].String() < gvks[j].String() })
-
-	return gvks
 }
 
 var _ core.Setter = setter{}

@@ -224,6 +224,47 @@ func Test_ModifySet(t *testing.T) {
 	}
 }
 
+func Test_AssignImage(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
+	// Apply fixtures *before* the controllers are set up.
+	err := applyFixtures("testdata")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	providerCache := frameworksexternaldata.NewCache()
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem, providerCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the AssignImage is present in the cache
+	for _, am := range testAssignImage {
+		id := mutationtypes.MakeID(am)
+		expectedMutator := mutationSystem.Get(id)
+		if expectedMutator == nil {
+			t.Fatal("want expectedMutator != nil but got nil")
+		}
+	}
+}
+
 func Test_Assign(t *testing.T) {
 	g := gomega.NewWithT(t)
 
@@ -463,7 +504,7 @@ func Test_CollectDeleted(t *testing.T) {
 	type test struct {
 		description string
 		gvk         schema.GroupVersionKind
-		tracker     readiness.Expectations
+		tracker     *readiness.Expectations
 	}
 
 	g := gomega.NewWithT(t)
@@ -521,7 +562,7 @@ func Test_CollectDeleted(t *testing.T) {
 	// between them to keep the test short. Trackers are mostly independent per GVK.
 	tests := []test{
 		{description: "constraints", gvk: cgvk},
-		{description: "data (configmaps)", gvk: cmgvk, tracker: cmtracker},
+		{description: "data (configmaps)", gvk: cmgvk, tracker: &cmtracker},
 		{description: "templates", gvk: ctgvk},
 		// no need to check Config here since it is not actually Expected for readiness
 		// (the objects identified in a Config's syncOnly are Expected, tested in data case above)
@@ -531,7 +572,7 @@ func Test_CollectDeleted(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var tt readiness.Expectations
 			if tc.tracker != nil {
-				tt = tc.tracker
+				tt = *tc.tracker
 			} else {
 				tt = tracker.For(tc.gvk)
 			}

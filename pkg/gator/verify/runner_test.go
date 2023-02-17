@@ -983,7 +983,7 @@ func TestRunner_Run(t *testing.T) {
 					}, {
 						Name:       "missing-namespace",
 						Object:     "object.yaml",
-						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.StringPtr("missing Namespace")}},
+						Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.String("missing Namespace")}},
 					}},
 				}},
 			},
@@ -1034,7 +1034,7 @@ func TestRunner_Run(t *testing.T) {
 							{
 								Name:       "user doesn't begin with \"system:\"",
 								Object:     "non-system-ar.yaml",
-								Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.StringPtr("username is not allowed to perform this operation")}},
+								Assertions: []Assertion{{Violations: gator.IntStrFromStr("yes"), Message: pointer.String("username is not allowed to perform this operation")}},
 							},
 						},
 					},
@@ -1077,6 +1077,23 @@ func TestRunner_Run(t *testing.T) {
 							},
 						},
 					},
+					{
+						Name:       "invalid admission review request usage", // this test covers error handling for invalid admission review objects
+						Template:   "template.yaml",
+						Constraint: "constraint-with-match.yaml",
+						Cases: []*Case{
+							{
+								Name:       "no kind on object", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-kind-object-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+							{
+								Name:       "no kind on old object", // this is an AdmissionRequest w a DELETE operation but no oldObject provided
+								Object:     "no-kind-oldObject-ar.yaml",
+								Assertions: []Assertion{{}},
+							},
+						},
+					},
 				},
 			},
 			f: fstest.MapFS{
@@ -1085,6 +1102,9 @@ func TestRunner_Run(t *testing.T) {
 				},
 				"constraint.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfo),
+				},
+				"constraint-with-match.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.ConstraintAlwaysValidateUserInfoWithMatch),
 				},
 				"no-objects-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.AdmissionReviewMissingObjectAndOldObject),
@@ -1106,6 +1126,12 @@ func TestRunner_Run(t *testing.T) {
 				},
 				"no-oldObject-ar.yaml": &fstest.MapFile{
 					Data: []byte(fixtures.DeleteAdmissionReviewWithNoOldObject),
+				},
+				"no-kind-object-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.SystemAdmissionReviewMissingKind),
+				},
+				"no-kind-oldObject-ar.yaml": &fstest.MapFile{
+					Data: []byte(fixtures.DeleteAdmissionReviewWithOldObjectMissingKind),
 				},
 			},
 			want: SuiteResult{
@@ -1130,6 +1156,13 @@ func TestRunner_Run(t *testing.T) {
 							{Name: "missing admission request object", Error: gator.ErrMissingK8sAdmissionRequest},
 							{Name: "no objects to review", Error: gator.ErrNoObjectForReview},
 							{Name: "no oldObject on delete", Error: gator.ErrNilOldObject},
+						},
+					},
+					{
+						Name: "invalid admission review request usage",
+						CaseResults: []CaseResult{
+							{Name: "no kind on object", Error: gator.ErrUnmarshallObject},
+							{Name: "no kind on old object", Error: gator.ErrUnmarshallObject},
 						},
 					},
 				},
@@ -1273,7 +1306,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("first message"),
+				Message: pointer.String("first message"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1348,7 +1381,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintAlwaysValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("never validate"),
+				Message: pointer.String("never validate"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1360,7 +1393,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("[enrv]+ [adeiltv]+"),
+				Message: pointer.String("[enrv]+ [adeiltv]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1370,7 +1403,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("never validate [("),
+				Message: pointer.String("never validate [("),
 			}},
 			want: CaseResult{
 				Error: gator.ErrInvalidRegex,
@@ -1382,7 +1415,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidate,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("[enrv]+x [adeiltv]+"),
+				Message: pointer.String("[enrv]+x [adeiltv]+"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,
@@ -1405,9 +1438,9 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("first message"),
+				Message: pointer.String("first message"),
 			}, {
-				Message: pointer.StringPtr("second message"),
+				Message: pointer.String("second message"),
 			}},
 			want: CaseResult{},
 		},
@@ -1418,10 +1451,10 @@ func TestRunner_RunCase(t *testing.T) {
 			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: gator.IntStrFromInt(1),
-				Message:    pointer.StringPtr("first message"),
+				Message:    pointer.String("first message"),
 			}, {
 				Violations: gator.IntStrFromInt(1),
-				Message:    pointer.StringPtr("second message"),
+				Message:    pointer.String("second message"),
 			}},
 			want: CaseResult{},
 		},
@@ -1431,7 +1464,7 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+				Message: pointer.String("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1442,7 +1475,7 @@ func TestRunner_RunCase(t *testing.T) {
 			object:     fixtures.Object,
 			assertions: []Assertion{{
 				Violations: gator.IntStrFromInt(2),
-				Message:    pointer.StringPtr("[cdefinorst]+ [aegms]+"),
+				Message:    pointer.String("[cdefinorst]+ [aegms]+"),
 			}},
 			want: CaseResult{},
 		},
@@ -1452,9 +1485,9 @@ func TestRunner_RunCase(t *testing.T) {
 			constraint: fixtures.ConstraintNeverValidateTwice,
 			object:     fixtures.Object,
 			assertions: []Assertion{{
-				Message: pointer.StringPtr("first message"),
+				Message: pointer.String("first message"),
 			}, {
-				Message: pointer.StringPtr("third message"),
+				Message: pointer.String("third message"),
 			}},
 			want: CaseResult{
 				Error: gator.ErrNumViolations,

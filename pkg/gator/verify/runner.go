@@ -271,7 +271,7 @@ func (r *Runner) checkCase(ctx context.Context, newClient func() (gator.Client, 
 
 	results := review.Results()
 	if r.includeTrace {
-		trace = pointer.StringPtr(review.TraceDump())
+		trace = pointer.String(review.TraceDump())
 	}
 	for i := range tc.Assertions {
 		err = tc.Assertions[i].Run(results)
@@ -334,6 +334,20 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 	// validate the AdmissionReview to match k8s api server behavior
 	if ar.Request.Object.Raw == nil && ar.Request.OldObject.Raw == nil {
 		return nil, fmt.Errorf("%w: AdmissionRequest does not contain an \"object\" or \"oldObject\" to review", gator.ErrNoObjectForReview)
+	}
+
+	// make sure that kind is set for object, oldObject if present since we expect it on Decode
+	// https://github.com/kubernetes/apimachinery/blob/27a96d86e70e9bbd40639a0539a14423f55afa07/pkg/apis/meta/v1/unstructured/helpers.go#L341
+	obj := &unstructured.Unstructured{}
+	if ar.Request.Object.Raw != nil {
+		if err := obj.UnmarshalJSON(ar.Request.Object.Raw); err != nil {
+			return nil, fmt.Errorf("%w: %v", gator.ErrUnmarshallObject, err.Error())
+		}
+	}
+	if ar.Request.OldObject.Raw != nil {
+		if err := obj.UnmarshalJSON(ar.Request.OldObject.Raw); err != nil {
+			return nil, fmt.Errorf("%w: %v", gator.ErrUnmarshallObject, err.Error())
+		}
 	}
 
 	// parse into webhook/admission type

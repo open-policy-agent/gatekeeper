@@ -1,0 +1,63 @@
+name: benchmark_changes
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  benchmark:
+    name: "Benchmark"
+    if: github.event.issue.pull_request && github.event.comment.body == '/benchmark'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: izhangzhihao/delete-comment@98aa1ea5c6304048edf951c20b3114e03c785c79
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          delete_user_name: github-actions[bot]
+          issue_number: ${{ github.event.issue.number }}
+
+      - name: Update status
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            [Running benchmark here...](${{ github.server.url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      - name: Check out base code into the Go module directory
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.base_ref }}
+
+      - name: Run benchmarks on base ref
+        run: make benchmark-test BENCHMARK_FILE_NAME="../base_benchmarks.txt"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: Run benchmark with incoming changes
+        run: make benchmark-test BENCHMARK_FILE_NAME="pr_benchmarks.txt"
+
+      - name: Compare benchmarks
+        id: get-comment-body
+        run: |
+          export GOPATH="$HOME/go"
+          PATH="$GOPATH/bin:$PATH"
+          go install golang.org/x/perf/cmd/benchstat@v0.0.0-20220920022801-e8d778a60d07
+          benchstat ../base_benchmarks.txt pr_benchmarks.txt > benchstat.txt
+          delimiter=$(openssl rand -hex 8)
+          echo 'msg<<$delimiter' >> $GITHUB_OUTPUT
+          cat benchstat.txt >> $GITHUB_OUTPUT
+          echo '$delimiter' >> $GITHUB_OUTPUT
+
+      - name: Create commit comment
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            This PR compares its performance to the latest released version. If it performs significantly lower, consider optimizing your changes to improve the performance.
+            ```
+            ${{ steps.get-comment-body.outputs.msg }}
+            ```

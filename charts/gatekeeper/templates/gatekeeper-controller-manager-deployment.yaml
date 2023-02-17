@@ -54,7 +54,7 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-        - --log-level={{ .Values.logLevel }}
+        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
@@ -64,6 +64,7 @@ spec:
         - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
         - --max-serving-threads={{ .Values.maxServingThreads }}
         - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+        {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
         
         {{- range .Values.metricsBackends}}
         - --metrics-backend={{ . }}
@@ -136,8 +137,6 @@ spec:
           name: cert
           readOnly: true
       dnsPolicy: {{ .Values.controllerManager.dnsPolicy }}
-      env:
-        {{- toYaml .Values.controllerManager.extraEnv | nindent 8 }}
       hostNetwork: {{ .Values.controllerManager.hostNetwork }}
       imagePullSecrets:
         {{- toYaml .Values.image.pullSecrets | nindent 8 }}

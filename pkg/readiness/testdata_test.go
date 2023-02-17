@@ -51,6 +51,10 @@ var testModifySet = []*mutationsv1alpha1.ModifySet{
 	makeModifySet("demo"),
 }
 
+var testAssignImage = []*mutationsv1alpha1.AssignImage{
+	makeAssignImage("demo"),
+}
+
 var testAssign = []*mutationsv1alpha1.Assign{
 	makeAssign("demo"),
 }
@@ -101,6 +105,21 @@ func makeModifySet(name string) *mutationsv1alpha1.ModifySet {
 		},
 		Spec: mutationsv1alpha1.ModifySetSpec{
 			Location: "spec.some.set",
+		},
+	}
+}
+
+func makeAssignImage(name string) *mutationsv1alpha1.AssignImage {
+	return &mutationsv1alpha1.AssignImage{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
+			Kind:       "Assign",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: mutationsv1alpha1.AssignImageSpec{
+			Location: "spec.containers[name:*].image",
 		},
 	}
 }

@@ -1,7 +1,6 @@
 package v1beta1_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -53,7 +52,7 @@ func TestNewConstraintStatusForPod(t *testing.T) {
 			v1beta1.ConstraintNameLabel:         "a-constraint",
 			v1beta1.ConstraintKindLabel:         "AConstraintKind",
 			v1beta1.PodLabel:                    podName,
-			v1beta1.ConstraintTemplateNameLabel: strings.ToLower(cstrKind),
+			v1beta1.ConstraintTemplateNameLabel: "aconstraintkind",
 		})
 
 	err = controllerutil.SetOwnerReference(pod, wantStatus, scheme)

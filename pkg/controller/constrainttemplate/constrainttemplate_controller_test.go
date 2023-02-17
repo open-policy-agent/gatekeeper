@@ -579,7 +579,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Set up tracker
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -282,7 +282,7 @@ PASS
 						CaseResults: []CaseResult{{
 							Name:    "case name",
 							Runtime: Duration(100 * time.Millisecond),
-							Trace:   pointer.StringPtr("this is a trace"),
+							Trace:   pointer.String("this is a trace"),
 						}},
 					},
 				},

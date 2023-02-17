@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"gopkg.in/yaml.v3"
@@ -770,6 +771,20 @@ func TestExpand(t *testing.T) {
 				{Obj: loadFixture(fixtures.ResultantPurr, t), EnforcementAction: "warn", TemplateName: "expand-cats-purr"},
 			},
 		},
+		{
+			name:      "1 mutator deployment expands pod with AssignImage",
+			generator: loadFixture(fixtures.DeploymentNginx, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssignImage(fixtures.AssignImage, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpDeploymentExpandsPods, t),
+			},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.PodMutateImage, t), EnforcementAction: "", TemplateName: "expand-deployments"},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -870,6 +885,20 @@ func loadAssign(f string, t *testing.T) types.Mutator {
 	mut, err := assign.MutatorForAssign(a)
 	if err != nil {
 		t.Fatalf("error creating assign: %s", err)
+	}
+	return mut
+}
+
+func loadAssignImage(f string, t *testing.T) types.Mutator {
+	u := loadFixture(f, t)
+	a := &mutationsunversioned.AssignImage{}
+	err := convertUnstructuredToTyped(u, a)
+	if err != nil {
+		t.Fatalf("error converting assignImage: %s", err)
+	}
+	mut, err := assignimage.MutatorForAssignImage(a)
+	if err != nil {
+		t.Fatalf("error creating assignimage: %s", err)
 	}
 	return mut
 }

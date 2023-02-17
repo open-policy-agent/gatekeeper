@@ -41,6 +41,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assign"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignimage"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/assignmeta"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators/modifyset"
 	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -340,6 +341,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 		return h.validateAssign(req)
 	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "ModifySet":
 		return h.validateModifySet(req)
+	case req.AdmissionRequest.Kind.Group == mutationsGroup && req.AdmissionRequest.Kind.Kind == "AssignImage":
+		return h.validateAssignImage(req)
 	case req.AdmissionRequest.Kind.Group == externalDataGroup && req.AdmissionRequest.Kind.Kind == "Provider":
 		return h.validateProvider(req)
 	}
@@ -373,7 +376,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 	// ensures the Rego code both parses and compiles.
 	d, err := local.New()
 	if err != nil {
-		return false, fmt.Errorf("unable to create Driver: %v", err)
+		return false, fmt.Errorf("unable to create Driver: %w", err)
 	}
 
 	err = d.AddTemplate(ctx, unversioned)
@@ -452,6 +455,23 @@ func (h *validationHandler) validateAssign(req *admission.Request) (bool, error)
 	return false, nil
 }
 
+func (h *validationHandler) validateAssignImage(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	unversioned := &mutationsunversioned.AssignImage{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
+	}
+	err = assignimage.IsValidAssignImage(unversioned)
+	if err != nil {
+		return true, err
+	}
+
+	return false, nil
+}
+
 func (h *validationHandler) validateModifySet(req *admission.Request) (bool, error) {
 	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
 	if err != nil {
@@ -504,13 +524,13 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 
 	review, err := h.createReviewForRequest(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create augmentedReview: %s", err)
+		return nil, fmt.Errorf("failed to create augmentedReview: %w", err)
 	}
 
 	// Convert the request's generator resource to unstructured for expansion
 	obj := &unstructured.Unstructured{}
 	if _, _, err := deserializer.Decode(req.Object.Raw, nil, obj); err != nil {
-		return nil, fmt.Errorf("error decoding generator resource %s: %v", req.Name, err)
+		return nil, fmt.Errorf("error decoding generator resource %s: %w", req.Name, err)
 	}
 	obj.SetNamespace(req.Namespace)
 	obj.SetGroupVersionKind(
@@ -529,19 +549,19 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 	}
 	resultants, err := h.expansionSystem.Expand(base)
 	if err != nil {
-		return nil, fmt.Errorf("unable to expand object: %s", err)
+		return nil, fmt.Errorf("unable to expand object: %w", err)
 	}
 
 	trace, dump := h.tracingLevel(ctx, req)
 	resp, err := h.review(ctx, review, trace, dump)
 	if err != nil {
-		return nil, fmt.Errorf("error reviewing resource %s: %s", req.Name, err)
+		return nil, fmt.Errorf("error reviewing resource %s: %w", req.Name, err)
 	}
 
 	for _, res := range resultants {
 		resultantResp, err := h.review(ctx, createReviewForResultant(res.Obj, review.Namespace), trace, dump)
 		if err != nil {
-			return nil, fmt.Errorf("error reviewing resultant resource: %s", err)
+			return nil, fmt.Errorf("error reviewing resultant resource: %w", err)
 		}
 		expansion.OverrideEnforcementAction(res.EnforcementAction, resultantResp)
 		expansion.AggregateResponses(res.TemplateName, resp, resultantResp)

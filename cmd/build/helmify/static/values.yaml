@@ -38,7 +38,7 @@ postUpgrade:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.12.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces:
@@ -49,6 +49,7 @@ postUpgrade:
       "pod-security.kubernetes.io/warn-version=latest",
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
+    extraAnnotations: {}
   affinity: {}
   tolerations: []
   nodeSelector: {kubernetes.io/os: linux}
@@ -68,7 +69,7 @@ postInstall:
     extraRules: []
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.12.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
     extraNamespaces:
@@ -79,6 +80,7 @@ postInstall:
       "pod-security.kubernetes.io/warn-version=latest",
       "pod-security.kubernetes.io/enforce=restricted",
       "pod-security.kubernetes.io/enforce-version=v1.24"]
+    extraAnnotations: {}
   probeWebhook:
     enabled: true
     image:
@@ -107,7 +109,7 @@ preUninstall:
     enabled: false
     image:
       repository: openpolicyagent/gatekeeper-crds
-      tag: v3.11.0-beta.0
+      tag: v3.12.0-beta.0
       pullPolicy: IfNotPresent
       pullSecrets: []
   affinity: {}
@@ -126,7 +128,7 @@ preUninstall:
 image:
   repository: openpolicyagent/gatekeeper
   crdRepository: openpolicyagent/gatekeeper-crds
-  release: v3.11.0-beta.0
+  release: v3.12.0-beta.0
   pullPolicy: IfNotPresent
   pullSecrets: []
 podAnnotations: {}
@@ -184,6 +186,12 @@ controllerManager:
     supplementalGroups:
       - 999
   extraRules: []
+  networkPolicy:
+    enabled: false
+    ingress: { }
+      # - from:
+      #   - ipBlock:
+      #       cidr: 0.0.0.0/0
 audit:
   hostNetwork: false
   dnsPolicy: ClusterFirst

@@ -50,7 +50,7 @@ func (d *DummyMutator) Mutate(mutable *types.Mutable) (bool, error) {
 	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d.value), mutable.Object)
 }
 
-func (d *DummyMutator) UsesExternalData() bool {
+func (d *DummyMutator) MustTerminate() bool {
 	return false
 }
 
