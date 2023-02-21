@@ -46,6 +46,11 @@ match_yaml_msg () {
 # END OF HELPER FUNCTIONS
 ####################################################################################################
 
+@test "gator test doesn't wait on stdin input" {
+  # this should fail with "no input data identified"
+  ! bin/gator test
+}
+
 @test "manifest with no violations piped to stdin returns 0 exit status" {
   bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
