@@ -143,9 +143,14 @@ func verifyFile(filename string) error {
 }
 
 func readStdin() ([]*unstructured.Unstructured, error) {
-	_, err := os.Stdin.Stat()
+	stdinfo, err := os.Stdin.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("getting stdin info: %w", err)
+	}
+
+	// check if data is being piped or redirected to stdin
+	if (stdinfo.Mode() & os.ModeCharDevice) != 0 {
+		return nil, nil
 	}
 
 	us, err := ReadK8sResources(os.Stdin)
