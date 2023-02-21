@@ -3,6 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: gatekeeper-update-namespace-label
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -96,6 +97,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: gatekeeper-update-namespace-label
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
