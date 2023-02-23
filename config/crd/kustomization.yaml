@@ -6,6 +6,7 @@ resources:
 - bases/status.gatekeeper.sh_constraintpodstatuses.yaml
 - bases/status.gatekeeper.sh_constrainttemplatepodstatuses.yaml
 - bases/status.gatekeeper.sh_mutatorpodstatuses.yaml
+- bases/status.gatekeeper.sh_expansiontemplatepodstatuses.yaml
 - bases/mutations.gatekeeper.sh_assign.yaml
 - bases/mutations.gatekeeper.sh_assignimage.yaml
 - bases/mutations.gatekeeper.sh_assignmetadata.yaml

@@ -79,6 +79,51 @@ spec:
                   generators, this is usually spec.template
                 type: string
             type: object
+          status:
+            description: ExpansionTemplateStatus defines the observed state of ExpansionStatus.
+            properties:
+              byPod:
+                items:
+                  description: ExpansionTemplatePodStatusStatus defines the observed
+                    state of ExpansionTemplatePodStatus.
+                  properties:
+                    enforced:
+                      type: boolean
+                    errors:
+                      items:
+                        properties:
+                          message:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - message
+                        type: object
+                      type: array
+                    id:
+                      description: 'Important: Run "make" to regenerate code after
+                        modifying this file'
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    operations:
+                      items:
+                        type: string
+                      type: array
+                    templateUID:
+                      description: UID is a type that holds unique ID values, including
+                        UUIDs.  Because we don't ONLY use UUIDs, this is an alias
+                        to string.  Being a type captures intent and helps make sure
+                        that UIDs and names do not get conflated.
+                      type: string
+                  type: object
+                type: array
+              created:
+                type: boolean
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

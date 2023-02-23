@@ -113,5 +113,5 @@ func KeyForMutatorID(id string, mID mtypes.ID) (string, error) {
 	// We must do this because K8s requires all lowercase letters for resource names
 	kind := strings.ToLower(mID.Kind)
 	name := mID.Name
-	return dashPacker(id, kind, name)
+	return DashPacker(id, kind, name)
 }
