@@ -87,7 +87,7 @@ type orFilter struct {
 func newOrFilter(filter string) (Filter, error) {
 	regex, err := regexp.Compile(filter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidFilter, err)
 	}
 
 	return &orFilter{regex: regex}, nil
@@ -123,12 +123,12 @@ var _ Filter = &andFilter{}
 func newAndFilter(testFilter, caseFilter string) (Filter, error) {
 	testRegex, err := regexp.Compile(testFilter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidFilter, err)
 	}
 
 	caseRegex, err := regexp.Compile(caseFilter)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidFilter, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidFilter, err)
 	}
 
 	return &andFilter{testRegex: testRegex, caseRegex: caseRegex}, nil

@@ -107,7 +107,7 @@ func Matches(match *Match, target *Matchable) (bool, error) {
 	for _, fn := range topLevelMatchers {
 		matches, err := fn(match, target)
 		if err != nil {
-			return false, fmt.Errorf("%w: %v", ErrMatch, err)
+			return false, fmt.Errorf("%w: %w", ErrMatch, err)
 		}
 
 		if !matches {
