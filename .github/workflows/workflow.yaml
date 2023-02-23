@@ -1,4 +1,4 @@
-name: build_test_release
+name: build_test
 on:
   push:
     paths-ignore:
@@ -23,19 +23,13 @@ on:
       - "**.md"
       - "!cmd/build/helmify/static/README.md"
 
-env:
-  GITHUB_REPO: open-policy-agent/gatekeeper
-  IMAGE_REPO: openpolicyagent/gatekeeper
-  CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
-  GATOR_IMAGE_REPO: openpolicyagent/gator
+permissions: read-all
 
 jobs:
   lint:
     name: "Lint"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 5
-    permissions:
-      contents: read
     steps:
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -54,10 +48,8 @@ jobs:
 
   test:
     name: "Unit test"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -77,12 +69,29 @@ jobs:
           file: ./cover.out
           fail_ci_if_error: false
 
+  check_manifest:
+    name: "Check codegen and manifest"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go 1.19
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+      - name: Check go.mod and manifests
+        run: |
+          # there should be no additional manifest or go.mod changes
+          go mod tidy
+          git diff --exit-code
+          make generate manifests
+          git diff --exit-code
+
   gator_test:
     name: "Test Gator"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 5
-    permissions:
-      contents: read
     steps:
       - name: Set up Go 1.19
         uses: actions/setup-go@v3
@@ -103,10 +112,8 @@ jobs:
 
   build_test:
     name: "Build and Test"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
-    permissions:
-      contents: read
     strategy:
       matrix:
         KUBERNETES_VERSION: ["1.23.13", "1.24.7", "1.25.3", "1.26.0"]
@@ -127,11 +134,18 @@ jobs:
 
       - name: Run e2e
         run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
-          make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true
-          go mod tidy
-          # there should be no additional manifest or go.mod changes
-          git diff --exit-code
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest
+
+          make e2e-build-load-externaldata-image
+
+          kind load docker-image --name kind \
+            gatekeeper-e2e:latest
+
+          make deploy \
+            IMG=gatekeeper-e2e:latest \
+            USE_LOCAL_IMG=true
+
           make test-e2e
 
       - name: Save logs
@@ -150,10 +164,8 @@ jobs:
 
   helm_build_test:
     name: "[Helm] Build and Test"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
-    permissions:
-      contents: read
     strategy:
       matrix:
         HELM_VERSION: ["3.7.2"]
@@ -170,9 +182,30 @@ jobs:
 
       - name: Run e2e
         run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
-          make e2e-helm-deploy HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest HELM_VERSION=${{ matrix.HELM_VERSION }} GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
-          make test-e2e GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          make docker-buildx-crds \
+            CRD_IMG=gatekeeper-crds:latest \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          make e2e-build-load-externaldata-image \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          kind load docker-image --name kind \
+            gatekeeper-e2e:latest \
+            gatekeeper-crds:latest
+
+          make e2e-helm-deploy \
+            HELM_REPO=gatekeeper-e2e \
+            HELM_CRD_REPO=gatekeeper-crds \
+            HELM_RELEASE=latest \
+            HELM_VERSION=${{ matrix.HELM_VERSION }} \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          make test-e2e \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
 
       - name: Save logs
         if: ${{ always() }}
@@ -191,10 +224,9 @@ jobs:
 
   build_test_generator_expansion:
     name: "[Generator Resource Expansion] Build and Test"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
-    permissions:
-      contents: read
+
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
@@ -212,8 +244,19 @@ jobs:
 
     - name: Run e2e
       run: |
-        make e2e-build-load-image IMG=gatekeeper-e2e:latest CRD_IMG=gatekeeper-crds:latest
-        make deploy IMG=gatekeeper-e2e:latest USE_LOCAL_IMG=true ENABLE_GENERATOR_EXPANSION=true
+        make docker-buildx \
+          IMG=gatekeeper-e2e:latest
+
+        make e2e-build-load-externaldata-image
+
+        kind load docker-image --name kind \
+          gatekeeper-e2e:latest
+
+        make deploy \
+          IMG=gatekeeper-e2e:latest \
+          USE_LOCAL_IMG=true \
+          ENABLE_GENERATOR_EXPANSION=true
+
         go mod tidy
         # there should be no additional manifest or go.mod changes
         git diff --exit-code
@@ -235,10 +278,8 @@ jobs:
 
   scan_vulnerabilities:
     name: "[Trivy] Scan for vulnerabilities"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
-    permissions:
-      contents: read
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
@@ -250,177 +291,24 @@ jobs:
           tar zxvf trivy_${{ env.TRIVY_VERSION }}_Linux-64bit.tar.gz
           echo "$(pwd)" >> $GITHUB_PATH
         env:
-          TRIVY_VERSION: "0.32.1"
+          TRIVY_VERSION: "0.36.1"
 
       - name: Run trivy on git repository
         run: |
           trivy fs --format table --ignore-unfixed --skip-dirs website --security-checks vuln .
 
       - name: Build docker images
-        run: make docker-build
+        run: |
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest
+
+          make docker-buildx-crds \
+            CRD_IMG=gatekeeper-crds:latest
 
       - name: Run trivy on images
         run: |
-          for img in "openpolicyagent/gatekeeper:latest" "openpolicyagent/gatekeeper-crds:latest"; do
+          for img in "gatekeeper-e2e:latest" "gatekeeper-crds:latest"; do
             for vuln_type in "os" "library"; do
               trivy image --ignore-unfixed --vuln-type="${vuln_type}" "${img}"
             done
           done
-
-  pre-release:
-    name: "Pre Release"
-    runs-on: "ubuntu-latest"
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, test, build_test, helm_build_test, scan_vulnerabilities]
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
-
-      - name: make docker-push-dev
-        run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull&scope=repository:${{ env.GATOR_IMAGE_REPO }}:pull"
-          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
-          listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
-          authz="Authorization: Bearer $bearerToken"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-dev DEV_TAG=${GITHUB_SHA::7}
-          fi
-
-          listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-crds-dev DEV_TAG=${GITHUB_SHA::7}
-          fi
-
-          listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H "$authz" $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${GITHUB_SHA::7} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-gator-dev DEV_TAG=${GITHUB_SHA::7}
-          fi
-        env:
-          DOCKER_USER: ${{ secrets.DOCKER_USER }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
-  tagged-release:
-    name: "Tagged Release"
-    runs-on: "ubuntu-latest"
-    permissions:
-      contents: write
-    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
-    needs: [lint, test, build_test, helm_build_test, scan_vulnerabilities]
-    timeout-minutes: 45
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
-
-      - name: Set up Go 1.19
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
-
-      - name: Get tag
-        id: get_version
-        run: |
-          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
-      - name: Publish release
-        run: |
-          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull&scope=repository:${{ env.GATOR_IMAGE_REPO }}:pull"
-          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
-          listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
-          authz="Authorization: Bearer $bearerToken"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-release VERSION=${TAG}
-          fi
-
-          listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-crds-release VERSION=${TAG}
-          fi
-
-          listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
-          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
-          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
-          if [[ $exists == null ]]
-          then
-            make docker-login
-            make docker-buildx-gator-release VERSION=${TAG}
-          fi
-        env:
-          DOCKER_USER: ${{ secrets.DOCKER_USER }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Bootstrap e2e
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/bin
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
-
-      - name: Verify release
-        run: |
-          make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
-
-      - name: Build gator-cli
-        run: |
-          build() {
-            export GOOS="$(echo ${1} | cut -d '-' -f 1)"
-            export GOARCH="$(echo ${1} | cut -d '-' -f 2)"
-            FILENAME=${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}
-            # build the binary
-            make bin/gator-${GOOS}-${GOARCH}
-            # rename the binary to gator
-            tmp_dir=$(mktemp -d)
-            cp bin/gator-${GOOS}-${GOARCH} ${tmp_dir}/gator
-            pushd ${tmp_dir}
-            tar -czf ${FILENAME}.tar.gz gator*
-            popd
-          }
-          mkdir -p _dist
-          for os_arch_extension in $PLATFORMS; do
-            build ${os_arch_extension} &
-          done
-          wait
-          pushd _dist
-          # consolidate tar's sha256sum into a single file
-          find . -type f -name '*.tar.gz' | sort | xargs sha256sum >> sha256sums.txt
-          popd
-        env:
-          PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
-
-      - name: Create GitHub release
-        uses: "marvinpinto/action-automatic-releases@v1.2.1"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: |
-            _dist/sha256sums.txt
-            _dist/*.tar.gz
-
-      - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@v1.7.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          charts_dir: charts
-          target_dir: charts
-          linting: off

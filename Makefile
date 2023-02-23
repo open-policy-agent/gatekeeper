@@ -44,6 +44,9 @@ LDFLAGS := "-X github.com/open-policy-agent/gatekeeper/pkg/version.Version=$(VER
 	-X main.frameworksVersion=$(FRAMEWORKS_VERSION) \
 	-X main.opaVersion=$(OPA_VERSION)"
 
+PLATFORM ?= linux/amd64
+OUTPUT_TYPE ?= type=docker
+
 MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \nkind: Deployment\
 \nmetadata:\
@@ -90,6 +93,10 @@ ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
 else
 GOBIN=$(shell go env GOBIN)
+endif
+
+ifdef GENERATE_ATTESTATIONS
+_ATTESTATIONS := --attest type=sbom --attest type=provenance,mode=max
 endif
 
 all: lint test manager
@@ -158,7 +165,11 @@ e2e-build-load-image: docker-buildx e2e-build-load-externaldata-image
 
 e2e-build-load-externaldata-image: docker-buildx-builder
 	./test/externaldata/dummy-provider/scripts/generate-tls-certificate.sh
-	docker buildx build --platform="linux/amd64" -t dummy-provider:test --load -f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
+	docker buildx build \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t dummy-provider:test \
+		-f test/externaldata/dummy-provider/Dockerfile test/externaldata/dummy-provider
 	kind load docker-image --name kind dummy-provider:test
 
 e2e-verify-release: e2e-build-load-externaldata-image patch-image deploy test-e2e
@@ -244,7 +255,9 @@ ifeq ($(ENABLE_GENERATOR_EXPANSION),true)
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=webhook/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 	@grep -q -v 'enable-generator-resource-expansion' ./config/overlays/dev/manager_image_patch.yaml && sed -i '/- --operation=audit/a \ \ \ \ \ \ \ \ - --enable-generator-resource-expansion=true' ./config/overlays/dev/manager_image_patch.yaml
 endif
-	docker run -v $(shell pwd)/config:/config -v $(shell pwd)/vendor:/vendor \
+	docker run \
+		-v $(shell pwd)/config:/config \
+		-v $(shell pwd)/vendor:/vendor \
 		registry.k8s.io/kustomize/kustomize:v${KUSTOMIZE_VERSION} build \
 		/config/overlays/dev | kubectl apply -f -
 
@@ -301,90 +314,89 @@ endif
 docker-login:
 	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(REGISTRY)
 
-# Tag for Dev
-docker-tag-dev:
-	@docker tag $(IMG) $(REPOSITORY):$(DEV_TAG)
-	@docker tag $(IMG) $(REPOSITORY):dev
-	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(DEV_TAG)
-	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):dev
-	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(DEV_TAG)
-	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):dev
-
-# Tag for Dev
-docker-tag-release:
-	@docker tag $(IMG) $(REPOSITORY):$(VERSION)
-	@docker tag $(CRD_IMG) $(CRD_REPOSITORY):$(VERSION)
-	@docker tag $(GATOR_IMG) $(GATOR_REPOSITORY):$(VERSION)
-
-# Push for Dev
-docker-push-dev: docker-tag-dev
-	@docker push $(REPOSITORY):$(DEV_TAG)
-	@docker push $(REPOSITORY):dev
-	@docker push $(CRD_REPOSITORY):$(DEV_TAG)
-	@docker push $(CRD_REPOSITORY):dev
-	@docker push $(GATOR_REPOSITORY):$(DEV_TAG)
-	@docker push $(GATOR_REPOSITORY):dev
-
-# Push for Release
-docker-push-release: docker-tag-release
-	@docker push $(REPOSITORY):$(VERSION)
-	@docker push $(CRD_REPOSITORY):$(VERSION)
-	@docker push $(GATOR_REPOSITORY):$(VERSION)
-
-# Add crds to gatekeeper-crds image
-# Build gatekeeper image
-docker-build: build-crds
-	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
-	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
-
 docker-buildx-builder:
 	if ! docker buildx ls | grep -q container-builder; then\
-		docker buildx create --name container-builder --use;\
+		docker buildx create --name container-builder --use --bootstrap;\
+		docker buildx inspect;\
 	fi
 
 # Build image with buildx to build cross platform multi-architecture docker images
 # https://docs.docker.com/buildx/working-with-buildx/
-docker-buildx: build-crds docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
-		-t $(IMG) \
-		. --load
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64" \
+docker-buildx: docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t $(IMG) .
+
+docker-buildx-crds: build-crds docker-buildx-builder
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_IMG) \
-		-f crd.Dockerfile .staging/crds/ --load
+		-f crd.Dockerfile .staging/crds/
 
 docker-buildx-dev: docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t $(REPOSITORY):$(DEV_TAG) \
-		-t $(REPOSITORY):dev \
-		. --push
+		-t $(REPOSITORY):dev .
 
 docker-buildx-crds-dev: build-crds docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
-		-f crd.Dockerfile .staging/crds/ --push
+		-f crd.Dockerfile .staging/crds/
 
 docker-buildx-release: docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
-		-t $(REPOSITORY):$(VERSION) \
-		. --push
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
+		-t $(REPOSITORY):$(VERSION) .
 
 docker-buildx-crds-release: build-crds docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS}\
+		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(VERSION) \
-		-f crd.Dockerfile .staging/crds/ --push
+		-f crd.Dockerfile .staging/crds/
 
 # Build gator image
 docker-buildx-gator-dev: docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${DEV_TAG} \
 		-t ${GATOR_REPOSITORY}:dev \
-		-f gator.Dockerfile . --push
+		-f gator.Dockerfile .
 
 docker-buildx-gator-release: docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64,linux/arm64,linux/arm/v6"\
+	docker buildx build \
+		$(_ATTESTATIONS) \
+		--build-arg LDFLAGS=${LDFLAGS} \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t ${GATOR_REPOSITORY}:${VERSION} \
-		-f gator.Dockerfile . --push
+		-f gator.Dockerfile .
 
 # Update manager_image_patch.yaml with image tag
 patch-image:
@@ -394,11 +406,6 @@ ifeq ($(USE_LOCAL_IMG),true)
 	@sed -i '/^        name: manager/a \ \ \ \ \ \ \ \ imagePullPolicy: IfNotPresent' ./config/overlays/dev/manager_image_patch.yaml
 endif
 	@sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/overlays/dev/manager_image_patch.yaml
-
-# Push the docker image
-docker-push:
-	docker push ${IMG}
-	docker push ${CRD_IMG}
 
 release-manifest:
 	@sed -i'' -e 's@image: $(REPOSITORY):$(VERSION)@image: $(REPOSITORY):'"$(NEWVERSION)"'@' ./config/manager/manager.yaml
@@ -440,17 +447,20 @@ __conversion-gen: __tooling-image
 CONVERSION_GEN=docker run --rm -v $(shell pwd):/gatekeeper gatekeeper-tooling conversion-gen
 
 __tooling-image:
-	docker build build/tooling \
+	docker buildx build build/tooling \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		-t gatekeeper-tooling
 
 __test-image:
 	docker buildx build test/image \
-		-t gatekeeper-test \
-		--load \
+		--platform="$(PLATFORM)" \
+		--output=$(OUTPUT_TYPE) \
 		--build-arg YQ_VERSION=$(YQ_VERSION) \
 		--build-arg BATS_VERSION=$(BATS_VERSION) \
 		--build-arg ORAS_VERSION=$(ORAS_VERSION) \
-		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION)
+		--build-arg KUSTOMIZE_VERSION=$(KUSTOMIZE_VERSION) \
+		-t gatekeeper-test
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/.tmp/bin
