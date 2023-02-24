@@ -123,7 +123,7 @@ func TestReconcile(t *testing.T) {
 
 	mSys := mutation.NewSystem(mutation.SystemOpts{})
 
-	tracker, err := readiness.SetupTracker(mgr, true, false)
+	tracker, err := readiness.SetupTracker(mgr, true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

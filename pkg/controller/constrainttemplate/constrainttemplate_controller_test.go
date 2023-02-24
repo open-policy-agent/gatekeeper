@@ -175,7 +175,7 @@ func TestReconcile(t *testing.T) {
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -579,7 +579,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Set up tracker
-	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false)
+	tracker, err := readiness.SetupTrackerNoReadyz(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

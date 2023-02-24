@@ -11,6 +11,7 @@ import (
 	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
@@ -106,6 +107,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	defer r.registry.report(ctx)
 	log.Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
@@ -122,11 +124,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.scheme.Convert(versionedET, et, nil); err != nil {
 		return reconcile.Result{}, err
 	}
-	defer func() {
-		if err := r.registry.report(ctx); err != nil {
-			log.Error(err, "error reporting template expansion metrics", "namespacedName", nsName)
-		}
-	}()
 
 	if deleted {
 		// et will be an empty struct. We set the metadata name, which is
@@ -146,9 +143,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if upsertErr == nil {
 		log.Info("[readiness] observed ExpansionTemplate", "template name", et.GetName())
 		r.getTracker().Observe(versionedET)
-		r.registry.add(request.NamespacedName)
+		r.registry.add(request.NamespacedName, metrics.ActiveStatus)
 	} else {
 		r.getTracker().TryCancelExpect(versionedET)
+		r.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		log.Error(upsertErr, "upserting template", "template_name", et.GetName())
 	}
 
