@@ -82,7 +82,6 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 		scheme: mgr.GetScheme(),
 		log:    log,
 	}
-
 }
 
 // PodStatusToExpansionTemplateMapper correlates a ExpansionTemplatePodStatus with its corresponding expansion template.
