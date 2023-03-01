@@ -76,6 +76,9 @@ jobs:
           flags: unittests
           file: ./cover.out
           fail_ci_if_error: false
+          gcov_ignore:
+            "./apis/*"
+            "*error.go"
 
   gator_test:
     name: "Test Gator"
