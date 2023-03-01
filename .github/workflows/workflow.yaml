@@ -74,11 +74,9 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           flags: unittests
-          file: ./cover.out
+          files: ./cover.out,./codecov.yml
           fail_ci_if_error: false
-          gcov_ignore:
-            "./apis/*"
-            "*error.go"
+          verbose: true 
 
   gator_test:
     name: "Test Gator"
