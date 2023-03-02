@@ -45,5 +45,6 @@ linters:
     - revive # replacement for golint
     - staticcheck
     - typecheck
+    - unconvert
     - unused
     - whitespace

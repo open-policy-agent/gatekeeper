@@ -93,7 +93,7 @@ Here is an example of a `ExpansionTemplate` that specifies that `DaemonSet`,
 `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet`
 should be expanded into a `Pod`.
 
-```
+```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: ExpansionTemplate
 metadata:
@@ -189,16 +189,16 @@ them to only be applied when expanding resources specified
 by `ExpansionTemplates`. These Mutators will not affect any real resources on
 the cluster.**
 
-```
+```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
 kind: ExpansionTemplate
 metadata:
   name: expand-deployments
 spec:
   applyTo:
-  - groups: [ "apps" ]
-    kinds: [ "Deployment" ]
-    versions: [ "v1" ]
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
   templateSource: "spec.template"
   generatedGVK:
     kind: "Pod"
@@ -210,17 +210,16 @@ kind: Assign
 metadata:
   name: add-sidecar
 spec:
-  source: Generated
   applyTo:
-  - groups: [""]
-    kinds: ["Pod"]
-    versions: ["v1"]
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
   match:
     scope: Namespaced
-    origin: "Generated"
+    source: All
     kinds:
-    - apiGroups: ["*"]
-      kinds: ["Pod"]
+      - apiGroups: ["*"]
+        kinds: ["Pod"]
   location: "spec.containers[name:istio-proxy]"
   parameters:
     assign:
@@ -229,25 +228,26 @@ spec:
         imagePullPolicy: IfNotPresent
         image: docker.io/istio/proxyv2:1.15.0
         ports:
-        - containerPort: 15090
-          name: http-envoy-prom
-          protocol: TCP
+          - containerPort: 15090
+            name: http-envoy-prom
+            protocol: TCP
         securityContext:
-              allowPrivilegeEscalation: false
-              capabilities:
-                drop:
-                - ALL
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
 ---
 apiVersion: mutations.gatekeeper.sh/v1beta1
 kind: ModifySet
 metadata:
   name: add-istio-args
 spec:
-  source: Generated
   applyTo:
-  - groups: [""]
-    kinds: ["Pod"]
-    versions: ["v1"]
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    source: All
   location: "spec.containers[name:istio-proxy].args"
   parameters:
     operation: merge
@@ -273,17 +273,17 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx:1.14.2
-        ports:
-        - containerPort: 80
-        args:
-        - "/bin/sh"
+        - name: nginx
+          image: nginx:1.14.2
+          ports:
+            - containerPort: 80
+          args:
+            - "/bin/sh"
 ```
 
 When expanded, the above configs will produce the following `Pod`:
 
-```
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:

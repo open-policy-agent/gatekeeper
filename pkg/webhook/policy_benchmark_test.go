@@ -45,7 +45,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	atypes "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/yaml"
 )
@@ -78,7 +77,7 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+func (f *fakeNsGetter) SubResource(subResource string) client.SubResourceClient {
 	return nil
 }
 

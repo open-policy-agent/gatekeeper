@@ -504,7 +504,7 @@ func Test_CollectDeleted(t *testing.T) {
 	type test struct {
 		description string
 		gvk         schema.GroupVersionKind
-		tracker     readiness.Expectations
+		tracker     *readiness.Expectations
 	}
 
 	g := gomega.NewWithT(t)
@@ -562,7 +562,7 @@ func Test_CollectDeleted(t *testing.T) {
 	// between them to keep the test short. Trackers are mostly independent per GVK.
 	tests := []test{
 		{description: "constraints", gvk: cgvk},
-		{description: "data (configmaps)", gvk: cmgvk, tracker: cmtracker},
+		{description: "data (configmaps)", gvk: cmgvk, tracker: &cmtracker},
 		{description: "templates", gvk: ctgvk},
 		// no need to check Config here since it is not actually Expected for readiness
 		// (the objects identified in a Config's syncOnly are Expected, tested in data case above)
@@ -572,7 +572,7 @@ func Test_CollectDeleted(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var tt readiness.Expectations
 			if tc.tracker != nil {
-				tt = tc.tracker
+				tt = *tc.tracker
 			} else {
 				tt = tracker.For(tc.gvk)
 			}

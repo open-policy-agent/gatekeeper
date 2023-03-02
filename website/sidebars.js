@@ -47,6 +47,12 @@ module.exports = {
     },
     {
       type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: ['mutation-background']
+    },
+    {
+      type: 'category',
       label: 'Contributing',
       collapsed: false,
       items: [
