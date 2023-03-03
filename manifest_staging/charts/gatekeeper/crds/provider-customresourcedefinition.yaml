@@ -41,12 +41,12 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with http:// or https://.
+                description: URL is the url for the provider. URL is prefixed with https://.
                 type: string
             type: object
         type: object
     served: true
-    storage: true
+    storage: false
   - name: v1beta1
     schema:
       openAPIV3Schema:
@@ -70,9 +70,9 @@ spec:
                 description: Timeout is the timeout when querying the provider.
                 type: integer
               url:
-                description: URL is the url for the provider. URL is prefixed with http:// or https://.
+                description: URL is the url for the provider. URL is prefixed with https://.
                 type: string
             type: object
         type: object
     served: true
-    storage: false
+    storage: true
