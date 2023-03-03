@@ -217,7 +217,7 @@ func (d *Driver) eval(ctx context.Context, compiler *ast.Compiler, target string
 	if d.traceEnabled || cfg.TracingEnabled {
 		b := &bytes.Buffer{}
 		topdown.PrettyTrace(b, *buf)
-		t = pointer.StringPtr(b.String())
+		t = pointer.String(b.String())
 	}
 
 	return res, t, err

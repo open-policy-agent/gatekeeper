@@ -36,7 +36,7 @@ func CreateSchema(templ *templates.ConstraintTemplate, target MatchSchemaProvide
 				Properties: props,
 			},
 			"status": {
-				XPreserveUnknownFields: pointer.BoolPtr(true),
+				XPreserveUnknownFields: pointer.Bool(true),
 			},
 		},
 	}
