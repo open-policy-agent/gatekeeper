@@ -28,7 +28,7 @@ spec:
               internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           embeddedMatch:
-            description: Match selects objects to apply mutations to.
+            description: Match selects which objects are in scope.
             properties:
               excludedNamespaces:
                 description: 'ExcludedNamespaces is a list of namespace names. If

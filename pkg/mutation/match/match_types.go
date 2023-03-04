@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Match selects objects to apply mutations to.
+// Match selects which objects are in scope.
 // +kubebuilder:object:generate=true
 type Match struct {
 	// Source determines whether generated or original resources are matched.

@@ -18,7 +18,7 @@ func init() {
 	}
 
 	// Sanity checks to ensure the CRD was generated properly
-	if len(matchCRD.Spec.Versions) == 0 {
+	if len(matchCRD.Spec.Versions) != 1 {
 		panic(fmt.Errorf("generated match CRD does not contain any versions"))
 	}
 	if matchCRD.Spec.Versions[0].Schema.OpenAPIV3Schema == nil {
@@ -37,8 +37,13 @@ func init() {
 	if err := rt.Convert(&embedded, &matchJSONSchemaProps, nil); err != nil {
 		panic(fmt.Errorf("could not convert match JSONSchemaProps from v1 to versionless: %w", err))
 	}
+
+	// Verify conversion worked by checking properties field
+	if _, exists := matchJSONSchemaProps.Properties["kinds"]; !exists {
+		panic("converted match schema does not have 'kinds' field")
+	}
 }
 
 func matchSchema() apiextensions.JSONSchemaProps {
-	return matchJSONSchemaProps
+	return *matchJSONSchemaProps.DeepCopy()
 }
