@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	templatesv1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
@@ -35,69 +34,22 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
-	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
-
-// constantRetry makes 3,000 attempts at a rate of 100 per second. Since this
-// is a test instance and not a "real" cluster, this is fine and there's no need
-// to increase the wait time each iteration.
-var constantRetry = wait.Backoff{
-	Steps:    3000,
-	Duration: 10 * time.Millisecond,
-}
-
-// setupManager sets up a controller-runtime manager with registered watch manager.
-func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
-	t.Helper()
-
-	metrics.Registry = prometheus.NewRegistry()
-	mgr, err := manager.New(cfg, manager.Options{
-		MetricsBindAddress: "0",
-		NewCache:           dynamiccache.New,
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
-			return apiutil.NewDynamicRESTMapper(c)
-		},
-		Logger: testutils.NewLogger(t),
-	})
-	if err != nil {
-		t.Fatalf("setting up controller manager: %s", err)
-	}
-	c := mgr.GetCache()
-	dc, ok := c.(watch.RemovableCache)
-	if !ok {
-		t.Fatalf("expected dynamic cache, got: %T", c)
-	}
-	wm, err := watch.New(dc)
-	if err != nil {
-		t.Fatalf("could not create watch manager: %s", err)
-	}
-	if err := mgr.Add(wm); err != nil {
-		t.Fatalf("could not add watch manager to manager: %s", err)
-	}
-	return mgr, wm
-}
 
 func makeReconcileConstraintTemplate(suffix string) *v1beta1.ConstraintTemplate {
 	return &v1beta1.ConstraintTemplate{
@@ -151,12 +103,12 @@ func TestReconcile(t *testing.T) {
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
-	mgr, wm := setupManager(t)
+	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	err := createGatekeeperNamespace(mgr.GetConfig())
+	err := testutils.CreateGatekeeperNamespace(mgr.GetConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,11 +157,11 @@ func TestReconcile(t *testing.T) {
 
 		logger.Info("Running test: CRD Gets Created")
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
-		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		createThenCleanup(ctx, t, c, constraintTemplate)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		clientset := kubernetes.NewForConfigOrDie(cfg)
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -239,11 +191,11 @@ func TestReconcile(t *testing.T) {
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
 
-		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, cstr))
-		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		createThenCleanup(ctx, t, c, constraintTemplate)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
-		err = retry.OnError(constantRetry, func(error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(error) bool {
 			return true
 		}, func() error {
 			return c.Create(ctx, cstr)
@@ -293,12 +245,12 @@ func TestReconcile(t *testing.T) {
 		constraintTemplate := makeReconcileConstraintTemplate(suffix)
 		cstr := newDenyAllCstr(suffix)
 
-		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, cstr))
-		t.Cleanup(deleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
-		createThenCleanup(ctx, t, c, constraintTemplate)
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, cstr))
+		t.Cleanup(testutils.DeleteObjectAndConfirm(ctx, t, c, expectedCRD(suffix)))
+		testutils.CreateThenCleanup(ctx, t, c, constraintTemplate)
 
 		var crd *apiextensionsv1.CustomResourceDefinition
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd = &apiextensionsv1.CustomResourceDefinition{}
@@ -315,7 +267,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			crd := &apiextensionsv1.CustomResourceDefinition{}
@@ -339,7 +291,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			sList := &statusv1beta1.ConstraintPodStatusList{}
@@ -355,7 +307,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			return c.Create(ctx, newDenyAllCstr(suffix))
@@ -409,7 +361,7 @@ func TestReconcile(t *testing.T) {
 		// https://github.com/open-policy-agent/gatekeeper/pull/1595#discussion_r722819552
 		t.Cleanup(testutils.DeleteObject(t, c, instanceInvalidRego))
 
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			ct := &v1beta1.ConstraintTemplate{}
@@ -484,7 +436,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = retry.OnError(constantRetry, func(err error) bool {
+		err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 			return true
 		}, func() error {
 			resp, err := opaClient.Review(ctx, req)
@@ -508,7 +460,7 @@ func TestReconcile_DeleteConstraintResources(t *testing.T) {
 	logger.Info("Running test: Cancel the expectations when constraint gets deleted")
 
 	// Setup the Manager
-	mgr, wm := setupManager(t)
+	mgr, wm := testutils.SetupManager(t, cfg)
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// start manager that will start tracker and controller
@@ -573,7 +525,7 @@ violation[{"msg": "denied!"}] {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	err = createGatekeeperNamespace(mgr.GetConfig())
+	err = testutils.CreateGatekeeperNamespace(mgr.GetConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,7 +574,7 @@ violation[{"msg": "denied!"}] {
 		t.Fatalf("unexpected tracker, got %T", ot)
 	}
 	// ensure that expectations are set for the constraint gvk
-	err = retry.OnError(constantRetry, func(err error) bool {
+	err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		gotExpected := tr.IsExpecting(gvk, types.NamespacedName{Name: "denyallconstraint"})
@@ -648,7 +600,7 @@ violation[{"msg": "denied!"}] {
 	}
 
 	// Check readiness tracker is satisfied post-reconcile
-	err = retry.OnError(constantRetry, func(err error) bool {
+	err = retry.OnError(testutils.ConstantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		satisfied := tracker.For(gvk).Satisfied()
@@ -663,7 +615,7 @@ violation[{"msg": "denied!"}] {
 }
 
 func constraintEnforced(ctx context.Context, c client.Client, suffix string) error {
-	return retry.OnError(constantRetry, func(err error) bool {
+	return retry.OnError(testutils.ConstantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		cstr := newDenyAllCstr(suffix)
@@ -778,7 +730,7 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 
 	u := &unstructured.UnstructuredList{}
 	u.SetGroupVersionKind(gvk)
-	return retry.OnError(constantRetry, func(err error) bool {
+	return retry.OnError(testutils.ConstantRetry, func(err error) bool {
 		return true
 	}, func() error {
 		if ctx.Err() != nil {
@@ -788,99 +740,7 @@ func applyCRD(ctx context.Context, client client.Client, gvk schema.GroupVersion
 	})
 }
 
-// deleteObjectAndConfirm returns a callback which deletes obj from the passed
-// Client. Does result in mutations to obj. The callback includes a cached copy
-// of all information required to delete obj in the callback, so it is safe to
-// mutate obj afterwards. Similarly - client.Delete mutates its input, but
-// the callback does not call client.Delete on obj. Instead, it creates a
-// single-purpose Unstructured for this purpose. Thus, obj is not mutated after
-// the callback is run.
-func deleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, obj client.Object) func() {
-	t.Helper()
-
-	// Cache the identifying information from obj. We refer to this cached
-	// information in the callback, and not obj itself.
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	namespace := obj.GetNamespace()
-	name := obj.GetName()
-
-	if gvk.Empty() {
-		// We can't send a proper delete request with an Unstructured without
-		// filling in GVK. The alternative would be to require tests to construct
-		// a valid Scheme or provide a factory method for the type to delete - this
-		// is easier.
-		t.Fatalf("gvk for %v/%v %T is empty",
-			namespace, name, obj)
-	}
-
-	return func() {
-		t.Helper()
-
-		// Construct a single-use Unstructured to send the Delete request.
-		toDelete := makeUnstructured(gvk, namespace, name)
-		err := c.Delete(ctx, toDelete)
-		if apierrors.IsNotFound(err) {
-			return
-		} else if err != nil {
-			t.Fatal(err)
-		}
-
-		err = retry.OnError(constantRetry, func(err error) bool {
-			return true
-		}, func() error {
-			// Construct a single-use Unstructured to send the Get request. It isn't
-			// safe to reuse Unstructureds for each retry as Get modifies its input.
-			toGet := makeUnstructured(gvk, namespace, name)
-			key := client.ObjectKey{Namespace: namespace, Name: name}
-			err2 := c.Get(ctx, key, toGet)
-			if apierrors.IsGone(err2) || apierrors.IsNotFound(err2) {
-				return nil
-			}
-
-			// Marshal the currently-gotten object, so it can be printed in test
-			// failure output.
-			s, _ := json.MarshalIndent(toGet, "", "  ")
-			return fmt.Errorf("found %v %v:\n%s", gvk, key, string(s))
-		})
-
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 // This interface is getting used by tests to check the private objects of objectTracker.
 type testExpectations interface {
 	IsExpecting(gvk schema.GroupVersionKind, nsName types.NamespacedName) bool
-}
-
-// createThenCleanup creates obj in Client, and then registers obj to be deleted
-// at the end of the test. The passed obj is safely deepcopied before being
-// passed to client.Create, so it is not mutated by this call.
-func createThenCleanup(ctx context.Context, t *testing.T, c client.Client, obj client.Object) {
-	t.Helper()
-	cpy := obj.DeepCopyObject()
-	cpyObj, ok := cpy.(client.Object)
-	if !ok {
-		t.Fatalf("got obj.DeepCopyObject() type = %T, want %T", cpy, client.Object(nil))
-	}
-
-	err := c.Create(ctx, cpyObj)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// It is unnecessary to deepcopy obj as deleteObjectAndConfirm does not pass
-	// obj to any Client calls.
-	t.Cleanup(deleteObjectAndConfirm(ctx, t, c, obj))
-}
-
-func makeUnstructured(gvk schema.GroupVersionKind, namespace, name string) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{
-		Object: make(map[string]interface{}),
-	}
-	u.SetGroupVersionKind(gvk)
-	u.SetNamespace(namespace)
-	u.SetName(name)
-	return u
 }

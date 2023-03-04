@@ -199,7 +199,7 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, et *unversione
 		return fmt.Errorf("getting expansion status in name %s, namespace %s: %w", et.GetName(), et.GetNamespace(), err)
 	}
 
-	r.addStatusError(status, etErr)
+	addStatusError(status, etErr)
 	status.Status.ObservedGeneration = et.GetGeneration()
 
 	if shouldCreate {
@@ -222,7 +222,7 @@ func (r *Reconciler) getTracker() readiness.Expectations {
 	return r.tracker.For(v1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
 }
 
-func (r *Reconciler) addStatusError(status *statusv1alpha1.ExpansionTemplatePodStatus, etErr error) {
+func addStatusError(status *statusv1alpha1.ExpansionTemplatePodStatus, etErr error) {
 	if etErr == nil {
 		status.Status.Enforced = true
 		status.Status.Errors = nil
@@ -231,5 +231,5 @@ func (r *Reconciler) addStatusError(status *statusv1alpha1.ExpansionTemplatePodS
 
 	status.Status.Enforced = false
 	e := &statusv1alpha1.ExpansionTemplateError{Message: etErr.Error()}
-	status.Status.Errors = []*statusv1alpha1.ExpansionTemplateError{e}
+	status.Status.Errors = append(status.Status.Errors, e)
 }
