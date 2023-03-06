@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/ghodss/yaml"
+	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
+	api "github.com/open-policy-agent/gatekeeper/apis"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -412,6 +414,11 @@ func TestConstraintEnforcement(t *testing.T) {
 		},
 	}
 
+	scheme := runtime.NewScheme()
+	if err := api.AddToScheme(scheme); err != nil {
+		t.Fatalf("could not initialize scheme: %s", err)
+	}
+
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			target := &K8sValidationTarget{}
@@ -425,9 +432,13 @@ func TestConstraintEnforcement(t *testing.T) {
 				t.Fatalf("unable to set up OPA client: %s", err)
 			}
 
-			tmpl := &templates.ConstraintTemplate{}
-			if err := yaml.Unmarshal([]byte(testTemplate), tmpl); err != nil {
+			versionedTmpl := &templatesv1beta1.ConstraintTemplate{}
+			if err := yaml.Unmarshal([]byte(testTemplate), versionedTmpl); err != nil {
 				t.Fatalf("unable to unmarshal template: %s", err)
+			}
+			tmpl := &templates.ConstraintTemplate{}
+			if err := scheme.Convert(versionedTmpl, tmpl, nil); err != nil {
+				t.Fatalf("could not convert template: %s", err)
 			}
 			ctx := context.Background()
 			if _, err := c.AddTemplate(ctx, tmpl); err != nil {

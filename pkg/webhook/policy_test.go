@@ -165,12 +165,17 @@ func validRegoTemplate() *templates.ConstraintTemplate {
 			},
 			Targets: []templates.Target{{
 				Target: target.Name,
-				Rego: `
+				Code: []templates.Code{{
+					Engine: "Rego",
+					Source: &templates.Anything{
+						Value: map[string]interface{}{"rego": `
 package goodrego
 
-        violation[{"msg": msg}] {
-          msg := "Maybe this will work?"
-        }`,
+violation[{"msg": msg}] {
+   msg := "Maybe this will work?"
+}`},
+					},
+				}},
 			}},
 		},
 	}
