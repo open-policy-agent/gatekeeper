@@ -16,6 +16,9 @@ limitations under the License.
 package v1beta1
 
 import (
+	"unsafe"
+
+	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	coreTemplates "github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/schema"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -57,6 +60,44 @@ func Convert_v1beta1_Validation_To_templates_Validation(in *Validation, out *cor
 	} else {
 		inVal := *in.LegacySchema
 		out.LegacySchema = &inVal
+	}
+
+	return nil
+}
+
+func Convert_v1beta1_Target_To_templates_Target(in *Target, out *coreTemplates.Target, s conversion.Scope) error { // nolint:revive // Required exact function name.
+	out.Target = in.Target
+	out.Rego = in.Rego
+	out.Libs = *(*[]string)(unsafe.Pointer(&in.Libs))
+
+	out.Code = make([]coreTemplates.Code, len(in.Code))
+	for i := range in.Code {
+		if err := Convert_v1beta1_Code_To_templates_Code(&(in.Code[i]), &(out.Code[i]), s); err != nil {
+			return err
+		}
+	}
+
+	if in.Rego == "" {
+		return nil
+	}
+
+	regoSource := &regoSchema.Source{}
+	regoSource.Rego = in.Rego
+	regoSource.Libs = append(regoSource.Libs, in.Libs...)
+
+	injected := false
+	for i := range out.Code {
+		if out.Code[i].Engine == regoSchema.Name {
+			out.Code[i].Source.Value = regoSource.ToUnstructured()
+			injected = true
+			break
+		}
+	}
+	if !injected {
+		out.Code = append(out.Code, coreTemplates.Code{
+			Engine: regoSchema.Name,
+			Source: &coreTemplates.Anything{Value: regoSource.ToUnstructured()},
+		})
 	}
 
 	return nil

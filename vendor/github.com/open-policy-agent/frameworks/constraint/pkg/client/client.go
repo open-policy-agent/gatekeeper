@@ -11,6 +11,8 @@ import (
 	apiconstraints "github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/crds"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	regoSchema "github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/handler"
@@ -31,9 +33,22 @@ const statusField = "status"
 // allowed to continue running. Thus, this problem can only safely be handled
 // by the caller.
 type Client struct {
-	// driver contains the Rego runtime environments to run queries against.
-	// Does not require mutex locking as Driver is threadsafe.
-	driver drivers.Driver
+	// driver priority specifies the preference for which driver should
+	// be preferred if a template specifies multiple kinds of source
+	// code. It is determined by the order with which drivers are
+	// added to the client.
+	driverPriority map[string]int
+
+	// ignoreNoReferentialDriverWarning toggles whether we warn the user
+	// when there is no registered driver that supports referential data when
+	// they call AddData()
+	ignoreNoReferentialDriverWarning bool
+
+	// drivers contains the drivers for policy engines understood
+	// by the constraint framework client.
+	// Does not require mutex locking as Driver is threadsafe
+	// and the map should be created during bootstrapping.
+	drivers map[string]drivers.Driver
 	// targets are the targets supported by this Client.
 	// Assumed to be constant after initialization.
 	targets map[string]handler.TargetHandler
@@ -43,6 +58,26 @@ type Client struct {
 
 	// templates is a map from a Template's name to its entry.
 	templates map[string]*templateClient
+}
+
+// driverForTemplate returns the driver to be used for a template according
+// to the driver priority in the client. An empty string means the constraint
+// template does not contain a language the client has a driver for.
+func (c *Client) driverForTemplate(template *templates.ConstraintTemplate) string {
+	if len(template.Spec.Targets) == 0 {
+		return ""
+	}
+	language := ""
+	for _, v := range template.Spec.Targets[0].Code {
+		priority, ok := c.driverPriority[v.Engine]
+		if !ok {
+			continue
+		}
+		if priority < c.driverPriority[language] || c.driverPriority[language] == 0 {
+			language = v.Engine
+		}
+	}
+	return language
 }
 
 // CreateCRD creates a CRD from template.
@@ -93,7 +128,9 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 		}
 	}
 
-	if cachedCpy != nil && cachedCpy.SemanticEqual(templ) {
+	// if there is more than one active driver for the template, there is some cleanup to do
+	// from a botched driver swap.
+	if cachedCpy != nil && cachedCpy.SemanticEqual(templ) && len(cached.activeDrivers) == 1 {
 		resp.Handled[targetName] = true
 		return resp, nil
 	}
@@ -135,29 +172,72 @@ func (c *Client) AddTemplate(ctx context.Context, templ *templates.ConstraintTem
 		return resp, err
 	}
 
-	if err := c.driver.AddTemplate(ctx, templ); err != nil {
+	newDriverN := c.driverForTemplate(templ)
+
+	driver, ok := c.drivers[newDriverN]
+	if !ok {
+		return resp, fmt.Errorf("%w: available drivers: %v, wanted %q", clienterrors.ErrNoDriver, c.driverPriority, c.driverForTemplate(templ))
+	}
+
+	// TODO: because different targets may have different code sets,
+	// the driver should be told which targets to load code for.
+	// this is moot right now, since templates only have one target
+	if err := driver.AddTemplate(ctx, templ); err != nil {
 		return resp, err
 	}
 
 	templateName := templ.GetName()
 
-	template := c.templates[templateName]
+	cacheEntry := c.templates[templateName]
 
 	// We don't want to use the usual "if found/ok" idiom here - if the value
 	// stored for templateName is nil, we need to update it to be non-nil to avoid
 	// a panic.
-	if template == nil {
-		template = &templateClient{
-			constraints: make(map[string]*constraintClient),
-		}
-
-		c.templates[templateName] = template
+	if cacheEntry == nil {
+		cacheEntry = newTemplateClient()
+		c.templates[templateName] = cacheEntry
 	}
 
-	// This state mutation needs to happen last so that the semantic equal check
-	// at the beginning does not incorrectly return true when updating did not
-	// succeed previously.
-	template.Update(templ, crd, target)
+	cacheEntry.activeDrivers[newDriverN] = true
+
+	// For drivers that require a local cache of constraints, we ensure that
+	// cache is current if the active driver has changed.
+	if cachedCpy != nil {
+		oldDriverN := c.driverForTemplate(cachedCpy)
+		if oldDriverN != newDriverN {
+			cacheEntry.needsConstraintReplay = true
+		}
+	}
+
+	if cacheEntry.needsConstraintReplay {
+		for _, constraintEntry := range cacheEntry.constraints {
+			cstr := constraintEntry.getConstraint()
+			if err := driver.AddConstraint(ctx, cstr); err != nil {
+				return resp, fmt.Errorf("%w: while replaying constraints", err)
+			}
+		}
+		cacheEntry.needsConstraintReplay = false
+	}
+
+	// This state mutation needs to happen after the new driver is fully ready
+	// to enforce the template
+	cacheEntry.Update(templ, crd, target)
+
+	// Remove old drivers last so that templates can be enforced
+	// despite a botched update
+	for oldDriverN := range cacheEntry.activeDrivers {
+		if oldDriverN == newDriverN {
+			continue
+		}
+		oldDriver, ok := c.drivers[oldDriverN]
+		if !ok {
+			return resp, fmt.Errorf("%w: while changing drivers", clienterrors.ErrNoDriver)
+		}
+		if err := oldDriver.RemoveTemplate(ctx, cachedCpy); err != nil {
+			return resp, fmt.Errorf("%w: while changing drivers", err)
+		}
+		delete(cacheEntry.activeDrivers, oldDriverN)
+	}
 
 	resp.Handled[targetName] = true
 	return resp, nil
@@ -189,22 +269,33 @@ func (c *Client) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	err := c.driver.RemoveTemplate(ctx, templ)
-	if err != nil {
-		return resp, err
-	}
-
 	name := templ.GetName()
 
-	template, found := c.templates[name]
-
+	cached, found := c.templates[name]
 	if !found {
 		return resp, nil
 	}
 
+	template := cached.getTemplate()
+
+	// remove the template from all active drivers
+	// to ensure cleanup in case of a botched update
+	for driverN := range cached.activeDrivers {
+		driver, ok := c.drivers[driverN]
+		if !ok {
+			return resp, fmt.Errorf("%w: could not clean up %q", clienterrors.ErrNoDriver, driverN)
+		}
+
+		err := driver.RemoveTemplate(ctx, template)
+		if err != nil {
+			return resp, err
+		}
+		delete(cached.activeDrivers, driverN)
+	}
+
 	delete(c.templates, name)
 
-	for _, target := range template.targets {
+	for _, target := range cached.targets {
 		resp.Handled[target.GetName()] = true
 	}
 
@@ -253,25 +344,32 @@ func (c *Client) AddConstraint(ctx context.Context, constraint *unstructured.Uns
 	}
 
 	kind := constraint.GetKind()
-	template := c.getTemplateForKind(kind)
-	if template == nil {
+	cached := c.getTemplateForKind(kind)
+	if cached == nil {
 		templateName := strings.ToLower(kind)
 		return resp, templateNotFound(templateName)
 	}
 
-	changed, err := template.AddConstraint(constraint)
+	template := cached.getTemplate()
+
+	driver, ok := c.drivers[c.driverForTemplate(template)]
+	if !ok {
+		return resp, clienterrors.ErrNoDriver
+	}
+
+	changed, err := cached.AddConstraint(constraint)
 	if err != nil {
 		return resp, err
 	}
 
 	if changed {
-		err = c.driver.AddConstraint(ctx, constraint)
+		err = driver.AddConstraint(ctx, constraint)
 		if err != nil {
 			return resp, err
 		}
 	}
 
-	for _, target := range template.targets {
+	for _, target := range cached.targets {
 		resp.Handled[target.GetName()] = true
 	}
 
@@ -291,25 +389,34 @@ func (c *Client) RemoveConstraint(ctx context.Context, constraint *unstructured.
 		return resp, err
 	}
 
-	err = c.driver.RemoveConstraint(ctx, constraint)
-	if err != nil {
-		return nil, err
-	}
-
 	kind := constraint.GetKind()
 
-	template := c.getTemplateForKind(kind)
-	if template == nil {
+	cached := c.getTemplateForKind(kind)
+	if cached == nil {
 		// The Template has been deleted, so nothing to do and no reason to return
 		// error.
 		return resp, nil
 	}
 
-	for _, target := range template.targets {
+	// Remove the constraint from all active drivers
+	// in case we are in the middle of a botched update
+	for driverN := range cached.activeDrivers {
+		driver, ok := c.drivers[driverN]
+		if !ok {
+			return resp, clienterrors.ErrNoDriver
+		}
+
+		err = driver.RemoveConstraint(ctx, constraint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, target := range cached.targets {
 		resp.Handled[target.GetName()] = true
 	}
 
-	template.RemoveConstraint(constraint.GetName())
+	cached.RemoveConstraint(constraint.GetName())
 
 	return resp, nil
 }
@@ -431,14 +538,22 @@ func (c *Client) AddData(ctx context.Context, data interface{}) (*types.Response
 			continue
 		}
 
-		err = c.driver.AddData(ctx, name, key, processedDataCpy)
-		if err != nil {
-			errMap[name] = err
+		// To avoid maintaining duplicate caches, only Rego should get its own
+		// storage. We should work to remove the need for this special case
+		// by building a global storage object. Right now Rego needs its own
+		// cache to cache constraints.
+		if _, ok := c.drivers[regoSchema.Name]; ok {
+			err = c.drivers[regoSchema.Name].AddData(ctx, name, key, processedDataCpy)
+			if err != nil {
+				errMap[name] = err
 
-			if cache != nil {
-				cache.Remove(key)
+				if cache != nil {
+					cache.Remove(key)
+				}
+				continue
 			}
-			continue
+		} else if !c.ignoreNoReferentialDriverWarning {
+			errMap[name] = ErrNoReferentialDriver
 		}
 
 		resp.Handled[name] = true
@@ -468,10 +583,18 @@ func (c *Client) RemoveData(ctx context.Context, data interface{}) (*types.Respo
 			continue
 		}
 
-		err = c.driver.RemoveData(ctx, target, relPath)
-		if err != nil {
-			errMap[target] = err
-			continue
+		// To avoid maintaining duplicate caches, only Rego should get its own
+		// storage. We should work to remove the need for this special case
+		// by building a global storage object. Right now Rego needs its own
+		// cache to cache constraints.
+		if _, ok := c.drivers[regoSchema.Name]; ok {
+			err = c.drivers[regoSchema.Name].RemoveData(ctx, target, relPath)
+			if err != nil {
+				errMap[target] = err
+				continue
+			}
+		} else if !c.ignoreNoReferentialDriverWarning {
+			errMap[target] = ErrNoReferentialDriver
 		}
 
 		resp.Handled[target] = true
@@ -573,27 +696,75 @@ func (c *Client) Review(ctx context.Context, obj interface{}, opts ...drivers.Qu
 func (c *Client) review(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...drivers.QueryOpt) (*types.Response, error) {
 	var results []*types.Result
 	var tracesBuilder strings.Builder
+	errs := &errors.ErrorMap{}
 
-	results, trace, err := c.driver.Query(ctx, target, constraints, review, opts...)
-	if err != nil {
-		return nil, err
+	driverToConstraints := map[string][]*unstructured.Unstructured{}
+
+	for _, constraint := range constraints {
+		template, ok := c.templates[strings.ToLower(constraint.GetObjectKind().GroupVersionKind().Kind)]
+		if !ok {
+			return nil, fmt.Errorf("%w: while loading driver for constraint %s", ErrMissingConstraintTemplate, constraint.GetName())
+		}
+		driver := c.driverForTemplate(template.template)
+		if driver == "" {
+			return nil, fmt.Errorf("%w: while loading driver for constraint %s", clienterrors.ErrNoDriver, constraint.GetName())
+		}
+		driverToConstraints[driver] = append(driverToConstraints[driver], constraint)
 	}
 
-	if trace != nil {
-		tracesBuilder.WriteString(*trace)
-		tracesBuilder.WriteString("\n\n")
+	for driverName, driver := range c.drivers {
+		if len(driverToConstraints[driverName]) == 0 {
+			continue
+		}
+		driverResults, trace, err := driver.Query(ctx, target, driverToConstraints[driverName], review, opts...)
+		if err != nil {
+			errs.Add(driverName, err)
+			continue
+		}
+		results = append(results, driverResults...)
+
+		if trace != nil {
+			tracesBuilder.WriteString(fmt.Sprintf("DRIVER %s:\n\n", driverName))
+			tracesBuilder.WriteString(*trace)
+			tracesBuilder.WriteString("\n\n")
+		}
+	}
+
+	traceStr := tracesBuilder.String()
+	var trace *string
+	if len(traceStr) != 0 {
+		trace = &traceStr
+	}
+
+	// golang idiom is nil on no errors, so we should
+	// only return errs if it is non-empty, otherwise
+	// we get a non-nil interface (even if errs is nil, since
+	// the interface would still hold type info).
+	var errRet error
+	if len(*errs) > 0 {
+		errRet = errs
 	}
 
 	return &types.Response{
 		Trace:   trace,
 		Target:  target,
 		Results: results,
-	}, nil
+	}, errRet
 }
 
 // Dump dumps the state of OPA to aid in debugging.
 func (c *Client) Dump(ctx context.Context) (string, error) {
-	return c.driver.Dump(ctx)
+	var dumpBuilder strings.Builder
+	for driverName, driver := range c.drivers {
+		dump, err := driver.Dump(ctx)
+		if err != nil {
+			return "", err
+		}
+		dumpBuilder.WriteString(fmt.Sprintf("DRIVER: %s:\n\n", driverName))
+		dumpBuilder.WriteString(dump)
+		dumpBuilder.WriteString("\n\n")
+	}
+	return dumpBuilder.String(), nil
 }
 
 // knownTargets returns a sorted list of known target names.

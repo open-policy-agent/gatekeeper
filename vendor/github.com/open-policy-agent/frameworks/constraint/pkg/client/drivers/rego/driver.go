@@ -1,4 +1,4 @@
-package local
+package rego
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
@@ -73,12 +74,17 @@ type Driver struct {
 	clientCertWatcher *certwatcher.CertWatcher
 }
 
-// RegoEvaluationMeta has rego specific metadata from evaluation.
-type RegoEvaluationMeta struct {
+// EvaluationMeta has rego specific metadata from evaluation.
+type EvaluationMeta struct {
 	// TemplateRunTime is the number of milliseconds it took to evaluate all constraints for a template.
 	TemplateRunTime float64 `json:"templateRunTime"`
 	// ConstraintCount indicates how many constraints were evaluated for an underlying rego engine eval call.
 	ConstraintCount uint `json:"constraintCount"`
+}
+
+// Name returns the name of the driver.
+func (d *Driver) Name() string {
+	return schema.Name
 }
 
 // AddTemplate adds templ to Driver. Normalizes modules into usable forms for
@@ -113,9 +119,13 @@ func (d *Driver) RemoveTemplate(ctx context.Context, templ *templates.Constraint
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 
+	if err := d.storage.removeDataEach(ctx, constraintParent); err != nil {
+		return err
+	}
+
 	d.compilers.removeTemplate(kind)
 	delete(d.targets, kind)
-	return d.storage.removeDataEach(ctx, constraintParent)
+	return nil
 }
 
 // AddConstraint adds Constraint to Rego storage. Future calls to Query will
@@ -291,7 +301,7 @@ func (d *Driver) Query(ctx context.Context, target string, constraints []*unstru
 		}
 
 		for _, result := range kindResults {
-			result.EvaluationMeta = RegoEvaluationMeta{
+			result.EvaluationMeta = EvaluationMeta{
 				TemplateRunTime: float64(evalEndTime.Nanoseconds()) / 1000000,
 				ConstraintCount: uint(len(kindResults)),
 			}

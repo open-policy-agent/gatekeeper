@@ -8,7 +8,7 @@ import (
 	"github.com/ghodss/yaml"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -415,7 +415,7 @@ func TestConstraintEnforcement(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			target := &K8sValidationTarget{}
-			driver, err := local.New(local.Tracing(true))
+			driver, err := rego.New(rego.Tracing(true))
 			if err != nil {
 				t.Fatalf("unable to set up Driver: %v", err)
 			}
