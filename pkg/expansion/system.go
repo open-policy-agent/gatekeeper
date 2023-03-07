@@ -188,10 +188,9 @@ func expandResource(obj *unstructured.Unstructured, ns *corev1.Namespace, templa
 func mockNameForResource(gen *unstructured.Unstructured, gvk schema.GroupVersionKind) string {
 	name := gen.GetName()
 	if gvk.Kind != "" {
-		name += "-" + gvk.Kind
-	} else {
-		name += gvk.Kind
+		name += "-"
 	}
+	name += gvk.Kind
 
 	return strings.ToLower(name)
 }
