@@ -128,6 +128,7 @@ kind: Pod
 metadata:
   labels:
     app: nginx
+  name: nginx-deployment-pod
   namespace: default
 spec:
   containers:
