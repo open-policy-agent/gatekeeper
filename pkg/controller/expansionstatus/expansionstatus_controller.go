@@ -24,7 +24,7 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
-	"github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -89,13 +89,13 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 func PodStatusToExpansionTemplateMapper(selfOnly bool) handler.MapFunc {
 	return func(obj client.Object) []reconcile.Request {
 		labels := obj.GetLabels()
-		name, ok := labels[v1alpha1.ExpansionTemplateNameLabel]
+		name, ok := labels[v1beta1.ExpansionTemplateNameLabel]
 		if !ok {
 			log.Error(fmt.Errorf("expansion template status resource with no mapping label: %s", obj.GetName()), "missing label while attempting to map a expansion template status resource")
 			return nil
 		}
 		if selfOnly {
-			pod, ok := labels[v1alpha1.PodLabel]
+			pod, ok := labels[v1beta1.PodLabel]
 			if !ok {
 				log.Error(fmt.Errorf("expansion template status resource with no pod label: %s", obj.GetName()), "missing label while attempting to map a expansion template status resource")
 			}
@@ -118,7 +118,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to ExpansionTemplateStatus
 	err = c.Watch(
-		&source.Kind{Type: &v1alpha1.ExpansionTemplatePodStatus{}},
+		&source.Kind{Type: &v1beta1.ExpansionTemplatePodStatus{}},
 		handler.EnqueueRequestsFromMapFunc(PodStatusToExpansionTemplateMapper(false)),
 	)
 	if err != nil {
@@ -161,11 +161,11 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 		return reconcile.Result{}, err
 	}
 
-	sObjs := &v1alpha1.ExpansionTemplatePodStatusList{}
+	sObjs := &v1beta1.ExpansionTemplatePodStatusList{}
 	if err := r.reader.List(
 		ctx,
 		sObjs,
-		client.MatchingLabels{v1alpha1.ExpansionTemplateNameLabel: request.Name},
+		client.MatchingLabels{v1beta1.ExpansionTemplateNameLabel: request.Name},
 		client.InNamespace(util.GetNamespace()),
 	); err != nil {
 		return reconcile.Result{}, err
@@ -174,9 +174,8 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 	copy(statusObjs, sObjs.Items)
 	sort.Sort(statusObjs)
 
-	var s []v1alpha1.ExpansionTemplatePodStatusStatus
+	var s []v1beta1.ExpansionTemplatePodStatusStatus
 	// created is true if at least one Pod hasn't reported any errors
-	var created bool
 
 	for i := range statusObjs {
 		// Don't report status if it's not for the correct object. This can happen
@@ -185,14 +184,10 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 		if statusObjs[i].Status.TemplateUID != et.GetUID() {
 			continue
 		}
-		if len(statusObjs[i].Status.Errors) == 0 {
-			created = true
-		}
 		s = append(s, statusObjs[i].Status)
 	}
 
 	et.Status.ByPod = s
-	et.Status.Created = created
 
 	if err := r.statusClient.Status().Update(ctx, et); err != nil {
 		return reconcile.Result{Requeue: true}, nil
@@ -200,7 +195,7 @@ func (r *ReconcileExpansionStatus) Reconcile(ctx context.Context, request reconc
 	return reconcile.Result{}, nil
 }
 
-type sortableStatuses []v1alpha1.ExpansionTemplatePodStatus
+type sortableStatuses []v1beta1.ExpansionTemplatePodStatus
 
 func (s sortableStatuses) Len() int {
 	return len(s)

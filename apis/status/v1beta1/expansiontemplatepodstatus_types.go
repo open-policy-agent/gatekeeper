@@ -1,7 +1,6 @@
-package v1alpha1
+package v1beta1
 
 import (
-	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/operations"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	corev1 "k8s.io/api/core/v1"
@@ -17,7 +16,6 @@ type ExpansionTemplatePodStatusStatus struct {
 	ID                 string                    `json:"id,omitempty"`
 	TemplateUID        types.UID                 `json:"templateUID,omitempty"`
 	Operations         []string                  `json:"operations,omitempty"`
-	Enforced           bool                      `json:"enforced,omitempty"`
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
 	Errors             []*ExpansionTemplateError `json:"errors,omitempty"`
 }
@@ -81,5 +79,5 @@ func NewExpansionTemplateStatusForPod(pod *corev1.Pod, templateName string, sche
 // KeyForExpansionTemplate returns a unique status object name given the Pod ID and
 // a template object.
 func KeyForExpansionTemplate(id string, templateName string) (string, error) {
-	return statusv1beta1.DashPacker(id, templateName)
+	return DashPacker(id, templateName)
 }

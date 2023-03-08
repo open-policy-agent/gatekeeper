@@ -15,7 +15,7 @@ spec:
     singular: expansiontemplatepodstatus
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - name: v1beta1
     schema:
       openAPIV3Schema:
         description: ExpansionTemplatePodStatus is the Schema for the expansiontemplatepodstatuses
@@ -37,8 +37,6 @@ spec:
             description: ExpansionTemplatePodStatusStatus defines the observed state
               of ExpansionTemplatePodStatus.
             properties:
-              enforced:
-                type: boolean
               errors:
                 items:
                   properties:

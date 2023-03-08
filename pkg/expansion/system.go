@@ -50,12 +50,6 @@ func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate
 		return err
 	}
 
-	// TODO debug (remove)
-	if template.Spec.TemplateSource == "hackz" {
-		return fmt.Errorf("big hack")
-	}
-	// TODO end debug
-
 	s.templates[keyForTemplate(template)] = template.DeepCopy()
 	return nil
 }

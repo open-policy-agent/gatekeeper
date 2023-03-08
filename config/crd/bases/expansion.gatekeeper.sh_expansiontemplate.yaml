@@ -87,8 +87,6 @@ spec:
                   description: ExpansionTemplatePodStatusStatus defines the observed
                     state of ExpansionTemplatePodStatus.
                   properties:
-                    enforced:
-                      type: boolean
                     errors:
                       items:
                         properties:
@@ -119,8 +117,6 @@ spec:
                       type: string
                   type: object
                 type: array
-              created:
-                type: boolean
             type: object
         type: object
     served: true

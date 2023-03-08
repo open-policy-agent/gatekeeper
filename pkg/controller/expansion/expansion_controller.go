@@ -8,7 +8,8 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
@@ -154,18 +155,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 }
 
 func (r *Reconciler) deleteStatus(ctx context.Context, etName string) error {
-	status := &statusv1alpha1.ExpansionTemplatePodStatus{}
+	status := &v1beta1.ExpansionTemplatePodStatus{}
 	pod, err := r.getPod(ctx)
 	if err != nil {
 		return fmt.Errorf("getting reconciler pod: %w", err)
 	}
-	sName, err := statusv1alpha1.KeyForExpansionTemplate(pod.Name, etName)
+	sName, err := v1beta1.KeyForExpansionTemplate(pod.Name, etName)
 	if err != nil {
 		return fmt.Errorf("getting key for expansiontemplate: %w", err)
 	}
 	status.SetName(sName)
 	status.SetNamespace(util.GetNamespace())
-	log.Info("XYZ123 deleting ET status", "sName", sName, "sNS", etName) // TODO rm
 	if err := r.Delete(ctx, status); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -180,12 +180,12 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, et *unversione
 
 	// Check if it exists already
 	sNS := pod.Namespace
-	sName, err := statusv1alpha1.KeyForExpansionTemplate(pod.Name, et.GetName())
+	sName, err := v1beta1.KeyForExpansionTemplate(pod.Name, et.GetName())
 	if err != nil {
 		return fmt.Errorf("getting key for expansiontemplate: %w", err)
 	}
 	shouldCreate := true
-	status := &statusv1alpha1.ExpansionTemplatePodStatus{}
+	status := &v1beta1.ExpansionTemplatePodStatus{}
 
 	err = r.Get(ctx, types.NamespacedName{Namespace: sNS, Name: sName}, status)
 	switch {
@@ -208,8 +208,8 @@ func (r *Reconciler) updateOrCreatePodStatus(ctx context.Context, et *unversione
 	return r.Update(ctx, status)
 }
 
-func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTemplate) (*statusv1alpha1.ExpansionTemplatePodStatus, error) {
-	status, err := statusv1alpha1.NewExpansionTemplateStatusForPod(pod, et.GetName(), r.scheme)
+func (r *Reconciler) newETStatus(pod *corev1.Pod, et *unversioned.ExpansionTemplate) (*v1beta1.ExpansionTemplatePodStatus, error) {
+	status, err := statusv1beta1.NewExpansionTemplateStatusForPod(pod, et.GetName(), r.scheme)
 	if err != nil {
 		return nil, fmt.Errorf("creating status for pod: %w", err)
 	}
@@ -222,14 +222,12 @@ func (r *Reconciler) getTracker() readiness.Expectations {
 	return r.tracker.For(v1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
 }
 
-func addStatusError(status *statusv1alpha1.ExpansionTemplatePodStatus, etErr error) {
+func addStatusError(status *v1beta1.ExpansionTemplatePodStatus, etErr error) {
 	if etErr == nil {
-		status.Status.Enforced = true
 		status.Status.Errors = nil
 		return
 	}
 
-	status.Status.Enforced = false
-	e := &statusv1alpha1.ExpansionTemplateError{Message: etErr.Error()}
+	e := &v1beta1.ExpansionTemplateError{Message: etErr.Error()}
 	status.Status.Errors = append(status.Status.Errors, e)
 }

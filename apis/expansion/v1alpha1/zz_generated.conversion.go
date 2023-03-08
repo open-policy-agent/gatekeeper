@@ -23,7 +23,7 @@ import (
 	unsafe "unsafe"
 
 	unversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	v1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	match "github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -174,8 +174,7 @@ func Convert_unversioned_ExpansionTemplateSpec_To_v1alpha1_ExpansionTemplateSpec
 }
 
 func autoConvert_v1alpha1_ExpansionTemplateStatus_To_unversioned_ExpansionTemplateStatus(in *ExpansionTemplateStatus, out *unversioned.ExpansionTemplateStatus, s conversion.Scope) error {
-	out.Created = in.Created
-	out.ByPod = *(*[]statusv1alpha1.ExpansionTemplatePodStatusStatus)(unsafe.Pointer(&in.ByPod))
+	out.ByPod = *(*[]v1beta1.ExpansionTemplatePodStatusStatus)(unsafe.Pointer(&in.ByPod))
 	return nil
 }
 
@@ -185,8 +184,7 @@ func Convert_v1alpha1_ExpansionTemplateStatus_To_unversioned_ExpansionTemplateSt
 }
 
 func autoConvert_unversioned_ExpansionTemplateStatus_To_v1alpha1_ExpansionTemplateStatus(in *unversioned.ExpansionTemplateStatus, out *ExpansionTemplateStatus, s conversion.Scope) error {
-	out.Created = in.Created
-	out.ByPod = *(*[]statusv1alpha1.ExpansionTemplatePodStatusStatus)(unsafe.Pointer(&in.ByPod))
+	out.ByPod = *(*[]v1beta1.ExpansionTemplatePodStatusStatus)(unsafe.Pointer(&in.ByPod))
 	return nil
 }
 

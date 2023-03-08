@@ -16,7 +16,7 @@ limitations under the License.
 package unversioned
 
 import (
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -70,8 +70,7 @@ type ExpansionTemplate struct {
 
 // ExpansionTemplateStatus defines the observed state of ExpansionStatus.
 type ExpansionTemplateStatus struct {
-	Created bool `json:"created,omitempty"`
-	ByPod   []statusv1alpha1.ExpansionTemplatePodStatusStatus
+	ByPod []statusv1alpha1.ExpansionTemplatePodStatusStatus
 }
 
 // +kubebuilder:object:root=true

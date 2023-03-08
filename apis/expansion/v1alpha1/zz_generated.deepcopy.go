@@ -21,7 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -113,7 +113,7 @@ func (in *ExpansionTemplateStatus) DeepCopyInto(out *ExpansionTemplateStatus) {
 	*out = *in
 	if in.ByPod != nil {
 		in, out := &in.ByPod, &out.ByPod
-		*out = make([]statusv1alpha1.ExpansionTemplatePodStatusStatus, len(*in))
+		*out = make([]v1beta1.ExpansionTemplatePodStatusStatus, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

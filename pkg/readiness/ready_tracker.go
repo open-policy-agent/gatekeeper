@@ -591,7 +591,6 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 }
 
 func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
-	log.Info("XYZ123 tracking expansion templates")
 	defer func() {
 		t.expansions.ExpectationsDone()
 		log.V(1).Info("ExpansionTemplate expectations populated")

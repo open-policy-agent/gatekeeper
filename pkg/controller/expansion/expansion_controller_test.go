@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
+	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -114,9 +114,6 @@ func TestReconcile(t *testing.T) {
 			if err != nil {
 				return fmt.Errorf("error fetching ET status: %w", err)
 			}
-			if !status.Status.Enforced {
-				return fmt.Errorf("ETPodStatus.Status.Enforced is false for %q", sName)
-			}
 			if status.Status.TemplateUID == et.GetUID() {
 				return nil
 			}
@@ -161,7 +158,7 @@ func TestAddStatusError(t *testing.T) {
 			name:        "no err sets 'enforced: true'",
 			inputStatus: statusv1alpha1.ExpansionTemplatePodStatus{},
 			etErr:       nil,
-			wantStatus:  statusv1alpha1.ExpansionTemplatePodStatus{Status: statusv1alpha1.ExpansionTemplatePodStatusStatus{Enforced: true}},
+			wantStatus:  statusv1alpha1.ExpansionTemplatePodStatus{Status: statusv1alpha1.ExpansionTemplatePodStatusStatus{}},
 		},
 		{
 			name:        "err sets 'enforced: false'",
@@ -169,7 +166,7 @@ func TestAddStatusError(t *testing.T) {
 			etErr:       errors.New("big problem"),
 			wantStatus: statusv1alpha1.ExpansionTemplatePodStatus{
 				Status: statusv1alpha1.ExpansionTemplatePodStatusStatus{
-					Enforced: false, Errors: []*statusv1alpha1.ExpansionTemplateError{{Message: "big problem"}}},
+					Errors: []*statusv1alpha1.ExpansionTemplateError{{Message: "big problem"}}},
 			},
 		},
 	}
