@@ -1,4 +1,4 @@
-package local
+package rego
 
 import (
 	"net/http"

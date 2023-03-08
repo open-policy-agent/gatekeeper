@@ -30,6 +30,23 @@ type templateClient struct {
 	// this Template. This is used to validate incoming Constraints before adding
 	// them.
 	crd *apiextensions.CustomResourceDefinition
+
+	// if, for some reason, there was an error adding a pre-cached constraint after
+	// a driver switch, AddTemplate returns an error. We should preserve that state
+	// so that we know a constraint replay should be attempted the next time AddTemplate
+	// is called.
+	needsConstraintReplay bool
+
+	// activeDrivers keeps track of drivers that are in an ambiguous state due to a failed
+	// cross-driver update. This allows us to clean up stale state on old drivers.
+	activeDrivers map[string]bool
+}
+
+func newTemplateClient() *templateClient {
+	return &templateClient{
+		constraints:   make(map[string]*constraintClient),
+		activeDrivers: make(map[string]bool),
+	}
 }
 
 func (e *templateClient) ValidateConstraint(constraint *unstructured.Unstructured) error {

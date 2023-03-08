@@ -1,4 +1,4 @@
-package local
+package rego
 
 import (
 	"github.com/open-policy-agent/opa/rego"
