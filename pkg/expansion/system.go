@@ -33,11 +33,6 @@ type Resultant struct {
 	EnforcementAction string
 }
 
-// TODO should we add a comment or put anything else here?
-type ETError struct {
-	error
-}
-
 func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
 	return template.ObjectMeta.Name
 }
