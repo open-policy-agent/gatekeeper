@@ -11,7 +11,7 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
@@ -84,8 +84,8 @@ func TestReconcile(t *testing.T) {
 	pc := frameworksexternaldata.NewCache()
 
 	// initialize OPA
-	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
-	driver, err := local.New(args...)
+	args := []rego.Arg{rego.Tracing(false), rego.AddExternalDataProviderCache(pc)}
+	driver, err := rego.New(args...)
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}

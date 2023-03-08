@@ -29,7 +29,7 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
@@ -372,7 +372,7 @@ func (h *validationHandler) validateTemplate(ctx context.Context, req *admission
 
 	// Create a temporary Driver and attempt to add the Template to it. This
 	// ensures the Rego code both parses and compiles.
-	d, err := local.New()
+	d, err := rego.New()
 	if err != nil {
 		return false, fmt.Errorf("unable to create Driver: %w", err)
 	}
