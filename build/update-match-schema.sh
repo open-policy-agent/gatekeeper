@@ -19,5 +19,3 @@ EOF
 # Escape backticks in the yaml, add terminating backtick
 cat ${CRD_FILE} | sed "s/\`/\`+\"\`\"+\`/g" >> ${GO_FILE}
 echo "\`" >> ${GO_FILE}
-
-gofmt -w -l ${GO_FILE}

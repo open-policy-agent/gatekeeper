@@ -40,9 +40,9 @@ spec:
                 description: 'ExcludedNamespaces is a list of namespace names. If
                   defined, a constraint only applies to resources not in a listed
                   namespace. ExcludedNamespaces also supports a prefix or suffix based
-                  glob.  For example, ` + "`" + `excludedNamespaces: [kube-*]` + "`" + ` matches both
-                  ` + "`" + `kube-system` + "`" + ` and ` + "`" + `kube-public` + "`" + `, and ` + "`" + `excludedNamespaces: [*-system]` + "`" + `
-                  matches both ` + "`" + `kube-system` + "`" + ` and ` + "`" + `gatekeeper-system` + "`" + `.'
+                  glob.  For example, `+"`"+`excludedNamespaces: [kube-*]`+"`"+` matches both
+                  `+"`"+`kube-system`+"`"+` and `+"`"+`kube-public`+"`"+`, and `+"`"+`excludedNamespaces: [*-system]`+"`"+`
+                  matches both `+"`"+`kube-system`+"`"+` and `+"`"+`gatekeeper-system`+"`"+`.'
                 items:
                   description: 'A string that supports globbing at its front or end.
                     Ex: "kube-*" will match "kube-system" or "kube-public", "*-system"
@@ -73,7 +73,7 @@ spec:
                 type: array
               labelSelector:
                 description: 'LabelSelector is the combination of two optional fields:
-                  ` + "`" + `matchLabels` + "`" + ` and ` + "`" + `matchExpressions` + "`" + `.  These two fields provide
+                  `+"`"+`matchLabels`+"`"+` and `+"`"+`matchExpressions`+"`"+`.  These two fields provide
                   different methods of selecting or excluding k8s objects based on
                   the label keys and values included in object metadata.  All selection
                   expressions from both sections are ANDed to determine if an object
@@ -123,9 +123,9 @@ spec:
               name:
                 description: 'Name is the name of an object.  If defined, it will
                   match against objects with the specified name.  Name also supports
-                  a prefix or suffix glob.  For example, ` + "`" + `name: pod-*` + "`" + ` would match
-                  both ` + "`" + `pod-a` + "`" + ` and ` + "`" + `pod-b` + "`" + `, and ` + "`" + `name: *-pod` + "`" + ` would match both ` + "`" + `a-pod` + "`" + `
-                  and ` + "`" + `b-pod` + "`" + `.'
+                  a prefix or suffix glob.  For example, `+"`"+`name: pod-*`+"`"+` would match
+                  both `+"`"+`pod-a`+"`"+` and `+"`"+`pod-b`+"`"+`, and `+"`"+`name: *-pod`+"`"+` would match both `+"`"+`a-pod`+"`"+`
+                  and `+"`"+`b-pod`+"`"+`.'
                 pattern: ^(\*|\*-)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\*|-\*)?$
                 type: string
               namespaceSelector:
@@ -176,9 +176,9 @@ spec:
               namespaces:
                 description: 'Namespaces is a list of namespace names. If defined,
                   a constraint only applies to resources in a listed namespace.  Namespaces
-                  also supports a prefix or suffix based glob.  For example, ` + "`" + `namespaces:
-                  [kube-*]` + "`" + ` matches both ` + "`" + `kube-system` + "`" + ` and ` + "`" + `kube-public` + "`" + `, and ` + "`" + `namespaces:
-                  [*-system]` + "`" + ` matches both ` + "`" + `kube-system` + "`" + ` and ` + "`" + `gatekeeper-system` + "`" + `.'
+                  also supports a prefix or suffix based glob.  For example, `+"`"+`namespaces:
+                  [kube-*]`+"`"+` matches both `+"`"+`kube-system`+"`"+` and `+"`"+`kube-public`+"`"+`, and `+"`"+`namespaces:
+                  [*-system]`+"`"+` matches both `+"`"+`kube-system`+"`"+` and `+"`"+`gatekeeper-system`+"`"+`.'
                 items:
                   description: 'A string that supports globbing at its front or end.
                     Ex: "kube-*" will match "kube-system" or "kube-public", "*-system"
@@ -189,14 +189,14 @@ spec:
                 type: array
               scope:
                 description: Scope determines if cluster-scoped and/or namespaced-scoped
-                  resources are matched.  Accepts ` + "`" + `*` + "`" + `, ` + "`" + `Cluster` + "`" + `, or ` + "`" + `Namespaced` + "`" + `.
-                  (defaults to ` + "`" + `*` + "`" + `)
+                  resources are matched.  Accepts `+"`"+`*`+"`"+`, `+"`"+`Cluster`+"`"+`, or `+"`"+`Namespaced`+"`"+`.
+                  (defaults to `+"`"+`*`+"`"+`)
                 type: string
               source:
                 description: Source determines whether generated or original resources
-                  are matched. Accepts ` + "`" + `Generated` + "`" + `|` + "`" + `Original` + "`" + `|` + "`" + `All` + "`" + ` (defaults to ` + "`" + `All` + "`" + `).
-                  A value of ` + "`" + `Generated` + "`" + ` will only match generated resources, while
-                  ` + "`" + `Original` + "`" + ` will only match regular resources.
+                  are matched. Accepts `+"`"+`Generated`+"`"+`|`+"`"+`Original`+"`"+`|`+"`"+`All`+"`"+` (defaults to `+"`"+`All`+"`"+`).
+                  A value of `+"`"+`Generated`+"`"+` will only match generated resources, while
+                  `+"`"+`Original`+"`"+` will only match regular resources.
                 enum:
                 - All
                 - Generated
