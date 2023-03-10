@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
+	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -81,7 +81,7 @@ func TestReconcile(t *testing.T) {
 		etName := "default-et"
 		et := newET(etName)
 
-		sName, err := statusv1alpha1.KeyForExpansionTemplate("no-pod", etName)
+		sName, err := statusv1beta1.KeyForExpansionTemplate("no-pod", etName)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +103,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			// Get the ETPodStatus
-			status := &statusv1alpha1.ExpansionTemplatePodStatus{}
+			status := &statusv1beta1.ExpansionTemplatePodStatus{}
 			nsName = types.NamespacedName{
 				Name:      sName,
 				Namespace: "gatekeeper-system",
@@ -131,7 +131,7 @@ func TestReconcile(t *testing.T) {
 			return true
 		}, func() error {
 			// Get the ETPodStatus
-			status := &statusv1alpha1.ExpansionTemplatePodStatus{}
+			status := &statusv1beta1.ExpansionTemplatePodStatus{}
 			nsName := types.NamespacedName{
 				Name:      sName,
 				Namespace: "gatekeeper-system",
@@ -150,30 +150,30 @@ func TestReconcile(t *testing.T) {
 func TestAddStatusError(t *testing.T) {
 	tests := []struct {
 		name        string
-		inputStatus statusv1alpha1.ExpansionTemplatePodStatus
+		inputStatus statusv1beta1.ExpansionTemplatePodStatus
 		etErr       error
-		wantStatus  statusv1alpha1.ExpansionTemplatePodStatus
+		wantStatus  statusv1beta1.ExpansionTemplatePodStatus
 	}{
 		{
-			name:        "no err sets 'enforced: true'",
-			inputStatus: statusv1alpha1.ExpansionTemplatePodStatus{},
+			name:        "no err",
+			inputStatus: statusv1beta1.ExpansionTemplatePodStatus{},
 			etErr:       nil,
-			wantStatus:  statusv1alpha1.ExpansionTemplatePodStatus{Status: statusv1alpha1.ExpansionTemplatePodStatusStatus{}},
+			wantStatus:  statusv1beta1.ExpansionTemplatePodStatus{Status: statusv1beta1.ExpansionTemplatePodStatusStatus{}},
 		},
 		{
-			name:        "err sets 'enforced: false'",
-			inputStatus: statusv1alpha1.ExpansionTemplatePodStatus{},
+			name:        "with err",
+			inputStatus: statusv1beta1.ExpansionTemplatePodStatus{},
 			etErr:       errors.New("big problem"),
-			wantStatus: statusv1alpha1.ExpansionTemplatePodStatus{
-				Status: statusv1alpha1.ExpansionTemplatePodStatusStatus{
-					Errors: []*statusv1alpha1.ExpansionTemplateError{{Message: "big problem"}}},
+			wantStatus: statusv1beta1.ExpansionTemplatePodStatus{
+				Status: statusv1beta1.ExpansionTemplatePodStatusStatus{
+					Errors: []*statusv1beta1.ExpansionTemplateError{{Message: "big problem"}}},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			addStatusError(&tc.inputStatus, tc.etErr)
+			setStatusError(&tc.inputStatus, tc.etErr)
 			if diff := cmp.Diff(tc.inputStatus, tc.wantStatus); diff != "" {
 				t.Errorf("got: %v\nwant: %v\ndiff: %s", tc.inputStatus, tc.wantStatus, diff)
 			}
