@@ -1,14 +1,18 @@
-package local
+package rego
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego/schema"
 	clienterrors "github.com/open-policy-agent/frameworks/constraint/pkg/client/errors"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/regorewriter"
 	"github.com/open-policy-agent/opa/ast"
 )
+
+var ErrNoRego = errors.New("Could not extract Rego from the constraint template")
 
 // Compilers is a threadsafe store of Compilers for ConstraintTemplates.
 type Compilers struct {
@@ -125,8 +129,9 @@ func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []stri
 	}
 
 	mods := make(map[string][]*ast.Module)
-	for _, target := range templ.Spec.Targets {
-		targetMods, err := parseConstraintTemplateTarget(rr, target)
+	for i := range templ.Spec.Targets {
+		target := templ.Spec.Targets[i]
+		targetMods, err := parseConstraintTemplateTarget(rr, &target)
 		if err != nil {
 			return nil, err
 		}
@@ -137,8 +142,24 @@ func parseConstraintTemplate(templ *templates.ConstraintTemplate, externs []stri
 	return mods, nil
 }
 
-func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec templates.Target) ([]*ast.Module, error) {
-	entryPoint, err := parseModule(templatePath, targetSpec.Rego)
+func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec *templates.Target) ([]*ast.Module, error) {
+	var regoCode templates.Code
+	found := false
+	for _, code := range targetSpec.Code {
+		if code.Engine == schema.Name {
+			found = true
+			regoCode = code
+			break
+		}
+	}
+	if !found {
+		return nil, ErrNoRego
+	}
+	regoSrc, err := schema.GetSource(regoCode)
+	if err != nil {
+		return nil, err
+	}
+	entryPoint, err := parseModule(templatePath, regoSrc.Rego)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", clienterrors.ErrInvalidConstraintTemplate, err)
 	}
@@ -160,7 +181,7 @@ func parseConstraintTemplateTarget(rr *regorewriter.RegoRewriter, targetSpec tem
 	}
 
 	rr.AddEntryPointModule(templatePath, entryPoint)
-	for idx, libSrc := range targetSpec.Libs {
+	for idx, libSrc := range regoSrc.Libs {
 		libPath := fmt.Sprintf(`%s["lib_%d"]`, templateLibPrefix, idx)
 
 		m, err := parseModule(libPath, libSrc)

@@ -16,10 +16,13 @@ limitations under the License.
 package templates
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -55,6 +58,21 @@ type Target struct {
 	Target string   `json:"target,omitempty"`
 	Rego   string   `json:"rego,omitempty"`
 	Libs   []string `json:"libs,omitempty"`
+	// The source code options for the constraint template, only one of this
+	// or "rego" can be specified.
+	Code []Code `json:"code,omitempty"`
+}
+
+type Code struct {
+	// +kubebuilder:validation:Required
+	// The engine used to evaluate the code. Example: "Rego". Required.
+	Engine string `json:"engine,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// The source code for the template. Required.
+	Source *Anything `json:"source,omitempty"`
 }
 
 // CreateCRDError represents a single error caught during parsing, compiling, etc.
@@ -103,6 +121,51 @@ type ConstraintTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ConstraintTemplate `json:"items"`
+}
+
+// Anything is a struct wrapper around a field of type `interface{}`
+// that plays nicely with controller-gen
+// +kubebuilder:object:generate=false
+// +kubebuilder:validation:Type=""
+type Anything struct {
+	Value interface{} `json:"-"`
+}
+
+func (in *Anything) GetValue() interface{} {
+	return runtime.DeepCopyJSONValue(in.Value)
+}
+
+func (in *Anything) UnmarshalJSON(val []byte) error {
+	if bytes.Equal(val, []byte("null")) {
+		return nil
+	}
+	return json.Unmarshal(val, &in.Value)
+}
+
+// MarshalJSON should be implemented against a value
+// per http://stackoverflow.com/questions/21390979/custom-marshaljson-never-gets-called-in-go
+// credit to K8s api machinery's RawExtension for finding this.
+func (in Anything) MarshalJSON() ([]byte, error) {
+	if in.Value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(in.Value)
+}
+
+func (in *Anything) DeepCopy() *Anything {
+	if in == nil {
+		return nil
+	}
+
+	return &Anything{Value: runtime.DeepCopyJSONValue(in.Value)}
+}
+
+func (in *Anything) DeepCopyInto(out *Anything) {
+	*out = *in
+
+	if in.Value != nil {
+		out.Value = runtime.DeepCopyJSONValue(in.Value)
+	}
 }
 
 // SemanticEqual returns whether there have been changes to a constraint that
