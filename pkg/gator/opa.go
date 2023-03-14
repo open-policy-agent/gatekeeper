@@ -2,12 +2,12 @@ package gator
 
 import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 )
 
 func NewOPAClient(includeTrace bool) (Client, error) {
-	driver, err := local.New(local.Tracing(includeTrace))
+	driver, err := rego.New(rego.Tracing(includeTrace))
 	if err != nil {
 		return nil, err
 	}

@@ -89,10 +89,10 @@ rm -rf manifest_staging
 mkdir -p manifest_staging/deploy/experimental
 mkdir -p manifest_staging/charts/gatekeeper
 docker run --rm -v /workspaces/gatekeeper:/gatekeeper \
-        k8s.gcr.io/kustomize/kustomize:v3.8.9 build \
+        registry.k8s.io/kustomize/kustomize:v3.8.9 build \
         /gatekeeper/config/default -o /gatekeeper/manifest_staging/deploy/gatekeeper.yaml
 docker run --rm -v /workspaces/gatekeeper:/gatekeeper \
-        k8s.gcr.io/kustomize/kustomize:v3.8.9 build \
+        registry.k8s.io/kustomize/kustomize:v3.8.9 build \
         --load_restrictor LoadRestrictionsNone /gatekeeper/cmd/build/helmify | go run cmd/build/helmify/*.go
 Writing manifest_staging/charts/gatekeeper/.helmignore
 Writing manifest_staging/charts/gatekeeper/Chart.yaml

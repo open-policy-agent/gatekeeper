@@ -21,7 +21,7 @@ import (
 
 // ProviderSpec defines the desired state of Provider.
 type ProviderSpec struct {
-	// URL is the url for the provider. URL is prefixed with http:// or https://.
+	// URL is the url for the provider. URL is prefixed with https://.
 	URL string `json:"url,omitempty"`
 	// Timeout is the timeout when querying the provider.
 	Timeout int `json:"timeout,omitempty"`
@@ -38,7 +38,6 @@ type ProviderSpec struct {
 
 // Provider is the Schema for the Provider API
 // +k8s:openapi-gen=true
-// +kubebuilder:storageversion
 // +k8s:conversion-gen-external-types=github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata
 type Provider struct {
 	metav1.TypeMeta   `json:",inline"`

@@ -195,6 +195,7 @@ var DefaultBuiltins = [...]*Builtin{
 	ParseNanos,
 	ParseRFC3339Nanos,
 	ParseDurationNanos,
+	Format,
 	Date,
 	Clock,
 	Weekday,
@@ -2144,6 +2145,21 @@ var ParseDurationNanos = &Builtin{
 	),
 }
 
+var Format = &Builtin{
+	Name:        "time.format",
+	Description: "Returns the formatted timestamp for the nanoseconds since epoch.",
+	Decl: types.NewFunction(
+		types.Args(
+			types.Named("x", types.NewAny(
+				types.N,
+				types.NewArray([]types.Type{types.N, types.S}, nil),
+				types.NewArray([]types.Type{types.N, types.S, types.S}, nil),
+			)).Description("a number representing the nanoseconds since the epoch (UTC); or a two-element array of the nanoseconds, and a timezone string; or a three-element array of ns, timezone string and a layout string (see golang supported time formats)"),
+		),
+		types.Named("formatted timestamp", types.S).Description("the formatted timestamp represented for the nanoseconds since the epoch in the supplied timezone (or UTC)"),
+	),
+}
+
 var Date = &Builtin{
 	Name:        "time.date",
 	Description: "Returns the `[year, month, day]` for the nanoseconds since epoch.",
@@ -2224,8 +2240,12 @@ var Diff = &Builtin{
  */
 
 var CryptoX509ParseCertificates = &Builtin{
-	Name:        "crypto.x509.parse_certificates",
-	Description: "Returns one or more certificates from the given base64 encoded string containing DER encoded certificates that have been concatenated.",
+	Name: "crypto.x509.parse_certificates",
+	Description: `Returns zero or more certificates from the given encoded string containing
+DER certificate data.
+
+If the input is empty, the function will return null. The input string should be a list of one or more
+concatenated PEM blocks. The whole input of concatenated PEM blocks can optionally be Base64 encoded.`,
 	Decl: types.NewFunction(
 		types.Args(
 			types.Named("certs", types.S).Description("base64 encoded DER or PEM data containing one or more certificates or a PEM string of one or more certificates"),

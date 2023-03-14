@@ -138,7 +138,7 @@ func MutatorForModifySet(modifySet *mutationsunversioned.ModifySet) (*Mutator, e
 		return nil, fmt.Errorf("modifyset %s can't change metadata", modifySet.GetName())
 	}
 
-	if path.Nodes[len(path.Nodes)-1].Type() == parser.ListNode {
+	if len(path.Nodes) > 0 && path.Nodes[len(path.Nodes)-1].Type() == parser.ListNode {
 		return nil, fmt.Errorf("final node in a modifyset location cannot be a keyed list")
 	}
 

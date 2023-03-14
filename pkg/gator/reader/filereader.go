@@ -148,7 +148,8 @@ func readStdin() ([]*unstructured.Unstructured, error) {
 		return nil, fmt.Errorf("getting stdin info: %w", err)
 	}
 
-	if stdinfo.Size() == 0 {
+	// check if data is being piped or redirected to stdin
+	if (stdinfo.Mode() & os.ModeCharDevice) != 0 {
 		return nil, nil
 	}
 
