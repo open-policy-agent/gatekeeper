@@ -9,7 +9,7 @@ metadata:
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
-  name: gatekeeper-validating-webhook-configuration
+  name: '{{ .Values.validatingWebhookName }}'
 webhooks:
 - admissionReviewVersions:
   - v1
