@@ -219,7 +219,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.MutationWebhook) {
 		return append(webhooks, rotator.WebhookInfo{
-			Name: MwhName,
+			Name: *MwhName,
 			Type: rotator.Mutating,
 		})
 	}

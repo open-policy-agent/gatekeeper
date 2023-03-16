@@ -93,10 +93,18 @@ spec:
       {{- end }}
       containers:
       - name: crds-upgrade
-        {{- if not .Values.image.release }}
-        image: '{{ .Values.image.crdRepository }}'
+        {{- if .Values.preInstall.crdRepository.image.repository }}
+          {{- if not .Values.preInstall.crdRepository.image.tag }}
+        image: '{{ .Values.preInstall.crdRepository.image.repository }}'
+          {{- else }}
+        image: '{{ .Values.preInstall.crdRepository.image.repository }}:{{ .Values.preInstall.crdRepository.image.tag }}'
+          {{- end }}
         {{- else }}
+          {{- if not .Values.image.release }}
+        image: '{{ .Values.image.crdRepository }}'
+          {{- else }}
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
+          {{- end }}
         {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         args:
