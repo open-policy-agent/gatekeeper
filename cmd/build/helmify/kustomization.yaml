@@ -137,3 +137,17 @@ patchesJson6902:
     patch: |-
       - op: remove
         path: /spec/ports
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: gatekeeper-validating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.validatingWebhookName }}"
+  - target:
+      kind: MutatingWebhookConfiguration
+      name: gatekeeper-mutating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.mutatingWebhookName }}"

@@ -38,13 +38,6 @@ const (
 
 var log = logf.Log.WithName("webhook")
 
-var (
-	// VwhName is the metadata.name of the Gatekeeper ValidatingWebhookConfiguration.
-	VwhName = "gatekeeper-validating-webhook-configuration"
-	// MwhName is the metadata.name of the Gatekeeper MutatingWebhookConfiguration.
-	MwhName = "gatekeeper-mutating-webhook-configuration"
-)
-
 const (
 	serviceAccountName = "gatekeeper-admin"
 	mutationsGroup     = "mutations.gatekeeper.sh"
@@ -63,7 +56,8 @@ var (
 	serviceaccount                     = fmt.Sprintf("system:serviceaccount:%s:%s", util.GetNamespace(), serviceAccountName)
 	clientCAName                       = flag.String("client-ca-name", "", "name of the certificate authority bundle to authenticate the Kubernetes API server requests against")
 	certCNName                         = flag.String("client-cn-name", "kube-apiserver", "expected CN name on the client certificate attached by apiserver in requests to the webhook")
-	// webhookName is deprecated, set this on the manifest YAML if needed".
+	VwhName                            = flag.String("validating-webhook-configuration-name", "gatekeeper-validating-webhook-configuration", "name of the ValidatingWebhookConfiguration")
+	MwhName                            = flag.String("mutating-webhook-configuration-name", "gatekeeper-mutating-webhook-configuration", "name of the MutatingWebhookConfiguration")
 )
 
 func init() {
