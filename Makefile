@@ -15,6 +15,7 @@ VERSION := v3.12.0-beta.0
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
+CRD_KUBECTL_VERSION ?= 1.26.3
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
@@ -334,7 +335,7 @@ docker-push-release: docker-tag-release
 # Add crds to gatekeeper-crds image
 # Build gatekeeper image
 docker-build: build-crds
-	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
+	docker build --pull -f crd.Dockerfile .staging/crds/ --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t ${CRD_IMG}
 	docker build --pull . --build-arg LDFLAGS=${LDFLAGS} -t ${IMG}
 
 docker-buildx-builder:
@@ -348,7 +349,7 @@ docker-buildx: build-crds docker-buildx-builder
 	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --platform "linux/amd64" \
 		-t $(IMG) \
 		. --load
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} --platform "linux/amd64" \
 		-t $(CRD_IMG) \
 		-f crd.Dockerfile .staging/crds/ --load
 
@@ -359,7 +360,7 @@ docker-buildx-dev: docker-buildx-builder
 		. --push
 
 docker-buildx-crds-dev: build-crds docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
 		-t $(CRD_REPOSITORY):dev \
 		-f crd.Dockerfile .staging/crds/ --push
@@ -370,7 +371,7 @@ docker-buildx-release: docker-buildx-builder
 		. --push
 
 docker-buildx-crds-release: build-crds docker-buildx-builder
-	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${KUBERNETES_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
+	docker buildx build --build-arg LDFLAGS=${LDFLAGS} --build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} --platform "linux/amd64,linux/arm64,linux/arm/v7" \
 		-t $(CRD_REPOSITORY):$(VERSION) \
 		-f crd.Dockerfile .staging/crds/ --push
 

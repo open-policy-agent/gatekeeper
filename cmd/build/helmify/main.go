@@ -101,17 +101,20 @@ func (ks *kindSet) Write() error {
 			if err != nil {
 				return err
 			}
+
 			fileName := fmt.Sprintf("%s-%s.yaml", strings.ToLower(name), strings.ToLower(kind))
-			destFile := path.Join(*outputDir, subPath, fileName)
-			fmt.Printf("Writing %s\n", destFile)
 
-			if name == "gatekeeper-validating-webhook-configuration" {
+			if name == "validation.gatekeeper.sh" {
 				obj = "{{- if not .Values.disableValidatingWebhook }}\n" + obj + "{{- end }}\n"
+				fileName = fmt.Sprintf("gatekeeper-validating-webhook-configuration-%s.yaml", strings.ToLower(kind))
 			}
 
-			if name == "gatekeeper-mutating-webhook-configuration" {
+			if name == "mutation.gatekeeper.sh" {
 				obj = "{{- if not .Values.disableMutation }}\n" + obj + "{{- end }}\n"
+				fileName = fmt.Sprintf("gatekeeper-mutating-webhook-configuration-%s.yaml", strings.ToLower(kind))
 			}
+
+			destFile := path.Join(*outputDir, subPath, fileName)
 
 			if name == "gatekeeper-webhook-server-cert" && kind == "Secret" {
 				obj = "{{- if not .Values.externalCertInjection.enabled }}\n" + obj + "{{- end }}\n"
@@ -151,7 +154,11 @@ func (ks *kindSet) Write() error {
 
 			if name == "gatekeeper-manager-role" && kind == "ClusterRole" {
 				obj = strings.Replace(obj, "- apiGroups:\n  - policy\n  resourceNames:\n  - gatekeeper-admin\n  resources:\n  - podsecuritypolicies\n  verbs:\n  - use\n", "{{- if and .Values.psp.enabled (.Capabilities.APIVersions.Has \"policy/v1beta1/PodSecurityPolicy\") }}\n- apiGroups:\n  - policy\n  resourceNames:\n  - gatekeeper-admin\n  resources:\n  - podsecuritypolicies\n  verbs:\n  - use\n{{- end }}\n", 1)
+				obj = strings.Replace(obj, "- gatekeeper-validating-webhook-configuration\n", "- {{ .Values.validatingWebhookName }}\n", 1)
+				obj = strings.Replace(obj, "- gatekeeper-mutating-webhook-configuration\n", "- {{ .Values.mutatingWebhookName }}\n", 1)
 			}
+
+			fmt.Printf("Writing %s\n", destFile)
 
 			if err := os.WriteFile(destFile, []byte(obj), 0o600); err != nil {
 				return err

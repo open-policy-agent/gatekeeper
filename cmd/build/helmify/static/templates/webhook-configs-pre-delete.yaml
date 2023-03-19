@@ -40,10 +40,10 @@ spec:
           args:
             - delete
             {{- if not .Values.disableValidatingWebhook }}
-            - validatingwebhookconfiguration/gatekeeper-validating-webhook-configuration
+            - validatingwebhookconfiguration/{{ .Values.validatingWebhookName }}
             {{- end }}
             {{- if not .Values.disableMutation }}
-            - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
+            - mutatingwebhookconfiguration/{{ .Values.mutatingWebhookName }}
             {{- end }}
           resources:
             {{- toYaml .Values.preUninstall.resources | nindent 10 }}
@@ -94,7 +94,7 @@ rules:
     resources:
       - validatingwebhookconfigurations
     resourceNames:
-      - gatekeeper-validating-webhook-configuration
+      - {{ .Values.validatingWebhookName }}
     verbs:
       - delete
   {{- end }}
@@ -104,7 +104,7 @@ rules:
     resources:
       - mutatingwebhookconfigurations
     resourceNames:
-      - gatekeeper-mutating-webhook-configuration
+      - {{ .Values.mutatingWebhookName }}
     verbs:
       - delete
   {{- end }}
