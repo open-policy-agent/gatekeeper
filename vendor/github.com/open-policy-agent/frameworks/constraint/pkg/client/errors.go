@@ -6,6 +6,9 @@ import (
 
 var (
 	ErrCreatingBackend           = errors.New("unable to create backend")
+	ErrNoDriverName              = errors.New("driver has no name")
+	ErrNoReferentialDriver       = errors.New("no driver that supports referential constraints added")
+	ErrDuplicateDriver           = errors.New("duplicate drivers of the same name")
 	ErrCreatingClient            = errors.New("unable to create client")
 	ErrMissingConstraint         = errors.New("missing Constraint")
 	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")

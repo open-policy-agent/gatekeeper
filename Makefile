@@ -15,6 +15,7 @@ VERSION := v3.12.0-beta.0
 KIND_VERSION ?= 0.17.0
 # note: k8s version pinned since KIND image availability lags k8s releases
 KUBERNETES_VERSION ?= 1.26.0
+CRD_KUBECTL_VERSION ?= 1.26.3
 KUSTOMIZE_VERSION ?= 3.8.9
 BATS_VERSION ?= 1.8.2
 ORAS_VERSION ?= 0.16.0
@@ -270,6 +271,7 @@ manifests: __controller-gen
 		paths="./apis/..." \
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
+	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
@@ -334,7 +336,7 @@ docker-buildx-crds: build-crds docker-buildx-builder
 	docker buildx build \
 		$(_ATTESTATIONS) \
 		--build-arg LDFLAGS=${LDFLAGS} \
-		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_IMG) \
@@ -353,7 +355,7 @@ docker-buildx-crds-dev: build-crds docker-buildx-builder
 	docker buildx build \
 		$(_ATTESTATIONS) \
 		--build-arg LDFLAGS=${LDFLAGS} \
-		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(DEV_TAG) \
@@ -372,7 +374,7 @@ docker-buildx-crds-release: build-crds docker-buildx-builder
 	docker buildx build \
 		$(_ATTESTATIONS) \
 		--build-arg LDFLAGS=${LDFLAGS}\
-		--build-arg KUBE_VERSION=${KUBERNETES_VERSION} \
+		--build-arg KUBE_VERSION=${CRD_KUBECTL_VERSION} \
 		--platform="$(PLATFORM)" \
 		--output=$(OUTPUT_TYPE) \
 		-t $(CRD_REPOSITORY):$(VERSION) \
