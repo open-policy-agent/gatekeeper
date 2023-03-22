@@ -663,7 +663,7 @@ go.opentelemetry.io/proto/otlp/trace/v1
 # go.uber.org/atomic v1.9.0
 ## explicit; go 1.13
 go.uber.org/atomic
-# go.uber.org/automaxprocs v1.5.1
+# go.uber.org/automaxprocs v1.5.2
 ## explicit; go 1.18
 go.uber.org/automaxprocs
 go.uber.org/automaxprocs/internal/cgroups
@@ -906,7 +906,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# k8s.io/api v0.26.2
+# k8s.io/api v0.26.3
 ## explicit; go 1.19
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
@@ -961,7 +961,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.26.2
+# k8s.io/apiextensions-apiserver v0.26.3
 ## explicit; go 1.19
 k8s.io/apiextensions-apiserver/pkg/apihelpers
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
@@ -979,7 +979,7 @@ k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
-# k8s.io/apimachinery v0.26.2
+# k8s.io/apimachinery v0.26.3
 ## explicit; go 1.19
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
@@ -1029,7 +1029,7 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.26.2
+# k8s.io/apiserver v0.26.3
 ## explicit; go 1.19
 k8s.io/apiserver/pkg/apis/apiserver
 k8s.io/apiserver/pkg/apis/apiserver/install
@@ -1051,7 +1051,7 @@ k8s.io/apiserver/pkg/server/egressselector/metrics
 k8s.io/apiserver/pkg/util/feature
 k8s.io/apiserver/pkg/util/webhook
 k8s.io/apiserver/pkg/util/x509metrics
-# k8s.io/client-go v0.26.2
+# k8s.io/client-go v0.26.3
 ## explicit; go 1.19
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1alpha1
@@ -1187,7 +1187,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.26.2
+# k8s.io/component-base v0.26.3
 ## explicit; go 1.19
 k8s.io/component-base/config
 k8s.io/component-base/config/v1alpha1
@@ -1247,7 +1247,7 @@ oras.land/oras-go/pkg/auth/docker
 oras.land/oras-go/pkg/content
 oras.land/oras-go/pkg/oras
 oras.land/oras-go/pkg/target
-# sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.35
+# sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.36
 ## explicit; go 1.17
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client/pkg/client/metrics
