@@ -185,10 +185,10 @@ func Test_nsMapFromObjs(t *testing.T) {
 func Test_getViolationRef(t *testing.T) {
 	type args struct {
 		enamespace string
-		rkind       string
-		rname       string
-		rrv 		string
-		ruid	    types.UID
+		rkind      string
+		rname      string
+		rrv        string
+		ruid       types.UID
 	}
 	tests := []struct {
 		name string
@@ -198,35 +198,35 @@ func Test_getViolationRef(t *testing.T) {
 		{
 			name: "Test case 1",
 			args: args{
-				rkind:       "Pod",
-				rname:       "my-pod",
-				enamespace:  "default",
-				rrv:       	 "123456",
-				ruid:  		 "abcde-123456",
+				rkind:      "Pod",
+				rname:      "my-pod",
+				enamespace: "default",
+				rrv:        "123456",
+				ruid:       "abcde-123456",
 			},
 			want: &corev1.ObjectReference{
-				Kind:      		 "Pod",
-				Name:      		 "my-pod",
-				Namespace: 	 	 "default",
+				Kind:            "Pod",
+				Name:            "my-pod",
+				Namespace:       "default",
 				ResourceVersion: "123456",
-				UID:       		 "abcde-123456",
+				UID:             "abcde-123456",
 			},
 		},
 		{
 			name: "Test case 2",
 			args: args{
-				rkind:       "Service",
-				enamespace:  "kube-system",
-				rname:       "my-service",
-				rrv:       	 "123456",
-				ruid:  		 "abcde-123456",
+				rkind:      "Service",
+				enamespace: "kube-system",
+				rname:      "my-service",
+				rrv:        "123456",
+				ruid:       "abcde-123456",
 			},
 			want: &corev1.ObjectReference{
-				Kind:      		 "Service",
-				Name:     		 "my-service",
-				Namespace: 		 "kube-system",
+				Kind:            "Service",
+				Name:            "my-service",
+				Namespace:       "kube-system",
 				ResourceVersion: "123456",
-				UID:       		 "abcde-123456",
+				UID:             "abcde-123456",
 			},
 		},
 	}
