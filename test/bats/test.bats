@@ -450,6 +450,20 @@ __expansion_audit_test() {
   assert_success
   # with a violating deployment on cluster, test that audit produces expansion violations
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "__expansion_audit_test"
+  run kubectl delete -f test/expansion/warn_expand_deployments
+  run kubectl delete -f test/expansion/deployment_no_label.yaml
+
+  # test source field on Constraints
+  run kubectl apply -f test/expansion/expand_deployments.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/loadbalancers_must_have_env.yaml
+  run kubectl apply -f test/expansion/loadbalancers_must_have_env_source_gen.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels loadbalancers-must-have-env-gen"
+  # a generated pod should be denied
+  run kubectl apply -f test/expansion/deployment_no_label.yaml
+  assert_failure
+  # an original pod should be accepted, as the constraint only matches generated pods
+  run kubectl run nginx --image=nginx --dry-run=server --output json
+  assert_success
 
   # cleanup
   run kubectl delete --ignore-not-found namespace loadbalancers
@@ -457,6 +471,7 @@ __expansion_audit_test() {
   run kubectl delete --ignore-not-found -f test/expansion/warn_expand_deployments.yaml
   run kubectl delete --ignore-not-found -f test/expansion/k8srequiredlabels_ct.yaml
   run kubectl delete --ignore-not-found -f test/expansion/loadbalancers_must_have_env.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/loadbalancers_must_have_env_source_gen.yaml
   run kubectl delete --ignore-not-found -f test/expansion/assignmeta_env.yaml
   run kubectl delete --ignore-not-found -f test/expansion/deployment_no_label.yaml
   run kubectl delete --ignore-not-found -f test/expansion/deployment_with_label.yaml
