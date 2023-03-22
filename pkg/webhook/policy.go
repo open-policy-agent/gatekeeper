@@ -301,7 +301,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 
 			ref := getViolationRef(enamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetResourceVersion(), obj.GetUID())
 
-			if *admissionEventsInvolvedNamespace || len(req.AdmissionRequest.Namespace) == 0 {
+			if *admissionEventsInvolvedNamespace {
 				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
 			} else {
 				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)

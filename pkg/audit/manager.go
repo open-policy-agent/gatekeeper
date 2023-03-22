@@ -1073,7 +1073,7 @@ func emitEvent(constraint *unstructured.Unstructured,
 
 	ref := getViolationRef(enamespace, resourceGroupVersionKind.Kind, rname, rrv, ruid)
 
-	if *auditEventsInvolvedNamespace || len(rnamespace) == 0 {
+	if *auditEventsInvolvedNamespace {
 		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Constraint: %s, Message: %s", constraint.GetName(), message)
 	} else {
 		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Resource Namespace: %s, Constraint: %s, Message: %s", rnamespace, constraint.GetName(), message)
