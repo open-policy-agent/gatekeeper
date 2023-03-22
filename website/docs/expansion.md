@@ -126,7 +126,7 @@ specified by the Constraint in violation.
 #### Match Source
 
 The `source` field on the `match` API, present in the Mutation
-and `ConstraintTemplate` kinds, specifies if the config should match Generated (
+and `Constraint` kinds, specifies if the config should match Generated (
 i.e. expanded) resources, Original resources, or both. The `source` field is
 an `enum` which accepts the following values:
 
