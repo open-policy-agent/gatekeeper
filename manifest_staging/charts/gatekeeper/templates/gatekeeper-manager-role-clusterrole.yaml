@@ -29,7 +29,7 @@ rules:
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
-  - gatekeeper-mutating-webhook-configuration
+  - {{ .Values.mutatingWebhookName }}
   resources:
   - mutatingwebhookconfigurations
   verbs:
@@ -160,7 +160,7 @@ rules:
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
-  - gatekeeper-validating-webhook-configuration
+  - {{ .Values.validatingWebhookName }}
   resources:
   - validatingwebhookconfigurations
   verbs:
