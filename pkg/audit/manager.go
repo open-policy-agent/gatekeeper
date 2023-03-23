@@ -1066,12 +1066,7 @@ func emitEvent(constraint *unstructured.Unstructured,
 	}
 
 	reason := "AuditViolation"
-	enamespace := gkNamespace
-	if *auditEventsInvolvedNamespace && len(rnamespace) > 0 {
-		enamespace = rnamespace
-	}
-
-	ref := getViolationRef(enamespace, resourceGroupVersionKind.Kind, rname, rrv, ruid)
+	ref := getViolationRef(gkNamespace, resourceGroupVersionKind.Kind, rname, rnamespace, rrv, ruid, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace(), *auditEventsInvolvedNamespace)
 
 	if *auditEventsInvolvedNamespace {
 		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Constraint: %s, Message: %s", constraint.GetName(), message)
@@ -1080,15 +1075,21 @@ func emitEvent(constraint *unstructured.Unstructured,
 	}
 }
 
-func getViolationRef(enamespace, rkind, rname, rrv string, ruid types.UID) *corev1.ObjectReference {
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {
+	enamespace := gkNamespace
+	if emitInvolvedNamespace && len(rnamespace) > 0 {
+		enamespace = rnamespace
+	}
 	ref := &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
 		Namespace: enamespace,
 	}
-	if len(ruid) > 0 && len(rrv) > 0 {
+	if emitInvolvedNamespace && len(ruid) > 0 && len(rrv) > 0 {
 		ref.UID = ruid
 		ref.ResourceVersion = rrv
+	} else if !emitInvolvedNamespace {
+		ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname)
 	}
 	return ref
 }

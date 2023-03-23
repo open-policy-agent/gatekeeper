@@ -294,12 +294,7 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				reason = "FailedAdmission"
 			}
 
-			enamespace := h.gkNamespace
-			if *admissionEventsInvolvedNamespace && len(req.AdmissionRequest.Namespace) > 0 {
-				enamespace = req.AdmissionRequest.Namespace
-			}
-
-			ref := getViolationRef(enamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetResourceVersion(), obj.GetUID())
+			ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
 
 			if *admissionEventsInvolvedNamespace {
 				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
@@ -622,15 +617,21 @@ func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespa
 	}
 }
 
-func getViolationRef(enamespace, rkind, rname, rrv string, ruid types.UID) *corev1.ObjectReference {
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {
+	enamespace := gkNamespace
+	if emitInvolvedNamespace && len(rnamespace) > 0 {
+		enamespace = rnamespace
+	}
 	ref := &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
 		Namespace: enamespace,
 	}
-	if len(ruid) > 0 && len(rrv) > 0 {
+	if emitInvolvedNamespace && len(ruid) > 0 && len(rrv) > 0 {
 		ref.UID = ruid
 		ref.ResourceVersion = rrv
+	} else if !emitInvolvedNamespace {
+		ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname)
 	}
 	return ref
 }
