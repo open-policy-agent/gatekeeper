@@ -30,7 +30,7 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -334,11 +334,11 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 	<-setupFinished
 
 	var providerCache *frameworksexternaldata.ProviderCache
-	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
-		args = append(args, local.AddExternalDataProviderCache(providerCache))
+		args = append(args, rego.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
 
 		certFile := filepath.Join(*certDir, certName)
@@ -358,13 +358,13 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		}
 
 		// register the client cert watcher to the driver
-		args = append(args, local.EnableExternalDataClientAuth(), local.AddExternalDataClientCertWatcher(certWatcher))
+		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
 
 		// register the client cert watcher to the mutation system
 		mutationOpts.ClientCertWatcher = certWatcher
 	}
 	// initialize OPA
-	driver, err := local.New(args...)
+	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
 		return err

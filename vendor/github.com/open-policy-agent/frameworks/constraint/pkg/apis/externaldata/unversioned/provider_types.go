@@ -23,7 +23,7 @@ import (
 
 // ProviderSpec defines the desired state of Provider.
 type ProviderSpec struct {
-	// URL is the url for the provider. URL is prefixed with http:// or https://.
+	// URL is the url for the provider. URL is prefixed with https://.
 	URL string `json:"url,omitempty"`
 	// Timeout is the timeout when querying the provider.
 	Timeout int `json:"timeout,omitempty"`

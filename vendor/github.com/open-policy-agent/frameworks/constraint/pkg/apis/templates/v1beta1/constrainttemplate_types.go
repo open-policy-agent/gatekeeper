@@ -16,6 +16,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -48,6 +49,7 @@ type Validation struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
+	// +k8s:conversion-gen=false
 	OpenAPIV3Schema *apiextensionsv1.JSONSchemaProps `json:"openAPIV3Schema,omitempty"`
 	// +kubebuilder:default=true
 	LegacySchema *bool `json:"legacySchema,omitempty"` // *bool allows for "unset" state which we need to apply appropriate defaults
@@ -57,6 +59,23 @@ type Target struct {
 	Target string   `json:"target,omitempty"`
 	Rego   string   `json:"rego,omitempty"`
 	Libs   []string `json:"libs,omitempty"`
+	// The source code options for the constraint template. "Rego" can only
+	// be specified in one place (either here or in the "rego" field)
+	// +listType=map
+	// +listMapKey=engine
+	Code []Code `json:"code,omitempty"`
+}
+
+type Code struct {
+	// The engine used to evaluate the code. Example: "Rego". Required.
+	// +kubebuilder:validation:Required
+	Engine string `json:"engine"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// The source code for the template. Required.
+	Source *templates.Anything `json:"source"`
 }
 
 // CreateCRDError represents a single error caught during parsing, compiling, etc.

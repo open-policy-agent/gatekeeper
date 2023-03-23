@@ -162,12 +162,6 @@ func unstructuredToAdmissionRequest(obj *unstructured.Unstructured) (*gkReview, 
 	return &gkReview{AdmissionRequest: req}, nil
 }
 
-func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
-	propCopy := props.DeepCopy()
-	propCopy.Description = description
-	return propCopy
-}
-
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	return matchSchema()
 }

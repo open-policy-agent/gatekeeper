@@ -28,7 +28,7 @@ import (
 	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
@@ -89,7 +89,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 
 func setupOpa(t *testing.T) *constraintclient.Client {
 	// initialize OPA
-	driver, err := local.New(local.Tracing(false))
+	driver, err := rego.New(rego.Tracing(false))
 	if err != nil {
 		t.Fatalf("setting up Driver: %v", err)
 	}

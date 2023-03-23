@@ -10,7 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
@@ -26,7 +26,7 @@ import (
 
 func TestFrameworkInjection(t *testing.T) {
 	target := &K8sValidationTarget{}
-	driver, err := local.New(local.Tracing(true))
+	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,6 +54,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "All",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -80,6 +81,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Original",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -202,6 +204,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Generated",
 			"kinds": [
 				{
 					"apiGroups": [""],
