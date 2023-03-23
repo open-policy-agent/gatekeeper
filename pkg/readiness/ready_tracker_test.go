@@ -46,8 +46,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -60,6 +62,7 @@ func setupManager(t *testing.T) (manager.Manager, *watch.Manager) {
 	t.Helper()
 
 	logger := zap.New(zap.UseDevMode(true), zap.WriteTo(testutils.NewTestWriter(t)))
+	ctrl.SetLogger(logger)
 	metrics.Registry = prometheus.NewRegistry()
 	mgr, err := manager.New(cfg, manager.Options{
 		HealthProbeBindAddress: "127.0.0.1:29090",
@@ -110,6 +113,8 @@ func setupController(
 	expansionSystem *expansion.System,
 	providerCache *frameworksexternaldata.ProviderCache,
 ) error {
+	*expansion.ExpansionEnabled = expansionSystem != nil
+
 	tracker, err := readiness.SetupTracker(mgr, mutationSystem != nil, providerCache != nil, expansionSystem != nil)
 	if err != nil {
 		return fmt.Errorf("setting up tracker: %w", err)
@@ -310,6 +315,61 @@ func Test_Assign(t *testing.T) {
 		if expectedMutator == nil {
 			t.Fatal("want expectedMutator != nil but got nil")
 		}
+	}
+}
+
+func Test_ExpansionTemplate(t *testing.T) {
+	g := gomega.NewWithT(t)
+
+	testutils.Setenv(t, "POD_NAME", "no-pod")
+
+	// Apply fixtures *before* the controllers are setup.
+	err := applyFixtures("testdata")
+	if err != nil {
+		t.Fatalf("applying fixtures: %v", err)
+	}
+
+	// Wire up the rest.
+	mgr, wm := setupManager(t)
+	opaClient := setupOpa(t)
+
+	mutationSystem := mutation.NewSystem(mutation.SystemOpts{})
+	expansionSystem := expansion.NewSystem(mutationSystem)
+	providerCache := frameworksexternaldata.NewCache()
+
+	if err := setupController(mgr, wm, opaClient, mutationSystem, expansionSystem, providerCache); err != nil {
+		t.Fatalf("setupControllers: %v", err)
+	}
+
+	ctx := context.Background()
+	testutils.StartManager(ctx, t, mgr)
+
+	g.Eventually(func() (bool, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		return probeIsReady(ctx)
+	}, 20*time.Second, 1*time.Second).Should(gomega.BeTrue())
+
+	// Verify that the ExpansionTemplate is registered by expanding a demo deployment
+	// and checking that the resulting Pod is non-nil
+	deployment := makeDeployment("demo-deployment")
+	o, err := runtime.DefaultUnstructuredConverter.ToUnstructured(deployment)
+	if err != nil {
+		panic(fmt.Errorf("error converting deployment to unstructured: %w", err))
+	}
+	u := unstructured.Unstructured{Object: o}
+	m := mutationtypes.Mutable{
+		Object:    &u,
+		Namespace: testNS,
+		Username:  "",
+		Source:    "All",
+	}
+	res, err := expansionSystem.Expand(&m)
+	if err != nil {
+		panic(fmt.Errorf("error expanding: %w", err))
+	}
+	if len(res) != 1 {
+		t.Fatal("expected generator to expand into 1 pod, but got 0 resultants")
 	}
 }
 

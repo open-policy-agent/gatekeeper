@@ -37,7 +37,6 @@ import (
 	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
-	statusv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/status/v1alpha1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
@@ -116,7 +115,6 @@ func init() {
 	_ = api.AddToScheme(scheme)
 
 	_ = configv1alpha1.AddToScheme(scheme)
-	_ = statusv1alpha1.AddToScheme(scheme)
 	_ = statusv1beta1.AddToScheme(scheme)
 	_ = mutationsv1alpha1.AddToScheme(scheme)
 	_ = mutationsv1beta1.AddToScheme(scheme)

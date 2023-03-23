@@ -166,7 +166,8 @@ func TestAddStatusError(t *testing.T) {
 			etErr:       errors.New("big problem"),
 			wantStatus: statusv1beta1.ExpansionTemplatePodStatus{
 				Status: statusv1beta1.ExpansionTemplatePodStatusStatus{
-					Errors: []*statusv1beta1.ExpansionTemplateError{{Message: "big problem"}}},
+					Errors: []*statusv1beta1.ExpansionTemplateError{{Message: "big problem"}},
+				},
 			},
 		},
 	}

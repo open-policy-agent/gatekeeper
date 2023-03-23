@@ -67,6 +67,9 @@ func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {
 // Add creates a new Constraint Status Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func (a *Adder) Add(mgr manager.Manager) error {
+	if !*expansion.ExpansionEnabled {
+		return nil
+	}
 	r := newReconciler(mgr)
 	return add(mgr, r)
 }
