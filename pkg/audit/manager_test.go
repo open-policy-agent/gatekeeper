@@ -184,11 +184,16 @@ func Test_nsMapFromObjs(t *testing.T) {
 
 func Test_getViolationRef(t *testing.T) {
 	type args struct {
-		enamespace string
-		rkind      string
-		rname      string
-		rrv        string
-		ruid       types.UID
+		gkNamespace string
+		rkind       string
+		rname       string
+		rnamespace  string
+		rrv         string
+		ckind       string
+		cname       string
+		cnamespace  string
+		ruid        types.UID
+		einvolved   bool
 	}
 	tests := []struct {
 		name string
@@ -196,13 +201,56 @@ func Test_getViolationRef(t *testing.T) {
 		want *corev1.ObjectReference
 	}{
 		{
-			name: "Test case 1",
+			name: "Test case 1 - Gatekeeper Namespace",
 			args: args{
-				rkind:      "Pod",
-				rname:      "my-pod",
-				enamespace: "default",
-				rrv:        "123456",
-				ruid:       "abcde-123456",
+				gkNamespace: "default",
+				rkind:       "Pod",
+				rname:       "my-pod",
+				rnamespace:  "default",
+				ckind:       "LimitRange",
+				cname:       "my-limit-range",
+				cnamespace:  "default",
+				einvolved:   false,
+			},
+			want: &corev1.ObjectReference{
+				Kind:      "Pod",
+				Name:      "my-pod",
+				UID:       "Pod/default/my-pod/LimitRange/default/my-limit-range",
+				Namespace: "default",
+			},
+		},
+		{
+			name: "Test case 2 - GK Namespace",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Service",
+				rname:       "my-service",
+				rnamespace:  "default",
+				ckind:       "PodSecurityPolicy",
+				cname:       "my-pod-security-policy",
+				cnamespace:  "kube-system",
+				einvolved:   false,
+			},
+			want: &corev1.ObjectReference{
+				Kind:      "Service",
+				Name:      "my-service",
+				UID:       "Service/default/my-service/PodSecurityPolicy/kube-system/my-pod-security-policy",
+				Namespace: "kube-system",
+			},
+		},
+		{
+			name: "Test case 3 - Involved Namespace",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Pod",
+				rname:       "my-pod",
+				rrv:         "123456",
+				ruid:        "abcde-123456",
+				rnamespace:  "default",
+				ckind:       "LimitRange",
+				cname:       "my-limit-range",
+				cnamespace:  "default",
+				einvolved:   true,
 			},
 			want: &corev1.ObjectReference{
 				Kind:            "Pod",
@@ -213,13 +261,17 @@ func Test_getViolationRef(t *testing.T) {
 			},
 		},
 		{
-			name: "Test case 2",
+			name: "Test case 4 - Involved Namespace Cluster Scoped",
 			args: args{
-				rkind:      "Service",
-				enamespace: "kube-system",
-				rname:      "my-service",
-				rrv:        "123456",
-				ruid:       "abcde-123456",
+				gkNamespace: "kube-system",
+				rkind:       "Service",
+				rname:       "my-service",
+				rrv:         "123456",
+				ruid:        "abcde-123456",
+				ckind:       "PodSecurityPolicy",
+				cname:       "my-pod-security-policy",
+				cnamespace:  "kube-system",
+				einvolved:   true,
 			},
 			want: &corev1.ObjectReference{
 				Kind:            "Service",
@@ -229,10 +281,32 @@ func Test_getViolationRef(t *testing.T) {
 				UID:             "abcde-123456",
 			},
 		},
+		{
+			name: "Test case 5 - Involved Namespace RV/UID",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Service",
+				rname:       "my-service",
+				rrv:         "",
+				ruid:        "",
+				rnamespace:  "default",
+				ckind:       "PodSecurityPolicy",
+				cname:       "my-pod-security-policy",
+				cnamespace:  "kube-system",
+				einvolved:   true,
+			},
+			want: &corev1.ObjectReference{
+				Kind:            "Service",
+				Name:            "my-service",
+				Namespace:       "default",
+				ResourceVersion: "",
+				UID:             "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getViolationRef(tt.args.enamespace, tt.args.rkind, tt.args.rname, tt.args.rrv, tt.args.ruid); !reflect.DeepEqual(got, tt.want) {
+			if got := getViolationRef(tt.args.gkNamespace, tt.args.rkind, tt.args.rname, tt.args.rnamespace, tt.args.rrv, tt.args.ruid, tt.args.ckind, tt.args.cname, tt.args.cnamespace, tt.args.einvolved); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getViolationRef() = %v, want %v", got, tt.want)
 			}
 		})
