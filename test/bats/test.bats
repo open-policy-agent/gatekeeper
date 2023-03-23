@@ -228,14 +228,14 @@ __required_labels_audit_test() {
 
 @test "emit events test" {
   # list events for easy debugging
-  kubectl get events -n ${GATEKEEPER_NAMESPACE}
-  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  kubectl get events -n gatekeeper-test-playground
+  events=$(kubectl get events -n gatekeeper-test-playground --field-selector reason=FailedAdmission -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 
-  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  events=$(kubectl get events -n gatekeeper-test-playground --field-selector reason=DryrunViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 
-  events=$(kubectl get events -n ${GATEKEEPER_NAMESPACE} --field-selector reason=AuditViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
+  events=$(kubectl get events -n gatekeeper-test-playground --field-selector reason=AuditViolation -o json | jq -r '.items[] | select(.metadata.annotations.constraint_kind=="K8sRequiredLabels" )' | jq -s '. | length')
   [[ "$events" -ge 1 ]]
 }
 
