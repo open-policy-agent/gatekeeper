@@ -5,155 +5,155 @@ commonLabels:
   release: "{{ .Release.Name }}"
   heritage: "{{ .Release.Service }}"
 bases:
-- "../../../config/default"
+  - "../../../config/default"
 patchesStrategicMerge:
-- kustomize-for-helm.yaml
-- delete-ports.yaml
+  - kustomize-for-helm.yaml
+  - delete-ports.yaml
 patchesJson6902:
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: constrainttemplates.templates.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: constraintpodstatuses.status.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: constrainttemplatepodstatuses.status.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: mutatorpodstatuses.status.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: expansiontemplatepodstatuses.status.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: configs.config.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: assignmetadata.mutations.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: assignimage.mutations.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: assign.mutations.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: modifyset.mutations.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: expansiontemplate.expansion.gatekeeper.sh
-  path: labels_patch.yaml
-- target:
-    group: apiextensions.k8s.io
-    version: v1
-    kind: CustomResourceDefinition
-    name: providers.externaldata.gatekeeper.sh
-  path: labels_patch.yaml
-# these are defined in the chart values rather than hard-coded
-- target:
-    kind: Deployment
-    name: gatekeeper-audit
-  patch: |-
-    - op: remove
-      path: /spec/template/spec/containers/0/resources/limits
-    - op: remove
-      path: /spec/template/spec/containers/0/resources/requests
-    - op: remove
-      path: /spec/template/spec/nodeSelector/kubernetes.io~1os
-    - op: remove
-      path: /spec/template/spec/containers/0/image
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/capabilities
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsGroup
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsUser
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/seccompProfile
-- target:
-    kind: Deployment
-    name: gatekeeper-controller-manager
-  patch: |-
-    - op: remove
-      path: /spec/template/spec/containers/0/resources/limits
-    - op: remove
-      path: /spec/template/spec/containers/0/resources/requests
-    - op: remove
-      path: /spec/template/spec/nodeSelector/kubernetes.io~1os
-    - op: remove
-      path: /spec/template/spec/affinity/podAntiAffinity
-    - op: remove
-      path: /spec/template/spec/containers/0/image
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/capabilities
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsGroup
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/runAsUser
-    - op: remove
-      path: /spec/template/spec/containers/0/securityContext/seccompProfile
-- target:
-    kind: Service
-    name: webhook-service
-  patch: |-
-    - op: remove
-      path: /spec/ports
-- target:
-    kind: ValidatingWebhookConfiguration
-    name: gatekeeper-validating-webhook-configuration
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: "{{ .Values.validatingWebhookName }}"
-- target:
-    kind: MutatingWebhookConfiguration
-    name: gatekeeper-mutating-webhook-configuration
-  patch: |-
-    - op: replace
-      path: /metadata/name
-      value: "{{ .Values.mutatingWebhookName }}"
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: constrainttemplates.templates.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: constraintpodstatuses.status.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: constrainttemplatepodstatuses.status.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: mutatorpodstatuses.status.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: expansiontemplatepodstatuses.status.gatekeeper.sh
+    path: labels_patch.yam
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: configs.config.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: assignmetadata.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: assignimage.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: assign.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: modifyset.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: expansiontemplate.expansion.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: providers.externaldata.gatekeeper.sh
+    path: labels_patch.yaml
+  # these are defined in the chart values rather than hard-coded
+  - target:
+      kind: Deployment
+      name: gatekeeper-audit
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests
+      - op: remove
+        path: /spec/template/spec/nodeSelector/kubernetes.io~1os
+      - op: remove
+        path: /spec/template/spec/containers/0/image
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsGroup
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
+  - target:
+      kind: Deployment
+      name: gatekeeper-controller-manager
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests
+      - op: remove
+        path: /spec/template/spec/nodeSelector/kubernetes.io~1os
+      - op: remove
+        path: /spec/template/spec/affinity/podAntiAffinity
+      - op: remove
+        path: /spec/template/spec/containers/0/image
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsGroup
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
+  - target:
+      kind: Service
+      name: webhook-service
+    patch: |-
+      - op: remove
+        path: /spec/ports
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: gatekeeper-validating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.validatingWebhookName }}"
+  - target:
+      kind: MutatingWebhookConfiguration
+      name: gatekeeper-mutating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.mutatingWebhookName }}"
