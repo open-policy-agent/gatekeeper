@@ -118,7 +118,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 		if errors.Is(err, constraints.ErrSchema) {
 			err = nil
 		} else {
-			err = fmt.Errorf("%w: got error %v but want %v", gator.ErrValidConstraint, err, constraints.ErrSchema)
+			err = fmt.Errorf("%w: got error %w but want %w", gator.ErrValidConstraint, err, constraints.ErrSchema)
 		}
 	} else if err == nil {
 		results, err = r.runCases(ctx, suiteDir, filter, t)
@@ -135,7 +135,7 @@ func (r *Runner) runTest(ctx context.Context, suiteDir string, filter Filter, t 
 func (r *Runner) tryAddConstraint(ctx context.Context, suiteDir string, t Test) error {
 	client, err := r.newClient(r.includeTrace)
 	if err != nil {
-		return fmt.Errorf("%w: %v", gator.ErrCreatingClient, err)
+		return fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
 	}
 
 	err = r.addTemplate(suiteDir, t.Template, client)
@@ -190,7 +190,7 @@ func (r *Runner) skipCase(tc *Case) CaseResult {
 func (r *Runner) makeTestClient(ctx context.Context, suiteDir string, t Test) (gator.Client, error) {
 	client, err := r.newClient(r.includeTrace)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrCreatingClient, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrCreatingClient, err)
 	}
 
 	err = r.addTemplate(suiteDir, t.Template, client)
@@ -218,7 +218,7 @@ func (r *Runner) addConstraint(ctx context.Context, suiteDir, constraintPath str
 
 	_, err = client.AddConstraint(ctx, cObj)
 	if err != nil {
-		return fmt.Errorf("%w: %v", gator.ErrAddingConstraint, err)
+		return fmt.Errorf("%w: %w", gator.ErrAddingConstraint, err)
 	}
 	return nil
 }
@@ -235,7 +235,7 @@ func (r *Runner) addTemplate(suiteDir, templatePath string, client gator.Client)
 
 	_, err = client.AddTemplate(context.Background(), template)
 	if err != nil {
-		return fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
+		return fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
 	}
 
 	return nil
@@ -324,7 +324,7 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 	// convert unstructured into AdmissionReview, don't allow unknown fields
 	var ar admissionv1.AdmissionReview
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(toReview.UnstructuredContent(), &ar, true); err != nil {
-		return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %v", gator.ErrInvalidK8sAdmissionReview, err)
+		return nil, fmt.Errorf("%w: unable to convert to an AdmissionReview object, error: %w", gator.ErrInvalidK8sAdmissionReview, err)
 	}
 
 	if ar.Request == nil { // then this admission review did not actually pass in an AdmissionRequest
@@ -341,19 +341,19 @@ func (r *Runner) validateAndReviewAdmissionReviewRequest(ctx context.Context, c 
 	obj := &unstructured.Unstructured{}
 	if ar.Request.Object.Raw != nil {
 		if err := obj.UnmarshalJSON(ar.Request.Object.Raw); err != nil {
-			return nil, fmt.Errorf("%w: %v", gator.ErrUnmarshallObject, err.Error())
+			return nil, fmt.Errorf("%w: %w", gator.ErrUnmarshallObject, err)
 		}
 	}
 	if ar.Request.OldObject.Raw != nil {
 		if err := obj.UnmarshalJSON(ar.Request.OldObject.Raw); err != nil {
-			return nil, fmt.Errorf("%w: %v", gator.ErrUnmarshallObject, err.Error())
+			return nil, fmt.Errorf("%w: %w", gator.ErrUnmarshallObject, err)
 		}
 	}
 
 	// parse into webhook/admission type
 	req := &admission.Request{AdmissionRequest: *ar.Request}
 	if err := util.SetObjectOnDelete(req); err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrNilOldObject, err.Error())
+		return nil, fmt.Errorf("%w: %w", gator.ErrNilOldObject, err)
 	}
 
 	arr := target.AugmentedReview{
@@ -375,7 +375,7 @@ func (r *Runner) addInventory(ctx context.Context, c gator.Client, suiteDir, inv
 	for _, obj := range inventory {
 		_, err = c.AddData(ctx, obj)
 		if err != nil {
-			return fmt.Errorf("%w: %v %v/%v: %v",
+			return fmt.Errorf("%w: %v %v/%v: %w",
 				gator.ErrAddInventory, obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName(), err)
 		}
 	}
