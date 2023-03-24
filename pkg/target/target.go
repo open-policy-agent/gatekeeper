@@ -230,13 +230,13 @@ func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
 	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+		return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 	}
 
 	if found && obj != nil {
 		m, err := convertToMatch(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 		}
 		return &Matcher{match: m, cache: &h.cache}, nil
 	}
