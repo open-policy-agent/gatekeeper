@@ -25,5 +25,5 @@ import (
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
-	testutils.StartControlPlane(m, &cfg)
+	testutils.StartControlPlane(m, &cfg, 3)
 }
