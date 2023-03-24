@@ -25,8 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-var vendorCRDPath = []string{"vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"}
-var gkCRDPath = []string{"config", "crd", "bases"}
+var (
+	vendorCRDPath = []string{"vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"}
+	gkCRDPath     = []string{"config", "crd", "bases"}
+)
 
 // ConstantRetry makes 3,000 attempts at a rate of 100 per second. Since this
 // is a test instance and not a "real" cluster, this is fine and there's no need
@@ -116,9 +118,9 @@ func DeleteObjectAndConfirm(ctx context.Context, t *testing.T, c client.Client, 
 	}
 }
 
-func StartControlPlane(m *testing.M, cfg **rest.Config, callerDepth int) {
-	walkbacks := make([]string, callerDepth)
-	for i := 0; i < callerDepth; i++ {
+func StartControlPlane(m *testing.M, cfg **rest.Config, testerDepth int) {
+	walkbacks := make([]string, testerDepth)
+	for i := 0; i < testerDepth; i++ {
 		walkbacks[i] = ".."
 	}
 	t := &envtest.Environment{
