@@ -162,12 +162,6 @@ func unstructuredToAdmissionRequest(obj *unstructured.Unstructured) (*gkReview, 
 	return &gkReview{AdmissionRequest: req}, nil
 }
 
-func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
-	propCopy := props.DeepCopy()
-	propCopy.Description = description
-	return propCopy
-}
-
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	return matchSchema()
 }
@@ -236,13 +230,13 @@ func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
 	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+		return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 	}
 
 	if found && obj != nil {
 		m, err := convertToMatch(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 		}
 		return &Matcher{match: m, cache: &h.cache}, nil
 	}
