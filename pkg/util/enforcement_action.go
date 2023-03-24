@@ -43,7 +43,7 @@ func ValidateEnforcementAction(input EnforcementAction) error {
 func GetEnforcementAction(item map[string]interface{}) (EnforcementAction, error) {
 	enforcementActionSpec, _, err := unstructured.NestedString(item, "spec", "enforcementAction")
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidSpecEnforcementAction, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidSpecEnforcementAction, err)
 	}
 	enforcementAction := EnforcementAction(enforcementActionSpec)
 	// default enforcementAction is deny

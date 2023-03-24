@@ -31,7 +31,7 @@ GATEKEEPER_NAMESPACE ?= gatekeeper-system
 
 # When updating this, make sure to update the corresponding action in
 # workflow.yaml
-GOLANGCI_LINT_VERSION := v1.50.1
+GOLANGCI_LINT_VERSION := v1.51.2
 
 # Detects the location of the user golangci-lint cache.
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
@@ -258,6 +258,7 @@ manifests: __controller-gen
 		paths="./apis/..." \
 		paths="./pkg/..." \
 		output:crd:artifacts:config=config/crd/bases
+	./build/update-match-schema.sh
 	rm -rf manifest_staging
 	mkdir -p manifest_staging/deploy/experimental
 	mkdir -p manifest_staging/charts/gatekeeper
