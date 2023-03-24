@@ -316,6 +316,8 @@ endif
 docker-login:
 	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(REGISTRY)
 
+docker-build: docker-buildx
+
 docker-buildx-builder:
 	if ! docker buildx ls | grep -q container-builder; then\
 		docker buildx create --name container-builder --use --bootstrap;\
