@@ -70,7 +70,7 @@ type ExpansionTemplate struct {
 
 // ExpansionTemplateStatus defines the observed state of ExpansionStatus.
 type ExpansionTemplateStatus struct {
-	ByPod []statusv1alpha1.ExpansionTemplatePodStatusStatus
+	ByPod []statusv1alpha1.ExpansionTemplatePodStatusStatus `json:"byPod,omitempty"`
 }
 
 // +kubebuilder:object:root=true
