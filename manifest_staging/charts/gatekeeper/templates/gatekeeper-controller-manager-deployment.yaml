@@ -54,6 +54,7 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+        - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
         - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
