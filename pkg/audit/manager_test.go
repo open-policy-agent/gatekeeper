@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func Test_newNSCache(t *testing.T) {
@@ -187,9 +188,12 @@ func Test_getViolationRef(t *testing.T) {
 		rkind       string
 		rname       string
 		rnamespace  string
+		rrv         string
 		ckind       string
 		cname       string
 		cnamespace  string
+		ruid        types.UID
+		einvolved   bool
 	}
 	tests := []struct {
 		name string
@@ -197,7 +201,7 @@ func Test_getViolationRef(t *testing.T) {
 		want *corev1.ObjectReference
 	}{
 		{
-			name: "Test case 1",
+			name: "Test case 1 - Gatekeeper Namespace",
 			args: args{
 				gkNamespace: "default",
 				rkind:       "Pod",
@@ -206,6 +210,7 @@ func Test_getViolationRef(t *testing.T) {
 				ckind:       "LimitRange",
 				cname:       "my-limit-range",
 				cnamespace:  "default",
+				einvolved:   false,
 			},
 			want: &corev1.ObjectReference{
 				Kind:      "Pod",
@@ -215,7 +220,7 @@ func Test_getViolationRef(t *testing.T) {
 			},
 		},
 		{
-			name: "Test case 2",
+			name: "Test case 2 - GK Namespace",
 			args: args{
 				gkNamespace: "kube-system",
 				rkind:       "Service",
@@ -224,6 +229,7 @@ func Test_getViolationRef(t *testing.T) {
 				ckind:       "PodSecurityPolicy",
 				cname:       "my-pod-security-policy",
 				cnamespace:  "kube-system",
+				einvolved:   false,
 			},
 			want: &corev1.ObjectReference{
 				Kind:      "Service",
@@ -232,10 +238,75 @@ func Test_getViolationRef(t *testing.T) {
 				Namespace: "kube-system",
 			},
 		},
+		{
+			name: "Test case 3 - Involved Namespace",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Pod",
+				rname:       "my-pod",
+				rrv:         "123456",
+				ruid:        "abcde-123456",
+				rnamespace:  "default",
+				ckind:       "LimitRange",
+				cname:       "my-limit-range",
+				cnamespace:  "default",
+				einvolved:   true,
+			},
+			want: &corev1.ObjectReference{
+				Kind:            "Pod",
+				Name:            "my-pod",
+				Namespace:       "default",
+				ResourceVersion: "123456",
+				UID:             "abcde-123456",
+			},
+		},
+		{
+			name: "Test case 4 - Involved Namespace Cluster Scoped",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Service",
+				rname:       "my-service",
+				rrv:         "123456",
+				ruid:        "abcde-123456",
+				ckind:       "PodSecurityPolicy",
+				cname:       "my-pod-security-policy",
+				cnamespace:  "kube-system",
+				einvolved:   true,
+			},
+			want: &corev1.ObjectReference{
+				Kind:            "Service",
+				Name:            "my-service",
+				Namespace:       "kube-system",
+				ResourceVersion: "123456",
+				UID:             "abcde-123456",
+			},
+		},
+		{
+			name: "Test case 5 - Involved Namespace RV/UID",
+			args: args{
+				gkNamespace: "kube-system",
+				rkind:       "Service",
+				rname:       "my-service",
+				rrv:         "",
+				ruid:        "",
+				rnamespace:  "default",
+				ckind:       "PodSecurityPolicy",
+				cname:       "my-pod-security-policy",
+				cnamespace:  "kube-system",
+				einvolved:   true,
+			},
+			want: &corev1.ObjectReference{
+				Kind:            "Service",
+				Name:            "my-service",
+				Namespace:       "default",
+				ResourceVersion: "",
+				UID:             "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getViolationRef(tt.args.gkNamespace, tt.args.rkind, tt.args.rname, tt.args.rnamespace, tt.args.ckind, tt.args.cname, tt.args.cnamespace); !reflect.DeepEqual(got, tt.want) {
+			if got := getViolationRef(tt.args.gkNamespace, tt.args.rkind, tt.args.rname, tt.args.rnamespace, tt.args.rrv, tt.args.ruid, tt.args.ckind, tt.args.cname, tt.args.cnamespace, tt.args.einvolved); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getViolationRef() = %v, want %v", got, tt.want)
 			}
 		})
