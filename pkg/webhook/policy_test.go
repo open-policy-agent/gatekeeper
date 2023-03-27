@@ -279,7 +279,7 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+func (f *nsGetter) SubResource(_ string) ctrlclient.SubResourceClient {
 	return nil
 }
 
@@ -298,7 +298,7 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+func (f *errorNSGetter) SubResource(_ string) ctrlclient.SubResourceClient {
 	return nil
 }
 
