@@ -113,7 +113,7 @@ func makeAssignImage(name string) *mutationsv1alpha1.AssignImage {
 	return &mutationsv1alpha1.AssignImage{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
-			Kind:       "Assign",
+			Kind:       "AssignImage",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
