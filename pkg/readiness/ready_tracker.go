@@ -129,32 +129,33 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 		return noopExpectations{}
 	}
 
+	// Do not compare versions. Internally, we index trackers by GroupKind
 	switch {
-	case gvk.GroupVersion() == v1beta1.SchemeGroupVersion && gvk.Kind == "ConstraintTemplate":
+	case gvk.Group == v1beta1.SchemeGroupVersion.Group && gvk.Kind == "ConstraintTemplate":
 		if operations.HasValidationOperations() {
 			return t.templates
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == configv1alpha1.GroupVersion && gvk.Kind == "Config":
+	case gvk.Group == configv1alpha1.GroupVersion.Group && gvk.Kind == "Config":
 		return t.config
-	case gvk.GroupVersion() == externaldatav1beta1.SchemeGroupVersion && gvk.Kind == "Provider":
+	case gvk.Group == externaldatav1beta1.SchemeGroupVersion.Group && gvk.Kind == "Provider":
 		return t.externalDataProvider
-	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "AssignMetadata":
+	case gvk.Group == mutationv1.GroupVersion.Group && gvk.Kind == "AssignMetadata":
 		if t.mutationEnabled {
 			return t.assignMetadata
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "Assign":
+	case gvk.Group == mutationv1.GroupVersion.Group && gvk.Kind == "Assign":
 		if t.mutationEnabled {
 			return t.assign
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationv1.GroupVersion && gvk.Kind == "ModifySet":
+	case gvk.Group == mutationv1.GroupVersion.Group && gvk.Kind == "ModifySet":
 		if t.mutationEnabled {
 			return t.modifySet
 		}
 		return noopExpectations{}
-	case gvk.GroupVersion() == mutationsv1alpha1.GroupVersion && gvk.Kind == "AssignImage":
+	case gvk.Group == mutationsv1alpha1.GroupVersion.Group && gvk.Kind == "AssignImage":
 		if t.mutationEnabled {
 			return t.assignImage
 		}
