@@ -230,14 +230,17 @@ func (h *validationHandler) Handle(ctx context.Context, req admission.Request) a
 func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *admission.Request) ([]string, []string) {
 	var denyMsgs, warnMsgs []string
 	var resourceName string
+	obj := &unstructured.Unstructured{}
+
 	if len(res) > 0 && (*logDenies || *emitAdmissionEvents) {
 		resourceName = req.AdmissionRequest.Name
-		if len(resourceName) == 0 && req.AdmissionRequest.Object.Raw != nil {
-			// On a CREATE operation, the client may omit name and
-			// rely on the server to generate the name.
-			obj := &unstructured.Unstructured{}
+		if req.AdmissionRequest.Object.Raw != nil {
 			if _, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, obj); err == nil {
-				resourceName = obj.GetName()
+				// On a CREATE operation, the client may omit name and
+				// rely on the server to generate the name.
+				if len(resourceName) == 0 {
+					resourceName = obj.GetName()
+				}
 			}
 		}
 	}
@@ -290,24 +293,14 @@ func (h *validationHandler) getValidationMessages(res []*rtypes.Result, req *adm
 				eventMsg = "Admission webhook \"validation.gatekeeper.sh\" denied request"
 				reason = "FailedAdmission"
 			}
-			ref := getViolationRef(
-				h.gkNamespace,
-				req.AdmissionRequest.Kind.Kind,
-				resourceName,
-				req.AdmissionRequest.Namespace,
-				r.Constraint.GetKind(),
-				r.Constraint.GetName(),
-				r.Constraint.GetNamespace())
-			h.eventRecorder.AnnotatedEventf(
-				ref,
-				annotations,
-				corev1.EventTypeWarning,
-				reason,
-				"%s, Resource Namespace: %s, Constraint: %s, Message: %s",
-				eventMsg,
-				req.AdmissionRequest.Namespace,
-				r.Constraint.GetName(),
-				r.Msg)
+
+			ref := getViolationRef(h.gkNamespace, req.AdmissionRequest.Kind.Kind, resourceName, obj.GetNamespace(), obj.GetResourceVersion(), obj.GetUID(), r.Constraint.GetKind(), r.Constraint.GetName(), r.Constraint.GetNamespace(), *admissionEventsInvolvedNamespace)
+
+			if *admissionEventsInvolvedNamespace {
+				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Constraint: %s, Message: %s", eventMsg, r.Constraint.GetName(), r.Msg)
+			} else {
+				h.eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "%s, Resource Namespace: %s, Constraint: %s, Message: %s", eventMsg, req.AdmissionRequest.Namespace, r.Constraint.GetName(), r.Msg)
+			}
 		}
 
 		if r.EnforcementAction == string(util.Deny) {
@@ -624,13 +617,23 @@ func createReviewForResultant(obj *unstructured.Unstructured, ns *corev1.Namespa
 	}
 }
 
-func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
-	return &corev1.ObjectReference{
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {
+	enamespace := gkNamespace
+	if emitInvolvedNamespace && len(rnamespace) > 0 {
+		enamespace = rnamespace
+	}
+	ref := &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
-		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
-		Namespace: gkNamespace,
+		Namespace: enamespace,
 	}
+	if emitInvolvedNamespace && len(ruid) > 0 && len(rrv) > 0 {
+		ref.UID = ruid
+		ref.ResourceVersion = rrv
+	} else if !emitInvolvedNamespace {
+		ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname)
+	}
+	return ref
 }
 
 func AppendValidationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
