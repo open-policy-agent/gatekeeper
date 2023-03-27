@@ -51,7 +51,7 @@ func init() {
 	SchemeBuilder.Register(&ExpansionTemplatePodStatus{}, &ExpansionTemplatePodStatusList{})
 }
 
-// NewExpansionTemplateStatusForPod returns a constraint template status object
+// NewExpansionTemplateStatusForPod returns an expansion template status object
 // that has been initialized with the bare minimum of fields to make it functional
 // with the expansion template status controller.
 func NewExpansionTemplateStatusForPod(pod *corev1.Pod, templateName string, scheme *runtime.Scheme) (*ExpansionTemplatePodStatus, error) {
