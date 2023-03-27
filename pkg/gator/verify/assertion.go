@@ -150,7 +150,7 @@ func (a *Assertion) getMsgRegex() (*regexp.Regexp, error) {
 		a.msgRegex, err = regexp.Compile(*a.Message)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidRegex, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidRegex, err)
 	}
 
 	return a.msgRegex, nil

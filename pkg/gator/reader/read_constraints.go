@@ -60,7 +60,7 @@ func ReadUnstructureds(bytes []byte) ([]*unstructured.Unstructured, error) {
 
 		u, err := readUnstructured([]byte(split))
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", gator.ErrInvalidYAML, err)
+			return nil, fmt.Errorf("%w: %w", gator.ErrInvalidYAML, err)
 		}
 
 		result = append(result, u)
@@ -91,7 +91,7 @@ func ReadTemplate(scheme *runtime.Scheme, f fs.FS, path string) (*templates.Cons
 
 	u, err := readUnstructured(bytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %v", gator.ErrAddingTemplate, path, err)
+		return nil, fmt.Errorf("%w: parsing ConstraintTemplate YAML from %q: %w", gator.ErrAddingTemplate, path, err)
 	}
 
 	template, err := ToTemplate(scheme, u)
@@ -115,7 +115,7 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	t, err := scheme.New(gvk)
 	if err != nil {
 		// The type isn't registered in the scheme.
-		return nil, fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
 	}
 
 	// YAML parsing doesn't properly handle ObjectMeta, so we must
@@ -128,7 +128,7 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	}
 	err = json.Unmarshal(jsonBytes, t)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrAddingTemplate, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrAddingTemplate, err)
 	}
 
 	v, isVersionless := t.(versionless)
@@ -140,7 +140,7 @@ func ToTemplate(scheme *runtime.Scheme, u *unstructured.Unstructured) (*template
 	if err != nil {
 		// This shouldn't happen unless there's a bug in the conversion functions.
 		// Most likely it means the conversion functions weren't generated.
-		return nil, fmt.Errorf("%w: %v", gator.ErrConvertingTemplate, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrConvertingTemplate, err)
 	}
 
 	return template, nil
@@ -157,7 +157,7 @@ func ReadObject(f fs.FS, path string) (*unstructured.Unstructured, error) {
 
 	u, err := readUnstructured(bytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing Constraint from %q: %v", gator.ErrAddingConstraint, path, err)
+		return nil, fmt.Errorf("%w: parsing Constraint from %q: %w", gator.ErrAddingConstraint, path, err)
 	}
 
 	return u, nil

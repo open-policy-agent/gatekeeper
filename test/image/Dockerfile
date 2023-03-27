@@ -1,4 +1,4 @@
-FROM golang@sha256:bb9811fad43a7d6fd2173248d8331b2dcf5ac9af20976b1937ecd214c5b8c383 as builder
+FROM golang:1.20-bullseye as builder
 
 ARG BATS_VERSION
 ARG ORAS_VERSION
@@ -6,6 +6,8 @@ ARG YQ_VERSION
 ARG KUSTOMIZE_VERSION
 
 ARG TARGETARCH
+
+RUN git config --global --add safe.directory "*"
 
 RUN apt-get update && \
     apt-get install -y make jq apt-utils

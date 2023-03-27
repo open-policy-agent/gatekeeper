@@ -1067,7 +1067,7 @@ spec:
               location:
                 type: string
               match:
-                description: Match selects objects to apply mutations to.
+                description: Match selects which objects are in scope.
                 properties:
                   excludedNamespaces:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
@@ -1278,7 +1278,7 @@ spec:
               location:
                 type: string
               match:
-                description: Match selects objects to apply mutations to.
+                description: Match selects which objects are in scope.
                 properties:
                   excludedNamespaces:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
@@ -1489,7 +1489,7 @@ spec:
               location:
                 type: string
               match:
-                description: Match selects objects to apply mutations to.
+                description: Match selects which objects are in scope.
                 properties:
                   excludedNamespaces:
                     description: 'ExcludedNamespaces is a list of namespace names. If defined, a constraint only applies to resources not in a listed namespace. ExcludedNamespaces also supports a prefix or suffix based glob.  For example, `excludedNamespaces: [kube-*]` matches both `kube-system` and `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and `gatekeeper-system`.'
@@ -3321,6 +3321,13 @@ metadata:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-manager-role
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - '*'
   resources:
