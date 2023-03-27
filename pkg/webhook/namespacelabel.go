@@ -19,12 +19,14 @@ import (
 var (
 	exemptNamespace       = util.NewFlagSet()
 	exemptNamespacePrefix = util.NewFlagSet()
+	exemptNamespaceSuffix = util.NewFlagSet()
 )
 
 func init() {
 	AddToManagerFuncs = append(AddToManagerFuncs, AddLabelWebhook)
 	flag.Var(exemptNamespace, "exempt-namespace", "The specified namespace is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple namespaces, this flag can be declared more than once.")
 	flag.Var(exemptNamespacePrefix, "exempt-namespace-prefix", "A namespace with the specified prefix is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple prefixes, this flag can be declared more than once.")
+	flag.Var(exemptNamespaceSuffix, "exempt-namespace-suffix", "A namespace with the specified suffix is allowed to set the admission.gatekeeper.sh/ignore label. To exempt multiple suffixes, this flag can be declared more than once.")
 }
 
 const ignoreLabel = "admission.gatekeeper.sh/ignore"
@@ -47,7 +49,7 @@ var _ admission.Handler = &namespaceLabelHandler{}
 
 type namespaceLabelHandler struct{}
 
-// nolint: gocritic // Must accept admission.Request as a struct to satisfy Handler interface.
+//nolint:gocritic // Must accept admission.Request as a struct to satisfy Handler interface.
 func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Request) admission.Response {
 	if req.Operation == admissionv1.Delete {
 		return admission.Allowed("Delete is always allowed")
@@ -61,7 +63,7 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 		r.Result.Code = http.StatusInternalServerError
 		return r
 	}
-	if exemptNamespace[obj.GetName()] || matchesPrefix(obj.GetName()) {
+	if exemptNamespace[obj.GetName()] || matchesPrefix(obj.GetName()) || matchesSuffix(obj.GetName()) {
 		return admission.Allowed(fmt.Sprintf("Namespace %s is allowed to set %s", obj.GetName(), ignoreLabel))
 	}
 	for label := range obj.GetLabels() {
@@ -75,6 +77,15 @@ func (h *namespaceLabelHandler) Handle(ctx context.Context, req admission.Reques
 func matchesPrefix(s string) bool {
 	for p := range exemptNamespacePrefix {
 		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesSuffix(s string) bool {
+	for p := range exemptNamespaceSuffix {
+		if strings.HasSuffix(s, p) {
 			return true
 		}
 	}

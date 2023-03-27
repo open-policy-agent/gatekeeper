@@ -85,6 +85,10 @@ spec:
         - --exempt-namespace-prefix={{ . }}
         {{- end }}
         
+        {{- range .Values.controllerManager.exemptNamespaceSuffixes}}
+        - --exempt-namespace-suffix={{ . }}
+        {{- end }}
+        
         {{- if .Values.controllerManager.logFile}}
         - --log-file={{ .Values.controllerManager.logFile }}
         {{- end }}

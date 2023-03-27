@@ -232,6 +232,11 @@ var replacements = map[string]string{
         - --exempt-namespace-prefix={{ . }}
         {{- end }}`,
 
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES": `
+        {{- range .Values.controllerManager.exemptNamespaceSuffixes}}
+        - --exempt-namespace-suffix={{ . }}
+        {{- end }}`,
+
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE": `
         {{- if .Values.controllerManager.logFile}}
         - --log-file={{ .Values.controllerManager.logFile }}
