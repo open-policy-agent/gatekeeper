@@ -54,6 +54,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "All",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -80,6 +81,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Original",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -202,6 +204,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Generated",
 			"kinds": [
 				{
 					"apiGroups": [""],
