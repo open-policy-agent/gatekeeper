@@ -72,10 +72,11 @@ func ignoreGatorResultFields() cmp.Option {
 
 func TestTest(t *testing.T) {
 	tcs := []struct {
-		name   string
-		inputs []string
-		want   []*GatorResult
-		err    error
+		name      string
+		inputs    []string
+		want      []*GatorResult
+		cmpOption cmp.Option
+		err       error
 	}{
 		{
 			name: "basic no violation",
@@ -84,6 +85,7 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintAlwaysValidate,
 				fixtures.Object,
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "basic violation",
@@ -115,6 +117,7 @@ func TestTest(t *testing.T) {
 					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint with violation",
@@ -140,6 +143,7 @@ func TestTest(t *testing.T) {
 					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint without violation",
@@ -195,7 +199,13 @@ func TestTest(t *testing.T) {
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, ignoreGatorResultFields())
+			var diff string
+			if tc.cmpOption != nil {
+				diff = cmp.Diff(tc.want, got, tc.cmpOption)
+			} else {
+				diff = cmp.Diff(tc.want, got)
+			}
+
 			if diff != "" {
 				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
