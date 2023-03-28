@@ -9,7 +9,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/constraints"
 	templatesv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -165,12 +165,17 @@ func validRegoTemplate() *templates.ConstraintTemplate {
 			},
 			Targets: []templates.Target{{
 				Target: target.Name,
-				Rego: `
+				Code: []templates.Code{{
+					Engine: "Rego",
+					Source: &templates.Anything{
+						Value: map[string]interface{}{"rego": `
 package goodrego
 
-        violation[{"msg": msg}] {
-          msg := "Maybe this will work?"
-        }`,
+violation[{"msg": msg}] {
+   msg := "Maybe this will work?"
+}`},
+					},
+				}},
 			}},
 		},
 	}
@@ -202,7 +207,7 @@ func invalidRegoTemplate() *templates.ConstraintTemplate {
 
 func makeOpaClient() (*constraintclient.Client, error) {
 	t := &target.K8sValidationTarget{}
-	driver, err := local.New(local.Tracing(false))
+	driver, err := rego.New(rego.Tracing(false))
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +279,7 @@ type nsGetter struct {
 	testclients.NoopClient
 }
 
-func (f *nsGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+func (f *nsGetter) SubResource(_ string) ctrlclient.SubResourceClient {
 	return nil
 }
 
@@ -293,7 +298,7 @@ type errorNSGetter struct {
 	testclients.NoopClient
 }
 
-func (f *errorNSGetter) SubResource(subResource string) ctrlclient.SubResourceClient {
+func (f *errorNSGetter) SubResource(_ string) ctrlclient.SubResourceClient {
 	return nil
 }
 

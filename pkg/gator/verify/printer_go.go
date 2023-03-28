@@ -53,18 +53,18 @@ func (p PrinterGo) PrintSuite(w StringWriter, r *SuiteResult, verbose bool) erro
 	if r.IsFailure() {
 		_, err := w.WriteString(fmt.Sprintf("FAIL\t%s\t%v\n", r.Path, r.Runtime))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 		if r.Error != nil {
 			_, err = w.WriteString(fmt.Sprintf("  %v\n", r.Error))
 			if err != nil {
-				return fmt.Errorf("%w: %v", ErrWritingString, err)
+				return fmt.Errorf("%w: %w", ErrWritingString, err)
 			}
 		}
 	} else {
 		_, err := w.WriteString(fmt.Sprintf("ok\t%s\t%v\n", r.Path, r.Runtime))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 	return nil
@@ -75,39 +75,39 @@ func (p PrinterGo) PrintTest(w StringWriter, r *TestResult, verbose bool) error 
 		if r.Skipped {
 			_, err := w.WriteString(fmt.Sprintf("=== SKIP  %s\n", r.Name))
 			if err != nil {
-				return fmt.Errorf("%w: %v", ErrWritingString, err)
+				return fmt.Errorf("%w: %w", ErrWritingString, err)
 			}
 			return nil
 		}
 
 		_, err := w.WriteString(fmt.Sprintf("=== RUN   %s\n", r.Name))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 
 	for i := range r.CaseResults {
 		err := p.PrintCase(w, &r.CaseResults[i], verbose)
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 
 	if r.IsFailure() {
 		_, err := w.WriteString(fmt.Sprintf("--- FAIL: %s\t(%v)\n", r.Name, r.Runtime))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 		if r.Error != nil {
 			_, err = w.WriteString(fmt.Sprintf("  %v\n", r.Error))
 			if err != nil {
-				return fmt.Errorf("%w: %v", ErrWritingString, err)
+				return fmt.Errorf("%w: %w", ErrWritingString, err)
 			}
 		}
 	} else if verbose {
 		_, err := w.WriteString(fmt.Sprintf("--- PASS: %s\t(%v)\n", r.Name, r.Runtime))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 	return nil
@@ -118,26 +118,26 @@ func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error 
 		if r.Skipped {
 			_, err := w.WriteString(fmt.Sprintf("    === SKIP  %s\n", r.Name))
 			if err != nil {
-				return fmt.Errorf("%w: %v", ErrWritingString, err)
+				return fmt.Errorf("%w: %w", ErrWritingString, err)
 			}
 			return nil
 		}
 
 		_, err := w.WriteString(fmt.Sprintf("    === RUN   %s\n", r.Name))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 
 	if r.Error != nil {
 		_, err := w.WriteString(fmt.Sprintf("    --- FAIL: %s\t(%v)\n        %v\n", r.Name, r.Runtime, r.Error))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	} else if verbose {
 		_, err := w.WriteString(fmt.Sprintf("    --- PASS: %s\t(%v)\n", r.Name, r.Runtime))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 
@@ -149,7 +149,7 @@ func (p PrinterGo) PrintCase(w StringWriter, r *CaseResult, verbose bool) error 
 		}
 		_, err := w.WriteString(fmt.Sprintf("%sTRACE: %s\t%s\n", prefix, r.Name, strings.ReplaceAll(*r.Trace, "\n", "\n"+prefix)))
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrWritingString, err)
+			return fmt.Errorf("%w: %w", ErrWritingString, err)
 		}
 	}
 

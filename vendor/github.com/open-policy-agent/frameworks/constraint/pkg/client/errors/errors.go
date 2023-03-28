@@ -19,4 +19,5 @@ var (
 	ErrMissingConstraintTemplate = errors.New("missing ConstraintTemplate")
 	ErrInvalidModule             = errors.New("invalid module")
 	ErrChangeTargets             = errors.New("ConstraintTemplates with Constraints may not change targets")
+	ErrNoDriver                  = errors.New("No language driver is installed that handles this constraint template")
 )

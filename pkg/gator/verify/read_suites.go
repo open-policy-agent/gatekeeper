@@ -186,7 +186,7 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 	}
 	err = yaml.Unmarshal(bytes, u.Object)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing yaml file %q: %v", gator.ErrInvalidYAML, path, err)
+		return nil, fmt.Errorf("%w: parsing yaml file %q: %w", gator.ErrInvalidYAML, path, err)
 	}
 	gvk := u.GroupVersionKind()
 	if gvk.Group != Group || gvk.Kind != Kind {
@@ -198,7 +198,7 @@ func readSuite(f fs.FS, path string) (*Suite, error) {
 
 	err = gator.ParseYaml(bytes, &suite)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", gator.ErrInvalidYAML, err)
+		return nil, fmt.Errorf("%w: %w", gator.ErrInvalidYAML, err)
 	}
 
 	return &suite, nil

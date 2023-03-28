@@ -76,6 +76,7 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
+            - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
             - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
@@ -93,6 +94,7 @@ spec:
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
@@ -152,10 +154,13 @@ spec:
             - --audit-interval={{ .Values.auditInterval }}
             - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - --audit-chunk-size={{ .Values.auditChunkSize }}
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - --emit-audit-events={{ .Values.emitAuditEvents }}
+            - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG

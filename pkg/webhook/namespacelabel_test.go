@@ -139,6 +139,10 @@ func TestAdmission(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				exemptNamespace = nil
+			})
+
 			exemptNamespace = map[string]bool{"random-allowed-ns": true}
 			gvk := tt.obj.GetObjectKind()
 			gvk.SetGroupVersionKind(schema.GroupVersionKind{Group: tt.kind.Group, Version: tt.kind.Version, Kind: tt.kind.Kind})
@@ -226,9 +230,107 @@ func TestAdmissionPrefix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				exemptNamespacePrefix = nil
+			})
+
 			exemptNamespacePrefix = map[string]bool{}
 			for _, p := range tt.prefixes {
 				exemptNamespacePrefix[p] = true
+			}
+			gvk := tt.obj.GetObjectKind()
+			gvk.SetGroupVersionKind(schema.GroupVersionKind{Group: tt.kind.Group, Version: tt.kind.Version, Kind: tt.kind.Kind})
+			bytes, err := json.Marshal(tt.obj)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					Kind:      tt.kind,
+					Object:    runtime.RawExtension{Raw: bytes},
+					Operation: tt.op,
+				},
+			}
+			handler := &namespaceLabelHandler{}
+			resp := handler.Handle(context.Background(), req)
+			if resp.Allowed != tt.expectAllowed {
+				t.Errorf("resp.Allowed = %v, expected %v. Reason: %s", resp.Allowed, tt.expectAllowed, resp.Result.Reason)
+			}
+		})
+	}
+}
+
+func TestAdmissionSuffix(t *testing.T) {
+	tests := []struct {
+		name          string
+		suffixes      []string
+		kind          metav1.GroupVersionKind
+		obj           client.Object
+		op            admissionv1.Operation
+		expectAllowed bool
+	}{
+		{
+			name:     "Exempt Namespace create allowed",
+			suffixes: []string{"-random"},
+			kind:     gvk("", "v1", "Namespace"),
+			obj: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "allowed-ns-random",
+					Labels: map[string]string{ignoreLabel: "true"},
+				},
+			},
+			op:            admissionv1.Create,
+			expectAllowed: true,
+		},
+		{
+			name:     "Exempt Namespace update allowed",
+			suffixes: []string{"-random"},
+			kind:     gvk("", "v1", "Namespace"),
+			obj: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "allowed-ns-random",
+					Labels: map[string]string{ignoreLabel: "true"},
+				},
+			},
+			op:            admissionv1.Update,
+			expectAllowed: true,
+		},
+		{
+			name:     "Exempt Namespace delete allowed",
+			suffixes: []string{"-random"},
+			kind:     gvk("", "v1", "Namespace"),
+			obj: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "allowed-ns-random",
+					Labels: map[string]string{ignoreLabel: "true"},
+				},
+			},
+			op:            admissionv1.Delete,
+			expectAllowed: true,
+		},
+		{
+			name:     "Bad Namespace create rejected",
+			suffixes: []string{"-random"},
+			kind:     gvk("", "v1", "Namespace"),
+			obj: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "random-namespace-wrongsuffix",
+					Labels: map[string]string{ignoreLabel: "true"},
+				},
+			},
+			op:            admissionv1.Create,
+			expectAllowed: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				exemptNamespaceSuffix = nil
+			})
+
+			exemptNamespaceSuffix = map[string]bool{}
+			for _, p := range tt.suffixes {
+				exemptNamespaceSuffix[p] = true
 			}
 			gvk := tt.obj.GetObjectKind()
 			gvk.SetGroupVersionKind(schema.GroupVersionKind{Group: tt.kind.Group, Version: tt.kind.Version, Kind: tt.kind.Kind})

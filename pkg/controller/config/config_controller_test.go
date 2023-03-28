@@ -24,7 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/fakes"
@@ -127,7 +127,7 @@ func TestReconcile(t *testing.T) {
 	c := testclient.NewRetryClient(mgr.GetClient())
 
 	// initialize OPA
-	driver, err := local.New(local.Tracing(true))
+	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 
 func setupController(mgr manager.Manager, wm *watch.Manager, tracker *readiness.Tracker, events <-chan event.GenericEvent) error {
 	// initialize OPA
-	driver, err := local.New(local.Tracing(true))
+	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		return fmt.Errorf("unable to set up Driver: %w", err)
 	}

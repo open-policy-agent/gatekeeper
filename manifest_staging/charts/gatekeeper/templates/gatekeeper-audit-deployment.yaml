@@ -51,10 +51,13 @@ spec:
         - --audit-interval={{ .Values.auditInterval }}
         - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
         - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+        - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+        - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
         - --audit-from-cache={{ .Values.auditFromCache }}
         - --audit-chunk-size={{ .Values.auditChunkSize }}
         - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
         - --emit-audit-events={{ .Values.emitAuditEvents }}
+        - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
         - --operation=audit
         - --operation=status
         {{ if not .Values.disableMutation}}- --operation=mutation-status{{- end }}
