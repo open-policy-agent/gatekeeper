@@ -1,7 +1,6 @@
 package test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -10,6 +9,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -56,12 +56,27 @@ func init() {
 	}
 }
 
+func ignoreGatorResultFields() cmp.Option {
+	return cmp.FilterPath(
+		func(p cmp.Path) bool {
+			switch p.String() {
+			// ignore these fields
+			case "Result.Metadata", "Result.EvaluationMeta", "Result.EnforcementAction", "ViolatingObject":
+				return true
+			default:
+				return false
+			}
+		},
+		cmp.Ignore())
+}
+
 func TestTest(t *testing.T) {
 	tcs := []struct {
-		name   string
-		inputs []string
-		want   []*GatorResult
-		err    error
+		name      string
+		inputs    []string
+		want      []*GatorResult
+		cmpOption cmp.Option
+		err       error
 	}{
 		{
 			name: "basic no violation",
@@ -70,6 +85,7 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintAlwaysValidate,
 				fixtures.Object,
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "basic violation",
@@ -101,6 +117,7 @@ func TestTest(t *testing.T) {
 					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint with violation",
@@ -126,6 +143,7 @@ func TestTest(t *testing.T) {
 					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint without violation",
@@ -168,27 +186,26 @@ func TestTest(t *testing.T) {
 			var objs []*unstructured.Unstructured
 			for _, input := range tc.inputs {
 				u, err := readUnstructured([]byte(input))
-				if err != nil {
-					t.Fatalf("readUnstructured for input %q: %v", input, err)
-				}
+				require.NoError(t, err)
 				objs = append(objs, u)
 			}
 
 			resps, err := Test(objs, false)
 			if tc.err != nil {
-				if err == nil {
-					t.Errorf("got nil err, want %v", tc.err)
-				}
-				if !errors.Is(err, tc.err) {
-					t.Errorf("got err %q, want %q", err, tc.err)
-				}
+				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
-				t.Errorf("got err '%v', want nil", err)
+				require.NoError(t, err)
 			}
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(GatorResult{}, "Metadata", "EvaluationMeta", "EnforcementAction", "ViolatingObject"))
+			var diff string
+			if tc.cmpOption != nil {
+				diff = cmp.Diff(tc.want, got, tc.cmpOption)
+			} else {
+				diff = cmp.Diff(tc.want, got)
+			}
+
 			if diff != "" {
 				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
@@ -244,12 +261,8 @@ func Test_Test_withTrace(t *testing.T) {
 		},
 	}
 
-	diff := cmp.Diff(want, got, cmpopts.IgnoreFields(
+	diff := cmp.Diff(want, got, ignoreGatorResultFields(), cmpopts.IgnoreFields(
 		GatorResult{},
-		"Metadata",
-		"EvaluationMeta",
-		"EnforcementAction",
-		"ViolatingObject",
 		"Trace", // ignore Trace for now, we will assert non nil further down
 	))
 	if diff != "" {
