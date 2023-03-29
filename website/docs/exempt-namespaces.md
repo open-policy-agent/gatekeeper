@@ -40,6 +40,8 @@ Available processes:
 Note that the following only exempts resources from the admission webhook. They will still be audited. Editing individual constraints or [config resource](#exempting-namespaces-from-gatekeeper-using-config-resource) is
 necessary to exclude them from audit.
 
+In addition to the `--exempt-namespace` flag, there are two additional flags: `--exempt-namespace-prefix` and `--exempt-namespace-suffix`. The flags behavior is the same but the full namespace name is not required. For example, `--exempt-namespace-suffix=kube-`.
+
 If it becomes necessary to exempt a namespace from Gatekeeper webhook entirely (e.g. you want `kube-system` to bypass admission checks), here's how to do it:
 
    1. Make sure the validating admission webhook configuration for Gatekeeper has the following namespace selector:
@@ -72,3 +74,5 @@ The difference is at what point in the admission process an exemption occurs.
 If you use `--exempt-namespace` flag and `admission.gatekeeper.sh/ignore` label, Gatekeeper's webhook will not be called by the API server for any resource in that namespace. That means that Gatekeeper being down should have no effect on requests for that namespace.
 
 If you use the config method, Gatekeeper itself evaluates the exemption. The benefit there is that we have more control over the syntax and can be more fine-grained, but it also means that the API server is still calling the webhook, which means downtime can have an impact.
+
+Use both methods to exempt fully from both webhook and auditing.
