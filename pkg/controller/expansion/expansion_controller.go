@@ -107,7 +107,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	defer r.registry.report(ctx)
-	log.Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
+	log.V(1).Info("Reconcile", "request", request, "namespace", request.Namespace, "name", request.Name)
 
 	deleted := false
 	versionedET := &v1alpha1.ExpansionTemplate{}
@@ -227,5 +227,5 @@ func setStatusError(status *v1beta1.ExpansionTemplatePodStatus, etErr error) {
 	}
 
 	e := &v1beta1.ExpansionTemplateError{Message: etErr.Error()}
-	status.Status.Errors = append(status.Status.Errors, e)
+	status.Status.Errors = []*statusv1beta1.ExpansionTemplateError{e}
 }

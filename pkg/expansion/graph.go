@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type cycleDetector interface {
+type gvkGrapher interface {
 	addTemplate(*expansionunversioned.ExpansionTemplate) error
 	removeTemplate(*expansionunversioned.ExpansionTemplate)
 }

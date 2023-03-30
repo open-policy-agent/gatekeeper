@@ -465,6 +465,19 @@ __expansion_audit_test() {
   run kubectl run nginx --image=nginx --dry-run=server --output json
   assert_success
 
+  # test recursive expansion cronjob->job->pod triggers pod violation when creating cronjob
+  run kubectl apply -f test/expansion/expand_cronjob_job_pod.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get expansiontemplate expand-cronjobs  -ojson | jq -r -e '.status.byPod[0]'"
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get expansiontemplate expand-jobs  -ojson | jq -r -e '.status.byPod[0]'"
+  run kubectl apply -f test/expansion/cronjob.yaml
+  assert_failure
+
+  # test adding a ExpansionTemplate that creates a cycle updates template's status
+  run kubectl apply -f test/expansion/expand_pod_cronjob.yaml
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get -f test/expansion/expand_pod_cronjob.yaml -ojson | jq -r -e '.status.byPod[0]'"
+  local status_err=$(kubectl get -f test/expansion/expand_pod_cronjob.yaml -o jsonpath='{.status.byPod[0].errors}' | grep "template forms expansion cycle" | wc -l)
+  assert_match "${status_err}" "1"
+
   # cleanup
   run kubectl delete --ignore-not-found namespace loadbalancers
   run kubectl delete --ignore-not-found -f test/expansion/expand_deployments.yaml
@@ -475,4 +488,7 @@ __expansion_audit_test() {
   run kubectl delete --ignore-not-found -f test/expansion/assignmeta_env.yaml
   run kubectl delete --ignore-not-found -f test/expansion/deployment_no_label.yaml
   run kubectl delete --ignore-not-found -f test/expansion/deployment_with_label.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/cronjob.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/expand_cronjob_job_pod.yaml
+  run kubectl delete --ignore-not-found -f test/expansion/expand_pod_cronjob.yaml
 }

@@ -478,7 +478,7 @@ const (
 )
 
 // mockGraphs mocks gvkGraph. Since gvkGraph is a type-casted map and all the
-// functions are value receivers, the mock will record all the received
+// functions are value receivers, the mock will stuff all the received
 // operations in a map with a fixed key (mapKey).
 type mockGraph map[string][]expansionOperation
 
