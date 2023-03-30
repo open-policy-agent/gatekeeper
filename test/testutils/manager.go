@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -29,6 +30,7 @@ func StartManager(ctx context.Context, t *testing.T, mgr manager.Manager) {
 	}()
 
 	t.Cleanup(func() {
+		fmt.Println("QWE123 -- Cleaning up manager") // TODO rm
 		cancel()
 
 		mgrStopped.Wait()

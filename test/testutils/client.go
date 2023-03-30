@@ -34,7 +34,7 @@ func DeleteObject(t *testing.T, c client.Client, original client.Object) func() 
 	return func() {
 		err := c.Delete(ctx, obj)
 		if err != nil && !apierrors.IsNotFound(err) {
-			t.Errorf("cleaning up %v %v/%v: %v",
+			t.Errorf("QWE123 -- cleaning up %v %v/%v: %v", // TODO revert
 				obj.GetObjectKind().GroupVersionKind(),
 				obj.GetNamespace(), obj.GetName(), err)
 		}
