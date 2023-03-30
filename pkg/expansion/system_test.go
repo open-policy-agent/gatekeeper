@@ -56,6 +56,7 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		remove        []*expansionunversioned.ExpansionTemplate
 		check         []*expansionunversioned.ExpansionTemplate
 		wantAddErr    bool
+		addErrIndex   int
 		wantRemoveErr bool
 	}{
 		{
@@ -142,6 +143,85 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 			},
 			check:      []*expansionunversioned.ExpansionTemplate{},
 			wantAddErr: true,
+		},
+		{
+			name: "adding template that creates cycle returns error",
+			add: []*expansionunversioned.ExpansionTemplate{
+				newTemplate(&templateData{
+					name: "t1",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				}),
+				newTemplate(&templateData{
+					name: "t2",
+					apply: []match.ApplyTo{{
+						Groups:   []string{""},
+						Kinds:    []string{"Pod"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "MiniPod",
+					},
+				}),
+				newTemplate(&templateData{
+					name: "t3",
+					apply: []match.ApplyTo{{
+						Groups:   []string{""},
+						Kinds:    []string{"MiniPod"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "apps",
+						Version: "v1",
+						Kind:    "Deployment",
+					},
+				}),
+			},
+			check: []*expansionunversioned.ExpansionTemplate{
+				newTemplate(&templateData{
+					name: "t1",
+					apply: []match.ApplyTo{{
+						Groups:   []string{"apps"},
+						Kinds:    []string{"Deployment"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+				}),
+				newTemplate(&templateData{
+					name: "t2",
+					apply: []match.ApplyTo{{
+						Groups:   []string{""},
+						Kinds:    []string{"Pod"},
+						Versions: []string{"v1"},
+					}},
+					source: "spec.template",
+					generatedGVK: expansionunversioned.GeneratedGVK{
+						Group:   "",
+						Version: "v1",
+						Kind:    "MiniPod",
+					},
+				}),
+			},
+			wantAddErr:  true,
+			addErrIndex: 2,
 		},
 		{
 			name: "adding template with empty source returns error",
@@ -356,12 +436,12 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 
-			for _, templ := range tc.add {
+			for i, templ := range tc.add {
 				err := ec.UpsertTemplate(templ)
-				if tc.wantAddErr && err == nil {
+				if i == tc.addErrIndex && tc.wantAddErr && err == nil {
 					t.Errorf("expected error, got nil")
-				} else if !tc.wantAddErr && err != nil {
-					t.Errorf("failed to add template: %s", err)
+				} else if i == tc.addErrIndex && !tc.wantAddErr && err != nil {
+					t.Errorf("failed to upsert template: %s", err)
 				}
 			}
 
@@ -378,13 +458,208 @@ func TestUpsertRemoveTemplate(t *testing.T) {
 				t.Errorf("incorrect number of templates in cache, got %d, want %d", len(ec.templates), len(tc.check))
 			}
 			for _, templ := range tc.check {
-				k := templ.ObjectMeta.Name
+				k := keyForTemplate(templ)
 				got, exists := ec.templates[k]
 				if !exists {
 					t.Errorf("could not find template with key %q", k)
 				}
 				if cmp.Diff(got, templ) != "" {
 					t.Errorf("got value:  \n%s\n, wanted: \n%s\n\n diff: \n%s", prettyResource(got), prettyResource(templ), cmp.Diff(got, templ))
+				}
+			}
+		})
+	}
+}
+
+const (
+	addOp  = "UPSERT"
+	rmOp   = "REMOVE"
+	mapKey = "OPS"
+)
+
+// mockGraphs mocks gvkGraph. Since gvkGraph is a type-casted map and all the
+// functions are value receivers, the mock will record all the received
+// operations in a map with a fixed key (mapKey).
+type mockGraph map[string][]expansionOperation
+
+type expansionOperation struct {
+	op string
+	t  *expansionunversioned.ExpansionTemplate
+}
+
+func (m mockGraph) addTemplate(t *expansionunversioned.ExpansionTemplate) error {
+	m[mapKey] = append(m[mapKey], expansionOperation{
+		op: addOp,
+		t:  t,
+	})
+	return nil
+}
+
+func (m mockGraph) removeTemplate(t *expansionunversioned.ExpansionTemplate) {
+	m[mapKey] = append(m[mapKey], expansionOperation{
+		op: rmOp,
+		t:  t,
+	})
+}
+
+func TestGraph(t *testing.T) {
+	tests := []struct {
+		name    string
+		runOps  []expansionOperation
+		wantOps []expansionOperation
+	}{
+		{
+			name: "adding template for first time adds to graph",
+			runOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+			wantOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+		},
+		{
+			name: "adding template for second time removes and re-adds",
+			runOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+			wantOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+		},
+		{
+			name: "add then remove same template",
+			runOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+			wantOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+		},
+		{
+			name: "removing non-existing template does nothing",
+			runOps: []expansionOperation{
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+			},
+		},
+		{
+			name: "add 2 templates and remove 1 then update 1",
+			runOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpCronJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpCronJob, t),
+				},
+			},
+			wantOps: []expansionOperation{
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpCronJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpJob, t),
+				},
+				{
+					op: rmOp,
+					t:  loadTemplate(fixtures.TempExpCronJob, t),
+				},
+				{
+					op: addOp,
+					t:  loadTemplate(fixtures.TempExpCronJob, t),
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			expSystem := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			mock := mockGraph{}
+			expSystem.graph = mock
+
+			for _, op := range tc.runOps {
+				var err error
+				switch op.op {
+				case addOp:
+					err = expSystem.UpsertTemplate(op.t)
+				case rmOp:
+					err = expSystem.RemoveTemplate(op.t)
+				default:
+					t.Fatalf("invalid op: %s", op.op)
+				}
+				if err != nil {
+					t.Fatalf("unexpected error running op %s with template:\n%v", op.op, op.t)
+				}
+			}
+
+			got := mock[mapKey]
+			want := tc.wantOps
+			if len(got) != len(want) {
+				t.Errorf("got %d templates, but want %d", len(got), len(want))
+			}
+			for i := 0; i < len(got); i++ {
+				gotOp := got[i]
+				wantOp := want[i]
+				if gotOp.op != wantOp.op {
+					t.Errorf("got operation %s, but want %s", gotOp.op, wantOp.op)
+				}
+				if diff := cmp.Diff(gotOp.t, wantOp.t); diff != "" {
+					t.Errorf("got template: %v\nbut want: %v\ndiff: %s", got[i], want[i], diff)
 				}
 			}
 		})
@@ -558,14 +833,14 @@ func TestTemplatesForGVK(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ec := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
+			expSystem := NewSystem(mutation.NewSystem(mutation.SystemOpts{}))
 			for _, te := range tc.addTemplates {
-				if err := ec.UpsertTemplate(te); err != nil {
+				if err := expSystem.UpsertTemplate(te); err != nil {
 					t.Fatalf("error upserting template: %s", err)
 				}
 			}
 
-			got := ec.templatesForGVK(genGVKToSchemaGVK(tc.gvk))
+			got := expSystem.templatesForGVK(genGVKToSchemaGVK(tc.gvk))
 			sortTemplates(got)
 			wantSorted := make([]*expansionunversioned.ExpansionTemplate, len(tc.want))
 			copy(wantSorted, tc.want)
@@ -785,6 +1060,22 @@ func TestExpand(t *testing.T) {
 				{Obj: loadFixture(fixtures.PodMutateImage, t), EnforcementAction: "", TemplateName: "expand-deployments"},
 			},
 		},
+		{
+			name:      "recursive expansion with mutators",
+			generator: loadFixture(fixtures.GeneratorCronJob, t),
+			ns:        &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+			mutators: []types.Mutator{
+				loadAssignMeta(fixtures.AssignMetaAnnotatePod, t),
+			},
+			templates: []*expansionunversioned.ExpansionTemplate{
+				loadTemplate(fixtures.TempExpCronJob, t),
+				loadTemplate(fixtures.TempExpJob, t),
+			},
+			want: []*Resultant{
+				{Obj: loadFixture(fixtures.ResultantJob, t), EnforcementAction: "", TemplateName: "expand-cronjobs"},
+				{Obj: loadFixture(fixtures.ResultantRecursivePod, t), EnforcementAction: "", TemplateName: "expand-jobs"},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -848,7 +1139,7 @@ func sortReusultants(objs []*Resultant) {
 func loadFixture(f string, t *testing.T) *unstructured.Unstructured {
 	obj := make(map[string]interface{})
 	if err := yaml.Unmarshal([]byte(f), obj); err != nil {
-		t.Fatalf("error unmarshaling yaml for fixture: %s", err)
+		t.Fatalf("error unmarshaling yaml for fixture: %s\n%s", err, f)
 	}
 
 	jsonBytes, err := json.Marshal(obj)
