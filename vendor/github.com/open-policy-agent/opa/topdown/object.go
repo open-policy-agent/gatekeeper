@@ -8,7 +8,6 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/ref"
 	"github.com/open-policy-agent/opa/topdown/builtins"
-	"github.com/open-policy-agent/opa/types"
 )
 
 func builtinObjectUnion(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
@@ -33,17 +32,30 @@ func builtinObjectUnionN(_ BuiltinContext, operands []*ast.Term, iter func(*ast.
 		return err
 	}
 
-	r := ast.NewObject()
-	arr.Foreach(func(t *ast.Term) {
-		var o ast.Object
-		o, err = builtins.ObjectOperand(t.Value, 1)
-		r = mergeWithOverwrite(r, o)
-	})
-	if err != nil {
-		return err
+	// Because we need merge-with-overwrite behavior, we can iterate
+	// back-to-front, and get a mostly correct set of key assignments that
+	// give us the "last assignment wins, with merges" behavior we want.
+	// However, if a non-object overwrites an object value anywhere in the
+	// chain of assignments for a key, we have to "freeze" that key to
+	// prevent accidentally picking up nested objects that could merge with
+	// it from earlier in the input array.
+	// Example:
+	//   Input: [{"a": {"b": 2}}, {"a": 4}, {"a": {"c": 3}}]
+	//   Want Output: {"a": {"c": 3}}
+	result := ast.NewObject()
+	frozenKeys := map[*ast.Term]struct{}{}
+	for i := arr.Len() - 1; i >= 0; i-- {
+		o, ok := arr.Elem(i).Value.(ast.Object)
+		if !ok {
+			return builtins.NewOperandElementErr(1, arr, arr.Elem(i).Value, "object")
+		}
+		mergewithOverwriteInPlace(result, o, frozenKeys)
+		if err != nil {
+			return err
+		}
 	}
 
-	return iter(ast.NewTerm(r))
+	return iter(ast.NewTerm(result))
 }
 
 func builtinObjectRemove(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
@@ -126,6 +138,17 @@ func builtinObjectGet(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Ter
 	return iter(ast.NewTerm(value))
 }
 
+func builtinObjectKeys(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
+	object, err := builtins.ObjectOperand(operands[0].Value, 1)
+	if err != nil {
+		return err
+	}
+
+	keys := ast.SetTerm(object.Keys()...)
+
+	return iter(keys)
+}
+
 // getObjectKeysParam returns a set of key values
 // from a supplied ast array, object, set value
 func getObjectKeysParam(arrayOrSet ast.Value) (ast.Set, error) {
@@ -148,7 +171,7 @@ func getObjectKeysParam(arrayOrSet ast.Value) (ast.Set, error) {
 			return nil
 		})
 	default:
-		return nil, builtins.NewOperandTypeErr(2, arrayOrSet, ast.TypeName(types.Object{}), ast.TypeName(types.S), ast.TypeName(types.Array{}))
+		return nil, builtins.NewOperandTypeErr(2, arrayOrSet, "object", "set", "array")
 	}
 
 	return keys, nil
@@ -170,10 +193,37 @@ func mergeWithOverwrite(objA, objB ast.Object) ast.Object {
 	return merged
 }
 
+// Modifies obj with any new keys from other, and recursively
+// merges any keys where the values are both objects.
+func mergewithOverwriteInPlace(obj, other ast.Object, frozenKeys map[*ast.Term]struct{}) {
+	other.Foreach(func(k, v *ast.Term) {
+		v2 := obj.Get(k)
+		// The key didn't exist in other, keep the original value.
+		if v2 == nil {
+			obj.Insert(k, v)
+			return
+		}
+		// The key exists in both. Merge or reject change.
+		updateValueObj, ok2 := v.Value.(ast.Object)
+		originalValueObj, ok1 := v2.Value.(ast.Object)
+		// Both are objects? Merge recursively.
+		if ok1 && ok2 {
+			// Check to make sure that this key isn't frozen before merging.
+			if _, ok := frozenKeys[v2]; !ok {
+				mergewithOverwriteInPlace(originalValueObj, updateValueObj, frozenKeys)
+			}
+		} else {
+			// Else, original value wins. Freeze the key.
+			frozenKeys[v2] = struct{}{}
+		}
+	})
+}
+
 func init() {
 	RegisterBuiltinFunc(ast.ObjectUnion.Name, builtinObjectUnion)
 	RegisterBuiltinFunc(ast.ObjectUnionN.Name, builtinObjectUnionN)
 	RegisterBuiltinFunc(ast.ObjectRemove.Name, builtinObjectRemove)
 	RegisterBuiltinFunc(ast.ObjectFilter.Name, builtinObjectFilter)
 	RegisterBuiltinFunc(ast.ObjectGet.Name, builtinObjectGet)
+	RegisterBuiltinFunc(ast.ObjectKeys.Name, builtinObjectKeys)
 }

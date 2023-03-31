@@ -29,6 +29,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraint"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constrainttemplatestatus"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -111,6 +112,8 @@ func (a *Adder) InjectGetPod(getPod func(context.Context) (*corev1.Pod, error)) 
 }
 
 func (a *Adder) InjectMutationSystem(_ *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(_ *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(_ *externaldata.ProviderCache) {}
 
@@ -356,7 +359,7 @@ func (r *ReconcileConstraintTemplate) Reconcile(ctx context.Context, request rec
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		r.metrics.registry.add(request.NamespacedName, metrics.ErrorStatus)
 		logError(request.NamespacedName.Name)
-		err := r.reportErrorOnCTStatus(ctx, "conversion_error", "Could not convert from unversioned resource", status, err)
+		err := r.reportErrorOnCTStatus(ctx, ErrConversionCode, "Could not convert from unversioned resource", status, err)
 		return reconcile.Result{}, err
 	}
 
@@ -426,7 +429,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 		if err := r.metrics.reportIngestDuration(ctx, metrics.ErrorStatus, time.Since(beginCompile)); err != nil {
 			logger.Error(err, "failed to report constraint template ingestion duration")
 		}
-		err := r.reportErrorOnCTStatus(ctx, "ingest_error", "Could not ingest Rego", status, err)
+		err := r.reportErrorOnCTStatus(ctx, ErrIngestCode, "Could not ingest Rego", status, err)
 		r.tracker.TryCancelTemplate(unversionedCT) // Don't track templates that failed compilation
 		return reconcile.Result{}, err
 	}
@@ -461,7 +464,7 @@ func (r *ReconcileConstraintTemplate) handleUpdate(
 	} else if !reflect.DeepEqual(newCRD, currentCRD) {
 		logger.Info("updating crd")
 		if err := r.Update(ctx, newCRD); err != nil {
-			err := r.reportErrorOnCTStatus(ctx, "update_error", "Could not update CRD", status, err)
+			err := r.reportErrorOnCTStatus(ctx, ErrUpdateCode, "Could not update CRD", status, err)
 			return reconcile.Result{}, err
 		}
 	}

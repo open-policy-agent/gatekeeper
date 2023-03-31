@@ -24,6 +24,7 @@ import (
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	syncc "github.com/open-policy-agent/gatekeeper/pkg/controller/sync"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -95,6 +96,8 @@ func (a *Adder) InjectProcessExcluder(m *process.Excluder) {
 }
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}
 
@@ -190,6 +193,7 @@ type ReconcileConfig struct {
 // +kubebuilder:rbac:groups=policy,resources=podsecuritypolicies,resourceNames=gatekeeper-admin,verbs=use
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=config.gatekeeper.sh,resources=configs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch;
 
 // Reconcile reads that state of the cluster for a Config object and makes changes based on the state read
 // and what is in the Config.Spec

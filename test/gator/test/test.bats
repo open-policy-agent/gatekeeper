@@ -29,7 +29,7 @@ match_yaml_msg () {
   want_msg="${2}"
   violation_index="${3:-0}"
 
-  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].msg" - --exit-status); then
+  if ! got=$(echo -n "$yaml_output" | yq eval ".[${violation_index}].result.msg" - --exit-status); then
     printf "ERROR: failed to evaluate output\n"
     printf "GOT: %s\n" "$yaml_output"
     exit 1
@@ -46,6 +46,11 @@ match_yaml_msg () {
 # END OF HELPER FUNCTIONS
 ####################################################################################################
 
+@test "gator test doesn't wait on stdin input" {
+  # this should fail with "no input data identified"
+  ! bin/gator test
+}
+
 @test "manifest with no violations piped to stdin returns 0 exit status" {
   bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/no-violations.yaml"
   if [ "$?" -ne 0 ]; then
@@ -54,8 +59,18 @@ match_yaml_msg () {
   fi
 }
 
-@test "manifest with violations piped to stdin returns 1 exit status" {
+@test "manifest with violations redirected to stdin returns 1 exit status" {
   ! bin/gator test < "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml"
+}
+
+@test "manifest with violations piped to stdin returns 1 exit status" {
+  # first test that we fail the command
+  ! cat "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" | bin/gator test
+
+  output=$(! cat "$BATS_TEST_DIRNAME/fixtures/manifests/with-policies/with-violations.yaml" | bin/gator test)
+
+  # now test that the failure reason is a violation
+  match_substring "${output[*]}" "Container <tomcat> in your <Pod> <test-pod1> has no <readinessProbe>"
 }
 
 @test "manifest with no violations included as flag returns 0 exit status" {
@@ -194,5 +209,39 @@ match_yaml_msg () {
 
   # Confirm we still get our violation output
   want_msg="ingress host conflicts with an existing ingress <example-host.example.com>" 
+  match_yaml_msg "${output[*]}" "${want_msg}"
+}
+
+@test "pull OCI images" {
+  artifacts_dir="$BATS_TEST_DIRNAME"/../oci-artifacts/
+  violating_ns="$BATS_TEST_DIRNAME"/fixtures/manifests/no-policies/violating-ns.yaml
+  media_type=:application/vnd.oci.image.layer.v1.tar+gzip
+
+  # Test with 1 OCI image + 1 local directory as input
+  img1=localhost:5000/my-bundle:v1
+
+  pushd "$artifacts_dir"
+  oras push $img1 ./templates/$media_type ./constraints/$media_type
+  popd
+
+  run bin/gator test --image=$img1 --filename="$violating_ns" -o=yaml
+  [ "$status" -eq 1 ]
+  want_msg="you must provide labels: {\"geo\"}"
+  match_yaml_msg "${output[*]}" "${want_msg}"
+
+  # Test with 2 OCI images + stdin as input
+  img2=localhost:5000/templates:v1
+  img3=localhost:5000/constraints:v1
+
+  pushd "$artifacts_dir"
+  run oras push $img2 ./templates/$media_type
+  [ "$status" -eq 0 ]
+  run oras push $img3 ./constraints/$media_type
+  [ "$status" -eq 0 ]
+  popd
+
+  run bin/gator test --image=$img2 --image=$img3 -o=yaml < "$violating_ns"
+  [ "$status" -eq 1 ]
+  want_msg="you must provide labels: {\"geo\"}"
   match_yaml_msg "${output[*]}" "${want_msg}"
 }

@@ -2,11 +2,12 @@ package mutation
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"sync"
 
-	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -17,7 +18,7 @@ import (
 
 // resolvePlaceholders resolves all external data placeholders in the given object.
 func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
-	providerKeys := make(map[string]sets.String)
+	providerKeys := make(map[string]sets.Set[string])
 
 	// recurse object to find all existing external data placeholders
 	var recurse func(object interface{})
@@ -25,7 +26,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		switch obj := object.(type) {
 		case *unversioned.ExternalDataPlaceholder:
 			if _, ok := providerKeys[obj.Ref.Provider]; !ok {
-				providerKeys[obj.Ref.Provider] = sets.NewString()
+				providerKeys[obj.Ref.Provider] = sets.New[string]()
 			}
 			// gather and de-duplicate all keys for this
 			// provider so we can resolve them in batch
@@ -47,7 +48,12 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 		return nil
 	}
 
-	externalData, errors := s.sendRequests(providerKeys)
+	clientCert, err := s.getTLSCertificate()
+	if err != nil {
+		return fmt.Errorf("failed to get client TLS certificate: %w", err)
+	}
+
+	externalData, errors := s.sendRequests(providerKeys, clientCert)
 	if err := s.mutateWithExternalData(obj, externalData, errors); err != nil {
 		return err
 	}
@@ -56,7 +62,7 @@ func (s *System) resolvePlaceholders(obj *unstructured.Unstructured) error {
 }
 
 // sendRequests sends requests to all providers in parallel.
-func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]map[string]*externaldata.Item, map[string]error) {
+func (s *System) sendRequests(providerKeys map[string]sets.Set[string], clientCert *tls.Certificate) (map[string]map[string]*externaldata.Item, map[string]error) {
 	var (
 		wg    sync.WaitGroup
 		mutex sync.RWMutex
@@ -80,10 +86,10 @@ func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]m
 		}
 
 		wg.Add(1)
-		go func(provider *v1alpha1.Provider, keys []string) {
+		go func(provider *externaldataUnversioned.Provider, keys []string) {
 			defer wg.Done()
 
-			resp, _, err := fn(context.Background(), provider, keys)
+			resp, _, err := fn(context.Background(), provider, keys, clientCert)
 
 			mutex.Lock()
 			defer mutex.Unlock()
@@ -102,7 +108,7 @@ func (s *System) sendRequests(providerKeys map[string]sets.String) (map[string]m
 				item := item // for scoping
 				responses[provider.Name][item.Key] = &item
 			}
-		}(&provider, keys.List())
+		}(&provider, keys.UnsortedList())
 		wg.Wait()
 	}
 
@@ -182,6 +188,15 @@ func (s *System) mutateWithExternalData(object *unstructured.Unstructured, exter
 	}
 
 	return errorsutil.NewAggregate(mutate(object.Object))
+}
+
+// getTLSCertificate returns the gatekeeper's TLS certificate.
+func (s *System) getTLSCertificate() (*tls.Certificate, error) {
+	if s.clientCertWatcher == nil {
+		return nil, fmt.Errorf("external data client certificate watcher is not initialized")
+	}
+
+	return s.clientCertWatcher.GetCertificate(nil)
 }
 
 // validateExternalDataResponse validates the given external data response.

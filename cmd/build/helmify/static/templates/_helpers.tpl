@@ -47,6 +47,8 @@ Output post install webhook probe container entry
 - name: webhook-probe-post
   image: "{{ .Values.postInstall.probeWebhook.image.repository }}:{{ .Values.postInstall.probeWebhook.image.tag }}"
   imagePullPolicy: {{ .Values.postInstall.probeWebhook.image.pullPolicy }}
+  command:
+    - "curl"
   args:
     - "--retry"
     - "99999"
@@ -64,7 +66,13 @@ Output post install webhook probe container entry
     {{- end }}
     - "-v"
     - "https://gatekeeper-webhook-service.{{ .Release.Namespace }}.svc/v1/admitlabel?timeout=2s"
+  resources:
+  {{- toYaml .Values.postInstall.resources | nindent 4 }}
   securityContext:
+    {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+    seccompProfile:
+      type: RuntimeDefault
+    {{- end }}
   {{- toYaml .Values.postInstall.securityContext | nindent 4 }}
   volumeMounts:
   - mountPath: /certs
@@ -78,5 +86,5 @@ Output post install webhook probe volume entry
 {{- define "gatekeeper.postInstallWebhookProbeVolume" -}}
 - name: cert
   secret:
-    secretName: gatekeeper-webhook-server-cert
+    secretName: {{ .Values.externalCertInjection.secretName }}
 {{- end -}}

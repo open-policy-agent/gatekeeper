@@ -46,7 +46,7 @@ func (e errorMutator) Mutate(*types.Mutable) (bool, error) {
 	return false, e.err
 }
 
-func (e errorMutator) UsesExternalData() bool {
+func (e errorMutator) MustTerminate() bool {
 	return false
 }
 

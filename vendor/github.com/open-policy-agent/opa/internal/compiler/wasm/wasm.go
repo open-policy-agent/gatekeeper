@@ -8,20 +8,19 @@ package wasm
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/internal/compiler/wasm/opa"
 	"github.com/open-policy-agent/opa/internal/debug"
-	"github.com/open-policy-agent/opa/internal/ir"
 	"github.com/open-policy-agent/opa/internal/wasm/encoding"
 	"github.com/open-policy-agent/opa/internal/wasm/instruction"
 	"github.com/open-policy-agent/opa/internal/wasm/module"
 	"github.com/open-policy-agent/opa/internal/wasm/types"
 	"github.com/open-policy-agent/opa/internal/wasm/util"
+	"github.com/open-policy-agent/opa/ir"
 	opatypes "github.com/open-policy-agent/opa/types"
 )
 
@@ -140,6 +139,7 @@ var builtinsFunctions = map[string]string{
 	ast.JSONIsValid.Name:                "opa_json_is_valid",
 	ast.ObjectFilter.Name:               "builtin_object_filter",
 	ast.ObjectGet.Name:                  "builtin_object_get",
+	ast.ObjectKeys.Name:                 "builtin_object_keys",
 	ast.ObjectRemove.Name:               "builtin_object_remove",
 	ast.ObjectUnion.Name:                "builtin_object_union",
 	ast.Concat.Name:                     "opa_strings_concat",
@@ -183,6 +183,11 @@ var builtinsUsingRE2 = [...]string{
 	builtinsFunctions[ast.RegexMatchDeprecated.Name],
 	builtinsFunctions[ast.RegexFindAllStringSubmatch.Name],
 	builtinsFunctions[ast.GlobMatch.Name],
+}
+
+func IsWasmEnabled(bi string) bool {
+	_, ok := builtinsFunctions[bi]
+	return ok
 }
 
 type externalFunc struct {
@@ -318,11 +323,8 @@ func (c *Compiler) Compile() (*module.Module, error) {
 // are about to be compiled.
 func (c *Compiler) initModule() error {
 
-	bs, err := opa.Bytes()
-	if err != nil {
-		return err
-	}
-
+	bs := opa.Bytes()
+	var err error
 	c.module, err = encoding.ReadModule(bytes.NewReader(bs))
 	if err != nil {
 		return err
@@ -602,7 +604,7 @@ func (c *Compiler) writeExternalFuncNames(buf *bytes.Buffer) {
 
 	for _, decl := range c.policy.Static.BuiltinFuncs {
 		if _, ok := builtinsFunctions[decl.Name]; !ok {
-			addr := int32(buf.Len()) + int32(c.stringOffset)
+			addr := int32(buf.Len()) + c.stringOffset
 			buf.WriteString(decl.Name)
 			buf.WriteByte(0)
 			c.externalFuncNameAddrs[decl.Name] = addr
@@ -614,7 +616,7 @@ func (c *Compiler) writeEntrypointNames(buf *bytes.Buffer) {
 	c.entrypointNameAddrs = make(map[string]int32)
 
 	for _, plan := range c.policy.Plans.Plans {
-		addr := int32(buf.Len()) + int32(c.stringOffset)
+		addr := int32(buf.Len()) + c.stringOffset
 		buf.WriteString(plan.Name)
 		buf.WriteByte(0)
 		c.entrypointNameAddrs[plan.Name] = addr
@@ -852,7 +854,7 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 	for i := range fn.Blocks {
 		instrs, err := c.compileBlock(fn.Blocks[i])
 		if err != nil {
-			return errors.Wrapf(err, "block %d", i)
+			return fmt.Errorf("block %d: %w", i, err)
 		}
 		if i < len(fn.Blocks)-1 { // not the last block: wrap in `block` instr
 			if withControlInstr(instrs) { // unless we don't need to
@@ -885,18 +887,15 @@ func (c *Compiler) compileFunc(fn *ir.Func) error {
 }
 
 func mapFunc(mapping ast.Object, fn *ir.Func, index int) (ast.Object, bool) {
-	curr := ast.NewObject()
-	curr.Insert(ast.StringTerm(fn.Path[len(fn.Path)-1]), ast.IntNumberTerm(index))
+	curr := ast.NewObject(ast.Item(ast.StringTerm(fn.Path[len(fn.Path)-1]), ast.IntNumberTerm(index)))
 	for i := len(fn.Path) - 2; i >= 0; i-- {
-		o := ast.NewObject()
-		o.Insert(ast.StringTerm(fn.Path[i]), ast.NewTerm(curr))
-		curr = o
+		curr = ast.NewObject(ast.Item(ast.StringTerm(fn.Path[i]), ast.NewTerm(curr)))
 	}
 	return mapping.Merge(curr)
 }
 
 func (c *Compiler) emitMappingAndStartFunc() error {
-	var indices []uint32
+	indices := make([]uint32, 0, len(c.policy.Funcs.Funcs))
 	var ok bool
 	mapping := ast.NewObject()
 

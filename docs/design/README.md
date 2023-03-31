@@ -8,7 +8,7 @@ Generally, design docs are on Google docs:
 
 ## Proposed
 * [Template e2e Testing Design](https://docs.google.com/document/d/15nWc9TH97LF9o58CTVxYxFM9tYk8-seB5erIa2gouPo/edit)
-* [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit?usp=sharing)
+* [ByPod Status Design](https://docs.google.com/document/d/13xmVQuE9Q8CFDpL9pzpoAyH1nIzHndP0OfccXVShiPo/edit)
 * [Namespace-Scoped Constraints](https://docs.google.com/document/d/1-pY7B5C6R0fjUbDu8izlcP7MSUDVDHv5XK16BFyTGRc/edit#heading=h.w8j68o8vjdts)
 * [Mutation Design - 4th Edition (current approach)](https://docs.google.com/document/d/1MdchNFz9guycX__QMGxpJviPaT_MZs8iXaAFqCvoXYQ/edit?ts=5f73fb77#
 )
@@ -17,7 +17,7 @@ Generally, design docs are on Google docs:
    * [Mutation Revised Design Doc (June 2019)](https://docs.google.com/document/d/1G7WgZKx1Y3VOTUjrqn7DjDaZgSKCIZowILm_I6psrw0/edit#heading=h.mtvdjag5uj9)
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
 * [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
-* [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit?usp=sharing)
+* [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
@@ -29,10 +29,11 @@ Generally, design docs are on Google docs:
 * [Dry-Run Design Doc](https://docs.google.com/document/d/17nJDJxjY_XHV8zrMNdOi2hFgfm6XKGJi0QyznsbhQ70/edit#heading=h.z0bjqzl81dpe)
 * [Constraint Framework Client Interface](https://docs.google.com/document/d/1NDOgu8F_yQqrxRRVTDiCXGXMsajA3Jtp-lwGrZsDFcI/edit#)
 * [Logging Design Doc](https://docs.google.com/document/d/1ap7AKOupNcR_42s8mkSh5FV9eteXTd4VCqelKst73VY/edit)
-* [Namespace Exclusion Design doc](https://docs.google.com/document/d/1yHuXFs_HQL5N9yT9QVi6AMyflWPtZS4Pg-uXczdqgZ8/edit?usp=sharing)
+* [Namespace Exclusion Design doc](https://docs.google.com/document/d/1yHuXFs_HQL5N9yT9QVi6AMyflWPtZS4Pg-uXczdqgZ8/edit)
 * [Metrics Design Issue](https://github.com/open-policy-agent/gatekeeper/issues/157#issuecomment-553015292)
 * [Gatekeeper v1beta1 CRD Deprecation](https://docs.google.com/document/d/12TD9vk79X3y0RgNxURamW4tQOyd6YjA6WrwDAqcplwg/edit#)
 * [Compiler Sharding Design](https://docs.google.com/document/d/1ibCxaI-7HyWyDjQNL4iDRMHnrauufIMJ1D6LwIKdlsI/edit)
+* [External Data TLS Support](https://docs.google.com/document/d/1GjV3WeC2bgQ3j37_mMpY9hr7YOAqzSJ6jDSu-DVrcmU/edit)
 
 ## Roadmap (in development)
 * See [milestones](https://github.com/open-policy-agent/gatekeeper/milestones?direction=asc&sort=due_date)
@@ -47,6 +48,9 @@ Generally, design docs are on Google docs:
 These docs may not be design docs in themselves, but seek to influence design
 decisions
 
+* [Mutation Convergence Proof](https://docs.google.com/document/d/1mCHHhBABzUwP8FtUuEf_B-FX-HHgh_k4bwZcGUYm7Sw/edit#heading=h.j5thjfnqybpn)
+   * This looks at the elements of mutation that allow us to assert that any combination of mutators should converge
+     and should serve as a guide when considering changes in behavior to mutation.
 * [Mutation Dynamics](https://docs.google.com/document/d/1WKj-9xYYVO9IckQVZHYVFCziRVS6zxCfvJxWbkbLcOM/view#)
    * A dissection of the mutation problem space, attempting to break down the
      salient behavioral elements and figure out what's needed for a

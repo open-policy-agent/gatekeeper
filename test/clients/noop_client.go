@@ -54,7 +54,7 @@ func (f *NoopClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ..
 }
 
 func (f *NoopClient) Status() client.StatusWriter {
-	return f
+	return &SubResourceNoopClient{}
 }
 
 func (f *NoopClient) RESTMapper() meta.RESTMapper {
@@ -62,5 +62,19 @@ func (f *NoopClient) RESTMapper() meta.RESTMapper {
 }
 
 func (f *NoopClient) Scheme() *runtime.Scheme {
+	return nil
+}
+
+type SubResourceNoopClient struct{}
+
+func (f *SubResourceNoopClient) Create(ctx context.Context, obj, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	return nil
+}
+
+func (f *SubResourceNoopClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	return nil
+}
+
+func (f *SubResourceNoopClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	return nil
 }

@@ -15,6 +15,9 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "create", "update", "patch"]
+{{- with .Values.upgradeCRDs.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
@@ -72,6 +75,15 @@ spec:
   template:
     metadata:
       name: gatekeeper-update-crds-hook
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+      labels:
+        {{- include "gatekeeper.podLabels" . }}
+        app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
+        release: '{{ .Release.Name }}'
     spec:
       serviceAccountName: gatekeeper-admin-upgrade-crds
       restartPolicy: Never
@@ -81,10 +93,18 @@ spec:
       {{- end }}
       containers:
       - name: crds-upgrade
-        {{- if not .Values.image.release }}
-        image: '{{ .Values.image.crdRepository }}'
+        {{- if .Values.preInstall.crdRepository.image.repository }}
+          {{- if not .Values.preInstall.crdRepository.image.tag }}
+        image: '{{ .Values.preInstall.crdRepository.image.repository }}'
+          {{- else }}
+        image: '{{ .Values.preInstall.crdRepository.image.repository }}:{{ .Values.preInstall.crdRepository.image.tag }}'
+          {{- end }}
         {{- else }}
+          {{- if not .Values.image.release }}
+        image: '{{ .Values.image.crdRepository }}'
+          {{- else }}
         image: '{{ .Values.image.crdRepository }}:{{ .Values.image.release }}'
+          {{- end }}
         {{- end }}
         imagePullPolicy: '{{ .Values.image.pullPolicy }}'
         args:
@@ -94,11 +114,17 @@ spec:
         resources:
           {{- toYaml .Values.crds.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.crds.securityContext | nindent 10 }}
+      {{- with .Values.crds }}
       affinity:
-        {{- toYaml .Values.upgradeCRDs.affinity | nindent 8 }}
-      nodeSelector:
-        kubernetes.io/os: linux
+        {{- toYaml .affinity | nindent 8 }}
       tolerations:
-        {{- toYaml .Values.upgradeCRDs.tolerations | nindent 8 }}
+        {{- toYaml .tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      {{- end }}
 {{- end }}

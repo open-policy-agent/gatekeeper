@@ -34,5 +34,5 @@ func init() {
 
 // Enabled indicates if the mutation feature is enabled.
 func Enabled() bool {
-	return operations.IsAssigned(operations.MutationStatus) || operations.IsAssigned(operations.MutationWebhook)
+	return operations.IsAssigned(operations.MutationStatus) || operations.IsAssigned(operations.MutationWebhook) || operations.IsAssigned(operations.MutationController)
 }

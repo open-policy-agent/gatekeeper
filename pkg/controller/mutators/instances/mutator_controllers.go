@@ -6,8 +6,10 @@ import (
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
-	mutationsv1beta1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1beta1"
+	mutationsv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
+	"github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/mutators/core"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/mutators"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
@@ -42,12 +44,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		GetPod:         a.GetPod,
 		MutationSystem: a.MutationSystem,
 		Kind:           "Assign",
-		NewMutationObj: func() client.Object { return &mutationsv1beta1.Assign{} },
+		NewMutationObj: func() client.Object { return &mutationsv1.Assign{} },
 		MutatorFor: func(obj client.Object) (types.Mutator, error) {
 			// The type is provided by the `NewObj` function above. If we
 			// are fed the wrong type, this is a non-recoverable error and we
 			// may as well crash for visibility
-			assign := obj.(*mutationsv1beta1.Assign) // nolint:forcetypeassert
+			assign := obj.(*mutationsv1.Assign) // nolint:forcetypeassert
 			unversioned := &mutationsunversioned.Assign{}
 			if err := scheme.Convert(assign, unversioned, nil); err != nil {
 				return nil, err
@@ -66,12 +68,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		GetPod:         a.GetPod,
 		MutationSystem: a.MutationSystem,
 		Kind:           "ModifySet",
-		NewMutationObj: func() client.Object { return &mutationsv1beta1.ModifySet{} },
+		NewMutationObj: func() client.Object { return &mutationsv1.ModifySet{} },
 		MutatorFor: func(obj client.Object) (types.Mutator, error) {
 			// The type is provided by the `NewObj` function above. If we
 			// are fed the wrong type, this is a non-recoverable error and we
 			// may as well crash for visibility
-			modifyset := obj.(*mutationsv1beta1.ModifySet) // nolint:forcetypeassert
+			modifyset := obj.(*mutationsv1.ModifySet) // nolint:forcetypeassert
 			unversioned := &mutationsunversioned.ModifySet{}
 			if err := scheme.Convert(modifyset, unversioned, nil); err != nil {
 				return nil, err
@@ -81,8 +83,31 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		Events:       events,
 		EventsSource: eventsSource,
 	}
-
 	if err := modifySet.Add(mgr); err != nil {
+		return err
+	}
+
+	assignImage := core.Adder{
+		Tracker:        a.Tracker,
+		GetPod:         a.GetPod,
+		MutationSystem: a.MutationSystem,
+		Kind:           "AssignImage",
+		NewMutationObj: func() client.Object { return &v1alpha1.AssignImage{} },
+		MutatorFor: func(obj client.Object) (types.Mutator, error) {
+			// The type is provided by the `NewObj` function above. If we
+			// are fed the wrong type, this is a non-recoverable error and we
+			// may as well crash for visibility
+			assignImage := obj.(*v1alpha1.AssignImage) // nolint:forcetypeassert
+			unversioned := &mutationsunversioned.AssignImage{}
+			if err := scheme.Convert(assignImage, unversioned, nil); err != nil {
+				return nil, err
+			}
+			return mutators.MutatorForAssignImage(unversioned)
+		},
+		Events:       events,
+		EventsSource: eventsSource,
+	}
+	if err := assignImage.Add(mgr); err != nil {
 		return err
 	}
 
@@ -91,12 +116,12 @@ func (a *Adder) Add(mgr manager.Manager) error {
 		GetPod:         a.GetPod,
 		MutationSystem: a.MutationSystem,
 		Kind:           "AssignMetadata",
-		NewMutationObj: func() client.Object { return &mutationsv1beta1.AssignMetadata{} },
+		NewMutationObj: func() client.Object { return &mutationsv1.AssignMetadata{} },
 		MutatorFor: func(obj client.Object) (types.Mutator, error) {
 			// The type is provided by the `NewObj` function above. If we
 			// are fed the wrong type, this is a non-recoverable error and we
 			// may as well crash for visibility
-			assignMeta := obj.(*mutationsv1beta1.AssignMetadata) // nolint:forcetypeassert
+			assignMeta := obj.(*mutationsv1.AssignMetadata) // nolint:forcetypeassert
 			unversioned := &mutationsunversioned.AssignMetadata{}
 			if err := scheme.Convert(assignMeta, unversioned, nil); err != nil {
 				return nil, err
@@ -124,5 +149,7 @@ func (a *Adder) InjectGetPod(getPod func(ctx context.Context) (*corev1.Pod, erro
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {
 	a.MutationSystem = mutationSystem
 }
+
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 func (a *Adder) InjectProviderCache(providerCache *externaldata.ProviderCache) {}

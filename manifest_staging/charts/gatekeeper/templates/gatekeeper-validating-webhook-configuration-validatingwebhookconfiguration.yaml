@@ -2,13 +2,14 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  annotations: {{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
     gatekeeper.sh/system: "yes"
     heritage: '{{ .Release.Service }}'
     release: '{{ .Release.Name }}'
-  name: gatekeeper-validating-webhook-configuration
+  name: '{{ .Values.validatingWebhookName }}'
 webhooks:
 - admissionReviewVersions:
   - v1
@@ -25,11 +26,18 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
     
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
   rules:
@@ -80,6 +88,12 @@ webhooks:
   failurePolicy: {{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}
   matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
   rules:
   - apiGroups:
     - ""

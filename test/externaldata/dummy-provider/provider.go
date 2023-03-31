@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -19,9 +22,31 @@ const (
 
 func main() {
 	fmt.Println("starting server...")
-	http.HandleFunc("/validate", processTimeout(validate, timeout))
 
-	if err := http.ListenAndServe(":8090", nil); err != nil {
+	// load Gatekeeper's CA certificate
+	caCert, err := os.ReadFile("/tmp/gatekeeper/ca.crt")
+	if err != nil {
+		panic(err)
+	}
+
+	clientCAs := x509.NewCertPool()
+	clientCAs.AppendCertsFromPEM(caCert)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/validate", processTimeout(validate, timeout))
+
+	server := &http.Server{
+		Addr:              ":8090",
+		Handler:           mux,
+		ReadHeaderTimeout: timeout,
+		TLSConfig: &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  clientCAs,
+			MinVersion: tls.VersionTLS13,
+		},
+	}
+
+	if err := server.ListenAndServeTLS("/etc/ssl/certs/server.crt", "/etc/ssl/certs/server.key"); err != nil {
 		panic(err)
 	}
 }
@@ -34,7 +59,7 @@ func validate(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// read request body
-	requestBody, err := ioutil.ReadAll(req.Body)
+	requestBody, err := io.ReadAll(req.Body)
 	if err != nil {
 		sendResponse(nil, fmt.Sprintf("unable to read request body: %v", err), w)
 		return

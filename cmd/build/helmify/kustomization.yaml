@@ -50,6 +50,12 @@ patchesJson6902:
       group: apiextensions.k8s.io
       version: v1
       kind: CustomResourceDefinition
+      name: assignimage.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
       name: assign.mutations.gatekeeper.sh
     path: labels_patch.yaml
   - target:
@@ -57,6 +63,12 @@ patchesJson6902:
       version: v1
       kind: CustomResourceDefinition
       name: modifyset.mutations.gatekeeper.sh
+    path: labels_patch.yaml
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: expansiontemplate.expansion.gatekeeper.sh
     path: labels_patch.yaml
   - target:
       group: apiextensions.k8s.io
@@ -74,8 +86,6 @@ patchesJson6902:
       - op: remove
         path: /spec/template/spec/containers/0/resources/requests
       - op: remove
-        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
-      - op: remove
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
         path: /spec/template/spec/containers/0/image
@@ -91,6 +101,8 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
   - target:
       kind: Deployment
       name: gatekeeper-controller-manager
@@ -99,8 +111,6 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/resources/limits
       - op: remove
         path: /spec/template/spec/containers/0/resources/requests
-      - op: remove
-        path: /spec/template/metadata/annotations/container.seccomp.security.alpha.kubernetes.io~1manager
       - op: remove
         path: /spec/template/spec/nodeSelector/kubernetes.io~1os
       - op: remove
@@ -119,9 +129,25 @@ patchesJson6902:
         path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
       - op: remove
         path: /spec/template/spec/containers/0/securityContext/runAsUser
+      - op: remove
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
   - target:
       kind: Service
       name: webhook-service
     patch: |-
       - op: remove
         path: /spec/ports
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: gatekeeper-validating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.validatingWebhookName }}"
+  - target:
+      kind: MutatingWebhookConfiguration
+      name: gatekeeper-mutating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: "{{ .Values.mutatingWebhookName }}"

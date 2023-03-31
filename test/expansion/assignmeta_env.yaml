@@ -1,0 +1,15 @@
+apiVersion: mutations.gatekeeper.sh/v1beta1
+kind: AssignMetadata
+metadata:
+  name: add-env-label
+spec:
+  match:
+    source: Generated
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
+  location: "metadata.labels.env"
+  parameters:
+    assign:
+      value: "prod"

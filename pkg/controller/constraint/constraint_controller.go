@@ -27,6 +27,7 @@ import (
 	constraintstatusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/constraintstatus"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -90,6 +91,8 @@ func (a *Adder) InjectTracker(t *readiness.Tracker) {
 }
 
 func (a *Adder) InjectMutationSystem(mutationSystem *mutation.System) {}
+
+func (a *Adder) InjectExpansionSystem(expansionSystem *expansion.System) {}
 
 // Add creates a new Constraint Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

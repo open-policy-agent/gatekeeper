@@ -12,26 +12,28 @@ permissions:
   contents: read
 
 env:
-  BASE_RELEASE: 3.5.0
-  BASE_BRANCH: release-3.5
+  BASE_RELEASE: 3.9.2
+  BASE_BRANCH: release-3.9
 
 jobs:
   helm_upgrade:
     name: "[Helm] Upgrade test"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
       matrix:
         HELM_VERSION: ["3.7.2"]
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
 
       - name: Bootstrap e2e
         run: |
           mkdir -p $GITHUB_WORKSPACE/bin
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
-          make e2e-bootstrap
+          make e2e-bootstrap KUBERNETES_VERSION=${{ env.KUBERNETES_VERSION }}
+        env:
+          KUBERNETES_VERSION: 1.24.4
 
       - name: Deploy Helm release
         run: |
@@ -59,21 +61,37 @@ jobs:
 
       - name: Upgrade Helm version
         run: |
-          make e2e-build-load-image IMG=gatekeeper-e2e-helm:latest CRD_IMG=gatekeeper-crds:latest
-          make e2e-helm-upgrade HELM_VERSION=${{ matrix.HELM_VERSION }} BASE_RELEASE=${{ env.BASE_RELEASE }} HELM_REPO=gatekeeper-e2e-helm HELM_CRD_REPO=gatekeeper-crds HELM_RELEASE=latest
+          make docker-buildx \
+            IMG=gatekeeper-e2e:latest \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
 
-      - name: Manually apply the CRDs.  Helm will not update CRDs.
-        run: |
-          kustomize build config/crd | kubectl apply -f -
+          make docker-buildx-crds \
+            CRD_IMG=gatekeeper-crds:latest \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          make e2e-build-load-externaldata-image \
+            GATEKEEPER_NAMESPACE=${{ matrix.GATEKEEPER_NAMESPACE }}
+
+          kind load docker-image --name kind \
+            gatekeeper-e2e:latest \
+            gatekeeper-crds:latest
+
+          make e2e-helm-upgrade \
+            HELM_VERSION=${{ matrix.HELM_VERSION }} \
+            HELM_REPO=gatekeeper-e2e \
+            HELM_CRD_REPO=gatekeeper-crds \
+            HELM_RELEASE=latest
 
       - name: Run e2e after upgrade
         run: |
           make test-e2e
 
       - name: Save logs
+        if: ${{ always() }}
         run: |
           kubectl logs -n gatekeeper-system -l control-plane=controller-manager --tail=-1 > logs-${{ matrix.HELM_VERSION }}-controller-post-upgrade.json
           kubectl logs -n gatekeeper-system -l control-plane=audit-controller --tail=-1 > logs-${{ matrix.HELM_VERSION }}-audit-post-upgrade.json
+          kubectl logs -n gatekeeper-system -l run=dummy-provider --tail=-1 > logs-${{ matrix.HELM_VERSION }}-dummy-provider-post-upgrade.json
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3

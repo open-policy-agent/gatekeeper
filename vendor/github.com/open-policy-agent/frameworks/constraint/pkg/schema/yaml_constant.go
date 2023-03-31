@@ -7,7 +7,8 @@ const constraintTemplateCRDYaml = `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.11.3
+  creationTimestamp: null
   name: constrainttemplates.templates.gatekeeper.sh
 spec:
   group: templates.gatekeeper.sh
@@ -69,6 +70,27 @@ spec:
               targets:
                 items:
                   properties:
+                    code:
+                      description: The source code options for the constraint template.
+                        "Rego" can only be specified in one place (either here or
+                        in the "rego" field)
+                      items:
+                        properties:
+                          engine:
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
+                            type: string
+                          source:
+                            description: The source code for the template. Required.
+                            x-kubernetes-preserve-unknown-fields: true
+                        required:
+                        - engine
+                        - source
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - engine
+                      x-kubernetes-list-type: map
                     libs:
                       items:
                         type: string
@@ -172,6 +194,27 @@ spec:
               targets:
                 items:
                   properties:
+                    code:
+                      description: The source code options for the constraint template.
+                        "Rego" can only be specified in one place (either here or
+                        in the "rego" field)
+                      items:
+                        properties:
+                          engine:
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
+                            type: string
+                          source:
+                            description: The source code for the template. Required.
+                            x-kubernetes-preserve-unknown-fields: true
+                        required:
+                        - engine
+                        - source
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - engine
+                      x-kubernetes-list-type: map
                     libs:
                       items:
                         type: string
@@ -275,6 +318,27 @@ spec:
               targets:
                 items:
                   properties:
+                    code:
+                      description: The source code options for the constraint template.
+                        "Rego" can only be specified in one place (either here or
+                        in the "rego" field)
+                      items:
+                        properties:
+                          engine:
+                            description: 'The engine used to evaluate the code. Example:
+                              "Rego". Required.'
+                            type: string
+                          source:
+                            description: The source code for the template. Required.
+                            x-kubernetes-preserve-unknown-fields: true
+                        required:
+                        - engine
+                        - source
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - engine
+                      x-kubernetes-list-type: map
                     libs:
                       items:
                         type: string
@@ -328,10 +392,4 @@ spec:
     storage: false
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
 `

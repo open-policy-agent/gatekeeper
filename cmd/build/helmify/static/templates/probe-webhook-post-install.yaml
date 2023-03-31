@@ -17,8 +17,14 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+        {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: Never
@@ -26,11 +32,17 @@ spec:
       imagePullSecrets:
       {{- .Values.postInstall.probeWebhook.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
-      nodeSelector:
-        kubernetes.io/os: linux
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
       containers:
       {{- include "gatekeeper.postInstallWebhookProbeContainer" . | nindent 8 }}
+      {{- with .Values.postInstall }}
+      affinity:
+        {{- toYaml .affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      {{- end }}
 {{- end }}
 {{- end }}

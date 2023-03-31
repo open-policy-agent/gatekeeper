@@ -76,18 +76,26 @@ spec:
             - --logtostderr
             - --log-denies={{ .Values.logDenies }}
             - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-            - --log-level={{ .Values.logLevel }}
+            - --admission-events-involved-namespace={{ .Values.admissionEventsInvolvedNamespace }}
+            - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
             - --exempt-namespace={{ .Release.Namespace }}
             - --operation=webhook
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - --log-mutations={{ .Values.logMutations }}
             - --mutation-annotations={{ .Values.mutationAnnotations }}
+            - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+            - --max-serving-threads={{ .Values.maxServingThreads }}
+            - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+            - HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION
             - HELMSUBST_METRICS_BACKEND_ARG
             - HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG
             - HELMSUBST_MUTATION_ENABLED_ARG
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_DISABLED_BUILTIN
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACES
             - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES
+            - HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -104,18 +112,24 @@ spec:
             httpGet:
               path: /readyz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_READINESS_TIMEOUT
           livenessProbe:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_CONTAINER_RESOURCES: ""
       nodeSelector:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""
+      securityContext:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SECURITY_CONTEXT: ""
       affinity:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""
+      topologySpreadConstraints:
+        HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""
       tolerations:
         HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""
       imagePullSecrets:
@@ -138,12 +152,15 @@ spec:
         - name: manager
           args:
             - --audit-interval={{ .Values.auditInterval }}
-            - --log-level={{ .Values.logLevel }}
+            - --log-level={{ (.Values.audit.logLevel | empty | not) | ternary .Values.audit.logLevel .Values.logLevel }}
             - --constraint-violations-limit={{ .Values.constraintViolationsLimit }}
+            - --validating-webhook-configuration-name={{ .Values.validatingWebhookName }}
+            - --mutating-webhook-configuration-name={{ .Values.mutatingWebhookName }}
             - --audit-from-cache={{ .Values.auditFromCache }}
             - --audit-chunk-size={{ .Values.auditChunkSize }}
             - --audit-match-kind-only={{ .Values.auditMatchKindOnly }}
             - --emit-audit-events={{ .Values.emitAuditEvents }}
+            - --audit-events-involved-namespace={{ .Values.auditEventsInvolvedNamespace }}
             - --operation=audit
             - --operation=status
             - HELMSUBST_MUTATION_STATUS_ENABLED_ARG
@@ -151,7 +168,10 @@ spec:
             - --health-addr=:HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
             - --prometheus-port=HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT
             - --enable-external-data={{ .Values.enableExternalData }}
+            - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
             - HELMSUBST_METRICS_BACKEND_ARG
+            - HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE
+            - --disable-cert-rotation={{ or .Values.audit.disableCertRotation .Values.externalCertInjection.enabled }}
           imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           HELMSUBST_AUDIT_CONTROLLER_MANAGER_DEPLOYMENT_IMAGE_RELEASE: ""
           ports:
@@ -165,16 +185,20 @@ spec:
             httpGet:
               path: /readyz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_AUDIT_READINESS_TIMEOUT
           livenessProbe:
             httpGet:
               path: /healthz
               port: HELMSUBST_DEPLOYMENT_AUDIT_HEALTH_PORT
+            timeoutSeconds: HELMSUBST_DEPLOYMENT_AUDIT_LIVENESS_TIMEOUT
           securityContext:
             HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""
           resources:
             HELMSUBST_DEPLOYMENT_AUDIT_CONTAINER_RESOURCES: ""
       nodeSelector:
         HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""
+      securityContext:
+        HELMSUBST_DEPLOYMENT_AUDIT_POD_SECURITY_CONTEXT: ""
       affinity:
         HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""
       tolerations:
@@ -197,6 +221,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-mutating-webhook-configuration
+  annotations: HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:
@@ -213,6 +238,7 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - HELMSUBST_MUTATING_WEBHOOK_MATCHEXPRESSION_METADATANAME
     - HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
   objectSelector: HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR
   sideEffects: None
@@ -224,6 +250,7 @@ metadata:
   labels:
     gatekeeper.sh/system: "yes"
   name: gatekeeper-validating-webhook-configuration
+  annotations: HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS
 webhooks:
 - clientConfig:
     service:
@@ -235,6 +262,7 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME
     - HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS
   objectSelector: HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
@@ -247,10 +275,13 @@ webhooks:
       namespace: gatekeeper-system
       path: /v1/admitlabel
   name: check-ignore-label.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME
   timeoutSeconds: HELMSUBST_VALIDATING_WEBHOOK_TIMEOUT
   failurePolicy: HELMSUBST_VALIDATING_WEBHOOK_CHECK_IGNORE_FAILURE_POLICY
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: gatekeeper-controller-manager

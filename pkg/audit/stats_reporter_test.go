@@ -101,8 +101,10 @@ func checkData(t *testing.T, name string, wantRowLength int) *view.Row {
 }
 
 func TestLastRestartCheck(t *testing.T) {
-	wantTime := time.Now()
-	wantTs := float64(wantTime.UnixNano()) / 1e9
+	wantStartTime := time.Now()
+	wantEndTime := wantStartTime.Add(1 * time.Minute)
+	wantStartTs := float64(wantStartTime.Unix())
+	wantEndTs := float64(wantEndTime.Unix())
 	const wantRowLength = 1
 
 	r, err := newStatsReporter()
@@ -110,21 +112,39 @@ func TestLastRestartCheck(t *testing.T) {
 		t.Fatalf("got newStatsReporter() error %v", err)
 	}
 
-	err = r.reportRunStart(wantTime)
+	err = r.reportRunStart(wantStartTime)
 	if err != nil {
 		t.Fatalf("reportRunStart error %v", err)
 	}
-	row := checkData(t, lastRunTimeMetricName, wantRowLength)
+	row := checkData(t, lastRunStartTimeMetricName, wantRowLength)
 	got, ok := row.Data.(*view.LastValueData)
 	if !ok {
-		t.Error("lastRunTimeMetricName should have aggregation LastValue()")
+		t.Errorf("%s should have aggregation LastValue()", lastRunStartTimeMetricName)
 	}
 
 	if len(row.Tags) != 0 {
-		t.Errorf("got %q tags %v, want empty", lastRunTimeMetricName, row.Tags)
+		t.Errorf("got %q tags %v, want empty", lastRunStartTimeMetricName, row.Tags)
 	}
 
-	if got.Value != wantTs {
-		t.Errorf("got %q = %v, want %v", lastRunTimeMetricName, got.Value, wantTs)
+	if got.Value != wantStartTs {
+		t.Errorf("got %q = %v, want %v", lastRunStartTimeMetricName, got.Value, wantStartTs)
+	}
+
+	err = r.reportRunEnd(wantEndTime)
+	if err != nil {
+		t.Fatalf("reportRunEnd error %v", err)
+	}
+	row = checkData(t, lastRunEndTimeMetricName, wantRowLength)
+	got, ok = row.Data.(*view.LastValueData)
+	if !ok {
+		t.Errorf("%s should have aggregation LastValue()", lastRunEndTimeMetricName)
+	}
+
+	if len(row.Tags) != 0 {
+		t.Errorf("got %q tags %v, want empty", lastRunEndTimeMetricName, row.Tags)
+	}
+
+	if got.Value != wantEndTs {
+		t.Errorf("got %q = %v, want %v", lastRunEndTimeMetricName, got.Value, wantEndTs)
 	}
 }

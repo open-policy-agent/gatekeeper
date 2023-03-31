@@ -3,6 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: gatekeeper-update-namespace-label
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -13,11 +14,20 @@ metadata:
     "helm.sh/hook": post-install
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    {{- if .Values.postInstall.labelNamespace.extraAnnotations }}
+    {{- toYaml .Values.postInstall.labelNamespace.extraAnnotations | trim | nindent 4 }}
+    {{- end }}
 spec:
   template:
     metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
       labels:
+        {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
+        chart: '{{ template "gatekeeper.name" . }}'
+        gatekeeper.sh/system: "yes"
+        heritage: '{{ .Release.Service }}'
         release: '{{ .Release.Name }}'
     spec:
       restartPolicy: OnFailure
@@ -26,8 +36,6 @@ spec:
       {{- .Values.postInstall.labelNamespace.image.pullSecrets | toYaml | nindent 12 }}
       {{- end }}
       serviceAccount: gatekeeper-update-namespace-label
-      nodeSelector:
-        kubernetes.io/os: linux
       {{- if .Values.postInstall.probeWebhook.enabled }}
       volumes:
       {{- include "gatekeeper.postInstallWebhookProbeVolume" . | nindent 8 }}
@@ -42,18 +50,54 @@ spec:
             - label
             - ns
             - {{ .Release.Namespace }}
+            - admission.gatekeeper.sh/ignore=no-self-managing
+            {{- range .Values.postInstall.labelNamespace.podSecurity }}
+            - {{ . }}
+            {{- end }}
+            - --overwrite
+          resources:
+            {{- toYaml .Values.postInstall.resources | nindent 12 }}
+          securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
+            {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
+        {{- if .Values.postInstall.labelNamespace.extraNamespaces }}
+        - name: kubectl-label-extra
+          image: "{{ .Values.postInstall.labelNamespace.image.repository }}:{{ .Values.postInstall.labelNamespace.image.tag }}"
+          imagePullPolicy: {{ .Values.postInstall.labelNamespace.image.pullPolicy }}
+          args:
+            - label
+            - ns
             {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
             - {{ . }}
             {{- end }}
-            - admission.gatekeeper.sh/ignore=no-self-managing
+            - admission.gatekeeper.sh/ignore=extra-namespaces
             - --overwrite
+          resources:
+            {{- toYaml .Values.postInstall.resources | nindent 12 }}
           securityContext:
+            {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+            seccompProfile:
+              type: RuntimeDefault
+            {{- end }}
             {{- toYaml .Values.postInstall.securityContext | nindent 12 }}
+        {{- end }}
+      {{- with .Values.postInstall }}
+      nodeSelector:
+        {{- toYaml .nodeSelector | nindent 8 }}
+      affinity:
+        {{- toYaml .affinity | nindent 8 }}
+      tolerations:
+        {{- toYaml .tolerations | nindent 8 }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: gatekeeper-update-namespace-label
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -64,7 +108,7 @@ metadata:
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
@@ -88,11 +132,14 @@ rules:
       {{- range .Values.postInstall.labelNamespace.extraNamespaces }}
       - {{ . }}
       {{- end }}
+{{- with .Values.postInstall.labelNamespace.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 ---
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: gatekeeper-update-namespace-label
   labels:
@@ -104,7 +151,7 @@ metadata:
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: gatekeeper-update-namespace-label
 subjects:
   - kind: ServiceAccount

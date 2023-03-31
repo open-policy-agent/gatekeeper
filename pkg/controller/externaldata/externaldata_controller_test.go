@@ -8,13 +8,15 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldataUnversioned "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/unversioned"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/readiness"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/open-policy-agent/gatekeeper/test/testutils"
@@ -57,17 +59,18 @@ func setupManager(t *testing.T) manager.Manager {
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &externaldatav1alpha1.Provider{
+	instance := &externaldatav1beta1.Provider{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
+			APIVersion: "externaldata.gatekeeper.sh/v1beta1",
 			Kind:       "Provider",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "my-provider",
 		},
-		Spec: externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 10,
+		Spec: externaldatav1beta1.ProviderSpec{
+			URL:      "https://my-provider:8080",
+			Timeout:  10,
+			CABundle: util.ValidCABundle,
 		},
 	}
 
@@ -81,8 +84,8 @@ func TestReconcile(t *testing.T) {
 	pc := frameworksexternaldata.NewCache()
 
 	// initialize OPA
-	args := []local.Arg{local.Tracing(false), local.AddExternalDataProviderCache(pc)}
-	driver, err := local.New(args...)
+	args := []rego.Arg{rego.Tracing(false), rego.AddExternalDataProviderCache(pc)}
+	driver, err := rego.New(args...)
 	if err != nil {
 		t.Fatalf("unable to set up Driver: %v", err)
 	}
@@ -129,9 +132,10 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		want := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 10,
+		want := externaldataUnversioned.ProviderSpec{
+			URL:      "https://my-provider:8080",
+			Timeout:  10,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(want, entry.Spec); diff != "" {
 			t.Fatal(diff)
@@ -153,9 +157,10 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		wantSpec := externaldatav1alpha1.ProviderSpec{
-			URL:     "http://my-provider:8080",
-			Timeout: 20,
+		wantSpec := externaldataUnversioned.ProviderSpec{
+			URL:      "https://my-provider:8080",
+			Timeout:  20,
+			CABundle: util.ValidCABundle,
 		}
 		if diff := cmp.Diff(wantSpec, entry.Spec); diff != "" {
 			t.Fatal(diff)

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
-	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/apis"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -53,7 +52,7 @@ func init() {
 // +kubebuilder:rbac:resourceNames=gatekeeper-mutating-webhook-configuration,groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;update;patch
 
 // AddMutatingWebhook registers the mutating webhook server with the manager.
-func AddMutatingWebhook(mgr manager.Manager, client *constraintclient.Client, processExcluder *process.Excluder, mutationSystem *mutation.System) error {
+func AddMutatingWebhook(mgr manager.Manager, deps Dependencies) error {
 	if !operations.IsAssigned(operations.MutationWebhook) {
 		return nil
 	}
@@ -75,11 +74,11 @@ func AddMutatingWebhook(mgr manager.Manager, client *constraintclient.Client, pr
 				client:          mgr.GetClient(),
 				reader:          mgr.GetAPIReader(),
 				reporter:        reporter,
-				processExcluder: processExcluder,
+				processExcluder: deps.ProcessExcluder,
 				eventRecorder:   recorder,
 				gkNamespace:     util.GetNamespace(),
 			},
-			mutationSystem: mutationSystem,
+			mutationSystem: deps.MutationSystem,
 			deserializer:   codecs.UniversalDeserializer(),
 		},
 	}
@@ -89,9 +88,7 @@ func AddMutatingWebhook(mgr manager.Manager, client *constraintclient.Client, pr
 	if err := wh.InjectLogger(log); err != nil {
 		return err
 	}
-	server := mgr.GetWebhookServer()
-	server.TLSMinVersion = *tlsMinVersion
-	server.Register("/v1/mutate", wh)
+	congifureWebhookServer(mgr.GetWebhookServer()).Register("/v1/mutate", wh)
 
 	return nil
 }
@@ -197,6 +194,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 		Object:    &obj,
 		Namespace: ns,
 		Username:  req.AdmissionRequest.UserInfo.Username,
+		Source:    mutationtypes.SourceTypeOriginal,
 	}
 	mutated, err := h.mutationSystem.Mutate(mutable)
 	if err != nil {
@@ -221,7 +219,7 @@ func (h *mutationHandler) mutateRequest(ctx context.Context, req *admission.Requ
 func AppendMutationWebhookIfEnabled(webhooks []rotator.WebhookInfo) []rotator.WebhookInfo {
 	if operations.IsAssigned(operations.MutationWebhook) {
 		return append(webhooks, rotator.WebhookInfo{
-			Name: MwhName,
+			Name: *MwhName,
 			Type: rotator.Mutating,
 		})
 	}

@@ -11,9 +11,9 @@ import (
 )
 
 func TestSystem_Mutate_Annotations(t *testing.T) {
-	MutationAnnotationsEnabled = pointer.BoolPtr(true)
+	MutationAnnotationsEnabled = pointer.Bool(true)
 	t.Cleanup(func() {
-		MutationAnnotationsEnabled = pointer.BoolPtr(false)
+		MutationAnnotationsEnabled = pointer.Bool(false)
 	})
 
 	m := &fakeMutator{

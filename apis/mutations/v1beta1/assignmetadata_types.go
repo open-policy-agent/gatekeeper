@@ -46,7 +46,6 @@ type AssignMetadataStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
 // AssignMetadata is the Schema for the assignmetadata API.
 type AssignMetadata struct {

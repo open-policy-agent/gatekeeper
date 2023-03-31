@@ -14,7 +14,7 @@ type node struct {
 	// ReferencedBy tracks the Mutations which reference this part of the schema tree.
 	ReferencedBy IDSet
 
-	// Children is the set of child Nodes a this location in the schema.
+	// Children is the set of child Nodes at this location in the schema.
 	// Each node defines a distinct child definition. If multiple Nodes are defined
 	// for the same child, then there is a schema conflict.
 	Children map[string]map[parser.NodeType]node

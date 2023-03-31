@@ -90,9 +90,17 @@ func (h *K8sValidationTarget) handleReview(obj interface{}) (bool, *gkReview, er
 	case *admissionv1.AdmissionRequest:
 		review = &gkReview{AdmissionRequest: *data}
 	case AugmentedReview:
-		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
+		review = &gkReview{
+			AdmissionRequest: *data.AdmissionRequest,
+			namespace:        data.Namespace,
+			source:           data.Source,
+		}
 	case *AugmentedReview:
-		review = &gkReview{AdmissionRequest: *data.AdmissionRequest, namespace: data.Namespace}
+		review = &gkReview{
+			AdmissionRequest: *data.AdmissionRequest,
+			namespace:        data.Namespace,
+			source:           data.Source,
+		}
 	case AugmentedUnstructured:
 		review, err = augmentedUnstructuredToAdmissionRequest(data)
 		if err != nil {
@@ -127,6 +135,7 @@ func augmentedUnstructuredToAdmissionRequest(obj AugmentedUnstructured) (*gkRevi
 	}
 
 	review.namespace = obj.Namespace
+	review.source = obj.Source
 
 	return review, nil
 }
@@ -153,12 +162,6 @@ func unstructuredToAdmissionRequest(obj *unstructured.Unstructured) (*gkReview, 
 	return &gkReview{AdmissionRequest: req}, nil
 }
 
-func propsWithDescription(props *apiextensions.JSONSchemaProps, description string) *apiextensions.JSONSchemaProps {
-	propCopy := props.DeepCopy()
-	propCopy.Description = description
-	return propCopy
-}
-
 func (h *K8sValidationTarget) MatchSchema() apiextensions.JSONSchemaProps {
 	return matchSchema()
 }
@@ -174,7 +177,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		if err != nil {
 			return err
 		}
-		errorList := validation.ValidateLabelSelector(labelSelectorObj, field.NewPath("spec", "labelSelector"))
+		errorList := validation.ValidateLabelSelector(labelSelectorObj, validation.LabelSelectorValidationOptions{}, field.NewPath("spec", "labelSelector"))
 		if len(errorList) > 0 {
 			return errorList.ToAggregate()
 		}
@@ -190,7 +193,7 @@ func (h *K8sValidationTarget) ValidateConstraint(u *unstructured.Unstructured) e
 		if err != nil {
 			return err
 		}
-		errorList := validation.ValidateLabelSelector(namespaceSelectorObj, field.NewPath("spec", "labelSelector"))
+		errorList := validation.ValidateLabelSelector(namespaceSelectorObj, validation.LabelSelectorValidationOptions{}, field.NewPath("spec", "labelSelector"))
 		if len(errorList) > 0 {
 			return errorList.ToAggregate()
 		}
@@ -227,13 +230,13 @@ func convertToMatch(object map[string]interface{}) (*match.Match, error) {
 func (h *K8sValidationTarget) ToMatcher(u *unstructured.Unstructured) (constraints.Matcher, error) {
 	obj, found, err := unstructured.NestedMap(u.Object, "spec", "match")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+		return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 	}
 
 	if found && obj != nil {
 		m, err := convertToMatch(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCreatingMatcher, err)
+			return nil, fmt.Errorf("%w: %w", ErrCreatingMatcher, err)
 		}
 		return &Matcher{match: m, cache: &h.cache}, nil
 	}

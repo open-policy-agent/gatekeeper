@@ -7,7 +7,9 @@ title: Installation
 
 ### Minimum Kubernetes Version
 
-The minimum supported Kubernetes version of Gatekeeper is **n-4 of the latest stable Kubernetes release** per [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). NOTE: Gatekeeper requires Kubernetes resources introduced in v1.16.
+The minimum supported Kubernetes version for Gatekeeper is aligned with the Kubernetes releases listed in the [Kubernetes Supported Versions policy](https://kubernetes.io/releases/version-skew-policy/). For more information, please see [supported Kubernetes versions](https://github.com/open-policy-agent/gatekeeper/blob/master/docs/Release_Management.md#supported-kubernetes-versions).
+
+**Note:** Gatekeeper requires resources introduced in Kubernetes v1.16.
 
 ### RBAC Permissions
 
@@ -40,27 +42,28 @@ Images are hosted in [OPA Docker Hub repository](https://hub.docker.com/r/openpo
 Currently the most reliable way of installing Gatekeeper is to build and install from HEAD:
 
    * Make sure that:
-       * You have Docker version 19.03 or later installed.
-       * [Kubebuilder](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [Kustomize](https://kubectl.docs.kubernetes.io/installation/kustomize/) are installed.
+       * You have [Docker](https://docs.docker.com/engine/install/) version 20.10 or later installed.
        * Your kubectl context is set to the desired installation cluster.
        * You have a container registry you can write to that is readable by the target cluster.
+
    * Clone the Gatekeeper repository to your local system:
      ```sh
      git clone https://github.com/open-policy-agent/gatekeeper.git
      ```
+
    * `cd` to the repository directory.
-   * Define your destination Docker image location:
+
+   * Build and push Gatekeeper image:
       ```sh
-      export DESTINATION_GATEKEEPER_DOCKER_IMAGE=<YOUR DESIRED DESTINATION DOCKER IMAGE>
+      export DESTINATION_GATEKEEPER_IMAGE=<add registry like "myregistry.docker.io/gatekeeper">
+      make docker-buildx REPOSITORY=$DESTINATION_GATEKEEPER_DOCKER_IMAGE OUTPUT_TYPE=type=registry
       ```
-   * Build and push your Docker image:
-      ```sh
-      make docker-buildx REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-      make docker-push REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
-      ```
+
+      > If you want to use a local image, don't set OUTPUT_TYPE and it will default to `OUTPUT_TYPE=type=docker`.
+
    * Finally, deploy:
      ```sh
-     make deploy REPOSITORY="$DESTINATION_GATEKEEPER_DOCKER_IMAGE"
+     make deploy REPOSITORY=$DESTINATION_GATEKEEPER_DOCKER_IMAGE
      ```
 
 ### Deploying via Helm

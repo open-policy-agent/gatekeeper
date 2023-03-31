@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	path "github.com/open-policy-agent/gatekeeper/pkg/mutation/path/tester"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -91,7 +92,7 @@ func newPod(pod *corev1.Pod) *unstructured.Unstructured {
 func ensureObj(u *unstructured.Unstructured, expected interface{}, path ...string) error {
 	v, exists, err := unstructured.NestedFieldNoCopy(u.Object, path...)
 	if err != nil {
-		return fmt.Errorf("could not retrieve value: %v", err)
+		return fmt.Errorf("could not retrieve value: %w", err)
 	}
 	if !exists {
 		return fmt.Errorf("value does not exist at %+v: %s", path, spew.Sdump(u.Object))
@@ -105,7 +106,7 @@ func ensureObj(u *unstructured.Unstructured, expected interface{}, path ...strin
 func ensureMissing(u *unstructured.Unstructured, path ...string) error {
 	v, exists, err := unstructured.NestedFieldNoCopy(u.Object, path...)
 	if err != nil {
-		return fmt.Errorf("could not retrieve value: %v", err)
+		return fmt.Errorf("could not retrieve value: %w", err)
 	}
 	if exists {
 		return fmt.Errorf("value exists at %+v as %v, expected missing: %s", path, v, spew.Sdump(u.Object))
@@ -774,7 +775,7 @@ func TestApplyTo(t *testing.T) {
 				Version: test.version,
 				Kind:    test.kind,
 			})
-			matches := mutator.Matches(&types.Mutable{Object: obj})
+			matches := mutator.Matches(&types.Mutable{Object: obj, Source: types.SourceTypeDefault})
 			if matches != test.matchExpected {
 				t.Errorf("Matches() = %t, expected %t", matches, test.matchExpected)
 			}
@@ -1069,4 +1070,13 @@ func nestedMapSlice(u map[string]interface{}, fields ...string) ([]map[string]in
 		out[i] = v
 	}
 	return out, nil
+}
+
+// Tests the Assign mutator MutatorForAssign call with an empty spec for graceful handling.
+func Test_Assign_emptySpec(t *testing.T) {
+	assign := &mutationsunversioned.Assign{}
+	mutator, err := MutatorForAssign(assign)
+
+	require.ErrorContains(t, err, "empty path")
+	require.Nil(t, mutator)
 }

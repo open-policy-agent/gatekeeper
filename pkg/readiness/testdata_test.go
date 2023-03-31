@@ -16,7 +16,7 @@ limitations under the License.
 package readiness_test
 
 import (
-	externaldatav1alpha1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1alpha1"
+	externaldatav1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/externaldata/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,11 +51,15 @@ var testModifySet = []*mutationsv1alpha1.ModifySet{
 	makeModifySet("demo"),
 }
 
+var testAssignImage = []*mutationsv1alpha1.AssignImage{
+	makeAssignImage("demo"),
+}
+
 var testAssign = []*mutationsv1alpha1.Assign{
 	makeAssign("demo"),
 }
 
-var testProvider = []*externaldatav1alpha1.Provider{
+var testProvider = []*externaldatav1beta1.Provider{
 	makeProvider("demo"),
 }
 
@@ -105,6 +109,21 @@ func makeModifySet(name string) *mutationsv1alpha1.ModifySet {
 	}
 }
 
+func makeAssignImage(name string) *mutationsv1alpha1.AssignImage {
+	return &mutationsv1alpha1.AssignImage{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "mutations.gatekeeper.sh/v1alpha1",
+			Kind:       "AssignImage",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: mutationsv1alpha1.AssignImageSpec{
+			Location: "spec.containers[name:*].image",
+		},
+	}
+}
+
 func makeAssign(name string) *mutationsv1alpha1.Assign {
 	return &mutationsv1alpha1.Assign{
 		TypeMeta: metav1.TypeMeta{
@@ -120,8 +139,8 @@ func makeAssign(name string) *mutationsv1alpha1.Assign {
 	}
 }
 
-func makeProvider(name string) *externaldatav1alpha1.Provider {
-	return &externaldatav1alpha1.Provider{
+func makeProvider(name string) *externaldatav1beta1.Provider {
+	return &externaldatav1beta1.Provider{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "externaldata.gatekeeper.sh/v1alpha1",
 			Kind:       "Provider",
@@ -129,7 +148,7 @@ func makeProvider(name string) *externaldatav1alpha1.Provider {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Spec: externaldatav1alpha1.ProviderSpec{
+		Spec: externaldatav1beta1.ProviderSpec{
 			URL:     "http://demo",
 			Timeout: 1,
 		},

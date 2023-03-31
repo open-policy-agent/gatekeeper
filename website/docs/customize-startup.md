@@ -23,11 +23,15 @@ The `--disable-opa-builtin` flag disables specific [OPA built-ins functions](htt
 
 ## [Alpha] Emit admission and audit events
 
-The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events in the Gatekeeper namespace. This flag is in alpha stage and it is set to `false` by default.
+The `--emit-admission-events` flag enables the emission of all admission violations as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
 
-The `--emit-audit-events` flag enables the emission of all audit violation as Kubernetes events in the Gatekeeper namespace. This flag is in alpha stage and it is set to `false` by default.
+The `--emit-audit-events` flag enables the emission of all audit violation as Kubernetes events. This flag is in alpha stage and it is set to `false` by default.
 
-There are three types of events that are emitted by Gatekeeper when the above flags are enabled:
+The `--admission-events-involved-namespace` flag controls which namespace admission events will be created in. When set to `true`, admission events will be created in the namespace of the object violating the constraint. If the object has no namespace (ie. cluster scoped resources), they will be created in the namespace Gatekeeper is installed in. Setting to `false` will cause all admission events to be created in the Gatekeeper namespace.
+
+The `--audit-events-involved-namespace` flag controls which namespace audit events will be created in. When set to `true`, audit events will be created in the namespace of the object violating the constraint. If the object has no namespace (ie. cluster scoped resources), they will be created in the namespace Gatekeeper is installed in. Setting to `false` will cause all audit events to be created in the Gatekeeper namespace.
+
+There are four types of events that are emitted by Gatekeeper when the emit event flags are enabled:
 
 | Event              | Description                                                             |
 | ------------------ | ----------------------------------------------------------------------- |
@@ -52,3 +56,11 @@ The `--mutation-annotations` flag adds the following two annotations to mutated 
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gatekeeper.sh/mutation-id` | The UUID of the mutation.                                                                                                                                     |
 | `gatekeeper.sh/mutations`   | A list of comma-separated mutations in the format of `<MutationType>/<MutationNamespace>/<MutationName>:<MutationGeneration>` that are applied to the object. |
+
+## Other Configuration Options
+
+For the complete list of configuration flags for your specific version of Gatekeeper, run the Gatekeeper binary with the `--help` flag. For example:
+
+`docker run openpolicyagent/gatekeeper:v3.10.0-beta.0 --help`
+
+To ensure you are seeing all relevant flags, be sure the image tag (`:3.10.0-beta.0` above) corresponds with the version of Gatekeeper you are running.

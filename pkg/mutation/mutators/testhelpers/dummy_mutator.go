@@ -37,7 +37,8 @@ func (d *DummyMutator) Path() parser.Path {
 }
 
 func (d *DummyMutator) Matches(mutable *types.Mutable) bool {
-	matches, err := match.Matches(&d.match, mutable.Object, mutable.Namespace)
+	m := &match.Matchable{Object: mutable.Object, Namespace: mutable.Namespace}
+	matches, err := match.Matches(&d.match, m)
 	if err != nil {
 		return false
 	}
@@ -49,7 +50,7 @@ func (d *DummyMutator) Mutate(mutable *types.Mutable) (bool, error) {
 	return core.Mutate(d.Path(), t, core.NewDefaultSetter(d.value), mutable.Object)
 }
 
-func (d *DummyMutator) UsesExternalData() bool {
+func (d *DummyMutator) MustTerminate() bool {
 	return false
 }
 

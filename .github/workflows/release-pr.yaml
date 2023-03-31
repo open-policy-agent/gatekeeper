@@ -15,19 +15,21 @@ permissions:
 
 jobs:
   create-release-pull-request:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - name: Set up Go 1.18
-        uses: actions/setup-go@v3
+      - name: Set up Go 1.20
+        uses: actions/setup-go@v4
         with:
-          go-version: 1.18
+          go-version: "1.20"
 
       - name: Set release version and target branch for vNext
         if: github.event_name == 'push'
         run: |
           TAG="$(echo "${{ github.ref }}" | tr -d 'refs/tags/v')"
           MAJOR_VERSION="$(echo "${TAG}" | cut -d '.' -f1)"
+          echo "MAJOR_VERSION=${MAJOR_VERSION}" >> ${GITHUB_ENV}
           MINOR_VERSION="$(echo "${TAG}" | cut -d '.' -f2)"
+          echo "MINOR_VERSION=${MINOR_VERSION}" >> ${GITHUB_ENV}
 
           # increment the minor version by 1 for vNext
           echo "NEWVERSION=v${MAJOR_VERSION}.$((MINOR_VERSION+1)).0-beta.0" >> ${GITHUB_ENV}
@@ -52,7 +54,7 @@ jobs:
             echo "TARGET_BRANCH=master" >> ${GITHUB_ENV}
           fi
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
         with:
           fetch-depth: 0
 
@@ -67,7 +69,7 @@ jobs:
       - run: make release-manifest promote-staging-manifest
 
       - if: github.event_name == 'push'
-        run: make version-docs
+        run: make version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x
 
       - name: Create release pull request
         uses: peter-evans/create-pull-request@v4

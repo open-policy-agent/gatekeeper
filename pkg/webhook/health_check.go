@@ -11,6 +11,7 @@ import (
 )
 
 // disabling gosec linting here as the http client used in this checking is intended to skip CA verification
+//
 //nolint:gosec
 var tr = &http.Transport{
 	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

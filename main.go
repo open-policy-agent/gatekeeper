@@ -16,18 +16,21 @@ limitations under the License.
 package main
 
 import (
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-logr/zapr"
 	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	frameworksexternaldata "github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	api "github.com/open-policy-agent/gatekeeper/apis"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
@@ -37,6 +40,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/audit"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
@@ -49,6 +53,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/watch"
 	"github.com/open-policy-agent/gatekeeper/pkg/webhook"
 	"github.com/open-policy-agent/gatekeeper/third_party/sigs.k8s.io/controller-runtime/pkg/dynamiccache"
+	_ "go.uber.org/automaxprocs" // set GOMAXPROCS to the number of container cores, if known.
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -59,16 +64,18 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
-	// +kubebuilder:scaffold:imports
 )
 
 const (
 	secretName     = "gatekeeper-webhook-server-cert"
 	caName         = "gatekeeper-ca"
 	caOrganization = "gatekeeper"
+	certName       = "tls.crt"
+	keyName        = "tls.key"
 )
 
 var (
@@ -83,12 +90,14 @@ var (
 )
 
 var (
+	logFile              = flag.String("log-file", "", "Log to file, if specified. Default is to log to stderr.")
 	logLevel             = flag.String("log-level", "INFO", "Minimum log level. For example, DEBUG, INFO, WARNING, ERROR. Defaulted to INFO if unspecified.")
 	logLevelKey          = flag.String("log-level-key", "level", "JSON key for the log level field, defaults to `level`")
 	logLevelEncoder      = flag.String("log-level-encoder", "lower", "Encoder for the value of the log level field. Valid values: [`lower`, `capital`, `color`, `capitalcolor`], default: `lower`")
 	healthAddr           = flag.String("health-addr", ":9090", "The address to which the health endpoint binds.")
 	metricsAddr          = flag.String("metrics-addr", "0", "The address the metric endpoint binds to.")
 	port                 = flag.Int("port", 443, "port for the server. defaulted to 443 if unspecified ")
+	host                 = flag.String("host", "", "the host address the webhook server listens on. defaults to all addresses.")
 	certDir              = flag.String("cert-dir", "/certs", "The directory where certs are stored, defaults to /certs")
 	disableCertRotation  = flag.Bool("disable-cert-rotation", false, "disable automatic generation and rotation of webhook TLS certificates/keys")
 	enableProfile        = flag.Bool("enable-pprof", false, "enable pprof profiling")
@@ -113,19 +122,38 @@ func init() {
 }
 
 func main() {
+	os.Exit(innerMain())
+}
+
+func innerMain() int {
 	flag.Parse()
 	encoder, ok := logLevelEncoders[*logLevelEncoder]
 	if !ok {
 		setupLog.Error(fmt.Errorf("invalid log level encoder: %v", *logLevelEncoder), "Invalid log level encoder")
-		os.Exit(1)
+		return 1
 	}
 
 	if *enableProfile {
-		setupLog.Info("Starting profiling on port %s", *profilePort)
+		setupLog.Info(fmt.Sprintf("Starting profiling on port %d", *profilePort))
 		go func() {
 			addr := fmt.Sprintf("%s:%d", "localhost", *profilePort)
-			setupLog.Error(http.ListenAndServe(addr, nil), "unable to start profiling server")
+			server := http.Server{
+				Addr:        addr,
+				ReadTimeout: 5 * time.Second,
+			}
+			setupLog.Error(server.ListenAndServe(), "unable to start profiling server")
 		}()
+	}
+
+	var logStream io.Writer
+	if *logFile != "" {
+		handle, err := os.OpenFile(*logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			setupLog.Error(fmt.Errorf("unable to open log file %s: %w", *logFile, err), "error initializing logging")
+			return 1
+		}
+		defer handle.Close()
+		logStream = handle
 	}
 
 	switch *logLevel {
@@ -133,18 +161,32 @@ func main() {
 		eCfg := zap.NewDevelopmentEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		logger := crzap.New(crzap.UseDevMode(true), crzap.Encoder(zapcore.NewConsoleEncoder(eCfg)))
+		opts := []crzap.Opts{
+			crzap.UseDevMode(true),
+			crzap.Encoder(zapcore.NewConsoleEncoder(eCfg)),
+		}
+		if logStream != nil {
+			opts = append(opts, crzap.WriteTo(logStream))
+		}
+		logger := crzap.New(opts...)
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
 	case "WARNING", "ERROR":
-		setLoggerForProduction(encoder)
+		setLoggerForProduction(encoder, logStream)
 	case "INFO":
 		fallthrough
 	default:
 		eCfg := zap.NewProductionEncoderConfig()
 		eCfg.LevelKey = *logLevelKey
 		eCfg.EncodeLevel = encoder
-		logger := crzap.New(crzap.UseDevMode(false), crzap.Encoder(zapcore.NewJSONEncoder(eCfg)))
+		opts := []crzap.Opts{
+			crzap.UseDevMode(false),
+			crzap.Encoder(zapcore.NewJSONEncoder(eCfg)),
+		}
+		if logStream != nil {
+			opts = append(opts, crzap.WriteTo(logStream))
+		}
+		logger := crzap.New(opts...)
 		ctrl.SetLogger(logger)
 		klog.SetLogger(logger)
 	}
@@ -170,6 +212,7 @@ func main() {
 		MetricsBindAddress:     *metricsAddr,
 		LeaderElection:         false,
 		Port:                   *port,
+		Host:                   *host,
 		CertDir:                *certDir,
 		HealthProbeBindAddress: *healthAddr,
 		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
@@ -178,13 +221,19 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		return 1
 	}
 
 	// Make sure certs are generated and valid if cert rotation is enabled.
 	setupFinished := make(chan struct{})
-	if !*disableCertRotation && (operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook)) {
+	if !*disableCertRotation {
 		setupLog.Info("setting up cert rotation")
+
+		keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		if *externaldata.ExternalDataEnabled {
+			keyUsages = append(keyUsages, x509.ExtKeyUsageClientAuth)
+		}
+
 		if err := rotator.AddRotator(mgr, &rotator.CertRotator{
 			SecretKey: types.NamespacedName{
 				Namespace: util.GetNamespace(),
@@ -196,9 +245,10 @@ func main() {
 			DNSName:        fmt.Sprintf("%s.%s.svc", *certServiceName, util.GetNamespace()),
 			IsReady:        setupFinished,
 			Webhooks:       webhooks,
+			ExtKeyUsages:   &keyUsages,
 		}); err != nil {
 			setupLog.Error(err, "unable to set up cert rotation")
-			os.Exit(1)
+			return 1
 		}
 	} else {
 		close(setupFinished)
@@ -212,14 +262,14 @@ func main() {
 	tracker, err := readiness.SetupTracker(mgr, mutation.Enabled(), *externaldata.ExternalDataEnabled)
 	if err != nil {
 		setupLog.Error(err, "unable to register readiness tracker")
-		os.Exit(1)
+		return 1
 	}
 
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("default", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to create health check")
-		os.Exit(1)
+		return 1
 	}
 
 	// only setup healthcheck when flag is set and available webhook count > 0
@@ -228,18 +278,43 @@ func main() {
 		setupLog.Info("setting up TLS healthcheck probe")
 		if err := mgr.AddHealthzCheck("tls-check", tlsChecker); err != nil {
 			setupLog.Error(err, "unable to create tls health check")
-			os.Exit(1)
+			return 1
 		}
 	}
 
 	// Setup controllers asynchronously, they will block for certificate generation if needed.
-	go setupControllers(mgr, sw, tracker, setupFinished)
+	setupErr := make(chan error)
+	go func() {
+		setupErr <- setupControllers(mgr, sw, tracker, setupFinished)
+	}()
 
 	setupLog.Info("starting manager")
+	mgrErr := make(chan error)
+	go func() {
+		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "problem running manager")
+			mgrErr <- err
+		}
+	}()
+
+	// block until either setupControllers or mgr has an error, or mgr exits.
+	// end after two events (one per goroutine) to guard against deadlock.
 	hadError := false
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		hadError = true
+blockingLoop:
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-setupErr:
+			if err != nil {
+				hadError = true
+				break blockingLoop
+			}
+		case err := <-mgrErr:
+			if err != nil {
+				hadError = true
+			}
+			// if manager has returned, we should exit the program
+			break blockingLoop
+		}
 	}
 
 	// Manager stops controllers asynchronously.
@@ -249,53 +324,77 @@ func main() {
 	sw.Stop()
 
 	if hadError {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
-func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) {
+func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *readiness.Tracker, setupFinished chan struct{}) error {
 	// Block until the setup (certificate generation) finishes.
 	<-setupFinished
 
 	var providerCache *frameworksexternaldata.ProviderCache
-	args := []local.Arg{local.Tracing(false), local.DisableBuiltins(disabledBuiltins.ToSlice()...)}
+	args := []rego.Arg{rego.Tracing(false), rego.DisableBuiltins(disabledBuiltins.ToSlice()...)}
 	mutationOpts := mutation.SystemOpts{Reporter: mutation.NewStatsReporter()}
 	if *externaldata.ExternalDataEnabled {
 		providerCache = frameworksexternaldata.NewCache()
-		args = append(args, local.AddExternalDataProviderCache(providerCache))
+		args = append(args, rego.AddExternalDataProviderCache(providerCache))
 		mutationOpts.ProviderCache = providerCache
+
+		certFile := filepath.Join(*certDir, certName)
+		keyFile := filepath.Join(*certDir, keyName)
+
+		// certWatcher is used to watch for changes to Gatekeeper's certificate and key files.
+		certWatcher, err := certwatcher.New(certFile, keyFile)
+		if err != nil {
+			setupLog.Error(err, "unable to create client cert watcher")
+			return err
+		}
+
+		setupLog.Info("setting up client cert watcher")
+		if err := mgr.Add(certWatcher); err != nil {
+			setupLog.Error(err, "unable to register client cert watcher")
+			return err
+		}
+
+		// register the client cert watcher to the driver
+		args = append(args, rego.EnableExternalDataClientAuth(), rego.AddExternalDataClientCertWatcher(certWatcher))
+
+		// register the client cert watcher to the mutation system
+		mutationOpts.ClientCertWatcher = certWatcher
 	}
 	// initialize OPA
-	driver, err := local.New(args...)
+	driver, err := rego.New(args...)
 	if err != nil {
 		setupLog.Error(err, "unable to set up Driver")
-		os.Exit(1)
+		return err
 	}
 
 	client, err := constraintclient.NewClient(constraintclient.Targets(&target.K8sValidationTarget{}), constraintclient.Driver(driver))
 	if err != nil {
 		setupLog.Error(err, "unable to set up OPA client")
-		os.Exit(1)
+		return err
 	}
 
 	mutationSystem := mutation.NewSystem(mutationOpts)
+	expansionSystem := expansion.NewSystem(mutationSystem)
 
 	c := mgr.GetCache()
 	dc, ok := c.(watch.RemovableCache)
 	if !ok {
 		err := fmt.Errorf("expected dynamic cache, got: %T", c)
 		setupLog.Error(err, "fetching dynamic cache")
-		os.Exit(1)
+		return err
 	}
 
 	wm, err := watch.New(dc)
 	if err != nil {
 		setupLog.Error(err, "unable to create watch manager")
-		os.Exit(1)
+		return err
 	}
 	if err := mgr.Add(wm); err != nil {
 		setupLog.Error(err, "unable to register watch manager with the manager")
-		os.Exit(1)
+		return err
 	}
 
 	// processExcluder is used for namespace exclusion for specified processes in config
@@ -311,47 +410,64 @@ func setupControllers(mgr ctrl.Manager, sw *watch.ControllerSwitch, tracker *rea
 		Tracker:          tracker,
 		ProcessExcluder:  processExcluder,
 		MutationSystem:   mutationSystem,
+		ExpansionSystem:  expansionSystem,
 		ProviderCache:    providerCache,
 		WatchSet:         watchSet,
 	}
 
-	if err := controller.AddToManager(mgr, opts); err != nil {
+	if err := controller.AddToManager(mgr, &opts); err != nil {
 		setupLog.Error(err, "unable to register controllers with the manager")
-		os.Exit(1)
+		return err
 	}
 
 	if operations.IsAssigned(operations.Webhook) || operations.IsAssigned(operations.MutationWebhook) {
 		setupLog.Info("setting up webhooks")
-		if err := webhook.AddToManager(mgr, client, processExcluder, mutationSystem); err != nil {
+		webhookDeps := webhook.Dependencies{
+			OpaClient:       client,
+			ProcessExcluder: processExcluder,
+			MutationSystem:  mutationSystem,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := webhook.AddToManager(mgr, webhookDeps); err != nil {
 			setupLog.Error(err, "unable to register webhooks with the manager")
-			os.Exit(1)
+			return err
 		}
 	}
 
 	if operations.IsAssigned(operations.Audit) {
 		setupLog.Info("setting up audit")
 		auditCache := audit.NewAuditCacheLister(mgr.GetCache(), watchSet)
-		if err := audit.AddToManager(mgr, client, processExcluder, auditCache); err != nil {
+		auditDeps := audit.Dependencies{
+			Client:          client,
+			ProcessExcluder: processExcluder,
+			CacheLister:     auditCache,
+			ExpansionSystem: expansionSystem,
+		}
+		if err := audit.AddToManager(mgr, &auditDeps); err != nil {
 			setupLog.Error(err, "unable to register audit with the manager")
-			os.Exit(1)
+			return err
 		}
 	}
 
 	setupLog.Info("setting up upgrade")
 	if err := upgrade.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register upgrade with the manager")
-		os.Exit(1)
+		return err
 	}
 
 	setupLog.Info("setting up metrics")
 	if err := metrics.AddToManager(mgr); err != nil {
 		setupLog.Error(err, "unable to register metrics with the manager")
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func setLoggerForProduction(encoder zapcore.LevelEncoder) {
+func setLoggerForProduction(encoder zapcore.LevelEncoder, dest io.Writer) {
 	sink := zapcore.AddSync(os.Stderr)
+	if dest != nil {
+		sink = zapcore.AddSync(dest)
+	}
 	var opts []zap.Option
 	encCfg := zap.NewProductionEncoderConfig()
 	encCfg.LevelKey = *logLevelKey

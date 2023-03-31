@@ -15,7 +15,9 @@ import (
 	"github.com/go-logr/logr"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
 	"github.com/open-policy-agent/gatekeeper/pkg/logging"
+	mutationtypes "github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	"github.com/pkg/errors"
@@ -24,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -50,14 +53,15 @@ const (
 )
 
 var (
-	auditInterval             = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
-	constraintViolationsLimit = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
-	auditChunkSize            = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
-	auditFromCache            = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
-	emitAuditEvents           = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events in gatekeeper namespace with detailed info for each violation from an audit")
-	auditMatchKindOnly        = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
-	apiCacheDir               = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
-	emptyAuditResults         []updateListEntry
+	auditInterval                = flag.Uint("audit-interval", defaultAuditInterval, "interval to run audit in seconds. defaulted to 60 secs if unspecified, 0 to disable")
+	constraintViolationsLimit    = flag.Uint("constraint-violations-limit", defaultConstraintViolationsLimit, "limit of number of violations per constraint. defaulted to 20 violations if unspecified")
+	auditChunkSize               = flag.Uint64("audit-chunk-size", defaultListLimit, "(alpha) Kubernetes API chunking List results when retrieving cluster resources using discovery client. defaulted to 500 if unspecified")
+	auditFromCache               = flag.Bool("audit-from-cache", false, "pull resources from OPA cache when auditing")
+	emitAuditEvents              = flag.Bool("emit-audit-events", false, "(alpha) emit Kubernetes events with detailed info for each violation from an audit")
+	auditEventsInvolvedNamespace = flag.Bool("audit-events-involved-namespace", false, "emit audit events for each violation in the involved objects namespace, the default (false) generates events in the namespace Gatekeeper is installed in. Audit events from cluster-scoped resources will still follow the default behavior")
+	auditMatchKindOnly           = flag.Bool("audit-match-kind-only", false, "only use kinds specified in all constraints for auditing cluster resources. if kind is not specified in any of the constraints, it will audit all resources (same as setting this flag to false)")
+	apiCacheDir                  = flag.String("api-cache-dir", defaultAPICacheDir, "The directory where audit from api server cache are stored, defaults to /tmp/audit")
+	emptyAuditResults            []updateListEntry
 )
 
 // Manager allows us to audit resources periodically.
@@ -76,10 +80,14 @@ type Manager struct {
 
 	// auditCache lists objects from the audit's cache if auditFromCache is enabled.
 	auditCache *CacheLister
+
+	expansionSystem *expansion.System
 }
 
 // StatusViolation represents each violation under status.
 type StatusViolation struct {
+	Group             string `json:"group"`
+	Version           string `json:"version"`
 	Kind              string `json:"kind"`
 	Name              string `json:"name"`
 	Namespace         string `json:"namespace,omitempty"`
@@ -123,7 +131,7 @@ func (c *nsCache) Get(ctx context.Context, client client.Client, namespace strin
 }
 
 // New creates a new manager for audit.
-func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *process.Excluder, cacheLister *CacheLister) (*Manager, error) {
+func New(mgr manager.Manager, deps *Dependencies) (*Manager, error) {
 	reporter, err := newStatsReporter()
 	if err != nil {
 		log.Error(err, "StatsReporter could not start")
@@ -137,15 +145,16 @@ func New(mgr manager.Manager, opa *constraintclient.Client, processExcluder *pro
 		corev1.EventSource{Component: "gatekeeper-audit"})
 
 	am := &Manager{
-		opa:             opa,
+		opa:             deps.Client,
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 		mgr:             mgr,
 		reporter:        reporter,
-		processExcluder: processExcluder,
+		processExcluder: deps.ProcessExcluder,
 		eventRecorder:   recorder,
 		gkNamespace:     util.GetNamespace(),
-		auditCache:      cacheLister,
+		auditCache:      deps.CacheLister,
+		expansionSystem: deps.ExpansionSystem,
 	}
 	return am, nil
 }
@@ -159,9 +168,13 @@ func (am *Manager) audit(ctx context.Context) error {
 	// record audit latency
 	defer func() {
 		logFinish(am.log)
-		latency := time.Since(startTime)
+		endTime := time.Now()
+		latency := endTime.Sub(startTime)
 		if err := am.reporter.reportLatency(latency); err != nil {
 			am.log.Error(err, "failed to report latency")
+		}
+		if err := am.reporter.reportRunEnd(endTime); err != nil {
+			am.log.Error(err, "failed to report run end time")
 		}
 	}()
 
@@ -202,7 +215,7 @@ func (am *Manager) audit(ctx context.Context) error {
 		am.log.Info("Auditing from cache")
 		res, errs := am.auditFromCache(ctx)
 
-		am.log.Info("Audit opa.Audit() results", "violations", len(res))
+		am.log.Info("Audit from cache results", "violations", len(res))
 		for _, err := range errs {
 			am.log.Error(err, "Auditing")
 		}
@@ -356,6 +369,7 @@ func (am *Manager) auditResources(
 	for gv, gvKinds := range clusterAPIResources {
 	kindsLoop:
 		for kind := range gvKinds {
+			am.log.V(logging.DebugLevel).Info("Listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			// delete all existing folders from cache dir before starting next kind
 			err := am.removeAllFromDir(*apiCacheDir, int(*auditChunkSize))
 			if err != nil {
@@ -424,15 +438,19 @@ func (am *Manager) auditResources(
 				resourceVersion = objList.GetResourceVersion()
 				opts.Continue = objList.GetContinue()
 				if opts.Continue == "" {
+					am.log.V(logging.DebugLevel).Info("Finished listing objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 					break
 				}
+				am.log.V(logging.DebugLevel).Info("Requesting next chunk of objects for GVK", "group", gv.Group, "version", gv.Version, "kind", kind)
 			}
 			// Loop through all subDirs to review all files for this kind.
+			am.log.V(logging.DebugLevel).Info("Reviewing objects for GVK", gv.Group, "version", gv.Version, "kind", kind)
 			err = am.reviewObjects(ctx, kind, folderCount, namespaceCache, updateLists, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
+			am.log.V(logging.DebugLevel).Info("Review complete for GVK", gv.Group, "version", gv.Version, "kind", kind)
 		}
 	}
 
@@ -447,6 +465,10 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	if err != nil {
 		return nil, []error{fmt.Errorf("unable to list objects from audit cache: %w", err)}
 	}
+	nsMap, err := nsMapFromObjs(objs)
+	if err != nil {
+		return nil, []error{fmt.Errorf("unable to build namespaces from cache: %w", err)}
+	}
 
 	var results []Result
 
@@ -454,9 +476,18 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	for i := range objs {
 		// Prevent referencing loop variables directly.
 		obj := objs[i]
-		resp, err := am.opa.Review(ctx, obj)
+		ns, exists := nsMap[obj.GetNamespace()]
+		if !exists {
+			ns = nil
+		}
+
+		au := &target.AugmentedUnstructured{
+			Object:    obj,
+			Namespace: ns,
+		}
+		resp, err := am.opa.Review(ctx, au)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("validating %v %s/%s: %v", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName(), err))
+			am.log.Error(err, "Unable to review object from audit cache %v %s/%s", obj.GroupVersionKind().String(), obj.GetNamespace(), obj.GetName())
 			continue
 		}
 
@@ -469,6 +500,26 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 	}
 
 	return results, errs
+}
+
+// nsMapFromObjs creates a mapping of namespaceName -> corev1.Namespace for
+// every Namespace in input `objs`.
+func nsMapFromObjs(objs []unstructured.Unstructured) (map[string]*corev1.Namespace, error) {
+	nsMap := make(map[string]*corev1.Namespace)
+	for _, obj := range objs {
+		if obj.GetKind() != "Namespace" {
+			continue
+		}
+
+		var ns corev1.Namespace
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &ns)
+		if err != nil {
+			return nil, fmt.Errorf("error converting cached namespace %s from unstructured: %w", obj.GetName(), err)
+		}
+		nsMap[obj.GetName()] = &ns
+	}
+
+	return nsMap, nil
 }
 
 func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount int, nsCache *nsCache,
@@ -486,43 +537,70 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 
 		files, err := am.getFilesFromDir(pDir, int(*auditChunkSize))
 		if err != nil {
-			errs = append(errs, err)
+			am.log.Error(err, "Unable to get files from directory")
 			continue
 		}
 		for _, fileName := range files {
 			contents, err := os.ReadFile(path.Join(pDir, fileName)) // #nosec G304
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to get content from file", "fileName", fileName)
 				continue
 			}
 			objFile, err := am.readUnstructured(contents)
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to get unstructured data from content in file", "fileName", fileName)
 				continue
 			}
 			objNs := objFile.GetNamespace()
-			ns := corev1.Namespace{}
+			var ns *corev1.Namespace
 			if objNs != "" {
-				ns, err = nsCache.Get(ctx, am.client, objNs)
+				nsRef, err := nsCache.Get(ctx, am.client, objNs)
 				if err != nil {
-					errs = append(errs, err)
 					am.log.Error(err, "Unable to look up object namespace", "objNs", objNs)
 					continue
 				}
+				ns = &nsRef
 			}
 			augmentedObj := target.AugmentedUnstructured{
 				Object:    *objFile,
-				Namespace: &ns,
+				Namespace: ns,
+				Source:    mutationtypes.SourceTypeOriginal,
 			}
 			resp, err := am.opa.Review(ctx, augmentedObj)
 			if err != nil {
-				errs = append(errs, err)
+				am.log.Error(err, "Unable to review object from file", "fileName", fileName, "objNs", objNs)
 				continue
 			}
 
-			results := ToResults(&augmentedObj.Object, resp)
+			// Expand object and review any resultant resources
+			base := &mutationtypes.Mutable{
+				Object:    objFile,
+				Namespace: ns,
+				Username:  "",
+				Source:    mutationtypes.SourceTypeOriginal,
+			}
+			resultants, err := am.expansionSystem.Expand(base)
+			if err != nil {
+				am.log.Error(err, "unable to expand object", "objName", objFile.GetName())
+				continue
+			}
+			for _, resultant := range resultants {
+				au := target.AugmentedUnstructured{
+					Object:    *resultant.Obj,
+					Namespace: ns,
+					Source:    mutationtypes.SourceTypeGenerated,
+				}
+				resultantResp, err := am.opa.Review(ctx, au)
+				if err != nil {
+					am.log.Error(err, "Unable to review expanded object", "objName", (*resultant.Obj).GetName(), "objNs", ns)
+					continue
+				}
+				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
+				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+			}
 
 			if len(resp.Results()) > 0 {
+				results := ToResults(&augmentedObj.Object, resp)
 				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {
 					// updated to not return err immediately
@@ -547,7 +625,7 @@ func (am *Manager) getFilesFromDir(directory string, batchSize int) (files []str
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		if err != nil {
@@ -566,7 +644,7 @@ func (am *Manager) removeAllFromDir(directory string, batchSize int) error {
 	defer dir.Close()
 	for {
 		names, err := dir.Readdirnames(batchSize)
-		if err == io.EOF || len(names) == 0 {
+		if errors.Is(err, io.EOF) || len(names) == 0 {
 			break
 		}
 		for _, n := range names {
@@ -660,6 +738,8 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		gvk := r.obj.GroupVersionKind()
 		namespace := r.obj.GetNamespace()
 		name := r.obj.GetName()
+		uid := r.obj.GetUID()
+		rv := r.obj.GetResourceVersion()
 		ea := util.EnforcementAction(r.EnforcementAction)
 
 		// append audit results only if it is below violations limit
@@ -681,9 +761,9 @@ func (am *Manager) addAuditResponsesToUpdateLists(
 		}
 
 		totalViolationsPerEnforcementAction[ea]++
-		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details)
+		logViolation(am.log, r.Constraint, ea, gvk, namespace, name, r.Msg, details, r.obj.GetLabels())
 		if *emitAuditEvents {
-			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, r.Msg, am.gkNamespace, am.eventRecorder)
+			emitEvent(r.Constraint, timestamp, ea, gvk, namespace, name, rv, r.Msg, am.gkNamespace, uid, am.eventRecorder)
 		}
 	}
 	return nil
@@ -736,6 +816,8 @@ func (ucloop *updateConstraintLoop) updateConstraintStatus(ctx context.Context, 
 		// append statusViolations for this constraint until constraintViolationsLimit has reached
 		if uint(len(statusViolations)) < *constraintViolationsLimit {
 			statusViolations = append(statusViolations, StatusViolation{
+				Group:             ar.group,
+				Version:           ar.version,
 				Kind:              ar.kind,
 				Name:              ar.name,
 				Namespace:         ar.namespace,
@@ -937,8 +1019,11 @@ func logConstraint(l logr.Logger, gvknn *util.KindVersionName, enforcementAction
 
 func logViolation(l logr.Logger,
 	constraint *unstructured.Unstructured,
-	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{},
+	enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message string, details interface{}, rlabels map[string]string,
 ) {
+	userConstraintAnnotations := constraint.GetAnnotations()
+	delete(userConstraintAnnotations, "kubectl.kubernetes.io/last-applied-configuration")
+
 	l.Info(
 		message,
 		logging.Details, details,
@@ -949,16 +1034,18 @@ func logViolation(l logr.Logger,
 		logging.ConstraintName, constraint.GetName(),
 		logging.ConstraintNamespace, constraint.GetNamespace(),
 		logging.ConstraintAction, enforcementAction,
+		logging.ConstraintAnnotations, userConstraintAnnotations,
 		logging.ResourceGroup, resourceGroupVersionKind.Group,
 		logging.ResourceAPIVersion, resourceGroupVersionKind.Version,
 		logging.ResourceKind, resourceGroupVersionKind.Kind,
 		logging.ResourceNamespace, rnamespace,
 		logging.ResourceName, rname,
+		logging.ResourceLabels, rlabels,
 	)
 }
 
 func emitEvent(constraint *unstructured.Unstructured,
-	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, message, gkNamespace string,
+	timestamp string, enforcementAction util.EnforcementAction, resourceGroupVersionKind schema.GroupVersionKind, rnamespace, rname, rrv, message, gkNamespace string, ruid types.UID,
 	eventRecorder record.EventRecorder,
 ) {
 	annotations := map[string]string{
@@ -977,19 +1064,34 @@ func emitEvent(constraint *unstructured.Unstructured,
 		logging.ResourceNamespace:    rnamespace,
 		logging.ResourceName:         rname,
 	}
-	reason := "AuditViolation"
-	ref := getViolationRef(gkNamespace, resourceGroupVersionKind.Kind, rname, rnamespace, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace())
 
-	eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Timestamp: %s, Resource Namespace: %s, Constraint: %s, Message: %s", timestamp, rnamespace, constraint.GetName(), message)
+	reason := "AuditViolation"
+	ref := getViolationRef(gkNamespace, resourceGroupVersionKind.Kind, rname, rnamespace, rrv, ruid, constraint.GetKind(), constraint.GetName(), constraint.GetNamespace(), *auditEventsInvolvedNamespace)
+
+	if *auditEventsInvolvedNamespace {
+		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Constraint: %s, Message: %s", constraint.GetName(), message)
+	} else {
+		eventRecorder.AnnotatedEventf(ref, annotations, corev1.EventTypeWarning, reason, "Resource Namespace: %s, Constraint: %s, Message: %s", rnamespace, constraint.GetName(), message)
+	}
 }
 
-func getViolationRef(gkNamespace, rkind, rname, rnamespace, ckind, cname, cnamespace string) *corev1.ObjectReference {
-	return &corev1.ObjectReference{
+func getViolationRef(gkNamespace, rkind, rname, rnamespace, rrv string, ruid types.UID, ckind, cname, cnamespace string, emitInvolvedNamespace bool) *corev1.ObjectReference {
+	enamespace := gkNamespace
+	if emitInvolvedNamespace && len(rnamespace) > 0 {
+		enamespace = rnamespace
+	}
+	ref := &corev1.ObjectReference{
 		Kind:      rkind,
 		Name:      rname,
-		UID:       types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname),
-		Namespace: gkNamespace,
+		Namespace: enamespace,
 	}
+	if emitInvolvedNamespace && len(ruid) > 0 && len(rrv) > 0 {
+		ref.UID = ruid
+		ref.ResourceVersion = rrv
+	} else if !emitInvolvedNamespace {
+		ref.UID = types.UID(rkind + "/" + rnamespace + "/" + rname + "/" + ckind + "/" + cnamespace + "/" + cname)
+	}
+	return ref
 }
 
 // mergeErrors concatenates errs into a single error. None of the original errors
@@ -999,8 +1101,8 @@ func mergeErrors(errs []error) error {
 	for i, err := range errs {
 		if i != 0 {
 			sb.WriteString("\n")
-			sb.WriteString(err.Error())
 		}
+		sb.WriteString(err.Error())
 	}
 	return errors.New(sb.String())
 }

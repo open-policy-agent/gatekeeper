@@ -5,6 +5,7 @@
 package copypropagation
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/open-policy-agent/opa/ast"
@@ -31,6 +32,18 @@ type CopyPropagator struct {
 	sorted             []ast.Var  // sorted copy of vars to ensure deterministic result
 	ensureNonEmptyBody bool
 	compiler           *ast.Compiler
+	localvargen        *localVarGenerator
+}
+
+type localVarGenerator struct {
+	next int
+}
+
+func (l *localVarGenerator) Generate() ast.Var {
+	result := ast.Var(fmt.Sprintf("__localcp%d__", l.next))
+	l.next++
+	return result
+
 }
 
 // New returns a new CopyPropagator that optimizes queries while preserving vars
@@ -46,7 +59,7 @@ func New(livevars ast.VarSet) *CopyPropagator {
 		return sorted[i].Compare(sorted[j]) < 0
 	})
 
-	return &CopyPropagator{livevars: livevars, sorted: sorted}
+	return &CopyPropagator{livevars: livevars, sorted: sorted, localvargen: &localVarGenerator{}}
 }
 
 // WithEnsureNonEmptyBody configures p to ensure that results are always non-empty.
@@ -166,7 +179,16 @@ func (p *CopyPropagator) Apply(query ast.Body) ast.Body {
 			providesSafety = true
 		}
 
-		if providesSafety || !containedIn(b.v, result) {
+		safevarRef := false // don't add something like `_ = input`
+		if r, ok := b.v.(ast.Ref); ok {
+			if len(r) == 1 {
+				if v, ok := r[0].Value.(ast.Var); ok {
+					safevarRef = safe.Contains(v)
+				}
+			}
+		}
+
+		if providesSafety || (!safevarRef && !containedIn(b.v, result)) {
 			result.Append(removedEq)
 			safe.Update(outputVars)
 		}
@@ -282,12 +304,16 @@ func (t bindingPlugTransform) plugBindingsRef(pctx *plugContext, v ast.Ref) ast.
 // updateBindings returns false if the expression can be killed. If the
 // expression is killed, the binding list is updated to map a var to value.
 func (p *CopyPropagator) updateBindings(pctx *plugContext, expr *ast.Expr) bool {
-	if pctx.negated || len(expr.With) > 0 {
+	switch {
+	case pctx.negated || len(expr.With) > 0:
 		return true
-	}
-	if expr.IsEquality() {
+
+	case expr.IsEquality():
 		a, b := expr.Operand(0), expr.Operand(1)
 		if a.Equal(b) {
+			if p.livevarRef(a) {
+				pctx.removedEqs.Put(p.localvargen.Generate(), a.Value)
+			}
 			return false
 		}
 		k, v, keep := p.updateBindingsEq(a, b)
@@ -297,7 +323,8 @@ func (p *CopyPropagator) updateBindings(pctx *plugContext, expr *ast.Expr) bool 
 			}
 			return false
 		}
-	} else if expr.IsCall() {
+
+	case expr.IsCall():
 		terms := expr.Terms.([]*ast.Term)
 		if p.compiler.GetArity(expr.Operator()) == len(terms)-2 { // with captured output
 			output := terms[len(terms)-1]
@@ -308,6 +335,21 @@ func (p *CopyPropagator) updateBindings(pctx *plugContext, expr *ast.Expr) bool 
 		}
 	}
 	return !isNoop(expr)
+}
+
+func (p *CopyPropagator) livevarRef(a *ast.Term) bool {
+	ref, ok := a.Value.(ast.Ref)
+	if !ok {
+		return false
+	}
+
+	for _, v := range p.sorted {
+		if ref[0].Value.Compare(v) == 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (p *CopyPropagator) updateBindingsEq(a, b *ast.Term) (ast.Var, ast.Value, bool) {
@@ -340,30 +382,42 @@ type plugContext struct {
 }
 
 type binding struct {
-	k ast.Value
-	v ast.Value
+	k, v ast.Value
 }
 
 func containedIn(value ast.Value, x interface{}) bool {
 	var stop bool
-	switch v := value.(type) {
-	case ast.Ref:
-		ast.WalkRefs(x, func(other ast.Ref) bool {
-			if stop || other.HasPrefix(v) {
+
+	var vis *ast.GenericVisitor
+	vis = ast.NewGenericVisitor(func(x interface{}) bool {
+		switch x := x.(type) {
+		case *ast.Every: // skip body
+			vis.Walk(x.Key)
+			vis.Walk(x.Value)
+			vis.Walk(x.Domain)
+			return true
+		case *ast.ArrayComprehension, *ast.ObjectComprehension, *ast.SetComprehension: // skip
+			return true
+		case ast.Ref:
+			var match bool
+			if v, ok := value.(ast.Ref); ok {
+				match = x.HasPrefix(v)
+			} else {
+				match = x.Compare(value) == 0
+			}
+			if stop || match {
 				stop = true
 				return stop
 			}
-			return false
-		})
-	default:
-		ast.WalkTerms(x, func(other *ast.Term) bool {
-			if stop || other.Value.Compare(v) == 0 {
+		case ast.Value:
+			if stop || x.Compare(value) == 0 {
 				stop = true
 				return stop
 			}
-			return false
-		})
-	}
+		}
+		return stop
+	})
+	vis.Walk(x)
 	return stop
 }
 
@@ -374,7 +428,7 @@ func sortbindings(bindings *ast.ValueMap) []*binding {
 		return false
 	})
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].k.Compare(sorted[j].k) < 0
+		return sorted[i].k.Compare(sorted[j].k) > 0
 	})
 	return sorted
 }
@@ -397,17 +451,21 @@ func makeDisjointSets(livevars ast.VarSet, query ast.Body) (*unionFind, bool) {
 			a, b := expr.Operand(0), expr.Operand(1)
 			varA, ok1 := a.Value.(ast.Var)
 			varB, ok2 := b.Value.(ast.Var)
-			if ok1 && ok2 {
+
+			switch {
+			case ok1 && ok2:
 				if _, ok := uf.Merge(varA, varB); !ok {
 					return nil, false
 				}
-			} else if ok1 && ast.IsConstant(b.Value) {
+
+			case ok1 && ast.IsConstant(b.Value):
 				root := uf.MakeSet(varA)
 				if root.constant != nil && !root.constant.Equal(b) {
 					return nil, false
 				}
 				root.constant = b
-			} else if ok2 && ast.IsConstant(a.Value) {
+
+			case ok2 && ast.IsConstant(a.Value):
 				root := uf.MakeSet(varB)
 				if root.constant != nil && !root.constant.Equal(a) {
 					return nil, false

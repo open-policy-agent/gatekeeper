@@ -17,18 +17,21 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
-	"time"
 
 	templv1beta1 "github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	"github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation"
 	testclient "github.com/open-policy-agent/gatekeeper/test/clients"
 	"github.com/pkg/errors"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -73,7 +76,11 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+func (f *fakeNsGetter) SubResource(_ string) client.SubResourceClient {
+	return nil
+}
+
+func (f *fakeNsGetter) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	if ns, ok := obj.(*corev1.Namespace); ok {
 		ns.ObjectMeta = metav1.ObjectMeta{
 			Name: key.Name,
@@ -202,6 +209,7 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 	res.SetResourceVersion("2")
 	oldRes.SetResourceVersion("1")
 	gvr, _ := meta.UnsafeGuessKindToResource(oldRes.GroupVersionKind())
+	rawObj, _ := json.Marshal(&resList[n%len(resList)])
 	return atypes.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			UID:                uuid.NewUUID(),
@@ -220,7 +228,10 @@ func createAdmissionRequests(resList []unstructured.Unstructured, n int) atypes.
 				Groups:   []string{"res-creator-group"},
 				Extra:    map[string]authenticationv1.ExtraValue{"extraKey": {"value1", "value2"}},
 			},
-			Object:    runtime.RawExtension{Object: &resList[n%len(resList)]},
+			Object: runtime.RawExtension{
+				Object: &resList[n%len(resList)],
+				Raw:    rawObj,
+			},
 			OldObject: runtime.RawExtension{Object: oldRes},
 			DryRun:    &dryRun,
 			Options:   runtime.RawExtension{},
@@ -289,10 +300,15 @@ func BenchmarkValidationHandler(b *testing.B) {
 					},
 				},
 			}
-			h := validationHandler{opa: opaClient, webhookHandler: webhookHandler{client: c, injectedConfig: cfg}}
-
-			// seed random generator
-			rand.Seed(time.Now().UnixNano())
+			h := validationHandler{
+				opa:             opaClient,
+				expansionSystem: expansion.NewSystem(mutation.NewSystem(mutation.SystemOpts{})),
+				webhookHandler: webhookHandler{
+					processExcluder: process.Get(),
+					client:          c,
+					injectedConfig:  cfg,
+				},
+			}
 
 			// create T templates
 			err = addTemplates(ctx, opaClient, ctList)

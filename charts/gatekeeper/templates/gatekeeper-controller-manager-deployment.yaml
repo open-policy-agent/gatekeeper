@@ -25,7 +25,9 @@ spec:
   template:
     metadata:
       annotations:
+        {{- if .Values.podAnnotations }}
         {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- end }}
       labels:
 {{- include "gatekeeper.podLabels" . }}
         app: '{{ template "gatekeeper.name" . }}'
@@ -52,12 +54,21 @@ spec:
         - --logtostderr
         - --log-denies={{ .Values.logDenies }}
         - --emit-admission-events={{ .Values.emitAdmissionEvents }}
-        - --log-level={{ .Values.logLevel }}
+        - --log-level={{ (.Values.controllerManager.logLevel | empty | not) | ternary .Values.controllerManager.logLevel .Values.logLevel }}
         - --exempt-namespace={{ .Release.Namespace }}
         - --operation=webhook
         - --enable-external-data={{ .Values.enableExternalData }}
+        - --enable-generator-resource-expansion={{ .Values.enableGeneratorResourceExpansion }}
         - --log-mutations={{ .Values.logMutations }}
         - --mutation-annotations={{ .Values.mutationAnnotations }}
+        - --disable-cert-rotation={{ .Values.controllerManager.disableCertRotation }}
+        - --max-serving-threads={{ .Values.maxServingThreads }}
+        - --tls-min-version={{ .Values.controllerManager.tlsMinVersion }}
+        {{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}
+        
+        {{- range .Values.metricsBackends}}
+        - --metrics-backend={{ . }}
+        {{- end }}
         {{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}
         {{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}
         
@@ -96,6 +107,7 @@ spec:
           httpGet:
             path: /healthz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.livenessTimeout }}
         name: manager
         ports:
         - containerPort: {{ .Values.controllerManager.port }}
@@ -111,9 +123,14 @@ spec:
           httpGet:
             path: /readyz
             port: {{ .Values.controllerManager.healthPort }}
+          timeoutSeconds: {{ .Values.controllerManager.readinessTimeout }}
         resources:
           {{- toYaml .Values.controllerManager.resources | nindent 10 }}
         securityContext:
+          {{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
           {{- toYaml .Values.controllerManager.securityContext | nindent 10}}
         volumeMounts:
         - mountPath: /certs
@@ -128,10 +145,14 @@ spec:
       {{- if .Values.controllerManager.priorityClassName }}
       priorityClassName:  {{ .Values.controllerManager.priorityClassName }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}
       serviceAccountName: gatekeeper-admin
       terminationGracePeriodSeconds: 60
       tolerations:
         {{- toYaml .Values.controllerManager.tolerations | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}
       volumes:
       - name: cert
         secret:

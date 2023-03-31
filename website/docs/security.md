@@ -18,7 +18,7 @@ Gatekeeper provides [Software Bill of Materials (SBOM)](https://docs.docker.com/
 
 To get a list of images per OS and architecture and their corresponding attestations, please run:
 
-```bash
+```shell
 $ docker buildx imagetools inspect openpolicyagent/gatekeeper:v3.12.0-rc.0
 Name:      docker.io/openpolicyagent/gatekeeper:v3.12.0-rc.0
 MediaType: application/vnd.oci.image.index.v1+json
@@ -60,6 +60,8 @@ Manifests:
 ```
 
 ## SBOM
+
+> Note: Gatekeeper generates 2 SBOMs. First is for the build stage which includes the builder image and Gatekeeper source code. Second is for the final stage that includes the built Gatekeeper binary (`manager`).
 
 To retrieve [SBOM](https://docs.docker.com/build/attestations/sbom/) for all architectures, please run:
 

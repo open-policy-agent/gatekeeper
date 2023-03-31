@@ -15,6 +15,10 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_METRICS_PORT": `{{ .Values.controllerManager.metricsPort }}`,
 
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_READINESS_TIMEOUT": `{{ .Values.controllerManager.readinessTimeout }}`,
+
+	"HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LIVENESS_TIMEOUT": `{{ .Values.controllerManager.livenessTimeout }}`,
+
 	"HELMSUBST_DEPLOYMENT_AUDIT_HOST_NETWORK": `{{ .Values.audit.hostNetwork }}`,
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_DNS_POLICY": `{{ .Values.audit.dnsPolicy }}`,
@@ -23,11 +27,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_AUDIT_METRICS_PORT": `{{ .Values.audit.metricsPort }}`,
 
+	"HELMSUBST_DEPLOYMENT_AUDIT_READINESS_TIMEOUT": `{{ .Values.audit.readinessTimeout }}`,
+
+	"HELMSUBST_DEPLOYMENT_AUDIT_LIVENESS_TIMEOUT": `{{ .Values.audit.livenessTimeout }}`,
+
 	`HELMSUBST_DEPLOYMENT_AUDIT_NODE_SELECTOR: ""`: `{{- toYaml .Values.audit.nodeSelector | nindent 8 }}`,
+
+	`HELMSUBST_DEPLOYMENT_AUDIT_POD_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.audit.podSecurityContext | nindent 8 }}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_AFFINITY: ""`: `{{- toYaml .Values.audit.affinity | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.audit.securityContext | nindent 10}}`,
+	`HELMSUBST_DEPLOYMENT_AUDIT_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
+          {{- toYaml .Values.audit.securityContext | nindent 10}}`,
 
 	`HELMSUBST_DEPLOYMENT_AUDIT_TOLERATIONS: ""`: `{{- toYaml .Values.audit.tolerations | nindent 8 }}`,
 
@@ -37,11 +51,19 @@ var replacements = map[string]string{
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_NODE_SELECTOR: ""`: `{{- toYaml .Values.controllerManager.nodeSelector | nindent 8 }}`,
 
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_POD_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.controllerManager.podSecurityContext | nindent 8 }}`,
+
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_AFFINITY: ""`: `{{- toYaml .Values.controllerManager.affinity | nindent 8 }}`,
 
-	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- toYaml .Values.controllerManager.securityContext | nindent 10}}`,
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_SECURITY_CONTEXT: ""`: `{{- if .Values.enableRuntimeDefaultSeccompProfile }}
+          seccompProfile:
+            type: RuntimeDefault
+          {{- end }}
+          {{- toYaml .Values.controllerManager.securityContext | nindent 10}}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOLERATIONS: ""`: `{{- toYaml .Values.controllerManager.tolerations | nindent 8 }}`,
+
+	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_TOPOLOGY_SPREAD_CONSTRAINTS: ""`: `{{- toYaml .Values.controllerManager.topologySpreadConstraints | nindent 8 }}`,
 
 	`HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_IMAGE_PULL_SECRETS: ""`: `{{- toYaml .Values.image.pullSecrets | nindent 8 }}`,
 
@@ -49,11 +71,15 @@ var replacements = map[string]string{
 
 	"HELMSUBST_DEPLOYMENT_REPLICAS": `{{ .Values.replicas }}`,
 
-	`HELMSUBST_ANNOTATIONS: ""`: `{{- toYaml .Values.podAnnotations | trim | nindent 8 }}`,
+	`HELMSUBST_ANNOTATIONS: ""`: `{{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | trim | nindent 8 }}
+        {{- end }}`,
 
 	"HELMSUBST_SECRET_ANNOTATIONS": `{{- toYaml .Values.secretAnnotations | trim | nindent 4 }}`,
 
 	"- HELMSUBST_TLS_HEALTHCHECK_ENABLED_ARG": `{{ if .Values.enableTLSHealthcheck}}- --enable-tls-healthcheck{{- end }}`,
+
+	"- HELMBUST_ENABLE_TLS_APISERVER_AUTHENTICATION": `{{ if ne .Values.controllerManager.clientCertName "" }}- --client-cert-name={{ .Values.controllerManager.clientCertName }}{{- end }}`,
 
 	"- HELMSUBST_MUTATION_ENABLED_ARG": `{{ if not .Values.disableMutation}}- --operation=mutation-webhook{{- end }}`,
 
@@ -63,11 +89,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_MUTATING_WEBHOOK_REINVOCATION_POLICY": `{{ .Values.mutatingWebhookReinvocationPolicy }}`,
 
+	"HELMSUBST_MUTATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.mutatingWebhookAnnotations | trim | nindent 4 }}`,
+
+	"HELMSUBST_MUTATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}`,
+
 	"- HELMSUBST_MUTATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- range $key, $value := .Values.mutatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}`,
 
 	"HELMSUBST_MUTATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.mutatingWebhookObjectSelector }}`,
@@ -91,11 +127,21 @@ var replacements = map[string]string{
 
 	"HELMSUBST_VALIDATING_WEBHOOK_FAILURE_POLICY": `{{ .Values.validatingWebhookFailurePolicy }}`,
 
+	"HELMSUBST_VALIDATING_WEBHOOK_ANNOTATIONS": `{{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}`,
+
+	"HELMSUBST_VALIDATING_WEBHOOK_MATCHEXPRESSION_METADATANAME": `key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}`,
+
 	"- HELMSUBST_VALIDATING_WEBHOOK_EXEMPT_NAMESPACE_LABELS": `
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}`,
 
 	"HELMSUBST_VALIDATING_WEBHOOK_OBJECT_SELECTOR": `{{ toYaml .Values.validatingWebhookObjectSelector }}`,
@@ -184,5 +230,20 @@ var replacements = map[string]string{
 	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_PREFIXES": `
         {{- range .Values.controllerManager.exemptNamespacePrefixes}}
         - --exempt-namespace-prefix={{ . }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_EXEMPT_NAMESPACE_SUFFIXES": `
+        {{- range .Values.controllerManager.exemptNamespaceSuffixes}}
+        - --exempt-namespace-suffix={{ . }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_CONTROLLER_MANAGER_LOGFILE": `
+        {{- if .Values.controllerManager.logFile}}
+        - --log-file={{ .Values.controllerManager.logFile }}
+        {{- end }}`,
+
+	"- HELMSUBST_DEPLOYMENT_AUDIT_LOGFILE": `
+        {{- if .Values.audit.logFile}}
+        - --log-file={{ .Values.audit.logFile }}
         {{- end }}`,
 }

@@ -3,9 +3,9 @@ id: mutation
 title: Mutation
 ---
 
-The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
+`Feature State`: Gatekeeper version v3.10+ (stable)
 
-> 🚧 This feature is in _beta_ stage and it is enabled by default.
+The mutation feature allows Gatekeeper modify Kubernetes resources at request time based on customizable mutation policies.
 
 ## Mutation CRDs
 
@@ -13,18 +13,20 @@ Mutation policies are defined using mutation-specific CRDs, called __mutators__:
 - AssignMetadata - defines changes to the metadata section of a resource
 - Assign - any change outside the metadata section
 - ModifySet - adds or removes entries from a list, such as the arguments to a container
+- AssignImage - defines changes to the components of an image string
 
 The rules for mutating metadata are more strict than for mutating the rest of the resource. The differences are described in more detail below.
 
 Here is an example of a simple AssignMetadata CRD:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
 spec:
   match:
     scope: Namespaced
+    name: nginx-*
     kinds:
     - apiGroups: ["*"]
       kinds: ["Pod"]
@@ -62,7 +64,7 @@ match:
   excludedNamespaces: []
 ```
 
-Note that the `applyTo` field is required for `Assign` and `ModifySet` mutators, and does not exist for `AssignMetadata` mutators.
+Note that the `applyTo` field is required for all mutators except `AssignMetadata`, which does not have the `applyTo` field. 
 `applyTo` allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
 to a kind's schema, which can cause non-convergent mutations. Also, the `applyTo` section does not accept globs.
 
@@ -73,6 +75,7 @@ The `match` section is common to all mutators. It supports the following match c
 - namespaces - list of allowed namespaces, only resources in listed namespaces will be mutated
 - namespaceSelector - filters resources by namespace selector
 - excludedNamespaces - list of excluded namespaces, resources in listed namespaces will not be mutated
+- name - the name of an object.  If defined, it matches against objects with the specified name.  Name also supports a prefix-based glob.  For example, `name: pod-*` matches both `pod-a` and `pod-b`.
 
 Note that any empty/undefined match criteria are inclusive: they match any object.
 
@@ -128,7 +131,7 @@ to use affinity/anti-affinity rules to [keep Pods from the same deployment on di
 Assign and AssignMetadata can do this via the `fromMetadata` field. Here is an example:
 
 ```
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -170,7 +173,7 @@ Pre-existing labels and annotations cannot be modified.
 
  An example of an AssignMetadata adding a label `owner` set to `admin`:
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -191,11 +194,15 @@ New values are appended to the end of a list.
 For example, the following mutator removes an `--alsologtostderr` argument from all containers in a pod:
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: ModifySet
 metadata:
   name: remove-err-logging
 spec:
+  applyTo:
+  - groups: [""]
+    kinds: ["Pod"]
+    versions: ["v1"]
   location: "spec.containers[name: *].args"
   parameters:
     operation: prune
@@ -207,13 +214,50 @@ spec:
 - `spec.parameters.values.fromList` holds the list of values that will be added or removed.
 - `operation` can be `merge` to insert values into the list if missing, or `prune` to remove values from the list. `merge` is default.
 
+### AssignImage
+
+AssignImage is a mutator specifically for changing the components of an image
+string. Suppose you have an image like `my.registry.io:2000/repo/app:latest`.
+`my.registry.io:2000` would be the domain, `repo/app` would be the path, and
+`:latest` would be the tag. The domain, path, and tag of an image can be changed
+separately or in conjunction.
+
+For example, to change the whole image to `my.registry.io/repo/app@sha256:abcde67890123456789abc345678901a`:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: assign-container-image
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "my.registry.io"
+    assignPath: "repo/app"
+    assignTag: "@sha256:abcde67890123456789abc345678901a"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
+```
+
+Only one of `[assignDomain, assignPath, assignTag]` is required. Note that `assignTag`
+must start with `:` or `@`. Also, if `assignPath` is set to a value which could potentially
+be interpreted as a domain, such as `my.repo.lib/app`, then `assignDomain` must
+also be specified.
 
 ## Examples
 
 ### Adding an annotation
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: AssignMetadata
 metadata:
   name: demo-annotation-owner
@@ -231,7 +275,7 @@ spec:
 Set the security context of container named `foo` in a Pod in namespace `bar` to be non-privileged
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-privileged
@@ -255,7 +299,7 @@ spec:
 #### Setting imagePullPolicy of all containers to Always in all namespaces except namespace `system`
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-image-pull-policy
@@ -279,7 +323,7 @@ spec:
 ### Adding a `network` sidecar to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-sidecar
@@ -307,7 +351,7 @@ spec:
 ### Adding dnsPolicy and dnsConfig to a Pod
 
 ```yaml
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-dns-policy
@@ -326,7 +370,7 @@ spec:
     assign:
       value: None
 ---
-apiVersion: mutations.gatekeeper.sh/v1beta1
+apiVersion: mutations.gatekeeper.sh/v1
 kind: Assign
 metadata:
   name: demo-dns-config
@@ -346,6 +390,29 @@ spec:
       value:
         nameservers:
         - 1.2.3.4
+```
+
+### Setting a Pod's container image to use a specific digest:
+
+```yaml
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: AssignImage
+metadata:
+  name: add-nginx-digest
+spec:
+  applyTo:
+  - groups: [ "" ]
+    kinds: [ "Pod" ]
+    versions: [ "v1" ]
+  location: "spec.containers[name:nginx].image"
+  parameters:
+    assignTag: "@sha256:abcde67890123456789abc345678901a"
+  match:
+    source: "All"
+    scope: Namespaced
+    kinds:
+    - apiGroups: [ "*" ]
+      kinds: [ "Pod" ]
 ```
 
 ### External Data

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: nginx
+  name: nginx-deployment-pod
+  namespace: my-ns
+spec:
+  containers:
+  - args:
+    - /bin/sh
+    image: nginx:1.14.2
+    imagePullPolicy: Always
+    name: nginx
+    ports:
+    - containerPort: 80

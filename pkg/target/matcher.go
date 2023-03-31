@@ -5,6 +5,7 @@ import (
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -37,10 +38,10 @@ func (m *Matcher) Match(review interface{}) (bool, error) {
 		ns = m.cache.GetNamespace(gkReq.Namespace)
 	}
 
-	return matchAny(m, ns, obj, oldObj)
+	return matchAny(m, ns, gkReq.source, obj, oldObj)
 }
 
-func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructured) (bool, error) {
+func matchAny(m *Matcher, ns *corev1.Namespace, source types.SourceType, objs ...*unstructured.Unstructured) (bool, error) {
 	nilObj := 0
 	for _, obj := range objs {
 		if obj == nil || obj.Object == nil {
@@ -48,9 +49,14 @@ func matchAny(m *Matcher, ns *corev1.Namespace, objs ...*unstructured.Unstructur
 			continue
 		}
 
-		matched, err := match.Matches(m.match, obj, ns)
+		t := &match.Matchable{
+			Object:    obj,
+			Namespace: ns,
+			Source:    source,
+		}
+		matched, err := match.Matches(m.match, t)
 		if err != nil {
-			return false, fmt.Errorf("%w: %v", ErrMatching, err)
+			return false, fmt.Errorf("%w: %w", ErrMatching, err)
 		}
 
 		if matched {

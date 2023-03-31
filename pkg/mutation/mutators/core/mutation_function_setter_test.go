@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/path/parser"
@@ -27,7 +28,7 @@ func TestKeyedListIncompatible(t *testing.T) {
 	}
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	m, err := Mutate(path, &tester.Tester{}, &notKeyedSetter{}, obj)
-	if err != ErrNonKeyedSetter {
+	if !errors.Is(err, ErrNonKeyedSetter) {
 		t.Errorf("wanted err = %+v, got %+v", ErrNonKeyedSetter, err)
 	}
 	if m != false {

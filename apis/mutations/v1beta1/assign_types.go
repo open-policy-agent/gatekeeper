@@ -84,7 +84,6 @@ type AssignStatus struct {
 // +kubebuilder:resource:path="assign"
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
 
 // Assign is the Schema for the assign API.
 type Assign struct {

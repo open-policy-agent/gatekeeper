@@ -1,7 +1,6 @@
 package test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -10,6 +9,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/gator/fixtures"
 	"github.com/open-policy-agent/gatekeeper/pkg/target"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -56,12 +56,27 @@ func init() {
 	}
 }
 
+func ignoreGatorResultFields() cmp.Option {
+	return cmp.FilterPath(
+		func(p cmp.Path) bool {
+			switch p.String() {
+			// ignore these fields
+			case "Result.Metadata", "Result.EvaluationMeta", "Result.EnforcementAction", "ViolatingObject":
+				return true
+			default:
+				return false
+			}
+		},
+		cmp.Ignore())
+}
+
 func TestTest(t *testing.T) {
 	tcs := []struct {
-		name   string
-		inputs []string
-		want   []*types.Result
-		err    error
+		name      string
+		inputs    []string
+		want      []*GatorResult
+		cmpOption cmp.Option
+		err       error
 	}{
 		{
 			name: "basic no violation",
@@ -70,6 +85,7 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintAlwaysValidate,
 				fixtures.Object,
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "basic violation",
@@ -78,23 +94,30 @@ func TestTest(t *testing.T) {
 				fixtures.ConstraintNeverValidate,
 				fixtures.Object,
 			},
-			want: []*types.Result{
+			want: []*GatorResult{
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "never validate",
-					Constraint: constraintNeverValidate,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "never validate",
+						Constraint: constraintNeverValidate,
+					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint with violation",
@@ -104,18 +127,23 @@ func TestTest(t *testing.T) {
 				fixtures.ObjectReferentialInventory,
 				fixtures.ObjectReferentialDeny,
 			},
-			want: []*types.Result{
+			want: []*GatorResult{
 				{
-					Target:     target.Name,
-					Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
-					Constraint: constraintReferential,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "same selector as service <gatekeeper-test-service-disallowed> in namespace <default>",
+						Constraint: constraintReferential,
+					},
 				},
 				{
-					Target:     target.Name,
-					Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
-					Constraint: constraintReferential,
+					Result: types.Result{
+						Target:     target.Name,
+						Msg:        "same selector as service <gatekeeper-test-service-example> in namespace <default>",
+						Constraint: constraintReferential,
+					},
 				},
 			},
+			cmpOption: ignoreGatorResultFields(),
 		},
 		{
 			name: "referential constraint without violation",
@@ -158,32 +186,93 @@ func TestTest(t *testing.T) {
 			var objs []*unstructured.Unstructured
 			for _, input := range tc.inputs {
 				u, err := readUnstructured([]byte(input))
-				if err != nil {
-					t.Fatalf("readUnstructured for input %q: %v", input, err)
-				}
+				require.NoError(t, err)
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs)
+			resps, err := Test(objs, false)
 			if tc.err != nil {
-				// If we're checking for specific errors, use errors.Is() to verify
-				if err == nil {
-					t.Errorf("got nil err, want %v", tc.err)
-				}
-				if !errors.Is(err, tc.err) {
-					t.Errorf("got err %q, want %q", err, tc.err)
-				}
+				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
-				t.Errorf("got err '%v', want nil", err)
+				require.NoError(t, err)
 			}
 
 			got := resps.Results()
 
-			diff := cmp.Diff(tc.want, got, cmpopts.IgnoreFields(types.Result{}, "Metadata", "EnforcementAction"))
+			var diff string
+			if tc.cmpOption != nil {
+				diff = cmp.Diff(tc.want, got, tc.cmpOption)
+			} else {
+				diff = cmp.Diff(tc.want, got)
+			}
+
 			if diff != "" {
-				t.Errorf("diff in Result objects (-want +got):\n%s", diff)
+				t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// Test_Test_withTrace proves that we can get a Trace populated when we ask for it.
+func Test_Test_withTrace(t *testing.T) {
+	inputs := []string{
+		fixtures.TemplateNeverValidate,
+		fixtures.ConstraintNeverValidate,
+		fixtures.Object,
+	}
+
+	var objs []*unstructured.Unstructured
+	for _, input := range inputs {
+		u, err := readUnstructured([]byte(input))
+		if err != nil {
+			t.Fatalf("readUnstructured for input %q: %v", input, err)
+		}
+		objs = append(objs, u)
+	}
+
+	resps, err := Test(objs, true)
+	if err != nil {
+		t.Errorf("got err '%v', want nil", err)
+	}
+
+	got := resps.Results()
+
+	want := []*GatorResult{
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+		{
+			Result: types.Result{
+				Target:     target.Name,
+				Msg:        "never validate",
+				Constraint: constraintNeverValidate,
+			},
+		},
+	}
+
+	diff := cmp.Diff(want, got, ignoreGatorResultFields(), cmpopts.IgnoreFields(
+		GatorResult{},
+		"Trace", // ignore Trace for now, we will assert non nil further down
+	))
+	if diff != "" {
+		t.Errorf("diff in GatorResult objects (-want +got):\n%s", diff)
+	}
+
+	for _, gotResult := range got {
+		if gotResult.Trace == nil {
+			t.Errorf("did not find a trace when we expected to find one")
+		}
 	}
 }
 

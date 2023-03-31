@@ -7887,12 +7887,7 @@ func (m *Oauth2Scopes) ToRawInfo() *yaml.Node {
 	if m == nil {
 		return info
 	}
-	if m.AdditionalProperties != nil {
-		for _, item := range m.AdditionalProperties {
-			info.Content = append(info.Content, compiler.NewScalarNodeForString(item.Name))
-			info.Content = append(info.Content, compiler.NewScalarNodeForString(item.Value))
-		}
-	}
+	// &{Name:additionalProperties Type:NamedString StringEnumValues:[] MapType:string Repeated:true Pattern: Implicit:true Description:}
 	return info
 }
 

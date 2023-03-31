@@ -10,10 +10,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/local"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/client/drivers/rego"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/constraints"
 	"github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	"github.com/open-policy-agent/gatekeeper/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +26,7 @@ import (
 
 func TestFrameworkInjection(t *testing.T) {
 	target := &K8sValidationTarget{}
-	driver, err := local.New(local.Tracing(true))
+	driver, err := rego.New(rego.Tracing(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +54,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "All",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -79,6 +81,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Original",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -89,7 +92,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "NotIn",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},
@@ -129,7 +132,7 @@ func TestValidateConstraint(t *testing.T) {
 			ErrorExpected: true,
 		},
 		{
-			Name: "Invalid LabelSelector MatchLels",
+			Name: "Invalid LabelSelector MatchLabels",
 			Constraint: `
 {
 	"apiVersion": "constraints.gatekeeper.sh/v1beta1",
@@ -201,6 +204,7 @@ func TestValidateConstraint(t *testing.T) {
 	},
 	"spec": {
 		"match": {
+			"source": "Generated",
 			"kinds": [
 				{
 					"apiGroups": [""],
@@ -211,7 +215,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "In",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},
@@ -244,7 +248,7 @@ func TestValidateConstraint(t *testing.T) {
 				"matchExpressions": [{
 					"key": "someKey",
 					"operator": "In",
-					"values": ["some value"]
+					"values": ["some-value"]
 				}]
 			}
 		},
@@ -500,6 +504,7 @@ func namespaceSelectorMatch() *match.Match {
 
 func fooMatch() *match.Match {
 	return &match.Match{
+		Source: string(types.SourceTypeAll),
 		Kinds: []match.Kinds{
 			{
 				Kinds:     []string{"Thing"},
@@ -530,6 +535,7 @@ func fooConstraint() *unstructured.Unstructured {
 		setNamespaceName("my-ns"),
 		setLabelSelector("obj", "label"),
 		setNamespaceSelector("ns", "label"),
+		setSource(string(types.SourceTypeDefault)),
 	)
 }
 
@@ -691,6 +697,7 @@ func TestMatcher_Match(t *testing.T) {
 				Object: unstructured.Unstructured{Object: map[string]interface{}{
 					"key": "Some invalid json",
 				}},
+				Source: types.SourceTypeDefault,
 			},
 			match:       fooMatch(),
 			wantHandled: true,

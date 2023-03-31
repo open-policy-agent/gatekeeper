@@ -4,10 +4,12 @@
 
 Compared to using [OPA with its sidecar kube-mgmt](https://www.openpolicyagent.org/docs/kubernetes-admission-control.html) (aka Gatekeeper v1.0), Gatekeeper introduces the following functionality:
 
-   * An extensible, parameterized policy library
+   * An extensible, parameterized [policy library](https://open-policy-agent.github.io/gatekeeper-library/website/)
    * Native Kubernetes CRDs for instantiating the policy library (aka "constraints")
    * Native Kubernetes CRDs for extending the policy library (aka "constraint templates")
+   * Native Kubernetes CRDs for [mutation](https://open-policy-agent.github.io/gatekeeper/website/docs/mutation/) support
    * Audit functionality
+   * External data support
 
 ## Getting started
 
@@ -19,7 +21,7 @@ Please see the [Gatekeeper website](https://open-policy-agent.github.io/gatekeep
 
 ## Policy Library
 
-See the [Gatekeeper policy library](https://www.github.com/open-policy-agent/gatekeeper-library) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
+See the [Gatekeeper policy library](https://open-policy-agent.github.io/gatekeeper-library/website/) for a collection of constraint templates and sample constraints that you can use with Gatekeeper.
 
 ## Community & Contributing
 

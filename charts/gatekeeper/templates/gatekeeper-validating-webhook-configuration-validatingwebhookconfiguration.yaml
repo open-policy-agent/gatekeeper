@@ -2,6 +2,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  annotations: {{- toYaml .Values.validatingWebhookAnnotations | trim | nindent 4 }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -25,11 +26,18 @@ webhooks:
     matchExpressions:
     - key: admission.gatekeeper.sh/ignore
       operator: DoesNotExist
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
     
     {{- range $key, $value := .Values.validatingWebhookExemptNamespacesLabels}}
     - key: {{ $key }}
       operator: NotIn
-      value: {{ $value }}
+      values:
+      {{- range $value }}
+      - {{ . }}
+      {{- end }}
     {{- end }}
   objectSelector: {{ toYaml .Values.validatingWebhookObjectSelector }}
   rules:
@@ -48,6 +56,24 @@ webhooks:
     {{- end }}
     resources:
     - '*'
+    # Explicitly list all known subresources except "status" (to avoid destabilizing the cluster and increasing load on gatekeeper).
+    # You can find a rough list of subresources by doing a case-sensitive search in the Kubernetes codebase for 'Subresource("'
+    - 'pods/ephemeralcontainers'
+    - 'pods/exec'
+    - 'pods/log'
+    - 'pods/eviction'
+    - 'pods/portforward'
+    - 'pods/proxy'
+    - 'pods/attach'
+    - 'pods/binding'
+    - 'deployments/scale'
+    - 'replicasets/scale'
+    - 'statefulsets/scale'
+    - 'replicationcontrollers/scale'
+    - 'services/proxy'
+    - 'nodes/proxy'
+    # For constraints that mitigate CVE-2020-8554
+    - 'services/status'
   {{- end }}
   sideEffects: None
   timeoutSeconds: {{ .Values.validatingWebhookTimeoutSeconds }}
@@ -62,6 +88,12 @@ webhooks:
   failurePolicy: {{ .Values.validatingWebhookCheckIgnoreFailurePolicy }}
   matchPolicy: Exact
   name: check-ignore-label.gatekeeper.sh
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - {{ .Release.Namespace }}
   rules:
   - apiGroups:
     - ""

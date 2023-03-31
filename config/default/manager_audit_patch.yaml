@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        volumeMounts:
+        - mountPath: /certs
+          name: cert
+          readOnly: true
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert

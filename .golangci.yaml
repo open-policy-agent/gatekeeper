@@ -1,5 +1,7 @@
 run:
   timeout: 5m
+  skip-files:
+    - pkg/target/matchcrd_constant.go
 
 linters-settings:
   gocritic:
@@ -20,15 +22,16 @@ linters-settings:
     locale: US
   staticcheck:
     # Select the Go version to target. The default is '1.13'.
-    go: "1.18"
+    go: "1.20"
 
 linters:
   disable-all: true
   enable:
-    - deadcode
     - errcheck
+    - errorlint
     - exportloopref
     - forcetypeassert
+    - gci
     - gocritic
     - goconst
     - godot
@@ -43,8 +46,7 @@ linters:
     - misspell
     - revive # replacement for golint
     - staticcheck
-    - structcheck
     - typecheck
+    - unconvert
     - unused
-    - varcheck
     - whitespace

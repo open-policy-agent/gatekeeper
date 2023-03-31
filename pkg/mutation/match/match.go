@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/open-policy-agent/gatekeeper/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/pkg/mutation/types"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,59 +19,18 @@ var ErrMatch = errors.New("failed to run Match criteria")
 // Only for use in Match, not ApplyTo.
 const Wildcard = "*"
 
-// Match selects objects to apply mutations to.
-// +kubebuilder:object:generate=true
-type Match struct {
-	Kinds []Kinds `json:"kinds,omitempty"`
-	// Scope determines if cluster-scoped and/or namespaced-scoped resources
-	// are matched.  Accepts `*`, `Cluster`, or `Namespaced`. (defaults to `*`)
-	Scope apiextensionsv1.ResourceScope `json:"scope,omitempty"`
-	// Namespaces is a list of namespace names. If defined, a constraint only
-	// applies to resources in a listed namespace.  Namespaces also supports a
-	// prefix or suffix based glob.  For example, `namespaces: [kube-*]` matches both
-	// `kube-system` and `kube-public`, and `namespaces: [*-system]` matches both
-	// `kube-system` and `gatekeeper-system`.
-	Namespaces []util.Wildcard `json:"namespaces,omitempty"`
-	// ExcludedNamespaces is a list of namespace names. If defined, a
-	// constraint only applies to resources not in a listed namespace.
-	// ExcludedNamespaces also supports a prefix or suffix based glob.  For example,
-	// `excludedNamespaces: [kube-*]` matches both `kube-system` and
-	// `kube-public`, and `excludedNamespaces: [*-system]` matches both `kube-system` and
-	// `gatekeeper-system`.
-	ExcludedNamespaces []util.Wildcard `json:"excludedNamespaces,omitempty"`
-	// LabelSelector is the combination of two optional fields: `matchLabels`
-	// and `matchExpressions`.  These two fields provide different methods of
-	// selecting or excluding k8s objects based on the label keys and values
-	// included in object metadata.  All selection expressions from both
-	// sections are ANDed to determine if an object meets the cumulative
-	// requirements of the selector.
-	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	// NamespaceSelector is a label selector against an object's containing
-	// namespace or the object itself, if the object is a namespace.
-	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
-	// Name is the name of an object.  If defined, it will match against objects with the specified
-	// name.  Name also supports a prefix or suffix glob.  For example, `name: pod-*` would match
-	// both `pod-a` and `pod-b`, and `name: *-pod` would match both `a-pod` and `b-pod`.
-	Name util.Wildcard `json:"name,omitempty"`
-}
-
-// Kinds accepts a list of objects with apiGroups and kinds fields
-// that list the groups/kinds of objects to which the mutation will apply.
-// If multiple groups/kinds objects are specified,
-// only one match is needed for the resource to be in scope.
-// +kubebuilder:object:generate=true
-type Kinds struct {
-	// APIGroups is the API groups the resources belong to. '*' is all groups.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
-	APIGroups []string `json:"apiGroups,omitempty" protobuf:"bytes,1,rep,name=apiGroups"`
-	Kinds     []string `json:"kinds,omitempty"`
+// Matchable represent an object to be matched along with its metadata.
+// +kubebuilder:object:generate=false
+type Matchable struct {
+	Object    client.Object
+	Namespace *corev1.Namespace
+	Source    types.SourceType
 }
 
 // Matches verifies if the given object belonging to the given namespace
 // matches Match. Only returns true if all parts of the Match succeed.
-func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
-	if reflect.ValueOf(obj).IsNil() {
+func Matches(match *Match, target *Matchable) (bool, error) {
+	if reflect.ValueOf(target.Object).IsNil() {
 		// Simply checking if obj == nil is insufficient here.
 		// obj can be an interface pointer to nil, such as client.Object(nil), which
 		// is not equal to just "nil".
@@ -87,12 +46,13 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 		labelSelectorMatch,
 		namespaceSelectorMatch,
 		namesMatch,
+		sourceMatch,
 	}
 
 	for _, fn := range topLevelMatchers {
-		matches, err := fn(match, obj, ns)
+		matches, err := fn(match, target)
 		if err != nil {
-			return false, fmt.Errorf("%w: %v", ErrMatch, err)
+			return false, fmt.Errorf("%w: %w", ErrMatch, err)
 		}
 
 		if !matches {
@@ -108,9 +68,12 @@ func Matches(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error
 // an object, and the namespace of the object and decides if there is a reason why the object does
 // not match.  If the TLM associated with the matching function is not defined by the user, the
 // matchFunc should return true.
-type matchFunc func(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error)
+type matchFunc func(match *Match, target *Matchable) (bool, error)
 
-func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func namespaceSelectorMatch(match *Match, target *Matchable) (bool, error) {
+	obj := target.Object
+	ns := target.Namespace
+
 	if match.NamespaceSelector == nil {
 		return true, nil
 	}
@@ -137,7 +100,9 @@ func namespaceSelectorMatch(match *Match, obj client.Object, ns *corev1.Namespac
 	return selector.Matches(labels.Set(ns.Labels)), nil
 }
 
-func labelSelectorMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
+func labelSelectorMatch(match *Match, target *Matchable) (bool, error) {
+	obj := target.Object
+
 	if match.LabelSelector == nil {
 		return true, nil
 	}
@@ -150,7 +115,10 @@ func labelSelectorMatch(match *Match, obj client.Object, _ *corev1.Namespace) (b
 	return selector.Matches(labels.Set(obj.GetLabels())), nil
 }
 
-func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func excludedNamespacesMatch(match *Match, target *Matchable) (bool, error) {
+	obj := target.Object
+	ns := target.Namespace
+
 	// If we don't have a namespace, we can't disqualify the match
 	var namespace string
 
@@ -179,7 +147,10 @@ func excludedNamespacesMatch(match *Match, obj client.Object, ns *corev1.Namespa
 	return true, nil
 }
 
-func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
+func namespacesMatch(match *Match, target *Matchable) (bool, error) {
+	obj := target.Object
+	ns := target.Namespace
+
 	// If we don't have a namespace, we can't disqualify the match
 	var namespace string
 
@@ -207,12 +178,12 @@ func namespacesMatch(match *Match, obj client.Object, ns *corev1.Namespace) (boo
 	return false, nil
 }
 
-func kindsMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
+func kindsMatch(match *Match, target *Matchable) (bool, error) {
 	if len(match.Kinds) == 0 {
 		return true, nil
 	}
 
-	gvk := obj.GetObjectKind().GroupVersionKind()
+	gvk := target.Object.GetObjectKind().GroupVersionKind()
 
 	for _, kk := range match.Kinds {
 		kindMatches := len(kk.Kinds) == 0 || contains(kk.Kinds, Wildcard) || contains(kk.Kinds, gvk.Kind)
@@ -229,7 +200,7 @@ func kindsMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, err
 	return false, nil
 }
 
-func namesMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, error) {
+func namesMatch(match *Match, target *Matchable) (bool, error) {
 	// A blank string could be undefined or an intentional blank string by the user.  Either way,
 	// we will assume this means "any name".  This goes with the undefined == match everything
 	// pattern that we've already got going in the Match.
@@ -237,12 +208,12 @@ func namesMatch(match *Match, obj client.Object, _ *corev1.Namespace) (bool, err
 		return true, nil
 	}
 
-	return match.Name.Matches(obj.GetName()), nil
+	return match.Name.Matches(target.Object.GetName()), nil
 }
 
-func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, error) {
-	hasNamespace := obj.GetNamespace() != "" || ns != nil
-	isNamespace := IsNamespace(obj)
+func scopeMatch(match *Match, target *Matchable) (bool, error) {
+	hasNamespace := target.Object.GetNamespace() != "" || target.Namespace != nil
+	isNamespace := IsNamespace(target.Object)
 
 	switch match.Scope {
 	case apiextensionsv1.ClusterScoped:
@@ -250,9 +221,35 @@ func scopeMatch(match *Match, obj client.Object, ns *corev1.Namespace) (bool, er
 	case apiextensionsv1.NamespaceScoped:
 		return !isNamespace && hasNamespace, nil
 	default:
-		// This includes invalid scopes, such as typos like "cluster" or "Namspace".
+		// This includes invalid scopes, such as typos like "cluster" or "Namespace".
 		return true, nil
 	}
+}
+
+func sourceMatch(match *Match, target *Matchable) (bool, error) {
+	mSrc := types.SourceType(match.Source)
+	tSrc := target.Source
+
+	// An empty 'source' field will default to 'All'
+	if mSrc == "" {
+		mSrc = types.SourceTypeDefault
+	} else if !types.IsValidSource(mSrc) {
+		return false, fmt.Errorf("invalid source field %q", mSrc)
+	}
+
+	if tSrc == "" && mSrc != types.SourceTypeAll {
+		return false, fmt.Errorf("source field not specified for resource %s", target.Object.GetName())
+	}
+
+	if mSrc == types.SourceTypeAll {
+		return true, nil
+	}
+
+	if !types.IsValidSource(tSrc) {
+		return false, fmt.Errorf("invalid source field %q", tSrc)
+	}
+
+	return mSrc == tSrc, nil
 }
 
 func IsNamespace(obj client.Object) bool {

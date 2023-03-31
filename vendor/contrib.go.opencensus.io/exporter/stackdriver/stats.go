@@ -683,6 +683,7 @@ func serviceMetric(metricType string) bool {
 var knownExternalMetricPrefixes = []string{
 	"custom.googleapis.com/",
 	"external.googleapis.com/",
+	"workload.googleapis.com/",
 }
 
 // builtinMetric returns true if a MetricType is a heuristically known

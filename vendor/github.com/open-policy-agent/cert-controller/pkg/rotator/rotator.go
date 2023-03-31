@@ -157,6 +157,7 @@ type CertRotator struct {
 	IsReady                chan struct{}
 	Webhooks               []WebhookInfo
 	RestartOnSecretRefresh bool
+	ExtKeyUsages           *[]x509.ExtKeyUsage
 	certsMounted           chan struct{}
 	certsNotMounted        chan struct{}
 	wasCAInjected          *atomic.Bool
@@ -170,6 +171,10 @@ func (cr *CertRotator) Start(ctx context.Context) error {
 	}
 	if !cr.reader.WaitForCacheSync(ctx) {
 		return errors.New("failed waiting for reader to sync")
+	}
+
+	if cr.ExtKeyUsages == nil {
+		cr.ExtKeyUsages = &[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	}
 
 	// explicitly rotate on the first round so that the certificate
@@ -459,7 +464,7 @@ func (cr *CertRotator) CreateCertPEM(ca *KeyPairArtifacts, begin, end time.Time)
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:           *cr.ExtKeyUsages,
 		BasicConstraintsValid: true,
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -495,7 +500,7 @@ func lookaheadTime() time.Time {
 }
 
 func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
-	valid, err := ValidCert(caCert, cert, key, cr.DNSName, lookaheadTime())
+	valid, err := ValidCert(caCert, cert, key, cr.DNSName, cr.ExtKeyUsages, lookaheadTime())
 	if err != nil {
 		return false
 	}
@@ -503,14 +508,14 @@ func (cr *CertRotator) validServerCert(caCert, cert, key []byte) bool {
 }
 
 func (cr *CertRotator) validCACert(cert, key []byte) bool {
-	valid, err := ValidCert(cert, cert, key, cr.CAName, lookaheadTime())
+	valid, err := ValidCert(cert, cert, key, cr.CAName, nil, lookaheadTime())
 	if err != nil {
 		return false
 	}
 	return valid
 }
 
-func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, error) {
+func ValidCert(caCert, cert, key []byte, dnsName string, keyUsages *[]x509.ExtKeyUsage, at time.Time) (bool, error) {
 	if len(caCert) == 0 || len(cert) == 0 || len(key) == 0 {
 		return false, errors.New("empty cert")
 	}
@@ -540,11 +545,17 @@ func ValidCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 	if err != nil {
 		return false, errors.Wrap(err, "parsing cert")
 	}
-	_, err = crt.Verify(x509.VerifyOptions{
+
+	opt := x509.VerifyOptions{
 		DNSName:     dnsName,
 		Roots:       pool,
 		CurrentTime: at,
-	})
+	}
+	if keyUsages != nil {
+		opt.KeyUsages = *keyUsages
+	}
+
+	_, err = crt.Verify(opt)
 	if err != nil {
 		return false, errors.Wrap(err, "verifying cert")
 	}

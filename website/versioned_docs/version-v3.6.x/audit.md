@@ -13,7 +13,7 @@ There are three ways to gather audit results, depending on the level of detail n
 
 Prometheus metrics provide an aggregated look at the number of audit violations:
 
-* `gatekeeper_audit_last_run_time` provides the timestamp of the most recently completed audit run
+* `gatekeeper_audit_last_run_time` provides the start time timestamp of the most recent audit run
 * `gatekeeper_violations` provides the total number of audited violations for the last audit run, broken down by violation severity
 
 ### Constraint Status
@@ -107,6 +107,9 @@ In addition to violations, these other audit events may be useful (all uniquely 
 
 All of these events (including `violation_audited`) are marked with the same `audit_id` for a given audit run.
 
+## Running Audit
+By default, audit runs as its own deployment. To limit traffic to the API server and to avoid contention writing audit results to constraints, audit should run as a singleton pod.
+
 ## Configuring Audit
 
 - Audit violations per constraint: set `--constraint-violations-limit=123` (defaults to `20`)
@@ -137,3 +140,7 @@ spec:
 ```
 
 If any of the [constraints](howto.md#constraints) do not specify `kinds`, it will be equivalent to not setting `--audit-match-kind-only` flag (`false` by default), and will fall back to auditing all resources in the cluster.
+
+## Audit UserInfo
+
+When using `input.review.userInfo`, *NOTE* the request's user's information, such as `username`, `uid`, `groups`, `extra`, cannot be populated by Kubernetes for audit reviews and therefore constraint templates that rely on `userInfo` are not auditable. It is up to the rego author to handle the case where `userInfo` is unset and empty in order to avoid every matching resource being reported as violating resources. 

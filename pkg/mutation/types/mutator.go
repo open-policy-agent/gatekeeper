@@ -10,6 +10,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	SourceTypeOriginal  = SourceType("Original")
+	SourceTypeGenerated = SourceType("Generated")
+	SourceTypeAll       = SourceType("All")
+	SourceTypeDefault   = SourceTypeAll
+)
+
+// SourceType specifies which types resource a matcher should be applied to.
+type SourceType string
+
+var validSourceTypes = map[SourceType]bool{
+	SourceTypeAll:       true,
+	SourceTypeGenerated: true,
+	SourceTypeOriginal:  true,
+}
+
 // ID represent the identifier of a mutation object.
 type ID struct {
 	Group     string
@@ -24,14 +40,19 @@ func (id ID) String() string {
 		client.ObjectKey{Namespace: id.Namespace, Name: id.Name})
 }
 
+func IsValidSource(src SourceType) bool {
+	_, exists := validSourceTypes[src]
+	return exists
+}
+
 // Mutator represent a mutation object.
 type Mutator interface {
 	// Matches tells if the given object is eligible for this mutation.
 	Matches(mutable *Mutable) bool
 	// Mutate applies the mutation to the given object
 	Mutate(mutable *Mutable) (bool, error)
-	// UsesExternalData returns true if the mutation uses external data.
-	UsesExternalData() bool
+	// MustTerminate returns true if the mutator requires its path to terminate
+	MustTerminate() bool
 	// ID returns the id of the current mutator.
 	ID() ID
 	// HasDiff tells if the mutator has meaningful differences
