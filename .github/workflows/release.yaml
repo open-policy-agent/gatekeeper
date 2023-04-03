@@ -1,0 +1,144 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  IMAGE_REPO: openpolicyagent/gatekeeper
+  CRD_IMAGE_REPO: openpolicyagent/gatekeeper-crds
+  GATOR_IMAGE_REPO: openpolicyagent/gator
+
+jobs:
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: "ubuntu-22.04"
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'open-policy-agent/gatekeeper'
+    timeout-minutes: 45
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+
+      - name: Set up Go 1.20
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+
+      - name: Get tag
+        id: get_version
+        run: |
+          echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Publish release
+        run: |
+          make docker-login
+
+          tokenUri="https://auth.docker.io/token?service=registry.docker.io&scope=repository:${{ env.IMAGE_REPO }}:pull&scope=repository:${{ env.CRD_IMAGE_REPO }}:pull&scope=repository:${{ env.GATOR_IMAGE_REPO }}:pull"
+          bearerToken="$(curl --silent --get $tokenUri | jq --raw-output '.token')"
+          listUri="https://registry-1.docker.io/v2/${{ env.IMAGE_REPO }}/tags/list"
+          authz="Authorization: Bearer $bearerToken"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-buildx-release \
+              VERSION=${TAG} \
+              PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
+              OUTPUT_TYPE=type=registry \
+              GENERATE_ATTESTATIONS=true
+          fi
+
+          listUri="https://registry-1.docker.io/v2/${{ env.CRD_IMAGE_REPO }}/tags/list"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-buildx-crds-release \
+              VERSION=${TAG} \
+              PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
+              OUTPUT_TYPE=type=registry \
+              GENERATE_ATTESTATIONS=true
+          fi
+
+          listUri="https://registry-1.docker.io/v2/${{ env.GATOR_IMAGE_REPO }}/tags/list"
+          version_list="$(curl --silent --get -H "Accept: application/json" -H $authz $listUri | jq --raw-output '.')"
+          exists=$(echo $version_list | jq --arg t ${TAG} '.tags | index($t)')
+          if [[ $exists == null ]]
+          then
+            make docker-buildx-gator-release \
+              VERSION=${TAG} \
+              PLATFORM="linux/amd64,linux/arm64,linux/arm/v7" \
+              OUTPUT_TYPE=type=registry \
+              GENERATE_ATTESTATIONS=true
+          fi
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Bootstrap e2e
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          make e2e-bootstrap
+
+      - name: Verify release
+        run: |
+          make e2e-verify-release IMG=${{ env.IMAGE_REPO }}:${TAG} USE_LOCAL_IMG=false
+
+      - name: Build gator-cli
+        shell: bash
+        run: |
+          set -e
+          build() {
+            export GOOS="$(echo ${1} | cut -d '-' -f 1)"
+            export GOARCH="$(echo ${1} | cut -d '-' -f 2)"
+            FILENAME=${GITHUB_WORKSPACE}/_dist/gator-${TAG}-${GOOS}-${GOARCH}
+            # build the binary
+            make bin/gator-${GOOS}-${GOARCH}
+            # rename the binary to gator
+            tmp_dir=$(mktemp -d)
+            cp bin/gator-${GOOS}-${GOARCH} ${tmp_dir}/gator
+            pushd ${tmp_dir}
+            tar -czf ${FILENAME}.tar.gz gator*
+            popd
+          }
+
+          mkdir -p _dist
+
+          i=0
+          for os_arch_extension in $PLATFORMS; do
+              build ${os_arch_extension} &
+              pids[${i}]=$!
+              ((i=i+1))
+          done
+
+          # wait for all pids
+          for pid in ${pids[*]}; do
+              wait $pid
+          done
+
+          pushd _dist
+          # consolidate tar's sha256sum into a single file
+          find . -type f -name '*.tar.gz' | sort | xargs sha256sum >> sha256sums.txt
+          popd
+        env:
+          PLATFORMS: "linux-amd64 linux-arm64 darwin-amd64 darwin-arm64"
+
+      - name: Create GitHub release
+        uses: "marvinpinto/action-automatic-releases@v1.2.1"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            _dist/sha256sums.txt
+            _dist/*.tar.gz
+
+      - name: Publish Helm chart
+        uses: stefanprodan/helm-gh-pages@v1.7.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: charts
+          target_dir: charts
+          linting: off

@@ -64,7 +64,7 @@ match:
   excludedNamespaces: []
 ```
 
-Note that the `applyTo` field is required for `Assign` and `ModifySet` mutators, and does not exist for `AssignMetadata` mutators.
+Note that the `applyTo` field is required for all mutators except `AssignMetadata`, which does not have the `applyTo` field. 
 `applyTo` allows Gatekeeper to understand the schema of the objects being modified, so that it can detect when two mutators disagree as
 to a kind's schema, which can cause non-convergent mutations. Also, the `applyTo` section does not accept globs.
 

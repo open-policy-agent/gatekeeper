@@ -76,7 +76,7 @@ func getFiles(dir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func (f *fakeNsGetter) SubResource(subResource string) client.SubResourceClient {
+func (f *fakeNsGetter) SubResource(_ string) client.SubResourceClient {
 	return nil
 }
 
