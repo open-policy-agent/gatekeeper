@@ -944,8 +944,8 @@ github.com/onsi/gomega v1.9.0/go.mod h1:Ho0h+IUsWyvy1OpqCwxlQ/21gkhVunqlU8fDGcoT
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/onsi/gomega v1.10.3/go.mod h1:V9xEwhxec5O8UDM77eCW8vLymOMltsqPVYWrpDsH8xc=
 github.com/onsi/gomega v1.15.0/go.mod h1:cIuvLEne0aoVhAgh/O6ac0Op8WWw9H6eYCriF+tEHG0=
-github.com/onsi/gomega v1.27.5 h1:T/X6I0RNFw/kTqgfkZPcQ5KU6vCnWNBGdtrIx2dpGeQ=
-github.com/onsi/gomega v1.27.5/go.mod h1:PIQNjfQwkP3aQAH7lf7j87O/5FiNr+ZR8+ipb+qQlhg=
+github.com/onsi/gomega v1.27.6 h1:ENqfyGeS5AX/rlXDd/ETokDz93u0YufY1Pgxuy/PvWE=
+github.com/onsi/gomega v1.27.6/go.mod h1:PIQNjfQwkP3aQAH7lf7j87O/5FiNr+ZR8+ipb+qQlhg=
 github.com/open-policy-agent/cert-controller v0.4.0 h1:AQntgNq7fsoHgnoKrOk0lpRyab1na09vibeJCX4YBCs=
 github.com/open-policy-agent/cert-controller v0.4.0/go.mod h1:uOQW+2tMU51vSxy1Yt162oVUTMdqLuotC0aObQxrh6k=
 github.com/open-policy-agent/frameworks/constraint v0.0.0-20230304011918-d82cbe189211 h1:Ma5rn7r3rPwyP9OXi6zNKjNDsCHYccjcno9M83SHgO0=

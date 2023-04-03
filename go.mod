@@ -14,7 +14,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.9.2
-	github.com/onsi/gomega v1.27.5
+	github.com/onsi/gomega v1.27.6
 	github.com/open-policy-agent/cert-controller v0.4.0
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20230304011918-d82cbe189211
 	github.com/pkg/errors v0.9.1
