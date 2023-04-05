@@ -35,7 +35,7 @@ type System struct {
 	lock           sync.RWMutex
 	templates      map[string]*expansionunversioned.ExpansionTemplate
 	mutationSystem *mutation.System
-	graph          gvkGrapher
+	graph          cycleDetector
 }
 
 type Resultant struct {
