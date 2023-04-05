@@ -9,12 +9,12 @@ require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ghodss/yaml v1.0.0
-	github.com/go-logr/logr v1.2.3
+	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/zapr v1.2.3
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.9.2
-	github.com/onsi/gomega v1.27.5
+	github.com/onsi/gomega v1.27.6
 	github.com/open-policy-agent/cert-controller v0.4.0
 	github.com/open-policy-agent/frameworks/constraint v0.0.0-20230304011918-d82cbe189211
 	github.com/pkg/errors v0.9.1
@@ -37,7 +37,7 @@ require (
 	k8s.io/klog/v2 v2.80.1
 	k8s.io/utils v0.0.0-20221128185143-99ec85e7a448
 	oras.land/oras-go v1.2.2
-	sigs.k8s.io/controller-runtime v0.14.5
+	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/yaml v1.3.0
 )
 
