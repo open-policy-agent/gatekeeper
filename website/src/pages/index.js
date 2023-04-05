@@ -60,7 +60,7 @@ function ContributingCompanies() {
         <div className="row">
           <div className={clsx('col col--3 text--center')}>
             <a href="https://cloud.google.com/">
-              <img className={styles.companySvg} src="img/google_cloud_logo.svg" />
+              <img className={styles.companySvg} src="img/google_cloud_logo_vector.svg" />
             </a>
           </div>
           <div className={clsx('col col--3 text--center')}>
