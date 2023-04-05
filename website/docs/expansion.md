@@ -35,7 +35,7 @@ webhooks, Gatekeeper leverages its
 feature to allow mock resources to be manipulated into their desired form. In
 the Istio example, `Assign` and `ModifySet` mutators could be configured to
 mimic Istio sidecar injection. For further details on mutating mock resources
-see the [Math Source](#match-source) section below, or to see a working example,
+see the [Match Source](#match-source) section below, or to see a working example,
 see the [Example](#example) section.
 
 Any resources configured for expansion will be expanded by both the validating
