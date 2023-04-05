@@ -26,6 +26,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/apis/templates/v1beta1"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
 	configv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/config/v1alpha1"
+	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	mutationv1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1"
 	mutationsv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/mutations/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/pkg/keys"
@@ -67,6 +68,7 @@ type Tracker struct {
 	modifySet            *objectTracker
 	assignImage          *objectTracker
 	externalDataProvider *objectTracker
+	expansions           *objectTracker
 	constraints          *trackerMap
 	data                 *trackerMap
 
@@ -75,14 +77,15 @@ type Tracker struct {
 	statsEnabled        syncutil.SyncBool
 	mutationEnabled     bool
 	externalDataEnabled bool
+	expansionEnabled    bool
 }
 
 // NewTracker creates a new Tracker and initializes the internal trackers.
-func NewTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool) *Tracker {
-	return newTracker(lister, mutationEnabled, externalDataEnabled, nil)
+func NewTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEnabled bool) *Tracker {
+	return newTracker(lister, mutationEnabled, externalDataEnabled, expansionEnabled, nil)
 }
 
-func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, fn objDataFactory) *Tracker {
+func newTracker(lister Lister, mutationEnabled, externalDataEnabled, expansionEnabled bool, fn objDataFactory) *Tracker {
 	tracker := Tracker{
 		lister:             lister,
 		templates:          newObjTracker(v1beta1.SchemeGroupVersion.WithKind("ConstraintTemplate"), fn),
@@ -94,6 +97,7 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 
 		mutationEnabled:     mutationEnabled,
 		externalDataEnabled: externalDataEnabled,
+		expansionEnabled:    expansionEnabled,
 	}
 	if mutationEnabled {
 		tracker.assignMetadata = newObjTracker(mutationv1.GroupVersion.WithKind("AssignMetadata"), fn)
@@ -103,6 +107,9 @@ func newTracker(lister Lister, mutationEnabled bool, externalDataEnabled bool, f
 	}
 	if externalDataEnabled {
 		tracker.externalDataProvider = newObjTracker(externaldatav1beta1.SchemeGroupVersion.WithKind("Provider"), fn)
+	}
+	if expansionEnabled {
+		tracker.expansions = newObjTracker(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"), fn)
 	}
 	return &tracker
 }
@@ -151,6 +158,11 @@ func (t *Tracker) For(gvk schema.GroupVersionKind) Expectations {
 	case gvk.Group == mutationsv1alpha1.GroupVersion.Group && gvk.Kind == "AssignImage":
 		if t.mutationEnabled {
 			return t.assignImage
+		}
+		return noopExpectations{}
+	case gvk.GroupVersion() == expansionv1alpha1.GroupVersion && gvk.Kind == "ExpansionTemplate":
+		if t.expansionEnabled {
+			return t.expansions
 		}
 		return noopExpectations{}
 	}
@@ -232,6 +244,13 @@ func (t *Tracker) Satisfied() bool {
 		log.V(1).Info("all expectations satisfied", "tracker", "provider")
 	}
 
+	if t.expansionEnabled {
+		if !t.expansions.Satisfied() {
+			return false
+		}
+		log.V(1).Info("all expectations satisfied", "tracker", "expansiontemplates")
+	}
+
 	if operations.HasValidationOperations() {
 		if !t.templates.Satisfied() {
 			return false
@@ -292,6 +311,11 @@ func (t *Tracker) Run(ctx context.Context) error {
 	if t.externalDataEnabled {
 		grp.Go(func() error {
 			return t.trackExternalDataProvider(gctx)
+		})
+	}
+	if t.expansionEnabled {
+		grp.Go(func() error {
+			return t.trackExpansionTemplates(gctx)
 		})
 	}
 	if operations.HasValidationOperations() {
@@ -563,6 +587,31 @@ func (t *Tracker) trackAssignImage(ctx context.Context) error {
 	for index := range assignImageList.Items {
 		log.V(1).Info("expecting AssignImage", "name", assignImageList.Items[index].GetName())
 		t.assignImage.Expect(&assignImageList.Items[index])
+	}
+	return nil
+}
+
+func (t *Tracker) trackExpansionTemplates(ctx context.Context) error {
+	defer func() {
+		t.expansions.ExpectationsDone()
+		log.V(1).Info("ExpansionTemplate expectations populated")
+		_ = t.constraintTrackers.Wait()
+	}()
+
+	if !t.expansionEnabled {
+		return nil
+	}
+
+	expansionList := &expansionv1alpha1.ExpansionTemplateList{}
+	lister := retryLister(t.lister, retryAll)
+	if err := lister.List(ctx, expansionList); err != nil {
+		return fmt.Errorf("listing ExpansionTemplate: %w", err)
+	}
+	log.V(1).Info("setting expectations for ExpansionTemplate", "ExpansionTemplate Count", len(expansionList.Items))
+
+	for index := range expansionList.Items {
+		log.V(1).Info("expecting ExpansionTemplate", "name", expansionList.Items[index].GetName())
+		t.expansions.Expect(&expansionList.Items[index])
 	}
 	return nil
 }
@@ -858,6 +907,9 @@ func (t *Tracker) statsPrinter(ctx context.Context) {
 		if t.externalDataEnabled {
 			logUnsatisfiedExternalDataProvider(t)
 		}
+		if t.expansionEnabled {
+			logUnsatisfiedExpansions(t)
+		}
 	}
 }
 
@@ -882,6 +934,12 @@ func logUnsatisfiedModifySet(t *Tracker) {
 func logUnsatisfiedAssignImage(t *Tracker) {
 	for _, amKey := range t.assignImage.unsatisfied() {
 		log.Info("unsatisfied AssignImage", "name", amKey.namespacedName)
+	}
+}
+
+func logUnsatisfiedExpansions(t *Tracker) {
+	for _, et := range t.expansions.unsatisfied() {
+		log.Info("unsatisfied ExpansionTemplate", "name", et.namespacedName)
 	}
 }
 

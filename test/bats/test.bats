@@ -417,6 +417,12 @@ __expansion_audit_test() {
   run kubectl apply -f test/expansion/loadbalancers_must_have_env.yaml
   wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels loadbalancers-must-have-env"
 
+  # check status resource on expansion template
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "kubectl get -f test/expansion/expand_deployments.yaml -ojson | jq -r -e '.status.byPod[0]'"
+  local temp_uid=$(kubectl get -f test/expansion/expand_deployments.yaml -o jsonpath='{.metadata.uid}')
+  local byPod_uid=$(kubectl get -f test/expansion/expand_deployments.yaml -o jsonpath='{.status.byPod[0].templateUID}')
+  assert_match ${temp_uid} ${byPod_uid}
+
   # assert that creating deployment without 'env' label is rejected
   run kubectl apply -f test/expansion/deployment_no_label.yaml
   assert_failure

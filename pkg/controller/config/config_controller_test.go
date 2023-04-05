@@ -138,7 +138,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +321,7 @@ func TestConfig_DeleteSyncResources(t *testing.T) {
 	}
 
 	// set up tracker
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +431,7 @@ func TestConfig_CacheContents(t *testing.T) {
 
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +592,7 @@ func TestConfig_Retries(t *testing.T) {
 
 	opaClient := &fakeOpa{}
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

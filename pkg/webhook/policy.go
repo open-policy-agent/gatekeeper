@@ -34,6 +34,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	rtypes "github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/gatekeeper/apis"
+	expansionunversioned "github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	mutationsunversioned "github.com/open-policy-agent/gatekeeper/apis/mutations/unversioned"
 	"github.com/open-policy-agent/gatekeeper/pkg/controller/config/process"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
@@ -322,6 +323,8 @@ func (h *validationHandler) validateGatekeeperResources(ctx context.Context, req
 	switch {
 	case gvk.Group == "templates.gatekeeper.sh" && gvk.Kind == "ConstraintTemplate":
 		return h.validateTemplate(ctx, req)
+	case gvk.Group == "expansion.gatekeeper.sh" && gvk.Kind == "ExpansionTemplate":
+		return h.validateExpansionTemplate(req)
 	case gvk.Group == "constraints.gatekeeper.sh":
 		return h.validateConstraint(req)
 	case gvk.Group == "config.gatekeeper.sh" && gvk.Kind == "Config":
@@ -404,6 +407,23 @@ func (h *validationHandler) validateConstraint(req *admission.Request) (bool, er
 	} else {
 		return true, nil
 	}
+	return false, nil
+}
+
+func (h *validationHandler) validateExpansionTemplate(req *admission.Request) (bool, error) {
+	obj, _, err := deserializer.Decode(req.AdmissionRequest.Object.Raw, nil, nil)
+	if err != nil {
+		return false, err
+	}
+	unversioned := &expansionunversioned.ExpansionTemplate{}
+	if err := runtimeScheme.Convert(obj, unversioned, nil); err != nil {
+		return false, err
+	}
+	err = expansion.ValidateTemplate(unversioned)
+	if err != nil {
+		return true, err
+	}
+
 	return false, nil
 }
 

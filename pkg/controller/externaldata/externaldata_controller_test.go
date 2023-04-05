@@ -96,7 +96,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, true)
+	tracker, err := readiness.SetupTracker(mgr, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}

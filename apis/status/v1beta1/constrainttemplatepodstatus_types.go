@@ -88,5 +88,5 @@ func NewConstraintTemplateStatusForPod(pod *corev1.Pod, templateName string, sch
 // KeyForConstraintTemplate returns a unique status object name given the Pod ID and
 // a template object.
 func KeyForConstraintTemplate(id string, templateName string) (string, error) {
-	return dashPacker(id, templateName)
+	return DashPacker(id, templateName)
 }

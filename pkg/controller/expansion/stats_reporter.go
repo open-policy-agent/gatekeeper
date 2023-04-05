@@ -6,6 +6,7 @@ import (
 	"github.com/open-policy-agent/gatekeeper/pkg/metrics"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -15,7 +16,8 @@ const (
 )
 
 var (
-	etM = stats.Int64(etMetricName, etDesc, stats.UnitDimensionless)
+	etM       = stats.Int64(etMetricName, etDesc, stats.UnitDimensionless)
+	statusKey = tag.MustNewKey("status")
 
 	views = []*view.View{
 		{
@@ -23,6 +25,7 @@ var (
 			Measure:     etM,
 			Description: etDesc,
 			Aggregation: view.LastValue(),
+			TagKeys:     []tag.Key{statusKey},
 		},
 	}
 )
@@ -38,33 +41,50 @@ func register() error {
 }
 
 func newRegistry() *etRegistry {
-	return &etRegistry{cache: make(map[types.NamespacedName]bool)}
+	return &etRegistry{cache: make(map[types.NamespacedName]metrics.Status)}
 }
 
 type etRegistry struct {
-	cache map[types.NamespacedName]bool
+	cache map[types.NamespacedName]metrics.Status
 	dirty bool
 }
 
-func (r *etRegistry) add(key types.NamespacedName) {
-	r.cache[key] = true
+func (r *etRegistry) add(key types.NamespacedName, status metrics.Status) {
+	v, ok := r.cache[key]
+	if ok && v == status {
+		return
+	}
+	r.cache[key] = status
 	r.dirty = true
 }
 
 func (r *etRegistry) remove(key types.NamespacedName) {
+	if _, exists := r.cache[key]; !exists {
+		return
+	}
 	delete(r.cache, key)
 	r.dirty = true
 }
 
-func (r *etRegistry) report(ctx context.Context) error {
+func (r *etRegistry) report(ctx context.Context) {
 	if !r.dirty {
-		return nil
+		return
 	}
 
-	if err := metrics.Record(ctx, etM.M(int64(len(r.cache)))); err != nil {
-		r.dirty = false
-		return err
+	totals := make(map[metrics.Status]int64)
+	for _, status := range r.cache {
+		totals[status]++
 	}
 
-	return nil
+	for _, s := range metrics.AllStatuses {
+		ctx, err := tag.New(ctx, tag.Insert(statusKey, string(s)))
+		if err != nil {
+			log.Error(err, "failed to create status tag for expansion templates")
+			continue
+		}
+		err = metrics.Record(ctx, etM.M(totals[s]))
+		if err != nil {
+			log.Error(err, "failed to record total expansion templates")
+		}
+	}
 }
