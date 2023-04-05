@@ -51,7 +51,7 @@ func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
 func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	log.V(1).Info("upserting ExpansionTemplate", "template name", template.GetName()) // TODO rm
+	log.V(1).Info("upserting ExpansionTemplate", "template name", template.GetName())
 
 	if err := ValidateTemplate(template); err != nil {
 		return err
@@ -60,16 +60,10 @@ func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate
 	k := keyForTemplate(template)
 	if oldTemp, exists := s.templates[k]; exists {
 		s.graph.removeTemplate(oldTemp)
-		if err := s.graph.addTemplate(template); err != nil {
-			// if the updated template caused a cycle, delete the old one from cache
-			log.V(1).Info("updated ExpansionTemplate caused cycle, removing old template from cache", "template name", template.GetName())
-			delete(s.templates, k)
-			return err
-		}
-	} else {
-		if err := s.graph.addTemplate(template); err != nil {
-			return err
-		}
+	}
+
+	if err := s.graph.addTemplate(template); err != nil {
+		return err
 	}
 
 	s.templates[k] = template.DeepCopy()
