@@ -2352,7 +2352,7 @@ spec:
                 type: string
             type: object
           status:
-            description: ExpansionTemplateStatus defines the observed state of ExpansionStatus.
+            description: ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
             properties:
               byPod:
                 items:
