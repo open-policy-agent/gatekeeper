@@ -151,8 +151,8 @@ function HomepageFeatures() {
 const Services = [
   {
     thumbnail: 'img/azure.png',
-    name: 'Azure Kubernetes Service',
-    text: 'Azure Policy for Kubernetes is backed by Gatekeeper.',
+    name: 'Azure Policy for Kubernetes',
+    text: 'Azure Policy for Kubernetes is backed by Gatekeeper and supports Azure Kubernetes Service (AKS) and Azure Arc enabled Kubernetes.',
     website: 'https://learn.microsoft.com/en-us/azure/governance/policy/concepts/policy-for-kubernetes'
   },
   {
