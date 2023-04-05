@@ -13,17 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package constrainttemplate
+package controller
 
 import (
-	"testing"
-
-	"github.com/open-policy-agent/gatekeeper/test/testutils"
-	"k8s.io/client-go/rest"
+	"github.com/open-policy-agent/gatekeeper/pkg/controller/expansionstatus"
 )
 
-var cfg *rest.Config
-
-func TestMain(m *testing.M) {
-	testutils.StartControlPlane(m, &cfg, 3)
+func init() {
+	Injectors = append(Injectors, &expansionstatus.Adder{})
 }

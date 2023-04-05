@@ -91,12 +91,12 @@ var dashingTestCases = []struct {
 func TestDashPacker(t *testing.T) {
 	for _, tc := range dashingTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotPacked, err := dashPacker(tc.extracted...)
+			gotPacked, err := DashPacker(tc.extracted...)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(tc.packed, gotPacked); diff != "" {
-				t.Fatal("got dashPacker(tc.extracted...) != tc.packed, want equal")
+				t.Fatal("got DashPacker(tc.extracted...) != tc.packed, want equal")
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package expansion
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,6 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+var ExpansionEnabled *bool
+
+func init() {
+	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", false, "(alpha) Enable the expansion of generator resources")
+}
 
 type System struct {
 	lock           sync.RWMutex
@@ -34,7 +41,7 @@ func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if err := validateTemplate(template); err != nil {
+	if err := ValidateTemplate(template); err != nil {
 		return err
 	}
 
@@ -55,7 +62,7 @@ func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate
 	return nil
 }
 
-func validateTemplate(template *expansionunversioned.ExpansionTemplate) error {
+func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	k := keyForTemplate(template)
 	if k == "" {
 		return fmt.Errorf("ExpansionTemplate has empty name field")

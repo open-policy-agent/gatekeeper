@@ -32,7 +32,7 @@ func dashExtractor(val string) []string {
 	return tokens
 }
 
-// dashPacker puts a list of strings into a dash-separated format. Note that
+// DashPacker puts a list of strings into a dash-separated format. Note that
 // it cannot handle empty strings, as that makes the dash separator for the empty
 // string reduce to an escaped dash. This is fine because none of the packed strings
 // are allowed to be empty. If this changes in the future, we could create a placeholder
@@ -43,17 +43,17 @@ func dashExtractor(val string) []string {
 // which is also disallowed by the schema (and would require an additional placeholder
 // character to fix). Finally, note that it is impossible to distinguish between
 // a nil list of strings and a list of one empty string.
-func dashPacker(vals ...string) (string, error) {
+func DashPacker(vals ...string) (string, error) {
 	if len(vals) == 0 {
-		return "", fmt.Errorf("dashPacker cannot pack an empty list of strings")
+		return "", fmt.Errorf("DashPacker cannot pack an empty list of strings")
 	}
 	b := strings.Builder{}
 	for i, val := range vals {
 		if strings.HasPrefix(val, "-") || strings.HasSuffix(val, "-") {
-			return "", fmt.Errorf("dashPacker cannot pack strings that begin or end with a dash: %+v", vals)
+			return "", fmt.Errorf("DashPacker cannot pack strings that begin or end with a dash: %+v", vals)
 		}
 		if len(val) == 0 {
-			return "", fmt.Errorf("dashPacker cannot pack empty strings: %v", vals)
+			return "", fmt.Errorf("DashPacker cannot pack empty strings: %v", vals)
 		}
 		if i != 0 {
 			b.WriteString("-")
