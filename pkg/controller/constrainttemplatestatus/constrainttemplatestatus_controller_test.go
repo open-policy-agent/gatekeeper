@@ -108,7 +108,7 @@ violation[{"msg": "denied!"}] {
 
 	// creating the gatekeeper-system namespace is necessary because that's where
 	// status resources live by default
-	if err := createGatekeeperNamespace(mgr.GetConfig()); err != nil {
+	if err := testutils.CreateGatekeeperNamespace(mgr.GetConfig()); err != nil {
 		t.Fatalf("want createGatekeeperNamespace(mgr.GetConfig()) error = nil, got %v", err)
 	}
 
@@ -126,7 +126,7 @@ violation[{"msg": "denied!"}] {
 	testutils.Setenv(t, "POD_NAME", "no-pod")
 
 	cs := watch.NewSwitch()
-	tracker, err := readiness.SetupTracker(mgr, false, false)
+	tracker, err := readiness.SetupTracker(mgr, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

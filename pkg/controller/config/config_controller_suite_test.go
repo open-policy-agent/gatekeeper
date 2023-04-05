@@ -23,12 +23,9 @@ import (
 	"testing"
 
 	"github.com/open-policy-agent/gatekeeper/apis"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -52,7 +49,7 @@ func TestMain(m *testing.M) {
 		stdlog.Fatal(err)
 	}
 
-	if err := createGatekeeperNamespace(cfg); err != nil {
+	if err := testutils.CreateGatekeeperNamespace(cfg); err != nil {
 		stdlog.Printf("creating namespace: %v", err)
 	}
 
@@ -73,23 +70,4 @@ func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan 
 		return result, err
 	})
 	return fn, requests
-}
-
-// Bootstrap the gatekeeper-system namespace for use in tests.
-func createGatekeeperNamespace(cfg *rest.Config) error {
-	c, err := client.New(cfg, client.Options{})
-	if err != nil {
-		return err
-	}
-
-	// Create gatekeeper namespace
-	ns := &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "gatekeeper-system",
-		},
-	}
-
-	ctx := context.Background()
-	_, err = controllerutil.CreateOrUpdate(ctx, c, ns, func() error { return nil })
-	return err
 }

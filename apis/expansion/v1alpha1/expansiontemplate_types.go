@@ -16,6 +16,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	status "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/mutation/match"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -56,13 +57,21 @@ type GeneratedGVK struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path="expansiontemplate"
 // +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // ExpansionTemplate is the Schema for the ExpansionTemplate API.
 type ExpansionTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec ExpansionTemplateSpec `json:"spec,omitempty"`
+	Spec   ExpansionTemplateSpec   `json:"spec,omitempty"`
+	Status ExpansionTemplateStatus `json:"status,omitempty"`
+}
+
+// ExpansionTemplateStatus defines the observed state of ExpansionTemplate.
+type ExpansionTemplateStatus struct {
+	ByPod []status.ExpansionTemplatePodStatusStatus `json:"byPod,omitempty"`
 }
 
 // +kubebuilder:object:root=true

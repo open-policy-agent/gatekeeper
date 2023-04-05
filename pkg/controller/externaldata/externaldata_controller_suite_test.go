@@ -17,44 +17,17 @@ package externaldata
 
 import (
 	"context"
-	stdlog "log"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/open-policy-agent/gatekeeper/apis"
-	"k8s.io/client-go/kubernetes/scheme"
+	"github.com/open-policy-agent/gatekeeper/test/testutils"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var cfg *rest.Config
 
 func TestMain(m *testing.M) {
-	var err error
-
-	t := &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "vendor", "github.com", "open-policy-agent", "frameworks", "constraint", "deploy", "crds.yaml"),
-			filepath.Join("..", "..", "..", "config", "crd", "bases"),
-		},
-		ErrorIfCRDPathMissing: true,
-	}
-	if err := apis.AddToScheme(scheme.Scheme); err != nil {
-		stdlog.Fatal(err)
-	}
-
-	if cfg, err = t.Start(); err != nil {
-		stdlog.Fatal(err)
-	}
-	stdlog.Print("STARTED")
-
-	code := m.Run()
-	if err = t.Stop(); err != nil {
-		stdlog.Printf("error while trying to stop server: %v", err)
-	}
-	os.Exit(code)
+	testutils.StartControlPlane(m, &cfg, 3)
 }
 
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and

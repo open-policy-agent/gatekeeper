@@ -113,5 +113,5 @@ func KeyForConstraint(id string, constraint *unstructured.Unstructured) (string,
 	// because K8s requires all lowercase letters for resource names
 	kind := strings.ToLower(constraint.GetObjectKind().GroupVersionKind().Kind)
 	name := constraint.GetName()
-	return dashPacker(id, kind, name)
+	return DashPacker(id, kind, name)
 }
