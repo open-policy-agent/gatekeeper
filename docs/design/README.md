@@ -18,6 +18,7 @@ Generally, design docs are on Google docs:
    * [Mutation Initial Design Doc (April 2019)](https://docs.google.com/document/d/1qTHwqoUX8AL2jodyWKB_2szrGDwhi14Ra_LlQ-ogtck/edit#heading=h.iu1ppjy7g7j)
 * [External Data](https://docs.google.com/document/d/1hPi86jdsCKg8puYT5_s_73mPGExUJeZfyKmvG-XWtPc/edit#)
 * [gator validate](https://docs.google.com/document/d/1B0hXDia8SExOkCVAEbPVHFJmnWeJgHziGvMxnzrENa0/edit)
+* [Sync Resource](https://docs.google.com/document/d/1ZbXaEh7v_HcgrRu7N-kEucU2pXyq1Rt7cSmmFOBN2q8/edit)
 
 ## Implemented
 * [V3 Accepted Design](https://docs.google.com/document/d/1yC4wgpVoJj6ngYnSTtO-HeaIBl05gla562sD7qKPy3M/edit#heading=h.z0bjqzl81dpe)
