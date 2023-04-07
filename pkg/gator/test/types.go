@@ -3,6 +3,7 @@ package test
 import (
 	"sort"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -41,8 +42,9 @@ type GatorResponse struct {
 }
 
 type GatorResponses struct {
-	ByTarget map[string]*GatorResponse
-	Handled  map[string]bool
+	ByTarget     map[string]*GatorResponse
+	Handled      map[string]bool
+	StatsEntries []*instrumentation.StatsEntry
 }
 
 func (r *GatorResponses) Results() []*GatorResult {

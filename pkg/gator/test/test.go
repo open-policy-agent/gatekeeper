@@ -27,10 +27,16 @@ func init() {
 	}
 }
 
-func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses, error) {
-	// create the client
+// options for the Test func
+type TestOpts struct {
+	// Driver specific options
+	IncludeTrace bool
+	GatherStats  bool
+}
 
-	driver, err := rego.New(rego.Tracing(includeTrace))
+func Test(objs []*unstructured.Unstructured, tOpts TestOpts) (*GatorResponses, error) {
+	// create the client
+	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +46,12 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 		return nil, fmt.Errorf("creating OPA client: %w", err)
 	}
 
+	// mark off which indices hold objs that are templates or constraints
+	templatesOrConstraints := make([]bool, len(objs), len(objs))
+
 	// search for templates, add them if they exist
 	ctx := context.Background()
-	for _, obj := range objs {
+	for idx, obj := range objs {
 		if !isTemplate(obj) {
 			continue
 		}
@@ -56,11 +65,13 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 		if err != nil {
 			return nil, fmt.Errorf("adding template %q: %w", templ.GetName(), err)
 		}
+
+		templatesOrConstraints[idx] = true
 	}
 
 	// add all constraints.  A constraint must be added after its associated
 	// template or OPA will return an error
-	for _, obj := range objs {
+	for idx, obj := range objs {
 		if !isConstraint(obj) {
 			continue
 		}
@@ -69,6 +80,8 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 		if err != nil {
 			return nil, fmt.Errorf("adding constraint %q: %w", obj.GetName(), err)
 		}
+
+		templatesOrConstraints[idx] = true
 	}
 
 	// finally, add all the data.
@@ -89,7 +102,12 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 	responses := &GatorResponses{
 		ByTarget: make(map[string]*GatorResponse),
 	}
-	for _, obj := range objs {
+	for idx, obj := range objs {
+		if templatesOrConstraints[idx] {
+			// skip review on anything that is a constraint or a template
+			continue
+		}
+
 		// Try to attach the namespace if it was supplied (ns will be nil otherwise)
 		ns, _ := er.NamespaceForResource(obj)
 		au := target.AugmentedUnstructured{
@@ -148,9 +166,10 @@ func Test(objs []*unstructured.Unstructured, includeTrace bool) (*GatorResponses
 				trace = trace + "\n\n" + *r.Trace
 				targetResponse.Trace = &trace
 			}
-
 			responses.ByTarget[targetName] = targetResponse
 		}
+
+		responses.StatsEntries = append(responses.StatsEntries, review.StatsEntries...)
 	}
 
 	return responses, nil
@@ -164,4 +183,16 @@ func isTemplate(u *unstructured.Unstructured) bool {
 func isConstraint(u *unstructured.Unstructured) bool {
 	gvk := u.GroupVersionKind()
 	return gvk.Group == "constraints.gatekeeper.sh"
+}
+
+func makeRegoDriver(tOpts TestOpts) (*rego.Driver, error) {
+	var args []rego.Arg
+	if tOpts.GatherStats {
+		args = append(args, rego.GatherStats())
+	}
+	if tOpts.IncludeTrace {
+		args = append(args, rego.Tracing(tOpts.IncludeTrace))
+	}
+
+	return rego.New(args...)
 }
