@@ -23,13 +23,6 @@ import (
 
 	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
-	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +30,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/controller/config/process"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/expansion"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/fakes"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/mutation"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/pubsub"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/readiness"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/util"
+	"github.com/open-policy-agent/gatekeeper/v3/pkg/watch"
 )
 
 var debugUseFakePod = flag.Bool("debug-use-fake-pod", false, "Use a fake pod name so the Gatekeeper executable can be run outside of Kubernetes")
@@ -64,6 +66,10 @@ type WatchSetInjector interface {
 	InjectWatchSet(watchSet *watch.Set)
 }
 
+type PubsubInjector interface {
+	InjectPubsubSystem(pubsubSystem *pubsub.System)
+}
+
 // Injectors is a list of adder structs that need injection. We can convert this
 // to an interface once we create controllers for things like data sync.
 var Injectors []Injector
@@ -83,6 +89,7 @@ type Dependencies struct {
 	ExpansionSystem  *expansion.System
 	ProviderCache    *externaldata.ProviderCache
 	WatchSet         *watch.Set
+	PubsubSystem     *pubsub.System
 }
 
 type defaultPodGetter struct {
@@ -170,6 +177,9 @@ func AddToManager(m manager.Manager, deps *Dependencies) error {
 		}
 		if a2, ok := a.(WatchSetInjector); ok {
 			a2.InjectWatchSet(deps.WatchSet)
+		}
+		if a2, ok := a.(PubsubInjector); ok {
+			a2.InjectPubsubSystem(deps.PubsubSystem)
 		}
 		if err := a.Add(m); err != nil {
 			return err

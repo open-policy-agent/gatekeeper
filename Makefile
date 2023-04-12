@@ -9,6 +9,9 @@ GATOR_IMG := $(GATOR_REPOSITORY):latest
 DEV_TAG ?= dev
 USE_LOCAL_IMG ?= false
 ENABLE_GENERATOR_EXPANSION ?= false
+ENABLE_PUBSUB ?= false
+AUDIT_CONNECTION ?= "audit"
+AUDIT_CHANNEL ?= "audit"
 
 VERSION := v3.13.0-beta.0
 
@@ -37,6 +40,7 @@ GOLANGCI_LINT_VERSION := v1.51.2
 GOLANGCI_LINT_CACHE := $(shell pwd)/.tmp/golangci-lint
 
 BENCHMARK_FILE_NAME ?= benchmarks.txt
+DUMMY_SUBSCRIBER_IMAGE ?= dummy-subscriber:latest
 
 ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 BIN_DIR := $(abspath $(ROOT_DIR)/bin)
@@ -186,6 +190,30 @@ e2e-helm-install:
 	./.staging/helm/linux-amd64/helm version --client
 
 e2e-helm-deploy: e2e-helm-install
+ifeq ($(ENABLE_PUBSUB),true)
+	@echo 'podPubsubAnnotations: {dapr.io/enabled: "true", dapr.io/app-id: "audit", dapr.io/metrics-port: "9999"}' > annotations.yaml
+	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
+		--namespace ${GATEKEEPER_NAMESPACE} \
+		--debug --wait \
+		--set image.repository=${HELM_REPO} \
+		--set image.crdRepository=${HELM_CRD_REPO} \
+		--set image.release=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.image.repository=${HELM_CRD_REPO} \
+		--set postInstall.labelNamespace.image.tag=${HELM_RELEASE} \
+		--set postInstall.labelNamespace.enabled=true \
+		--set postInstall.probeWebhook.enabled=true \
+		--set emitAdmissionEvents=true \
+		--set emitAuditEvents=true \
+		--set admissionEventsInvolvedNamespace=true \
+		--set auditEventsInvolvedNamespace=true \
+		--set disabledBuiltins={http.send} \
+		--set logMutations=true \
+		--set audit.enablePubsub=${ENABLE_PUBSUB} \
+		--set audit.connection=${AUDIT_CONNECTION} \
+		--set audit.channel=${AUDIT_CHANNEL} \
+		--values annotations.yaml \
+		--set mutationAnnotations=true;
+else
 	./.staging/helm/linux-amd64/helm install manifest_staging/charts/gatekeeper --name-template=gatekeeper \
 		--namespace ${GATEKEEPER_NAMESPACE} --create-namespace \
 		--debug --wait \
@@ -202,7 +230,8 @@ e2e-helm-deploy: e2e-helm-install
 		--set auditEventsInvolvedNamespace=true \
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
-		--set mutationAnnotations=true;\
+		--set mutationAnnotations=true
+endif
 
 e2e-helm-upgrade-init: e2e-helm-install
 	./.staging/helm/linux-amd64/helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts;\
@@ -239,6 +268,19 @@ e2e-helm-upgrade:
 		--set disabledBuiltins={http.send} \
 		--set logMutations=true \
 		--set mutationAnnotations=true;\
+
+e2e-subscriber-build-load-image:
+	docker buildx build --platform="linux/amd64" -t ${DUMMY_SUBSCRIBER_IMAGE} --load -f test/pubsub/dummy-subscriber/Dockerfile test/pubsub/dummy-subscriber
+	kind load docker-image --name kind ${DUMMY_SUBSCRIBER_IMAGE}
+
+e2e-subscriber-deploy:
+	kubectl create ns dummy-subscriber
+	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: dummy-subscriber/' | kubectl apply -f -
+	kubectl apply -f test/pubsub/dummy-subscriber/manifest/subscriber.yaml
+
+e2e-publisher-deploy:
+	kubectl get secret redis --namespace=default -o yaml | sed 's/namespace: .*/namespace: gatekeeper-system/' | kubectl apply -f -
+	kubectl apply -f test/pubsub/publish-components.yaml
 
 # Build manager binary
 manager: generate

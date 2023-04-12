@@ -138,3 +138,10 @@ mutator_enforced() {
   echo "ready: ${ready_count}, expected: ${pod_count}"
   [[ "${ready_count}" -eq "${pod_count}" ]]
 }
+
+total_violations() {
+  ct_total_violations="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.totalViolations')"
+  audit_id="$(kubectl get k8srequiredlabels pod-must-have-test -n gatekeeper-system -ojson | jq '.status.auditTimestamp')"
+  violations="$(kubectl logs -n dummy-subscriber -l app=sub -c go-sub --tail=-1 | grep $audit_id | grep violation_audited | wc -l)"
+  [[ "${ct_total_violations}" -eq "${violations}" ]]
+}

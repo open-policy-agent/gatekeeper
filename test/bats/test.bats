@@ -497,3 +497,45 @@ __expansion_audit_test() {
   run kubectl delete --ignore-not-found -f test/expansion/expand_cronjob_job_pod.yaml
   run kubectl delete --ignore-not-found -f test/expansion/expand_pod_cronjob.yaml
 }
+
+@test "gatekeeper pubsub test" {
+  if [ -z $ENABLE_PUBSUB_TESTS ]; then
+    skip "skipping pubsub tests"
+  fi
+
+  run kubectl create ns nginx
+  run kubectl create -f test/pubsub/nginx_deployment.yaml
+
+  run kubectl apply -f test/pubsub/k8srequiredlabels_ct.yaml
+  run kubectl apply -f test/pubsub/pod_must_have_test.yaml
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations"
+
+  run kubectl delete -f test/pubsub/k8srequiredlabels_ct.yaml --ignore-not-found
+  run kubectl delete -f test/pubsub/pod_must_have_test.yaml --ignore-not-found
+  run kubectl delete -f test/pubsub/nginx_deployment.yaml --ignore-not-found
+  run kubectl delete ns nginx --ignore-not-found
+}
+
+@test "gatekeeper pubsub test" {
+  if [ -z $ENABLE_PUBSUB_TESTS ]; then
+    skip "skipping pubsub tests"
+  fi
+
+  run kubectl create ns nginx
+  run kubectl create -f test/pubsub/nginx_deployment.yaml
+
+  run kubectl apply -f test/pubsub/k8srequiredlabels_ct.yaml
+  run kubectl apply -f test/pubsub/pod_must_have_test.yaml
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "constraint_enforced k8srequiredlabels pod-must-have-test"
+
+  wait_for_process ${WAIT_TIME} ${SLEEP_TIME} "total_violations"
+
+  run kubectl delete -f test/pubsub/k8srequiredlabels_ct.yaml --ignore-not-found
+  run kubectl delete -f test/pubsub/pod_must_have_test.yaml --ignore-not-found
+  run kubectl delete -f test/pubsub/nginx_deployment.yaml --ignore-not-found
+  run kubectl delete ns nginx --ignore-not-found
+}
