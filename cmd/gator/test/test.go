@@ -46,13 +46,12 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	flagFilenames       []string
-	flagOutput          string
-	flagIncludeTrace    bool
-	flagGatherStats     bool
-	flagImages          []string
-	flagTempDir         string
-	flagStatsOutputFile string
+	flagFilenames    []string
+	flagOutput       string
+	flagIncludeTrace bool
+	flagGatherStats  bool
+	flagImages       []string
+	flagTempDir      string
 )
 
 const (
@@ -72,8 +71,6 @@ func init() {
 	Cmd.Flags().StringVarP(&flagOutput, flagNameOutput, "o", "", fmt.Sprintf("Output format.  One of: %s|%s.", stringJSON, stringYAML))
 	Cmd.Flags().BoolVarP(&flagIncludeTrace, "trace", "t", false, "include a trace for the underlying Constraint Framework evaluation.")
 	Cmd.Flags().BoolVarP(&flagGatherStats, "stats", "", false, "include performance stats returned from the Constraint Framework.")
-	Cmd.Flags().StringVarP(&flagStatsOutputFile, flagStatsOutputFileName, "", "", "the output file for the stats from the Constraint Framework."+
-		"If specified, all stats are going in this file and not the main response from the command. The outout from  the-o flag for json/ yaml is respected, otherwise it defaults to JSON.")
 	Cmd.Flags().StringArrayVarP(&flagImages, flagNameImage, "i", []string{}, "a URL to an OCI image containing policies. Can be specified multiple times.")
 	Cmd.Flags().StringVarP(&flagTempDir, flagNameTempDir, "d", "", fmt.Sprintf("Specifies the temporary directory to download and unpack images to, if using the --%s flag. Optional.", flagNameImage))
 }
@@ -81,33 +78,19 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	unstrucs, err := reader.ReadSources(flagFilenames, flagImages, flagTempDir)
 	if err != nil {
-		errFatalf("reading: %v", err)
+		commons.ErrFatalf("reading: %v", err)
 	}
 	if len(unstrucs) == 0 {
-		errFatalf("no input data identified")
+		commons.ErrFatalf("no input data identified")
 	}
 
-	responses, err := test.Test(unstrucs, test.TestOpts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
+	responses, err := test.Test(unstrucs, test.TOpts{IncludeTrace: flagIncludeTrace, GatherStats: flagGatherStats})
 	if err != nil {
-		errFatalf("auditing objects: %v\n", err)
+		commons.ErrFatalf("auditing objects: %v\n", err)
 	}
 	results := responses.Results()
 
-	if flagStatsOutputFile != "" {
-		var statsString string
-		switch strings.ToLower(flagOutput) {
-		case stringYAML:
-			statsString = statsToYAMLString(responses.StatsEntries)
-		default: // default is string json
-			statsString = statsToJSONString(responses.StatsEntries)
-		}
-
-		commons.StringToFile(statsString, flagStatsOutputFile)
-
-		fmt.Print(formatOutput(flagOutput, results, nil))
-	} else {
-		fmt.Print(formatOutput(flagOutput, results, responses.StatsEntries))
-	}
+	fmt.Print(formatOutput(flagOutput, results, responses.StatsEntries))
 
 	// Whether or not we return non-zero depends on whether we have a `deny`
 	// enforcementAction on one of the violated constraints
@@ -127,12 +110,12 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 			statsAndResuluts := map[string]interface{}{"results": results, "stats": stats}
 			jsonB, err = json.MarshalIndent(statsAndResuluts, "", "    ")
 			if err != nil {
-				errFatalf("marshaling validation json results and stats: %v", err)
+				commons.ErrFatalf("marshaling validation json results and stats: %v", err)
 			}
 		} else {
 			jsonB, err = json.MarshalIndent(results, "", "    ")
 			if err != nil {
-				errFatalf("marshaling validation json results: %v", err)
+				commons.ErrFatalf("marshaling validation json results: %v", err)
 			}
 		}
 
@@ -141,38 +124,38 @@ func formatOutput(flagOutput string, results []*test.GatorResult, stats []*instr
 		yamlResults := test.GetYamlFriendlyResults(results)
 		jsonb, err := json.Marshal(yamlResults)
 		if err != nil {
-			errFatalf("pre-marshaling results to json: %v", err)
+			commons.ErrFatalf("pre-marshaling results to json: %v", err)
 		}
 
 		unmarshalled := []*test.YamlGatorResult{}
 		err = json.Unmarshal(jsonb, &unmarshalled)
 		if err != nil {
-			errFatalf("pre-unmarshaling results from json: %v", err)
+			commons.ErrFatalf("pre-unmarshaling results from json: %v", err)
 		}
 
 		var yamlb []byte
 		if stats != nil {
-			statsAndResuluts := map[string]interface{}{"results": results, "stats": stats}
+			statsAndResuluts := map[string]interface{}{"results": yamlResults, "stats": stats}
 
-			statsJsonB, err := json.Marshal(stats)
+			statsJSONB, err := json.Marshal(stats)
 			if err != nil {
-				errFatalf("pre-marshaling stats to json: %v", err)
+				commons.ErrFatalf("pre-marshaling stats to json: %v", err)
 			}
 
 			unmarshalledStats := []*instrumentation.StatsEntry{}
-			err = json.Unmarshal(statsJsonB, &unmarshalledStats)
+			err = json.Unmarshal(statsJSONB, &unmarshalledStats)
 			if err != nil {
-				errFatalf("pre-unmarshaling stats from json: %v", err)
+				commons.ErrFatalf("pre-unmarshaling stats from json: %v", err)
 			}
 
 			yamlb, err = yaml.Marshal(statsAndResuluts)
 			if err != nil {
-				errFatalf("marshaling validation yaml results and stats: %v", err)
+				commons.ErrFatalf("marshaling validation yaml results and stats: %v", err)
 			}
 		} else {
 			yamlb, err = yaml.Marshal(unmarshalled)
 			if err != nil {
-				errFatalf("marshaling validation yaml results: %v", err)
+				commons.ErrFatalf("marshaling validation yaml results: %v", err)
 			}
 		}
 
@@ -203,37 +186,4 @@ func enforceableFailure(results []*test.GatorResult) bool {
 	}
 
 	return false
-}
-
-func errFatalf(format string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, a...)
-	os.Exit(1)
-}
-
-func statsToYAMLString(stats []*instrumentation.StatsEntry) string {
-	jsonb, err := json.Marshal(stats)
-	if err != nil {
-		commons.ErrFatalf("pre-marshaling stats to json: %v", err)
-	}
-
-	unmarshalled := []*instrumentation.StatsEntry{}
-	err = json.Unmarshal(jsonb, &unmarshalled)
-	if err != nil {
-		commons.ErrFatalf("pre-unmarshaling stats from json: %v", err)
-	}
-
-	var b bytes.Buffer
-	yamlEncoder := yaml.NewEncoder(&b)
-	if err := yamlEncoder.Encode(unmarshalled); err != nil {
-		commons.ErrFatalf("marshaling validation yaml stats: %v", err)
-	}
-	return b.String()
-}
-
-func statsToJSONString(stats []*instrumentation.StatsEntry) string {
-	b, err := json.MarshalIndent(stats, "", "    ")
-	if err != nil {
-		commons.ErrFatalf("marshaling validation stats resource: %v", err)
-	}
-	return string(b)
 }

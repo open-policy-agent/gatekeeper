@@ -27,14 +27,14 @@ func init() {
 	}
 }
 
-// options for the Test func
-type TestOpts struct {
+// options for the Test func.
+type TOpts struct {
 	// Driver specific options
 	IncludeTrace bool
 	GatherStats  bool
 }
 
-func Test(objs []*unstructured.Unstructured, tOpts TestOpts) (*GatorResponses, error) {
+func Test(objs []*unstructured.Unstructured, tOpts TOpts) (*GatorResponses, error) {
 	// create the client
 	driver, err := makeRegoDriver(tOpts)
 	if err != nil {
@@ -47,7 +47,7 @@ func Test(objs []*unstructured.Unstructured, tOpts TestOpts) (*GatorResponses, e
 	}
 
 	// mark off which indices hold objs that are templates or constraints
-	templatesOrConstraints := make([]bool, len(objs), len(objs))
+	templatesOrConstraints := make([]bool, len(objs))
 
 	// search for templates, add them if they exist
 	ctx := context.Background()
@@ -140,6 +140,7 @@ func Test(objs []*unstructured.Unstructured, tOpts TestOpts) (*GatorResponses, e
 			}
 			expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantReview)
 			expansion.AggregateResponses(resultant.TemplateName, review, resultantReview)
+			expansion.AggregateStats(resultant.TemplateName, review, resultantReview)
 		}
 
 		for targetName, r := range review.ByTarget {
@@ -185,7 +186,7 @@ func isConstraint(u *unstructured.Unstructured) bool {
 	return gvk.Group == "constraints.gatekeeper.sh"
 }
 
-func makeRegoDriver(tOpts TestOpts) (*rego.Driver, error) {
+func makeRegoDriver(tOpts TOpts) (*rego.Driver, error) {
 	var args []rego.Arg
 	if tOpts.GatherStats {
 		args = append(args, rego.GatherStats())

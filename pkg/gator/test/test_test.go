@@ -104,20 +104,6 @@ func TestTest(t *testing.T) {
 						Constraint: constraintNeverValidate,
 					},
 				},
-				{
-					Result: types.Result{
-						Target:     target.Name,
-						Msg:        "never validate",
-						Constraint: constraintNeverValidate,
-					},
-				},
-				{
-					Result: types.Result{
-						Target:     target.Name,
-						Msg:        "never validate",
-						Constraint: constraintNeverValidate,
-					},
-				},
 			},
 			cmpOption: ignoreGatorResultFields(),
 		},
@@ -192,7 +178,7 @@ func TestTest(t *testing.T) {
 				objs = append(objs, u)
 			}
 
-			resps, err := Test(objs, TestOpts{})
+			resps, err := Test(objs, TOpts{})
 			if tc.err != nil {
 				require.ErrorIs(t, err, tc.err)
 			} else if err != nil {
@@ -232,7 +218,7 @@ func Test_Test_withTrace(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, TestOpts{IncludeTrace: true})
+	resps, err := Test(objs, TOpts{IncludeTrace: true})
 	if err != nil {
 		t.Errorf("got err '%v', want nil", err)
 	}
@@ -240,20 +226,6 @@ func Test_Test_withTrace(t *testing.T) {
 	got := resps.Results()
 
 	want := []*GatorResult{
-		{
-			Result: types.Result{
-				Target:     target.Name,
-				Msg:        "never validate",
-				Constraint: constraintNeverValidate,
-			},
-		},
-		{
-			Result: types.Result{
-				Target:     target.Name,
-				Msg:        "never validate",
-				Constraint: constraintNeverValidate,
-			},
-		},
 		{
 			Result: types.Result{
 				Target:     target.Name,
@@ -293,7 +265,7 @@ func Test_Test_withStats(t *testing.T) {
 		objs = append(objs, u)
 	}
 
-	resps, err := Test(objs, TestOpts{GatherStats: true})
+	resps, err := Test(objs, TOpts{GatherStats: true})
 	assert.NoError(t, err)
 
 	actualStats := resps.StatsEntries
