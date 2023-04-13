@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/open-policy-agent/frameworks/constraint/pkg/core/templates"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 	"github.com/open-policy-agent/opa/storage"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -42,15 +41,17 @@ type Driver interface {
 	RemoveData(ctx context.Context, target string, path storage.Path) error
 
 	// Query runs the passed target's Constraints against review.
-	//
-	// Returns results for each violated Constraint.
-	// Returns a trace if specified in query options or enabled at Driver creation.
+	// Returns a QueryResponse type.
 	// Returns an error if there was a problem executing the Query.
-	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...QueryOpt) ([]*types.Result, *string, error)
+	Query(ctx context.Context, target string, constraints []*unstructured.Unstructured, review interface{}, opts ...QueryOpt) (*QueryResponse, error)
 
 	// Dump outputs the entire state of compiled Templates, added Constraints, and
 	// cached data used for referential Constraints.
 	Dump(ctx context.Context) (string, error)
+
+	// GetDescriptionForStat returns the description for a given stat name
+	// or errors out for an unknown stat.
+	GetDescriptionForStat(statName string) (string, error)
 }
 
 // ConstraintKey uniquely identifies a Constraint.
