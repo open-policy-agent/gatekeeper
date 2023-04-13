@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
+	"github.com/stretchr/testify/require"
 )
 
 // addFn is used to easily build types.Responses within the tests.
@@ -86,6 +88,86 @@ func TestAggregateResponses(t *testing.T) {
 
 			if diff := cmp.Diff(parent, want); diff != "" {
 				t.Errorf("got parent: %v\nbut wanted: %v\ndiff: %s", parent, want, diff)
+			}
+		})
+	}
+}
+
+// Test_AggregateStats is meant to show that StatsEntry objects are properly added
+// fron child to parent when using the AggregateStats function. IT IS NOT meant to
+// test StatsEntry objects themselves.
+func Test_AggregateStats(t *testing.T) {
+	tests := []struct {
+		name          string
+		templateName  string
+		parent        *types.Responses
+		child         *types.Responses
+		expectedStats int
+	}{
+		{
+			name:          "empty parent and child",
+			templateName:  "testTemplate1",
+			parent:        &types.Responses{},
+			child:         &types.Responses{},
+			expectedStats: 0,
+		},
+		{
+			name:         "empty parent, single child",
+			templateName: "testTemplate2",
+			parent:       &types.Responses{},
+			child: &types.Responses{
+				StatsEntries: []*instrumentation.StatsEntry{
+					{Labels: []*instrumentation.Label{}},
+				},
+			},
+			expectedStats: 1,
+		},
+		{
+			name:         "multiple children",
+			templateName: "testTemplate3",
+			parent: &types.Responses{
+				StatsEntries: []*instrumentation.StatsEntry{
+					{Labels: []*instrumentation.Label{}},
+				},
+			},
+			child: &types.Responses{
+				StatsEntries: []*instrumentation.StatsEntry{
+					{Labels: []*instrumentation.Label{}},
+					{Labels: []*instrumentation.Label{}},
+				},
+			},
+			expectedStats: 3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := tc.parent
+			child := tc.child
+			AggregateStats(tc.templateName, parent, child)
+
+			// if len(tc.parent.StatsEntries) != tc.expectedStats {
+			// 	t.Errorf("expected %d stats, got %d", tc.expectedStats, len(tc.parent.StatsEntries))
+			// }
+
+			require.Len(t, parent.StatsEntries, tc.expectedStats)
+
+			for _, se := range tc.parent.StatsEntries {
+				labelFound := false
+				for _, label := range se.Labels {
+					if label.Name == ChildStatLabel && label.Value == tc.templateName {
+						labelFound = true
+						break
+					}
+				}
+
+				// note that, in practice, we shouldn't care for the len of se.Labels
+				// we only add the check in here to distinguish between the parent labels,
+				// which are 0, and the child labels which should have at least one element,
+				// the label that is added thru AggregateStats
+				if !labelFound && len(se.Labels) > 0 {
+					t.Errorf("expected label %s not found", ChildStatLabel)
+				}
 			}
 		})
 	}

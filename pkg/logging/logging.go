@@ -2,7 +2,7 @@ package logging
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/open-policy-agent/frameworks/constraint/pkg/client"
+	constraintclient "github.com/open-policy-agent/frameworks/constraint/pkg/client"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 )
 
@@ -34,7 +34,7 @@ const (
 	DebugLevel            = 2 // r.log.Debug(foo) == r.log.V(logging.DebugLevel).Info(foo)
 )
 
-func LogStatsEntries(client *client.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
+func LogStatsEntries(client *constraintclient.Client, logger logr.Logger, entries []*instrumentation.StatsEntry, msg string) {
 	for _, se := range entries {
 		labelledLogger := logger
 		for _, label := range se.Labels {

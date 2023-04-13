@@ -495,7 +495,7 @@ func (am *Manager) auditFromCache(ctx context.Context) ([]Result, []error) {
 		if *logStatsAudit {
 			logging.LogStatsEntries(
 				am.opa,
-				log.WithValues(logging.Process, "audit"),
+				am.log,
 				resp.StatsEntries,
 				"audit from cache review request stats",
 			)
@@ -607,18 +607,19 @@ func (am *Manager) reviewObjects(ctx context.Context, kind string, folderCount i
 				}
 				expansion.OverrideEnforcementAction(resultant.EnforcementAction, resultantResp)
 				expansion.AggregateResponses(resultant.TemplateName, resp, resultantResp)
+				expansion.AggregateStats(resultant.TemplateName, resp, resultantResp)
+			}
+
+			if *logStatsAudit {
+				logging.LogStatsEntries(
+					am.opa,
+					am.log,
+					resp.StatsEntries,
+					"audit review request stats",
+				)
 			}
 
 			if len(resp.Results()) > 0 {
-				if *logStatsAudit {
-					logging.LogStatsEntries(
-						am.opa,
-						log.WithValues(logging.Process, "audit"),
-						resp.StatsEntries,
-						"audit review request stats",
-					)
-				}
-
 				results := ToResults(&augmentedObj.Object, resp)
 				err = am.addAuditResponsesToUpdateLists(updateLists, results, totalViolationsPerConstraint, totalViolationsPerEnforcementAction, timestamp)
 				if err != nil {

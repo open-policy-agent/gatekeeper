@@ -3,10 +3,15 @@ package expansion
 import (
 	"fmt"
 
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/types"
 )
 
-const childMsgPrefix = "[Implied by %s]"
+const (
+	childMsgPrefix = "[Implied by %s]"
+
+	ChildStatLabel = "EphemeralReviewFor"
+)
 
 // AggregateResponses aggregates all responses from children into the parent.
 // Child result messages will be prefixed with a string to indicate the msg
@@ -20,6 +25,22 @@ func AggregateResponses(templateName string, parent *types.Responses, child *typ
 			parent.ByTarget[target] = childRes
 		}
 	}
+}
+
+// AggregateStats aggregates all stats from the child Responses.StatsEntry
+// into the parent Responses.StatsEntry. Child Stats will have a label to
+// indicate that they come from an ExpansionTemplate usage.
+func AggregateStats(templateName string, parent *types.Responses, child *types.Responses) {
+	childStatsEntries := child.StatsEntries
+
+	for _, se := range childStatsEntries {
+		se.Labels = append(se.Labels, []*instrumentation.Label{{
+			Name:  ChildStatLabel,
+			Value: templateName,
+		}}...)
+	}
+
+	parent.StatsEntries = append(parent.StatsEntries, child.StatsEntries...)
 }
 
 func OverrideEnforcementAction(action string, resps *types.Responses) {

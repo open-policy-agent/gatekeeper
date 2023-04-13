@@ -594,6 +594,7 @@ func (h *validationHandler) reviewRequest(ctx context.Context, req *admission.Re
 		}
 		expansion.OverrideEnforcementAction(res.EnforcementAction, resultantResp)
 		expansion.AggregateResponses(res.TemplateName, resp, resultantResp)
+		expansion.AggregateStats(res.TemplateName, resp, resultantResp)
 	}
 
 	return resp, nil
