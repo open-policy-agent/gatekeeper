@@ -6,7 +6,12 @@ import (
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/open-policy-agent/frameworks/constraint/pkg/instrumentation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+const (
+	TracingDisabledHeader = "Trace: TRACING DISABLED"
 )
 
 type Result struct {
@@ -23,13 +28,10 @@ type Result struct {
 
 	// The enforcement action of the constraint
 	EnforcementAction string `json:"enforcementAction,omitempty"`
-
-	// EvaluationMeta has metadata for a Result's evaluation.
-	EvaluationMeta interface{} `json:"evaluationMeta,omitempty"`
 }
 
 // Response is a collection of Constraint violations for a particular Target.
-// Each Result is for a distinct Constraint.
+// Each Result represents a violation for a distinct Constraint.
 type Response struct {
 	Trace   *string
 	Target  string
@@ -65,7 +67,16 @@ func (r *Response) TraceDump() string {
 	b := &strings.Builder{}
 	_, _ = fmt.Fprintf(b, "Target: %s\n", r.Target)
 	if r.Trace == nil {
-		_, _ = fmt.Fprintf(b, "Trace: TRACING DISABLED\n\n")
+		if r.Results != nil {
+			// only say "Trace: TRACING DISABLED" if there are results
+			// otherwise, we risk to confuse consumers who see the msg
+			// and think that evaluation did not happen.
+
+			// Note that if there were NO violating results AND the trace
+			// was turned on, then r.Trace != nil.
+			b.WriteString(TracingDisabledHeader)
+			b.WriteString("\n\n")
+		}
 	} else {
 		_, _ = fmt.Fprintf(b, "Trace:\n%s\n\n", *r.Trace)
 	}
@@ -77,14 +88,16 @@ func (r *Response) TraceDump() string {
 
 func NewResponses() *Responses {
 	return &Responses{
-		ByTarget: make(map[string]*Response),
-		Handled:  make(map[string]bool),
+		ByTarget:     make(map[string]*Response),
+		Handled:      make(map[string]bool),
+		StatsEntries: make([]*instrumentation.StatsEntry, 0),
 	}
 }
 
 type Responses struct {
-	ByTarget map[string]*Response
-	Handled  map[string]bool
+	ByTarget     map[string]*Response
+	Handled      map[string]bool
+	StatsEntries []*instrumentation.StatsEntry
 }
 
 func (r *Responses) Results() []*Result {
