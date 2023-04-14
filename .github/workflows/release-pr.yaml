@@ -72,7 +72,7 @@ jobs:
         run: make version-docs NEWVERSION=v${MAJOR_VERSION}.${MINOR_VERSION}.x
 
       - name: Create release pull request
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v5
         with:
           commit-message: "chore: Prepare ${{ env.NEWVERSION }} release"
           title: "chore: Prepare ${{ env.NEWVERSION }} release"
