@@ -154,6 +154,16 @@ func Externs(externs ...string) Arg {
 	}
 }
 
+// GatherStats starts collecting various stats around the
+// underlying engine's calls.
+func GatherStats() Arg {
+	return func(driver *Driver) error {
+		driver.gatherStats = true
+
+		return nil
+	}
+}
+
 // Currently rules should only access data.inventory.
 var validDataFields = map[string]bool{
 	"inventory": true,
