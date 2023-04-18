@@ -16,7 +16,7 @@ that create a resource that violates a constraint.
 
 ## `ExpansionTemplate`s explained
 
-An `ExpansionTemplate` is a custom resource that Gatekeeper will use to simulate a workload resource expansion. Gatekeeper will create temporary, fake resources and validate the constraints against them. We prefer to these resources that Gatekeeper creates for validation pruposes as `expanded resources` but `mock resources`, `simualted resources`, `resulting resources` or `resultant resources` refer to the same notion.
+An `ExpansionTemplate` is a custom resource that Gatekeeper will use to simulate a workload resource expansion. Gatekeeper will create temporary, fake resources and validate the constraints against them. We refer to these resources that Gatekeeper creates for validation purposes as `expanded resources`, but  the terms `mock resources`, `simulated resources`, `resulting resources`, and `resultant resources` all refer to the same notion.
 
 The `ExpansionTemplate` custom resource specifies:
 
@@ -54,7 +54,7 @@ spec:
       kinds: ["Job"]
       versions: ["v1"]
   templateSource: "spec.template"
-  enforcementAction: "warn" # this will overwrite all constraint enforcement actions for the GVKs below that result from the GVKs above
+  enforcementAction: "warn" # This will overwrite all constraint enforcement actions for the GVKs below that result from the GVKs above.
   generatedGVK:
     kind: "Pod"
     group: ""
@@ -62,7 +62,7 @@ spec:
 ```
 
 With this `ExpansionTemplate`, any constraints that are configured to target
-`Pods` will be alsp evaluated on the temporary, fake pods that Gatekeeper creates when a `Deployment` /`ReplicaSet` is
+`Pods` will also be evaluated on the temporary, fake pods that Gatekeeper creates when a `Deployment` or `ReplicaSet` is
 being reviewed. Any violations created against these resulting `Pod`s, and only these resulting `Pod`s, will have their
 enforcement action set to `warn`, regardless of the enforcement actions
 specified by the Constraint in violation.
@@ -98,15 +98,15 @@ targets any resources that exist on the cluster.
 
 Note that the accuracy of enforcement depends on how well the mock resource
 resembles the real thing. Mutations can help with this, but 100% accuracy is
-impossible because not all fields can be predicted. For instance, deployments
-create pods with random names. Inaccurate mocks may lead to over or under
-enforcement. In the case of under enforcement, the resultant pod should still be
+impossible because not all fields can be predicted. For instance, Deployments
+create pods with random names. Inaccurate mocks may lead to over- or under-
+enforcement. In the case of under-enforcement, the resultant pod should still be
 rejected. Finally, non-state-based policies (those that rely on transient
 metadata such as requesting user or time of creation) cannot be enforced
 accurately. This is because such metadata would necessarily be different when
-creating the resultant resource. For example, a deployment is created using the
+creating the resultant resource. For example, a Deployment is created using the
 requesting user's account, but the pod creation request comes from the service
-account of the deployment controller.
+account of the Deployment controller.
 
 ## Configuring Expansion
 
