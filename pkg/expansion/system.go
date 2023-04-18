@@ -28,7 +28,7 @@ var (
 const maxRecursionDepth = 30
 
 func init() {
-	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", true, "(alpha) Enable the expansion of generator resources") // TODO revert
+	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", false, "(alpha) Enable the expansion of generator resources")
 }
 
 type System struct {
