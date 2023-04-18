@@ -93,7 +93,7 @@ see the [Example](#example) section.
 Any resources configured for expansion will be expanded by both the validating
 webhook and
 [Audit](audit.md). This
-feature will only be enabled if a user creates a `ExpansionTemplate` that
+feature will only be enabled if a user creates an `ExpansionTemplate` that
 targets any resources that exist on the cluster.
 
 Note that the accuracy of enforcement depends on how well the mock resource
