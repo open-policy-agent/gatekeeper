@@ -37,8 +37,13 @@ type edge struct {
 
 type db struct {
 	store map[TemplateID]*templateState
+
+	// graph stores a graph of ExpansionTemplate. A directed edge from template A
+	// to B means that the template A's `generatedGVK` matches template B's `applyTo`.
 	graph graph.Graph[string, TemplateID]
 
+	// `matchers` and `generators` creates the necessary mappings to be able to
+	// determine the inbound and outbound edges of a given template in O(1).
 	// matchers is a mapping of GVKs to templates that match (applyTo) that GVK.
 	matchers adjList
 	// generators is a mapping of GVKs to templates that generate that GVK.
