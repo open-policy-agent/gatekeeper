@@ -307,7 +307,6 @@ func TestValidateTemplate(t *testing.T) {
 		{
 			name: "missing name",
 			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
-				//Name: "test1",
 				Apply: []match.ApplyTo{{
 					Groups:   []string{"apps"},
 					Kinds:    []string{"Deployment"},
@@ -331,7 +330,6 @@ func TestValidateTemplate(t *testing.T) {
 					Kinds:    []string{"Deployment"},
 					Versions: []string{"v1"},
 				}},
-				//Source: "spec.template",
 				GenGVK: expansionunversioned.GeneratedGVK{
 					Group:   "",
 					Version: "v1",
@@ -350,23 +348,13 @@ func TestValidateTemplate(t *testing.T) {
 					Versions: []string{"v1"},
 				}},
 				Source: "spec.template",
-				//GenGVK: expansionunversioned.GeneratedGVK{
-				//	Group:   "",
-				//	Version: "v1",
-				//	Kind:    "Pod",
-				//},
 			}),
 			errFn: matchErr("empty generatedGVK"),
 		},
 		{
 			name: "missing applyTo",
 			temp: *fixtures.NewTemplate(&fixtures.TemplateData{
-				Name: "test1",
-				//Apply: []match.ApplyTo{{
-				//	Groups:   []string{"apps"},
-				//	Kinds:    []string{"Deployment"},
-				//	Versions: []string{"v1"},
-				//}},
+				Name:   "test1",
 				Source: "spec.template",
 				GenGVK: expansionunversioned.GeneratedGVK{
 					Group:   "",

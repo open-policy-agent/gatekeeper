@@ -94,7 +94,8 @@ type Reconciler struct {
 func newReconciler(mgr manager.Manager,
 	system *expansion.System,
 	getPod func(ctx context.Context) (*corev1.Pod, error),
-	tracker *readiness.Tracker) *Reconciler {
+	tracker *readiness.Tracker,
+) *Reconciler {
 	ev := make(chan event.GenericEvent, eventQueueSize)
 	return &Reconciler{
 		Client:       mgr.GetClient(),
@@ -130,6 +131,9 @@ func add(mgr manager.Manager, r *Reconciler) error {
 					},
 				}}
 			}))
+		if err != nil {
+			return err
+		}
 	}
 
 	// Watch for changes to ExpansionTemplates
@@ -193,7 +197,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 }
 
 func (r *Reconciler) queueConflicts(old expansion.IDSet) {
-	for tID, _ := range symmetricDiff(old, r.system.GetConflicts()) {
+	for tID := range symmetricDiff(old, r.system.GetConflicts()) {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
 		u.SetName(string(tID))
@@ -206,12 +210,12 @@ func (r *Reconciler) queueConflicts(old expansion.IDSet) {
 func symmetricDiff(x, y expansion.IDSet) expansion.IDSet {
 	sDiff := make(expansion.IDSet)
 
-	for id, _ := range x {
+	for id := range x {
 		if _, exists := y[id]; !exists {
 			sDiff[id] = true
 		}
 	}
-	for id, _ := range y {
+	for id := range y {
 		if _, exists := x[id]; !exists {
 			sDiff[id] = true
 		}

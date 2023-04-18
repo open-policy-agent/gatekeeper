@@ -285,7 +285,7 @@ func TestDB(t *testing.T) {
 		{
 			name: "update template to produce cycle",
 			ops: []templateOperation{
-				//t5 is completely disjoint from rest of graph
+				// t5 is completely disjoint from rest of graph
 				{
 					op:       addOp,
 					template: *fixtures.TestTemplate("t5", 5, 6),
@@ -520,8 +520,6 @@ func TestDB(t *testing.T) {
 				schema.GroupVersionKind{Group: "group3", Version: "v3", Kind: "kind3"}: {
 					keyForTemplate(fixtures.TestTemplate("t2-3", 2, 3)): true,
 				},
-				//	keyForTemplate(fixtures.TestTemplate("t3-1", 3, 4)): true,
-				//},
 				schema.GroupVersionKind{Group: "group8", Version: "v8", Kind: "kind8"}: {
 					keyForTemplate(fixtures.TestTemplate("t7-8", 7, 8)): true,
 				},
@@ -621,7 +619,8 @@ func TestDB(t *testing.T) {
 }
 
 func executeOps(db templateDB, ops []templateOperation, t *testing.T) {
-	for _, op := range ops {
+	for i := 0; i < len(ops); i++ {
+		op := ops[i]
 		switch op.op {
 		case addOp:
 			gotErr := db.upsert(&op.template)
@@ -783,14 +782,14 @@ func TestGetConflicts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newDB()
-			for i, _ := range tc.seed {
+			for i := range tc.seed {
 				d.store[keyForTemplate(tc.seed[i].template)] = &tc.seed[i]
 			}
 
 			got := d.getConflicts()
 
 			require.Len(t, got, len(tc.want))
-			for k, _ := range tc.want {
+			for k := range tc.want {
 				if _, exists := got[k]; !exists {
 					t.Errorf("wanted template ID %s, but not returned", k)
 				}

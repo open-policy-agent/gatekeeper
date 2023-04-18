@@ -98,7 +98,7 @@ func (d *db) handleAdd(template *expansionunversioned.ExpansionTemplate) (bool, 
 	if _, err := d.graph.Vertex(hashID(id)); err != nil {
 		if errors.Is(err, graph.ErrVertexNotFound) {
 			if err := d.graph.AddVertex(id); err != nil {
-				return false, fmt.Errorf("adding vertex to graph: %v", err)
+				return false, fmt.Errorf("adding vertex to graph: %w", err)
 			}
 		} else {
 			return false, fmt.Errorf("unexpected error getting vertex for template %s: %w", id, err)
@@ -118,7 +118,7 @@ func (d *db) handleAdd(template *expansionunversioned.ExpansionTemplate) (bool, 
 		}
 		cycle = createsCycle || cycle
 
-		if err := d.graph.AddEdge(from, to); err != nil {
+		if err = d.graph.AddEdge(from, to); err != nil {
 			return false, fmt.Errorf("adding edge for template %s: %w", id, err)
 		}
 	}
@@ -133,14 +133,14 @@ func (d *db) edgesForTemplate(template *expansionunversioned.ExpansionTemplate) 
 
 	// Add out-bound edges (from this template's generated GVK to other
 	// templates' matched GVKs)
-	for t, _ := range d.matchers[genGVK] {
+	for t := range d.matchers[genGVK] {
 		edges = append(edges, edge{id, t})
 	}
 
 	// Add in-bound edges (from other templates' generated GVK to this template's
 	// matched GVK)
 	for _, gen := range applyToGVKs(template) {
-		for t, _ := range d.generators[gen] {
+		for t := range d.generators[gen] {
 			edges = append(edges, edge{t, id})
 		}
 	}
@@ -189,7 +189,7 @@ func (d *db) handleRemove(template *expansionunversioned.ExpansionTemplate) {
 		from := hashID(e.x)
 		to := hashID(e.y)
 		if err := d.graph.RemoveEdge(from, to); err != nil {
-			panic(fmt.Errorf("[template %q] unexpected error removing edge: %v", id, err))
+			panic(fmt.Errorf("[template %q] unexpected error removing edge: %w", id, err))
 		}
 	}
 }
@@ -202,7 +202,7 @@ func (d *db) updateCycles() {
 
 	conflicts, err := graph.StronglyConnectedComponents(d.graph)
 	if err != nil {
-		panic(fmt.Errorf("error getting SCCs: %v", err))
+		panic(fmt.Errorf("error getting SCCs: %w", err))
 	}
 	// All strongly connect components containing more than 1 vertex are a cycle
 	for _, scc := range conflicts {
@@ -224,7 +224,7 @@ func (d *db) upsert(template *expansionunversioned.ExpansionTemplate) error {
 
 	newCycle, err := d.handleAdd(template)
 	if err != nil {
-		return fmt.Errorf("adding template to db: %v", err)
+		return fmt.Errorf("adding template to db: %w", err)
 	}
 	// If the new/updated template caused a cycle, or the previous template belonged
 	// to a cycle, then we need to re-check the graph for cycles
@@ -255,7 +255,7 @@ func (d *db) remove(template *expansionunversioned.ExpansionTemplate) {
 
 func (d *db) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate {
 	var tset []*expansionunversioned.ExpansionTemplate
-	for tID, _ := range d.matchers[gvk] {
+	for tID := range d.matchers[gvk] {
 		// Sanity check. In theory, this should never happen, but if it does, we
 		// can't recover.
 		if _, exists := d.store[tID]; !exists {
