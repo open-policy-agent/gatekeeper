@@ -1,6 +1,6 @@
 ---
 id: expansion
-title: Validation of Workload Resources
+title: Validating Workload Resources using `ExapansionTemplate`s
 ---
 
 `Feature State:` Gatekeeper version v3.10+ (alpha)
@@ -8,90 +8,34 @@ title: Validation of Workload Resources
 > ❗This feature is in _alpha_ stage, and is not enabled by default. To
 > enable, set the `enable-generator-resource-expansion` flag.
 
+## Motivation
+
 A workload resource is a resource that creates other resources, such as a
-Deployment or Job. Gatekeeper can be configured to reject workload resources
-that might create a resource that violates a constraint. For example, one could
-configure Gatekeeper to immediately reject deployments that would create a Pod
-that violates a constraint instead of merely rejecting the Pods. To achieve
-this, Gatekeeper creates a "mock resource" for the Pod, runs validation on it,
-and aggregates the mock resource's violations onto the parent resource (the
-Deployment in this example).
+[Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) or [Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/). Gatekeeper can be configured to reject workload resources
+that create a resource that violates a constraint. 
 
-To use this functionality, first specify which resources should be "expanded"
-into mock resource(s) by creating an `ExpansionTemplate` custom resource. This
-specifies the GVKs of the workload resources, the GVK of the resultant mock
-resource, as well as which subfield of the workload resource should be used to
-expand the mock resource (i.e. `spec.template` for most Pod-generating
-resources).
+## `ExpansionTemplate`s explained
 
-In some cases, it may not be possible to build an accurate representation of a
-mock resource by looking at the workload resource alone. For example, suppose a
-cluster is using Istio, which will inject a sidecar container on specific
-resources. This sidecar configuration is not specified in the config of the
-workload resource (i.e. Deployment), but rather injected by Istio's webhook. In
-order to accurately represent mock resources modified by controllers or
-webhooks, Gatekeeper leverages its
-[Mutations](mutation.md)
-feature to allow mock resources to be manipulated into their desired form. In
-the Istio example, `Assign` and `ModifySet` mutators could be configured to
-mimic Istio sidecar injection. For further details on mutating mock resources
-see the [Match Source](#match-source) section below, or to see a working example,
-see the [Example](#example) section.
-
-Any resources configured for expansion will be expanded by both the validating
-webhook and
-[Audit](audit.md). This
-feature will only be enabled if a user creates a `ExpansionTemplate` that
-targets some resource that exists on the cluster.
-
-Note that the accuracy of enforcement depends on how well the mock resource
-resembles the real thing. Mutations can help with this, but 100% accuracy is
-impossible because not all fields can be predicted. For instance, deployments
-create pods with random names. Inaccurate mocks may lead to over or under
-enforcement. In the case of under enforcement, the resultant pod should still be
-rejected. Finally, non-state-based policies (those that rely on transient
-metadata such as requesting user or time of creation) cannot be enforced
-accurately. This is because such metadata would necessarily be different when
-creating the resultant resource. For example, a deployment is created using the
-requesting user's account, but the pod creation request comes from the service
-account of the deployment controller.
-
-If, for any reason, you want to exempt expanded resources from a specific
-constraint, look at the [Match Source](#match-source) section below.
-
-## Configuring Expansion
-
-Expansion behavior is configured through the `ExpansionTemplate` custom
-resource. Optionally, users can create `Mutation` custom resources to customize
-how resources are expanded. Mutators with the `source: Generated` field will
-only be applied when expanding workload resources, and will not mutate real
-resources on the cluster. If the `source` field is not set, the `Mutation` will
-apply to both expanded resources and real resources on the cluster.
-
-Users can test their expansion configuration using the
-[`gator expand` CLI](gator.md)
-.
-
-#### ExpansionTemplate
+An `ExpansionTemplate` is a custom resource that Gatekeeper will use to simulate a workload resource expansion. Gatekeeper will create temporary, fake resources and validate the constraints against them. We prefer to these resources that Gatekeeper creates for validation pruposes as `expanded resources` but `mock resources`, `simualted resources`, `resulting resources` or `resultant resources` refer to the same notion.
 
 The `ExpansionTemplate` custom resource specifies:
 
-- Which resource(s) should be expanded, specified by their GVK
-- The GVK of the resultant resource
-- Which field to use as the "source" for the resultant resource. The template
-  source is a field on the parent resource which will be used as the base for
-  expanding it before any mutators are applied. For example, in a case where a
+- Which workload resource(s) should be simulated, specified by their GVK
+- The GVK of the resulting resources
+- The "source", a field to use as the blueprint for the resulting resource. The template
+  source is a field on the parent resource which will be used as the base (TODO: define) for
+  expanding. For example, in a case where a
   `Deployment` expands into a `Pod`, `spec.template` would typically be the
   source.
-- Optionally, an enforcement action override can be used when validating resultant
-  resources. If this field is set, any violations against the resultant resource
+- Optionally, an `enforcementAction` override can be used when validating resultant
+  resources. If this field is set, any violations against the resulting resource
   will use this enforcement action. If an enforcement action is not specified by
   the `ExpansionTemplate`, the enforcement action set by the Constraint in
   violation will be used.
 
 Here is an example of a `ExpansionTemplate` that specifies that `DaemonSet`,
 `Deployment`, `Job`, `ReplicaSet`, `ReplicationController`, and `StatefulSet`
-should be expanded into a `Pod`.
+ resources should be expanded into a `Pod`.
 
 ```yaml
 apiVersion: expansion.gatekeeper.sh/v1alpha1
@@ -110,7 +54,7 @@ spec:
       kinds: ["Job"]
       versions: ["v1"]
   templateSource: "spec.template"
-  enforcementAction: "warn"
+  enforcementAction: "warn" # this will overwrite all constraint enforcement actions for the GVKs below that result from the GVKs above
   generatedGVK:
     kind: "Pod"
     group: ""
@@ -118,16 +62,70 @@ spec:
 ```
 
 With this `ExpansionTemplate`, any constraints that are configured to target
-`Pods` will be evaluated on the "mock Pods" when a `Deployment` /`ReplicaSet` is
-being reviewed. Any violations created against the mock Pod will have their
+`Pods` will be alsp evaluated on the temporary, fake pods that Gatekeeper creates when a `Deployment` /`ReplicaSet` is
+being reviewed. Any violations created against these resulting `Pod`s, and only these resulting `Pod`s, will have their
 enforcement action set to `warn`, regardless of the enforcement actions
 specified by the Constraint in violation.
+
+If, for any reason, you want to exempt simulated resources from a specific
+constraint, look at the [Match Source](#match-source) section below.
+
+### Limitations
+
+#### Sidecars and Mutators
+
+It may not always be possible to build an accurate representation of a
+mock resource by looking at the workload resource alone. For example, suppose a
+cluster is using [Istio](https://istio.io/), which will inject a sidecar container on specific
+resources. This sidecar configuration is not specified in the config of the
+workload resource (i.e. Deployment), but rather injected by Istio's webhook. In
+order to accurately represent mock resources modified by controllers or
+webhooks, Gatekeeper leverages its
+[Mutations](mutation.md)
+feature to allow mock resources to be manipulated into their desired form. In
+the Istio example, `Assign` and `ModifySet` mutators could be configured to
+mimic Istio sidecar injection. For further details on mutating mock resources
+see the [Match Source](#match-source) section below, or to see a working example,
+see the [Example](#example) section.
+
+#### Enforcement Points
+
+Any resources configured for expansion will be expanded by both the validating
+webhook and
+[Audit](audit.md). This
+feature will only be enabled if a user creates a `ExpansionTemplate` that
+targets any resources that exist on the cluster.
+
+Note that the accuracy of enforcement depends on how well the mock resource
+resembles the real thing. Mutations can help with this, but 100% accuracy is
+impossible because not all fields can be predicted. For instance, deployments
+create pods with random names. Inaccurate mocks may lead to over or under
+enforcement. In the case of under enforcement, the resultant pod should still be
+rejected. Finally, non-state-based policies (those that rely on transient
+metadata such as requesting user or time of creation) cannot be enforced
+accurately. This is because such metadata would necessarily be different when
+creating the resultant resource. For example, a deployment is created using the
+requesting user's account, but the pod creation request comes from the service
+account of the deployment controller.
+
+## Configuring Expansion
+
+Expansion behavior is configured through the `ExpansionTemplate` custom
+resource. Optionally, users can create `Mutation` custom resources to customize
+how resources are expanded. Mutators with the `source: Generated` field will
+only be applied when expanding workload resources, and will not mutate real
+resources on the cluster. If the `source` field is not set, the `Mutation` will
+apply to both expanded resources and real resources on the cluster.
+
+Users can test their expansion configuration using the
+[`gator expand` CLI](gator.md#the-gator-expand-subcommand)
+.
 
 #### Match Source
 
 The `source` field on the `match` API, present in the Mutation
 and `Constraint` kinds, specifies if the config should match Generated (
-i.e. expanded) resources, Original resources, or both. The `source` field is
+i.e. fake) resources, Original resources, or both. The `source` field is
 an `enum` which accepts the following values:
 
 - `Generated` – the config will only apply to expanded resources, **and will not
@@ -165,14 +163,14 @@ spec:
         kinds: []
 ```
 
-Similarly, `Constraints` can be configured to only target expanded resources by
+Similarly, `Constraints` can be configured to only target fake resources by
 setting the `Constraint`'s `spec.match.source` field to `Generated`. This can
 also be used to define different enforcement actions for expanded resources and
 original resources.
 
-## Example
+## Mutating Example
 
-Suppose a cluster is using Istio, and has some policy configured to ensure
+Suppose a cluster is using Istio, and has a policy configured to ensure
 specified Pods have an Istio sidecar. To validate Deployments that would create
 Pods which Istio will inject a sidecar into, we need to use mutators to mimic
 the sidecar injection.
