@@ -28,14 +28,13 @@ var (
 const maxRecursionDepth = 30
 
 func init() {
-	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", false, "(alpha) Enable the expansion of generator resources")
+	ExpansionEnabled = flag.Bool("enable-generator-resource-expansion", true, "(alpha) Enable the expansion of generator resources") // TODO revert
 }
 
 type System struct {
 	lock           sync.RWMutex
-	templates      map[string]*expansionunversioned.ExpansionTemplate
 	mutationSystem *mutation.System
-	graph          cycleDetector
+	db             templateDB
 }
 
 type Resultant struct {
@@ -44,8 +43,12 @@ type Resultant struct {
 	EnforcementAction string
 }
 
-func keyForTemplate(template *expansionunversioned.ExpansionTemplate) string {
-	return template.ObjectMeta.Name
+type TemplateID string
+
+type IDSet map[TemplateID]bool
+
+func keyForTemplate(template *expansionunversioned.ExpansionTemplate) TemplateID {
+	return TemplateID(template.ObjectMeta.Name)
 }
 
 func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -57,17 +60,7 @@ func (s *System) UpsertTemplate(template *expansionunversioned.ExpansionTemplate
 		return err
 	}
 
-	k := keyForTemplate(template)
-	if oldTemp, exists := s.templates[k]; exists {
-		s.graph.removeTemplate(oldTemp)
-	}
-
-	if err := s.graph.addTemplate(template); err != nil {
-		return err
-	}
-
-	s.templates[k] = template.DeepCopy()
-	return nil
+	return s.db.upsert(template)
 }
 
 func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -79,12 +72,12 @@ func (s *System) RemoveTemplate(template *expansionunversioned.ExpansionTemplate
 		return fmt.Errorf("cannot remove template with empty name")
 	}
 
-	if oldTemp, exists := s.templates[k]; exists {
-		log.V(1).Info("deleting old template from graph and cache", "template name", template.GetName())
-		s.graph.removeTemplate(oldTemp)
-		delete(s.templates, k)
-	}
+	s.db.remove(template)
 	return nil
+}
+
+func (s *System) GetConflicts() IDSet {
+	return s.db.getConflicts()
 }
 
 func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
@@ -98,6 +91,18 @@ func ValidateTemplate(template *expansionunversioned.ExpansionTemplate) error {
 	if template.Spec.GeneratedGVK == (expansionunversioned.GeneratedGVK{}) {
 		return fmt.Errorf("ExpansionTemplate %s has empty generatedGVK field", k)
 	}
+	if len(template.Spec.ApplyTo) == 0 {
+		return fmt.Errorf("ExpansionTemplate %s must specify ApplyTo", k)
+	}
+	// Make sure template does not form a self-edge (i.e. a template configured
+	// to expand its own output)
+	genGVK := genGVKToSchemaGVK(template.Spec.GeneratedGVK)
+	for _, apply := range template.Spec.ApplyTo {
+		if apply.Matches(genGVK) {
+			return fmt.Errorf("ExpansionTemplate %s generates GVK %v, but also applies to that same GVK", k, genGVK)
+		}
+	}
+
 	return nil
 }
 
@@ -119,23 +124,6 @@ func genGVKToSchemaGVK(gvk expansionunversioned.GeneratedGVK) schema.GroupVersio
 		Version: gvk.Version,
 		Kind:    gvk.Kind,
 	}
-}
-
-// templatesForGVK returns a slice of ExpansionTemplates that match a given gvk.
-func (s *System) templatesForGVK(gvk schema.GroupVersionKind) []*expansionunversioned.ExpansionTemplate {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	var templates []*expansionunversioned.ExpansionTemplate
-	for _, t := range s.templates {
-		for _, apply := range t.Spec.ApplyTo {
-			if apply.Matches(gvk) {
-				templates = append(templates, t)
-			}
-		}
-	}
-
-	return templates
 }
 
 // Expand expands `base` into resultant resources, and applies any applicable
@@ -182,7 +170,7 @@ func (s *System) expand(base *mutationtypes.Mutable) ([]*Resultant, error) {
 	}
 
 	var resultants []*Resultant
-	templates := s.templatesForGVK(gvk)
+	templates := s.db.templatesForGVK(gvk)
 
 	for _, te := range templates {
 		res, err := expandResource(base.Object, base.Namespace, te)
@@ -264,8 +252,7 @@ func mockNameForResource(gen *unstructured.Unstructured, gvk schema.GroupVersion
 func NewSystem(mutationSystem *mutation.System) *System {
 	return &System{
 		lock:           sync.RWMutex{},
-		templates:      map[string]*expansionunversioned.ExpansionTemplate{},
 		mutationSystem: mutationSystem,
-		graph:          make(gvkGraph),
+		db:             newDB(),
 	}
 }

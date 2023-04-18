@@ -63,7 +63,6 @@ MANAGER_IMAGE_PATCH := "apiVersion: apps/v1\
 \n        - --port=8443\
 \n        - --logtostderr\
 \n        - --emit-admission-events\
-\n        - --admission-events-involved-namespace\
 \n        - --exempt-namespace=${GATEKEEPER_NAMESPACE}\
 \n        - --operation=webhook\
 \n        - --operation=mutation-webhook\

@@ -8,6 +8,7 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dominikbraun/graph v0.16.2
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/zapr v1.2.3

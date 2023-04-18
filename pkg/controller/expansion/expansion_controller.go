@@ -8,6 +8,7 @@ import (
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/unversioned"
 	"github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
+	expansionv1alpha1 "github.com/open-policy-agent/gatekeeper/apis/expansion/v1alpha1"
 	"github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	statusv1beta1 "github.com/open-policy-agent/gatekeeper/apis/status/v1beta1"
 	"github.com/open-policy-agent/gatekeeper/pkg/expansion"
@@ -20,10 +21,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -32,6 +36,9 @@ import (
 )
 
 var log = logf.Log.WithName("controller").WithValues("kind", "ExpansionTemplate", logging.Process, "template_expansion_controller")
+
+// eventQueueSize is how many events to queue before blocking.
+const eventQueueSize = 1024
 
 type Adder struct {
 	WatchManager    *watch.Manager
@@ -78,11 +85,17 @@ type Reconciler struct {
 	registry     *etRegistry
 	statusClient client.StatusClient
 	tracker      *readiness.Tracker
+	events       chan event.GenericEvent
+	eventSource  source.Source
 
 	getPod func(context.Context) (*corev1.Pod, error)
 }
 
-func newReconciler(mgr manager.Manager, system *expansion.System, getPod func(ctx context.Context) (*corev1.Pod, error), tracker *readiness.Tracker) *Reconciler {
+func newReconciler(mgr manager.Manager,
+	system *expansion.System,
+	getPod func(ctx context.Context) (*corev1.Pod, error),
+	tracker *readiness.Tracker) *Reconciler {
+	ev := make(chan event.GenericEvent, eventQueueSize)
 	return &Reconciler{
 		Client:       mgr.GetClient(),
 		system:       system,
@@ -91,15 +104,35 @@ func newReconciler(mgr manager.Manager, system *expansion.System, getPod func(ct
 		statusClient: mgr.GetClient(),
 		getPod:       getPod,
 		tracker:      tracker,
+		events:       ev,
+		eventSource:  &source.Channel{Source: ev, DestBufferSize: 1024},
 	}
 }
 
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r *Reconciler) error {
 	c, err := controller.New("expansion-template-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
+	// Watch for enqueued events
+	if r.eventSource != nil {
+		err = c.Watch(
+			r.eventSource,
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
+				if obj.GetObjectKind().GroupVersionKind() != expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate") {
+					return nil
+				}
+				return []reconcile.Request{{
+					NamespacedName: apitypes.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      obj.GetName(),
+					},
+				}}
+			}))
+	}
+
+	// Watch for changes to ExpansionTemplates
 	return c.Watch(
 		&source.Kind{Type: &v1alpha1.ExpansionTemplate{}},
 		&handler.EnqueueRequestForObject{})
@@ -123,6 +156,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err := r.scheme.Convert(versionedET, et, nil); err != nil {
 		return reconcile.Result{}, err
 	}
+	oldConflicts := r.system.GetConflicts()
+
+	if !et.GetDeletionTimestamp().IsZero() {
+		deleted = true
+	}
 
 	if deleted {
 		// et will be an empty struct. We set the metadata name, which is
@@ -132,9 +170,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.getTracker().TryCancelExpect(versionedET)
 			return reconcile.Result{}, err
 		}
-		log.Info("removed expansion template", "template name", et.GetName())
+		log.V(1).Info("removed expansion template", "template name", et.GetName())
 		r.registry.remove(request.NamespacedName)
 		r.getTracker().CancelExpect(versionedET)
+		r.queueConflicts(oldConflicts)
 		return reconcile.Result{}, r.deleteStatus(ctx, request.NamespacedName.Name)
 	}
 
@@ -149,7 +188,36 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		log.Error(upsertErr, "upserting template", "template_name", et.GetName())
 	}
 
+	r.queueConflicts(oldConflicts)
 	return reconcile.Result{}, r.updateOrCreatePodStatus(ctx, et, upsertErr)
+}
+
+func (r *Reconciler) queueConflicts(old expansion.IDSet) {
+	for tID, _ := range symmetricDiff(old, r.system.GetConflicts()) {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(expansionv1alpha1.GroupVersion.WithKind("ExpansionTemplate"))
+		u.SetName(string(tID))
+		u.SetNamespace("default") // ExpansionTemplate is cluster-scoped
+
+		r.events <- event.GenericEvent{Object: u}
+	}
+}
+
+func symmetricDiff(x, y expansion.IDSet) expansion.IDSet {
+	sDiff := make(expansion.IDSet)
+
+	for id, _ := range x {
+		if _, exists := y[id]; !exists {
+			sDiff[id] = true
+		}
+	}
+	for id, _ := range y {
+		if _, exists := x[id]; !exists {
+			sDiff[id] = true
+		}
+	}
+
+	return sDiff
 }
 
 func (r *Reconciler) deleteStatus(ctx context.Context, etName string) error {
