@@ -3,6 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: gatekeeper-delete-webhook-configs
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     app: '{{ template "gatekeeper.name" . }}'
     chart: '{{ template "gatekeeper.name" . }}'
@@ -39,10 +40,10 @@ spec:
           args:
             - delete
             {{- if not .Values.disableValidatingWebhook }}
-            - validatingwebhookconfiguration/gatekeeper-validating-webhook-configuration
+            - validatingwebhookconfiguration/{{ .Values.validatingWebhookName }}
             {{- end }}
             {{- if not .Values.disableMutation }}
-            - mutatingwebhookconfiguration/gatekeeper-mutating-webhook-configuration
+            - mutatingwebhookconfiguration/{{ .Values.mutatingWebhookName }}
             {{- end }}
           resources:
             {{- toYaml .Values.preUninstall.resources | nindent 10 }}
@@ -65,6 +66,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: gatekeeper-delete-webhook-configs
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -92,7 +94,7 @@ rules:
     resources:
       - validatingwebhookconfigurations
     resourceNames:
-      - gatekeeper-validating-webhook-configuration
+      - {{ .Values.validatingWebhookName }}
     verbs:
       - delete
   {{- end }}
@@ -102,7 +104,7 @@ rules:
     resources:
       - mutatingwebhookconfigurations
     resourceNames:
-      - gatekeeper-mutating-webhook-configuration
+      - {{ .Values.mutatingWebhookName }}
     verbs:
       - delete
   {{- end }}
